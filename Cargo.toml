@@ -8,7 +8,12 @@ edition = "2018"
 
 [lib]
 name = "rgrow"
-crate-type = ["cdylib"]
+path = "src/lib.rs"
+crate-type = ["lib"]
+
+[[bin]]
+name = "rgrow-bin"
+path = "src/main.rs"
 
 [dependencies]
 ndarray = "0.13"
