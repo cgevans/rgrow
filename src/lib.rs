@@ -1,12 +1,12 @@
 extern crate ndarray;
 extern crate num_traits;
-use numpy::IntoPyArray;
 use ndarray::prelude::*;
 use ndarray::{FoldWhile, Zip};
+use numpy::IntoPyArray;
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use rand::prelude::*;
-use std::{convert::TryInto};
+use std::convert::TryInto;
 type NumTiles = usize;
 type NumEvents = u64;
 type Point = (usize, usize);
@@ -60,7 +60,7 @@ pub struct StaticATAM {
     tile_rates: Array1<Rate>,
     strength_ns: Array2<Energy>,
     strength_we: Array2<Energy>,
-    tau: Energy
+    tau: Energy,
 }
 
 #[derive(Clone)]
@@ -97,9 +97,9 @@ impl StaticATAM {
             tile_rates: tile_concs,
             strength_ns,
             strength_we,
-            tau
+            tau,
         };
-    }  
+    }
 }
 
 impl StaticKTAM {
@@ -133,11 +133,14 @@ impl StaticKTAM {
     }
 }
 
-impl<S> StateCreate<Canvas2D, S> for State2DQT<S> where S: System<Canvas2D> + Clone {
+impl<S> StateCreate<Canvas2D, S> for State2DQT<S>
+where
+    S: System<Canvas2D> + Clone,
+{
     fn create(canvas: &Array2<Tile>, sys: &S) -> Self {
         assert!(canvas.nrows().is_power_of_two());
 
-        let p: u32 = (1+canvas.nrows().trailing_zeros()).try_into().unwrap();
+        let p: u32 = (1 + canvas.nrows().trailing_zeros()).try_into().unwrap();
         println!("P: {:?}", p);
 
         let mut rates = Vec::<Array2<Rate>>::new();
@@ -172,7 +175,6 @@ impl<S> StateCreate<Canvas2D, S> for State2DQT<S> where S: System<Canvas2D> + Cl
         ret
     }
 }
-
 
 impl<C> System<C> for StaticATAM
 where
@@ -255,7 +257,6 @@ where
         }
     }
 }
-
 
 impl<C> System<C> for StaticKTAM
 where
@@ -383,7 +384,6 @@ pub struct State2DQT<S: System<Canvas2D>> {
     //time: f64
 }
 
-
 #[derive(Clone)]
 pub struct Canvas2D {
     canvas: Array2<Tile>,
@@ -391,26 +391,32 @@ pub struct Canvas2D {
 }
 
 impl Canvas for Canvas2D {
+    #[inline]
     unsafe fn uv_n(&self, p: Point) -> Tile {
         *self.canvas.uget((p.0 - 1, p.1))
     }
 
+    #[inline]
     unsafe fn uv_e(&self, p: Point) -> Tile {
         *self.canvas.uget((p.0, p.1 + 1))
     }
 
+    #[inline]
     unsafe fn uv_s(&self, p: Point) -> Tile {
         *self.canvas.uget((p.0 + 1, p.1))
     }
 
+    #[inline]
     unsafe fn uv_w(&self, p: Point) -> Tile {
         *self.canvas.uget((p.0, p.1 - 1))
     }
 
+    #[inline]
     unsafe fn uv_p(&self, p: Point) -> Tile {
         *self.canvas.uget(p)
     }
 
+    #[inline]
     fn inbounds(&self, p: Point) -> bool {
         return (p.0 >= 1) & (p.1 >= 1) & (p.0 < self.size - 1) & (p.1 < self.size - 1);
     }
@@ -488,36 +494,42 @@ where
     }
 
     fn update_rates_ps(&mut self, p: Point) -> &Self {
+        let mut rtiter = self.rates.iter_mut();
+
+        // The base level
+        let mut rt = rtiter.next().unwrap();
+        let mut np: (usize, usize) = p.clone();
+
         for ps in plusar!(p) {
-            // Propagate everything for now (FIXME) until I can think through this process.
-            let mut rtiter = self.rates.iter_mut();
-
-            // The base level
-            let mut rt = rtiter.next().unwrap();
-            let mut np: (usize, usize) = *ps;
-            let mut ip: (usize, usize);
-
             rt[*ps] = self.system.event_rate_at_point(&self.canvas, *ps);
-
-            for rn in rtiter {
-                np = (np.0 / 2, np.1 / 2);
-                ip = (np.0 * 2, np.1 * 2);
-                // *rn.uget_mut(np) = rt
-                //     .slice(s![2 * np.0..2 * np.0 + 2, 2 * np.1..2 * np.1 + 2])
-                //     .sum();
-                unsafe {
-                    *rn.uget_mut(np) = *rt.uget(ip)
-                    + *rt.uget((ip.0, ip.1+1))
-                    + *rt.uget((ip.0+1, ip.1))
-                    + *rt.uget((ip.0+1, ip.1+1));
-                }
-                rt = rn;
-            }
-
-            self.total_rate = rt.sum();
-
         }
 
+        let mut div: usize = 2;
+
+        for rn in rtiter {
+            np = (np.0 / 2, np.1 / 2);
+
+            qt_update_level(rn, rt, np);
+
+            // If on boundary of , update to N; if on
+            if p.0 % div == 0 {
+                qt_update_level(rn, rt, (np.0 - 1, np.1))
+            } else if (p.0 + 1) % div == 0 {
+                qt_update_level(rn, rt, (np.0 + 1, np.1))
+            };
+
+            if p.1 % div == 0 {
+                qt_update_level(rn, rt, (np.0, np.1 - 1))
+            } else if (p.1 + 1) % div == 0 {
+                qt_update_level(rn, rt, (np.0, np.1 + 1))
+            };
+
+            div *= 2;
+
+            rt = rn;
+        }
+
+        self.total_rate = rt.sum();
 
         return self;
     }
@@ -526,23 +538,34 @@ where
         let mut rtiter = self.rates.iter_mut();
         let mut rt = rtiter.next().unwrap();
         let mut np: (usize, usize) = p.clone();
-        
+
         rt[p] = self.system.event_rate_at_point(&self.canvas, p);
 
         for rn in rtiter {
-        np = (np.0 / 2, np.1 / 2);
-        rn[np] = rt
+            np = (np.0 / 2, np.1 / 2);
+            rn[np] = rt
                 .slice(s![2 * np.0..2 * np.0 + 2, 2 * np.1..2 * np.1 + 2])
                 .sum();
-        rt = rn;
+            rt = rn;
         }
 
         self.total_rate = rt.sum();
 
-        return self
+        return self;
     }
-    }
+}
 
+#[inline]
+fn qt_update_level(rn: &mut Array2<Rate>, rt: &Array2<Rate>, np: Point) {
+    let ip = (np.0 * 2, np.1 * 2);
+
+    unsafe {
+        *rn.uget_mut(np) = *rt.uget(ip)
+            + *rt.uget((ip.0, ip.1 + 1))
+            + *rt.uget((ip.0 + 1, ip.1))
+            + *rt.uget((ip.0 + 1, ip.1 + 1));
+    }
+}
 
 impl<S> StateStep for State2DQT<S>
 where
@@ -585,7 +608,6 @@ where
 //         sys: StaticKTAM
 //     }
 
-
 //     #[pyclass]
 //     #[derive(Clone)]
 //     struct PyStaticATAM {
@@ -607,10 +629,10 @@ where
 //     #[pymethods]
 //     impl PyStaticKTAM {
 //         #[new]
-//         fn new(tile_concs: PyReadonlyArray1<f64>, tile_edges: PyReadonlyArray2<Tile>, 
+//         fn new(tile_concs: PyReadonlyArray1<f64>, tile_edges: PyReadonlyArray2<Tile>,
 //             glue_strengths: PyReadonlyArray1<Energy>, gse: Energy) -> PyResult<Self> {
-//             let sys = StaticKTAM::new(tile_concs.to_owned_array(), 
-//                         tile_edges.to_owned_array(), 
+//             let sys = StaticKTAM::new(tile_concs.to_owned_array(),
+//                         tile_edges.to_owned_array(),
 //                         glue_strengths.to_owned_array(), gse);
 
 //             Ok(PyStaticKTAM { sys })
@@ -620,10 +642,10 @@ where
 //     #[pymethods]
 //     impl PyStaticATAM {
 //         #[new]
-//         fn new(tile_concs: PyReadonlyArray1<f64>, tile_edges: PyReadonlyArray2<Tile>, 
+//         fn new(tile_concs: PyReadonlyArray1<f64>, tile_edges: PyReadonlyArray2<Tile>,
 //             glue_strengths: PyReadonlyArray1<Energy>, tau: Energy) -> PyResult<Self> {
-//             let sys = StaticATAM::new(tile_concs.to_owned_array(), 
-//                         tile_edges.to_owned_array(), 
+//             let sys = StaticATAM::new(tile_concs.to_owned_array(),
+//                         tile_edges.to_owned_array(),
 //                         glue_strengths.to_owned_array(), tau);
 
 //             Ok(PyStaticATAM { sys })
@@ -693,7 +715,6 @@ where
 //     m.add_class::<PyStaticKTAM>()?;
 //     m.add_class::<PyStateKTAM>()?;
 //     m.add_class::<PyStateATAM>()?;
-
 
 //     Ok(())
 // }
