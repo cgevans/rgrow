@@ -1,11 +1,10 @@
 extern crate ndarray;
 use rgrow::{State2DQT, StaticKTAM, StateEvolve, StateCreate, StateStatus};
 use ndarray::prelude::*;
-use std::{convert::TryInto, time::{Instant, Duration}};
+use std::{time::{Instant}};
+use num_format::{Locale, ToFormattedString};
 
 fn main() {
-
-    let size = 512usize;
 
     let gs = arr1(&[0.0, 2.0, 1.0, 1.0]);
 
@@ -39,7 +38,7 @@ fn main() {
 
     canvas.slice_mut(s![0..10,0..10]).assign(&internal);
 
-    let mut sys = StaticKTAM::new(tc, te, gs, gse);
+    let sys = StaticKTAM::new(tc, te, gs, gse);
 
     let mut state = State2DQT::create(&canvas, &sys);
 
@@ -49,7 +48,11 @@ fn main() {
 
     let el = now.elapsed().as_secs_f64();
 
-    let evps: f64 = state.total_events() as f64 / el;
+    let evps = ((state.total_events() as f64 / el).round() as u64).to_formatted_string(&Locale::en);
 
-    println!("{} tiles, {} events, {} secs, {} ev/sec", state.ntiles(), state.total_events(), el, evps);
+    let ev = state.total_events().to_formatted_string(&Locale::en);
+
+    let nt = state.ntiles().to_formatted_string(&Locale::en);
+
+    println!("{} tiles, {} events, {} secs, {} ev/sec", nt, ev, el, evps);
 }

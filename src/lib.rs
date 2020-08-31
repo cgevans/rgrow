@@ -2,17 +2,14 @@ extern crate ndarray;
 extern crate num_traits;
 use ndarray::prelude::*;
 use ndarray::{FoldWhile, Zip};
-use numpy::IntoPyArray;
-use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
-use pyo3::prelude::*;
 use rand::prelude::*;
 use std::convert::TryInto;
-type NumTiles = usize;
-type NumEvents = u64;
-type Point = (usize, usize);
-type Tile = usize;
-type Rate = f64;
-type Energy = f64;
+pub type NumTiles = usize;
+pub type NumEvents = u64;
+pub type Point = (usize, usize);
+pub type Tile = usize;
+pub type Rate = f64;
+pub type Energy = f64;
 
 pub trait StateEvolve {
     fn evolve_in_size_range(
@@ -27,8 +24,8 @@ pub trait StateStep {
     fn take_step(&mut self) -> &Self;
 }
 
-pub trait StateCreate<C: Canvas, S: System<C>> {
-    fn create(canvas: &Array2<Tile>, sys: &S) -> Self;
+pub trait StateCreate<'s, C: Canvas, S: System<C>> {
+    fn create(canvas: &Array2<Tile>, sys: &'s S) -> Self;
 }
 
 pub trait StateStatus {
@@ -68,6 +65,23 @@ pub struct StaticKTAM {
     tile_rates: Array1<Rate>,
     energy_ns: Array2<Energy>,
     energy_we: Array2<Energy>,
+}
+
+#[derive(Clone)]
+pub struct State2DQT<'s, S: System<Canvas2D>> {
+    pub rates: Vec<Array2<Rate>>,
+    pub canvas: Canvas2D,
+    system: &'s S,
+    ntiles: NumTiles,
+    total_rate: Rate,
+    total_events: NumEvents,
+    //time: f64
+}
+
+#[derive(Clone)]
+pub struct Canvas2D {
+    pub canvas: Array2<Tile>,
+    size: usize,
 }
 
 impl StaticATAM {
@@ -131,17 +145,20 @@ impl StaticKTAM {
             energy_we,
         };
     }
+
+    pub fn from_raw(tile_rates: Array1<f64>, energy_ns: Array2<Energy>, energy_we: Array2<Energy>) -> Self {
+        StaticKTAM { tile_rates, energy_ns, energy_we }
+    }
 }
 
-impl<S> StateCreate<Canvas2D, S> for State2DQT<S>
+impl<'s, S> StateCreate<'s, Canvas2D, S> for State2DQT<'s, S>
 where
     S: System<Canvas2D> + Clone,
 {
-    fn create(canvas: &Array2<Tile>, sys: &S) -> Self {
+    fn create(canvas: &Array2<Tile>, sys: &'s S) -> Self {
         assert!(canvas.nrows().is_power_of_two());
 
         let p: u32 = (1 + canvas.nrows().trailing_zeros()).try_into().unwrap();
-        println!("P: {:?}", p);
 
         let mut rates = Vec::<Array2<Rate>>::new();
 
@@ -156,10 +173,10 @@ where
             size,
         };
 
-        let mut ret = State2DQT::<S> {
+        let mut ret = State2DQT::<'s, S> {
             rates: rates,
             canvas: ncanvas,
-            system: sys.to_owned(), // FIXME: not ideal
+            system: sys,
             ntiles: canvas.fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 })),
             total_rate: 0.,
             total_events: 0,
@@ -285,7 +302,10 @@ where
                 + self.energy_we[(tw, tile)];
 
             Rate::exp(-bound_energy)
-        } else {
+        } else if (tn == 0) & (te == 0) & (tw == 0) & (ts == 0) { 
+            // Short circuit for no possibility of insertion (no adjacents)
+            0.0 } 
+        else {
             // Insertion
 
             Zip::from(self.energy_ns.row(tn))
@@ -373,23 +393,6 @@ where
     }
 }
 
-#[derive(Clone)]
-pub struct State2DQT<S: System<Canvas2D>> {
-    rates: Vec<Array2<Rate>>,
-    canvas: Canvas2D,
-    system: S,
-    ntiles: NumTiles,
-    total_rate: Rate,
-    total_events: NumEvents,
-    //time: f64
-}
-
-#[derive(Clone)]
-pub struct Canvas2D {
-    canvas: Array2<Tile>,
-    size: usize,
-}
-
 impl Canvas for Canvas2D {
     #[inline]
     unsafe fn uv_n(&self, p: Point) -> Tile {
@@ -435,7 +438,7 @@ macro_rules! plusar {
     };
 }
 
-impl<S> State2DQT<S>
+impl<'s, S> State2DQT<'s, S>
 where
     S: System<Canvas2D>,
 {
@@ -567,7 +570,7 @@ fn qt_update_level(rn: &mut Array2<Rate>, rt: &Array2<Rate>, np: Point) {
     }
 }
 
-impl<S> StateStep for State2DQT<S>
+impl<'s, S> StateStep for State2DQT<'s, S>
 where
     S: System<Canvas2D>,
 {
@@ -586,7 +589,7 @@ where
     }
 }
 
-impl<S> StateStatus for State2DQT<S>
+impl<'s, S> StateStatus for State2DQT<'s, S>
 where
     S: System<Canvas2D>,
 {
@@ -598,123 +601,3 @@ where
         self.total_events
     }
 }
-
-// #[pymodule]
-// fn rgrow(_py: Python, m: &PyModule) -> PyResult<()> {
-
-//     #[pyclass]
-//     #[derive(Clone)]
-//     struct PyStaticKTAM {
-//         sys: StaticKTAM
-//     }
-
-//     #[pyclass]
-//     #[derive(Clone)]
-//     struct PyStaticATAM {
-//         sys: StaticATAM
-//     }
-
-//     #[pyclass]
-//     #[derive(Clone)]
-//     struct PyStateKTAM {
-//         state: State2DQT<StaticKTAM>
-//     }
-
-//     #[pyclass]
-//     #[derive(Clone)]
-//     struct PyStateATAM {
-//         state: State2DQT<StaticATAM>
-//     }
-
-//     #[pymethods]
-//     impl PyStaticKTAM {
-//         #[new]
-//         fn new(tile_concs: PyReadonlyArray1<f64>, tile_edges: PyReadonlyArray2<Tile>,
-//             glue_strengths: PyReadonlyArray1<Energy>, gse: Energy) -> PyResult<Self> {
-//             let sys = StaticKTAM::new(tile_concs.to_owned_array(),
-//                         tile_edges.to_owned_array(),
-//                         glue_strengths.to_owned_array(), gse);
-
-//             Ok(PyStaticKTAM { sys })
-//         }
-//     }
-
-//     #[pymethods]
-//     impl PyStaticATAM {
-//         #[new]
-//         fn new(tile_concs: PyReadonlyArray1<f64>, tile_edges: PyReadonlyArray2<Tile>,
-//             glue_strengths: PyReadonlyArray1<Energy>, tau: Energy) -> PyResult<Self> {
-//             let sys = StaticATAM::new(tile_concs.to_owned_array(),
-//                         tile_edges.to_owned_array(),
-//                         glue_strengths.to_owned_array(), tau);
-
-//             Ok(PyStaticATAM { sys })
-//         }
-//     }
-
-//     #[pymethods]
-//     impl PyStateKTAM {
-//         #[new]
-//         fn new(canvas: PyReadonlyArray2<usize>, system: PyStaticKTAM) -> PyResult<Self> {
-//             let state = State2DQT::<StaticKTAM>::create(&canvas.to_owned_array(), &system.sys);
-
-//             Ok(Self { state })
-//         }
-
-//         fn take_step(&mut self) -> PyResult<()> {
-//             self.state.take_step();
-
-//             Ok(())
-//         }
-
-//         fn evolve_in_size_range(&mut self, minsize: usize, maxsize: usize, maxevents: u64) -> PyResult<()> {
-//             self.state.evolve_in_size_range(minsize, maxsize, maxevents);
-
-//             Ok(())
-//         }
-
-//         fn to_array(&self, py: Python) -> Py<PyArray2<usize>> {
-//             self.state.canvas.canvas.to_owned().into_pyarray(py).into()
-//         }
-
-//         fn rates(&self, level: usize, py: Python) -> Py<PyArray2<f64>> {
-//             self.state.rates[level].to_owned().into_pyarray(py).into()
-//         }
-//     }
-
-//     #[pymethods]
-//     impl PyStateATAM {
-//         #[new]
-//         fn new(canvas: PyReadonlyArray2<usize>, system: PyStaticATAM) -> PyResult<Self> {
-//             let state = State2DQT::<StaticATAM>::create(&canvas.to_owned_array(), &system.sys);
-
-//             Ok(Self { state })
-//         }
-
-//         fn take_step(&mut self) -> PyResult<()> {
-//             self.state.take_step();
-
-//             Ok(())
-//         }
-
-//         fn evolve_in_size_range(&mut self, minsize: usize, maxsize: usize, maxevents: u64) -> PyResult<()> {
-//             self.state.evolve_in_size_range(minsize, maxsize, maxevents);
-
-//             Ok(())
-//         }
-
-//         fn to_array(&self, py: Python) -> Py<PyArray2<usize>> {
-//             self.state.canvas.canvas.to_owned().into_pyarray(py).into()
-//         }
-
-//         fn rates(&self, level: usize, py: Python) -> Py<PyArray2<f64>> {
-//             self.state.rates[level].to_owned().into_pyarray(py).into()
-//         }
-//     }
-//     m.add_class::<PyStaticATAM>()?;
-//     m.add_class::<PyStaticKTAM>()?;
-//     m.add_class::<PyStateKTAM>()?;
-//     m.add_class::<PyStateATAM>()?;
-
-//     Ok(())
-// }

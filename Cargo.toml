@@ -9,7 +9,6 @@ edition = "2018"
 [lib]
 name = "rgrow"
 path = "src/lib.rs"
-crate-type = ["lib"]
 
 [[bin]]
 name = "rgrow-bin"
@@ -17,12 +16,9 @@ path = "src/main.rs"
 
 [dependencies]
 ndarray = "0.13"
-numpy = "0.11"
 rand = "0.7"
+num-format = "0.4.0"
 
 [dependencies.num-traits]
 version = "0.2"
 
-[dependencies.pyo3]
-version = "0.11"
-features = ["extension-module"]
