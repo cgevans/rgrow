@@ -167,7 +167,7 @@ where
         }
 
         let size = canvas.nrows();
-
+        
         let ncanvas = Canvas2D {
             canvas: canvas.to_owned(),
             size,
