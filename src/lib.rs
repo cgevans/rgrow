@@ -495,14 +495,22 @@ where
             // The base level
             let mut rt = rtiter.next().unwrap();
             let mut np: (usize, usize) = *ps;
+            let mut ip: (usize, usize);
 
             rt[*ps] = self.system.event_rate_at_point(&self.canvas, *ps);
 
             for rn in rtiter {
                 np = (np.0 / 2, np.1 / 2);
-                rn[np] = rt
-                    .slice(s![2 * np.0..2 * np.0 + 2, 2 * np.1..2 * np.1 + 2])
-                    .sum();
+                ip = (np.0 * 2, np.1 * 2);
+                // *rn.uget_mut(np) = rt
+                //     .slice(s![2 * np.0..2 * np.0 + 2, 2 * np.1..2 * np.1 + 2])
+                //     .sum();
+                unsafe {
+                    *rn.uget_mut(np) = *rt.uget(ip)
+                    + *rt.uget((ip.0, ip.1+1))
+                    + *rt.uget((ip.0+1, ip.1))
+                    + *rt.uget((ip.0+1, ip.1+1));
+                }
                 rt = rn;
             }
 

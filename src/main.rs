@@ -42,7 +42,7 @@ fn main() {
 
     let mut state = State2DQT::create(&canvas, &sys);
 
-    state.evolve_in_size_range(2, 20000, 50000000);
+    state.evolve_in_size_range(2, 100000, 50000000);
 
     println!("{} tiles, {} events", state.ntiles(), state.total_events())
 }
