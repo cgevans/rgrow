@@ -1,6 +1,7 @@
 extern crate ndarray;
 use rgrow::{State2DQT, StaticKTAM, StateEvolve, StateCreate, StateStatus};
 use ndarray::prelude::*;
+use std::{convert::TryInto, time::{Instant, Duration}};
 
 fn main() {
 
@@ -42,7 +43,13 @@ fn main() {
 
     let mut state = State2DQT::create(&canvas, &sys);
 
+    let now = Instant::now();
+
     state.evolve_in_size_range(2, 100000, 50000000);
 
-    println!("{} tiles, {} events", state.ntiles(), state.total_events())
+    let el = now.elapsed().as_secs_f64();
+
+    let evps: f64 = state.total_events() as f64 / el;
+
+    println!("{} tiles, {} events, {} secs, {} ev/sec", state.ntiles(), state.total_events(), el, evps);
 }
