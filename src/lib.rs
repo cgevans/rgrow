@@ -1,6 +1,6 @@
 extern crate ndarray;
+use fnv::FnvHashSet;
 use std::marker::PhantomData;
-use fnv::{FnvHashSet};
 extern crate num_traits;
 use ndarray::prelude::*;
 use ndarray::{FoldWhile, Zip};
@@ -68,6 +68,10 @@ pub struct StaticKTAM {
     tile_rates: Array1<Rate>,
     energy_ns: Array2<Energy>,
     energy_we: Array2<Energy>,
+    friends_n: Vec<FnvHashSet<Tile>>,
+    friends_e: Vec<FnvHashSet<Tile>>,
+    friends_s: Vec<FnvHashSet<Tile>>,
+    friends_w: Vec<FnvHashSet<Tile>>
 }
 
 #[derive(Clone)]
@@ -119,6 +123,43 @@ impl StaticATAM {
     }
 }
 
+fn create_friend_data(
+    energy_ns: &Array2<Energy>,
+    energy_we: &Array2<Energy>,
+) -> (
+    Vec<FnvHashSet<Tile>>,
+    Vec<FnvHashSet<Tile>>,
+    Vec<FnvHashSet<Tile>>,
+    Vec<FnvHashSet<Tile>>,
+) {
+    let mut friends_n = Vec::<FnvHashSet<Tile>>::new();
+    let mut friends_e = Vec::<FnvHashSet<Tile>>::new();
+    let mut friends_s = Vec::<FnvHashSet<Tile>>::new();
+    let mut friends_w = Vec::<FnvHashSet<Tile>>::new();
+    
+    for _t1 in 0..energy_ns.nrows() {
+        friends_n.push(FnvHashSet::default());
+        friends_e.push(FnvHashSet::default());
+        friends_s.push(FnvHashSet::default());
+        friends_w.push(FnvHashSet::default());
+    }
+
+    for t1 in 0..energy_ns.nrows() {
+        for t2 in 0..energy_ns.nrows() {
+            if energy_ns[(t1, t2)] != 0. {
+                friends_s[t1].insert(t2);
+                friends_n[t2].insert(t1);
+            }
+            if energy_we[(t1, t2)] != 0. {
+                friends_e[t1].insert(t2);
+                friends_w[t2].insert(t1);
+            }
+        }
+    };
+
+    (friends_n, friends_e, friends_s, friends_w)
+}
+
 impl StaticKTAM {
     pub fn new(
         tile_concs: Array1<f64>,
@@ -142,15 +183,34 @@ impl StaticKTAM {
                 }
             }
         }
+        let (friends_n, friends_e, friends_s, friends_w) = create_friend_data(&energy_ns, &energy_we);
         return StaticKTAM {
             tile_rates: tile_concs,
             energy_ns,
             energy_we,
+            friends_n,
+            friends_e,
+            friends_s,
+            friends_w,
         };
     }
 
-    pub fn from_raw(tile_rates: Array1<f64>, energy_ns: Array2<Energy>, energy_we: Array2<Energy>) -> Self {
-        StaticKTAM { tile_rates, energy_ns, energy_we }
+    pub fn from_raw(
+        tile_rates: Array1<f64>,
+        energy_ns: Array2<Energy>,
+        energy_we: Array2<Energy>,
+    ) -> Self {
+        let (friends_n, friends_e, friends_s, friends_w) = create_friend_data(&energy_ns, &energy_we);
+
+        StaticKTAM {
+            tile_rates,
+            energy_ns,
+            energy_we,
+            friends_n,
+            friends_e,
+            friends_s,
+            friends_w,
+        }
     }
 }
 
@@ -170,7 +230,7 @@ where
         }
 
         let size = canvas.nrows();
-        
+
         let ncanvas = Canvas2D {
             canvas: canvas.to_owned(),
             size,
@@ -306,28 +366,42 @@ where
                 + self.energy_we[(tw, tile)];
 
             Rate::exp(-bound_energy)
-        } else if (tn == 0) & (te == 0) & (tw == 0) & (ts == 0) { 
+        } else if (tn == 0) & (te == 0) & (tw == 0) & (ts == 0) {
             // Short circuit for no possibility of insertion (no adjacents)
-            0.0 } 
-        else {
+            0.0
+        } else {
             // Insertion
 
-            Zip::from(self.energy_ns.row(tn))
-                .and(self.energy_we.column(te))
-                .and(self.energy_ns.column(ts))
-                .and(self.energy_we.row(tw))
-                .and(&self.tile_rates)
-                .fold(0., |acc, &n, &e, &s, &w, &r| {
-                    if (n != 0.) | (e != 0.) | (s != 0.) | (w != 0.) {
-                        acc + r
-                    } else {
-                        acc
-                    }
-                })
+            let mut friends = FnvHashSet::<Tile>::default();
+
+            if tn != 0 {friends.extend(&self.friends_s[tn]);}
+            if te != 0 {friends.extend(&self.friends_w[te]);}
+            if ts != 0 {friends.extend(&self.friends_n[ts]);}
+            if tw != 0 {friends.extend(&self.friends_e[tw]);}
+
+            let mut acc = 0.;
+            for t in friends.drain() {
+                acc += self.tile_rates[t];
+            }
+
+            acc
+
+        //     Zip::from(self.energy_ns.row(tn))
+        //         .and(self.energy_we.column(te))
+        //         .and(self.energy_ns.column(ts))
+        //         .and(self.energy_we.row(tw))
+        //         .and(&self.tile_rates)
+        //         .fold(0., |acc, &n, &e, &s, &w, &r| {
+        //             if (n != 0.) | (e != 0.) | (s != 0.) | (w != 0.) {
+        //                 acc + r
+        //             } else {
+        //                 acc
+        //             }
+        //         })
         }
     }
 
-    fn choose_event_at_point(&self, canvas: &C, p: Point, acc: Rate) -> Tile {
+    fn choose_event_at_point(&self, canvas: &C, p: Point, mut acc: Rate) -> Tile {
         if !canvas.inbounds(p) {
             panic!("Oh dear!");
         }
@@ -344,36 +418,50 @@ where
             let ts = unsafe { canvas.uv_s(p) };
             let tw = unsafe { canvas.uv_w(p) };
 
-            // Insertion is hard!
-            let r = Zip::indexed(self.energy_ns.row(tn))
-                .and(self.energy_we.column(te))
-                .and(self.energy_ns.column(ts))
-                .and(self.energy_we.row(tw))
-                .and(&self.tile_rates)
-                .fold_while((acc, 0), |(acc, _v), i, &n, &e, &s, &w, &r| {
-                    if (n != 0.) | (e != 0.) | (s != 0.) | (w != 0.) {
-                        if acc - r > 0. {
-                            FoldWhile::Continue((acc - r, 0))
-                        } else {
-                            FoldWhile::Done((acc - r, i))
-                        }
-                    } else {
-                        FoldWhile::Continue((acc, 0))
-                    }
-                });
+            let mut friends = FnvHashSet::<Tile>::default();
 
-            match r {
-                FoldWhile::Done((_acc, i)) => i,
+            friends.extend(&self.friends_s[tn]);
+            friends.extend(&self.friends_w[te]);
+            friends.extend(&self.friends_n[ts]);
+            friends.extend(&self.friends_e[tw]);
 
-                FoldWhile::Continue((_acc, _i)) => panic!(),
+            for t in friends.drain() {
+                acc -= self.tile_rates[t];
+                if acc <= 0. {return t};
             }
+
+            panic!();
+
+            // // Insertion is hard!
+            // let r = Zip::indexed(self.energy_ns.row(tn))
+            //     .and(self.energy_we.column(te))
+            //     .and(self.energy_ns.column(ts))
+            //     .and(self.energy_we.row(tw))
+            //     .and(&self.tile_rates)
+            //     .fold_while((acc, 0), |(acc, _v), i, &n, &e, &s, &w, &r| {
+            //         if (n != 0.) | (e != 0.) | (s != 0.) | (w != 0.) {
+            //             if acc - r > 0. {
+            //                 FoldWhile::Continue((acc - r, 0))
+            //             } else {
+            //                 FoldWhile::Done((acc - r, i))
+            //             }
+            //         } else {
+            //             FoldWhile::Continue((acc, 0))
+            //         }
+            //     });
+
+            // match r {
+            //     FoldWhile::Done((_acc, i)) => i,
+
+            //     FoldWhile::Continue((_acc, _i)) => panic!(),
+            // }
         }
     }
 }
 
 impl<S> StateEvolve<Canvas2D, S> for State2DQT<S>
 where
-    S: System<Canvas2D>
+    S: System<Canvas2D>,
 {
     fn evolve_in_size_range(
         &mut self,
@@ -485,7 +573,6 @@ where
     }
 
     pub fn create_we_pair(sys: &S, w: Tile, e: Tile, size: usize) -> Self {
-
         assert!(size.is_power_of_two());
         assert!(size > 8);
 
@@ -500,9 +587,9 @@ where
         }
 
         let size = canvas.nrows();
-        
-        canvas[(size/2, size/2)] = w;
-        canvas[(size/2, size/2 + 1)] = e;
+
+        canvas[(size / 2, size / 2)] = w;
+        canvas[(size / 2, size / 2 + 1)] = e;
 
         let ncanvas = Canvas2D {
             canvas: canvas,
@@ -518,15 +605,13 @@ where
             total_events: 0,
         };
 
-        ret.update_rates_ps(sys, (size/2, size/2));
-        ret.update_rates_ps(sys, (size/2, size/2+1));
+        ret.update_rates_ps(sys, (size / 2, size / 2));
+        ret.update_rates_ps(sys, (size / 2, size / 2 + 1));
 
         ret
     }
 
-
     pub fn create_ns_pair(sys: &S, n: Tile, s: Tile, size: usize) -> Self {
-
         assert!(size.is_power_of_two());
         assert!(size > 8);
 
@@ -541,9 +626,9 @@ where
         }
 
         let size = canvas.nrows();
-        
-        canvas[(size/2, size/2)] = n;
-        canvas[(size/2+1, size/2)] = s;
+
+        canvas[(size / 2, size / 2)] = n;
+        canvas[(size / 2 + 1, size / 2)] = s;
 
         let ncanvas = Canvas2D {
             canvas: canvas,
@@ -559,8 +644,8 @@ where
             total_events: 0,
         };
 
-        ret.update_rates_ps(sys, (size/2, size/2));
-        ret.update_rates_ps(sys, (size/2+1, size/2));
+        ret.update_rates_ps(sys, (size / 2, size / 2));
+        ret.update_rates_ps(sys, (size / 2 + 1, size / 2));
 
         ret
     }
@@ -569,8 +654,11 @@ where
         let ot = self.canvas.canvas[p];
         self.canvas.canvas[p] = t;
         self.update_rates_ps(sys, p);
-        if (t == 0) & (ot != 0) {self.ntiles -= 1} 
-        else if (t != 0) & (ot == 0) {self.ntiles += 1};
+        if (t == 0) & (ot != 0) {
+            self.ntiles -= 1
+        } else if (t != 0) & (ot == 0) {
+            self.ntiles += 1
+        };
 
         self
     }
@@ -650,7 +738,6 @@ where
 
         return self;
     }
-
 
     fn update_rates_single_noprop(&mut self, system: &S, p: Point) -> &Self {
         let mut rt = self.rates.iter_mut().next().unwrap();
