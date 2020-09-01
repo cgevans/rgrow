@@ -1,4 +1,6 @@
 extern crate ndarray;
+use std::marker::PhantomData;
+use fnv::{FnvHashSet};
 extern crate num_traits;
 use ndarray::prelude::*;
 use ndarray::{FoldWhile, Zip};
@@ -11,21 +13,22 @@ pub type Tile = usize;
 pub type Rate = f64;
 pub type Energy = f64;
 
-pub trait StateEvolve {
+pub trait StateEvolve<C: Canvas, S: System<C>> {
     fn evolve_in_size_range(
         &mut self,
+        system: &S,
         minsize: NumTiles,
         maxsize: NumTiles,
         maxevents: NumEvents,
     ) -> &Self;
 }
 
-pub trait StateStep {
-    fn take_step(&mut self) -> &Self;
+pub trait StateStep<C: Canvas, S: System<C>> {
+    fn take_step(&mut self, system: &S) -> &Self;
 }
 
-pub trait StateCreate<'s, C: Canvas, S: System<C>> {
-    fn create(canvas: &Array2<Tile>, sys: &'s S) -> Self;
+pub trait StateCreate<C: Canvas, S: System<C>> {
+    fn create(canvas: &Array2<Tile>, sys: &S) -> Self;
 }
 
 pub trait StateStatus {
@@ -68,10 +71,10 @@ pub struct StaticKTAM {
 }
 
 #[derive(Clone)]
-pub struct State2DQT<'s, S: System<Canvas2D>> {
+pub struct State2DQT<S: System<Canvas2D>> {
     pub rates: Vec<Array2<Rate>>,
     pub canvas: Canvas2D,
-    system: &'s S,
+    phantomsys: PhantomData<S>,
     ntiles: NumTiles,
     total_rate: Rate,
     total_events: NumEvents,
@@ -151,11 +154,11 @@ impl StaticKTAM {
     }
 }
 
-impl<'s, S> StateCreate<'s, Canvas2D, S> for State2DQT<'s, S>
+impl<S> StateCreate<Canvas2D, S> for State2DQT<S>
 where
     S: System<Canvas2D> + Clone,
 {
-    fn create(canvas: &Array2<Tile>, sys: &'s S) -> Self {
+    fn create(canvas: &Array2<Tile>, sys: &S) -> Self {
         assert!(canvas.nrows().is_power_of_two());
 
         let p: u32 = (1 + canvas.nrows().trailing_zeros()).try_into().unwrap();
@@ -173,10 +176,10 @@ where
             size,
         };
 
-        let mut ret = State2DQT::<'s, S> {
+        let mut ret = State2DQT::<S> {
             rates: rates,
             canvas: ncanvas,
-            system: sys,
+            phantomsys: PhantomData,
             ntiles: canvas.fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 })),
             total_rate: 0.,
             total_events: 0,
@@ -185,9 +188,10 @@ where
         for y in 1..size - 1 {
             for x in 1..size - 1 {
                 // FIXME: not at all ideal
-                ret.update_rates_single((y, x));
+                ret.update_rates_single_noprop(sys, (y, x));
             }
         }
+        ret.rebuild_ratetree();
 
         ret
     }
@@ -367,12 +371,13 @@ where
     }
 }
 
-impl<T> StateEvolve for T
+impl<S> StateEvolve<Canvas2D, S> for State2DQT<S>
 where
-    T: StateStep + StateStatus,
+    S: System<Canvas2D>
 {
     fn evolve_in_size_range(
         &mut self,
+        system: &S,
         minsize: NumTiles,
         maxsize: NumTiles,
         maxevents: NumEvents,
@@ -380,7 +385,7 @@ where
         let mut events: NumEvents = 0;
 
         while events < maxevents {
-            self.take_step();
+            self.take_step(system);
 
             if (self.ntiles() <= minsize) | (self.ntiles() >= maxsize) {
                 return self;
@@ -438,7 +443,7 @@ macro_rules! plusar {
     };
 }
 
-impl<'s, S> State2DQT<'s, S>
+impl<S> State2DQT<S>
 where
     S: System<Canvas2D>,
 {
@@ -479,8 +484,99 @@ where
         return ((y, x), threshold);
     }
 
-    fn do_event_at_location(&mut self, p: Point, acc: Rate) -> &Self {
-        let newtile = self.system.choose_event_at_point(&self.canvas, p, acc);
+    pub fn create_we_pair(sys: &S, w: Tile, e: Tile, size: usize) -> Self {
+
+        assert!(size.is_power_of_two());
+        assert!(size > 8);
+
+        let mut canvas = Array2::<Tile>::zeros((size, size));
+
+        let p: u32 = (1 + size.trailing_zeros()).try_into().unwrap();
+
+        let mut rates = Vec::<Array2<Rate>>::new();
+
+        for i in (1..p).rev() {
+            rates.push(Array2::<Rate>::zeros((2usize.pow(i), 2usize.pow(i))))
+        }
+
+        let size = canvas.nrows();
+        
+        canvas[(size/2, size/2)] = w;
+        canvas[(size/2, size/2 + 1)] = e;
+
+        let ncanvas = Canvas2D {
+            canvas: canvas,
+            size,
+        };
+
+        let mut ret = State2DQT::<S> {
+            rates: rates,
+            canvas: ncanvas,
+            phantomsys: PhantomData,
+            ntiles: 2,
+            total_rate: 0.,
+            total_events: 0,
+        };
+
+        ret.update_rates_ps(sys, (size/2, size/2));
+        ret.update_rates_ps(sys, (size/2, size/2+1));
+
+        ret
+    }
+
+
+    pub fn create_ns_pair(sys: &S, n: Tile, s: Tile, size: usize) -> Self {
+
+        assert!(size.is_power_of_two());
+        assert!(size > 8);
+
+        let mut canvas = Array2::<Tile>::zeros((size, size));
+
+        let p: u32 = (1 + size.trailing_zeros()).try_into().unwrap();
+
+        let mut rates = Vec::<Array2<Rate>>::new();
+
+        for i in (1..p).rev() {
+            rates.push(Array2::<Rate>::zeros((2usize.pow(i), 2usize.pow(i))))
+        }
+
+        let size = canvas.nrows();
+        
+        canvas[(size/2, size/2)] = n;
+        canvas[(size/2+1, size/2)] = s;
+
+        let ncanvas = Canvas2D {
+            canvas: canvas,
+            size,
+        };
+
+        let mut ret = State2DQT::<S> {
+            rates: rates,
+            canvas: ncanvas,
+            phantomsys: PhantomData,
+            ntiles: 2,
+            total_rate: 0.,
+            total_events: 0,
+        };
+
+        ret.update_rates_ps(sys, (size/2, size/2));
+        ret.update_rates_ps(sys, (size/2+1, size/2));
+
+        ret
+    }
+
+    pub fn set_point(&mut self, sys: &S, p: Point, t: Tile) -> &Self {
+        let ot = self.canvas.canvas[p];
+        self.canvas.canvas[p] = t;
+        self.update_rates_ps(sys, p);
+        if (t == 0) & (ot != 0) {self.ntiles -= 1} 
+        else if (t != 0) & (ot == 0) {self.ntiles += 1};
+
+        self
+    }
+
+    fn do_event_at_location(&mut self, system: &S, p: Point, acc: Rate) -> &Self {
+        let newtile = system.choose_event_at_point(&self.canvas, p, acc);
 
         if newtile == 0 {
             self.ntiles -= 1
@@ -493,10 +589,10 @@ where
         // Repeatedly checked!
         unsafe { *self.canvas.canvas.uget_mut(p) = newtile };
 
-        self.update_rates_ps(p)
+        self.update_rates_ps(system, p)
     }
 
-    fn update_rates_ps(&mut self, p: Point) -> &Self {
+    fn update_rates_ps(&mut self, system: &S, p: Point) -> &Self {
         let mut rtiter = self.rates.iter_mut();
 
         // The base level
@@ -504,7 +600,7 @@ where
         let mut np: (usize, usize) = p.clone();
 
         for ps in plusar!(p) {
-            rt[*ps] = self.system.event_rate_at_point(&self.canvas, *ps);
+            rt[*ps] = system.event_rate_at_point(&self.canvas, *ps);
         }
 
         let mut div: usize = 2;
@@ -537,24 +633,48 @@ where
         return self;
     }
 
-    fn update_rates_single(&mut self, p: Point) -> &Self {
+    fn update_rates_single(&mut self, system: &S, p: Point) -> &Self {
         let mut rtiter = self.rates.iter_mut();
         let mut rt = rtiter.next().unwrap();
         let mut np: (usize, usize) = p.clone();
 
-        rt[p] = self.system.event_rate_at_point(&self.canvas, p);
+        rt[p] = system.event_rate_at_point(&self.canvas, p);
 
         for rn in rtiter {
             np = (np.0 / 2, np.1 / 2);
-            rn[np] = rt
-                .slice(s![2 * np.0..2 * np.0 + 2, 2 * np.1..2 * np.1 + 2])
-                .sum();
+            qt_update_level(rn, rt, np);
             rt = rn;
         }
 
         self.total_rate = rt.sum();
 
         return self;
+    }
+
+
+    fn update_rates_single_noprop(&mut self, system: &S, p: Point) -> &Self {
+        let mut rt = self.rates.iter_mut().next().unwrap();
+
+        rt[p] = system.event_rate_at_point(&self.canvas, p);
+
+        return self;
+    }
+
+    fn rebuild_ratetree(&mut self) -> &Self {
+        let mut rtiter = self.rates.iter_mut();
+        let mut rt = rtiter.next().unwrap();
+
+        for rn in rtiter {
+            for (p, v) in rn.indexed_iter_mut() {
+                qt_update_level_val(v, rt, p)
+            }
+
+            rt = rn;
+        }
+
+        self.total_rate = rt.sum();
+
+        self
     }
 }
 
@@ -570,26 +690,38 @@ fn qt_update_level(rn: &mut Array2<Rate>, rt: &Array2<Rate>, np: Point) {
     }
 }
 
-impl<'s, S> StateStep for State2DQT<'s, S>
+#[inline]
+fn qt_update_level_val(rn: &mut f64, rt: &Array2<Rate>, np: Point) {
+    let ip = (np.0 * 2, np.1 * 2);
+
+    unsafe {
+        *rn = *rt.uget(ip)
+            + *rt.uget((ip.0, ip.1 + 1))
+            + *rt.uget((ip.0 + 1, ip.1))
+            + *rt.uget((ip.0 + 1, ip.1 + 1));
+    }
+}
+
+impl<S> StateStep<Canvas2D, S> for State2DQT<S>
 where
     S: System<Canvas2D>,
 {
-    fn take_step(&mut self) -> &Self {
+    fn take_step(&mut self, system: &S) -> &Self {
         // Decide on a point.
         let (p, acc) = self.choose_event_point();
 
         // Do the event.
-        self.do_event_at_location(p, acc);
+        self.do_event_at_location(system, p, acc);
 
         // Update rates around the point (point, and NESW)
         // Only works without fission and without double tiles!
-        self.update_rates_ps(p);
+        self.update_rates_ps(system, p);
 
         return self;
     }
 }
 
-impl<'s, S> StateStatus for State2DQT<'s, S>
+impl<S> StateStatus for State2DQT<S>
 where
     S: System<Canvas2D>,
 {

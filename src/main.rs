@@ -44,7 +44,7 @@ fn main() {
 
     let now = Instant::now();
 
-    state.evolve_in_size_range(2, 100000, 50000000);
+    state.evolve_in_size_range(&sys, 2, 100000, 50000000);
 
     let el = now.elapsed().as_secs_f64();
 
