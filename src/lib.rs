@@ -1,7 +1,9 @@
 extern crate ndarray;
+use cached::Cached;
 use fnv::FnvHashSet;
 use std::marker::PhantomData;
 extern crate num_traits;
+use cached::{UnboundCache};
 use ndarray::prelude::*;
 use ndarray::{FoldWhile, Zip};
 use rand::prelude::*;
@@ -16,7 +18,7 @@ pub type Energy = f64;
 pub trait StateEvolve<C: Canvas, S: System<C>> {
     fn evolve_in_size_range(
         &mut self,
-        system: &S,
+        system: &mut S,
         minsize: NumTiles,
         maxsize: NumTiles,
         maxevents: NumEvents,
@@ -24,11 +26,11 @@ pub trait StateEvolve<C: Canvas, S: System<C>> {
 }
 
 pub trait StateStep<C: Canvas, S: System<C>> {
-    fn take_step(&mut self, system: &S) -> &Self;
+    fn take_step(&mut self, system: &mut S) -> &Self;
 }
 
 pub trait StateCreate<C: Canvas, S: System<C>> {
-    fn create(canvas: &Array2<Tile>, sys: &S) -> Self;
+    fn create(canvas: &Array2<Tile>, sys: &mut S) -> Self;
 }
 
 pub trait StateStatus {
@@ -50,7 +52,7 @@ pub trait Canvas {
     fn inbounds(&self, p: Point) -> bool;
 }
 pub trait System<C: Canvas> {
-    fn event_rate_at_point(&self, canvas: &C, p: Point) -> Rate;
+    fn event_rate_at_point(&mut self, canvas: &C, p: Point) -> Rate;
 
     fn choose_event_at_point(&self, canvas: &C, p: Point, acc: Rate) -> Tile;
 }
@@ -71,7 +73,8 @@ pub struct StaticKTAM {
     friends_n: Vec<FnvHashSet<Tile>>,
     friends_e: Vec<FnvHashSet<Tile>>,
     friends_s: Vec<FnvHashSet<Tile>>,
-    friends_w: Vec<FnvHashSet<Tile>>
+    friends_w: Vec<FnvHashSet<Tile>>,
+    insertcache: UnboundCache<(Tile, Tile, Tile, Tile), f64>
 }
 
 #[derive(Clone)]
@@ -192,6 +195,7 @@ impl StaticKTAM {
             friends_e,
             friends_s,
             friends_w,
+            insertcache: UnboundCache::with_capacity(10000)
         };
     }
 
@@ -210,6 +214,7 @@ impl StaticKTAM {
             friends_e,
             friends_s,
             friends_w,
+            insertcache: UnboundCache::with_capacity(10000)
         }
     }
 }
@@ -218,7 +223,7 @@ impl<S> StateCreate<Canvas2D, S> for State2DQT<S>
 where
     S: System<Canvas2D> + Clone,
 {
-    fn create(canvas: &Array2<Tile>, sys: &S) -> Self {
+    fn create(canvas: &Array2<Tile>, sys: &mut S) -> Self {
         assert!(canvas.nrows().is_power_of_two());
 
         let p: u32 = (1 + canvas.nrows().trailing_zeros()).try_into().unwrap();
@@ -261,7 +266,7 @@ impl<C> System<C> for StaticATAM
 where
     C: Canvas,
 {
-    fn event_rate_at_point(&self, canvas: &C, p: Point) -> Rate {
+    fn event_rate_at_point(&mut self, canvas: &C, p: Point) -> Rate {
         if !canvas.inbounds(p) {
             return 0.0;
         }
@@ -343,7 +348,7 @@ impl<C> System<C> for StaticKTAM
 where
     C: Canvas,
 {
-    fn event_rate_at_point(&self, canvas: &C, p: Point) -> Rate {
+    fn event_rate_at_point(&mut self, canvas: &C, p: Point) -> Rate {
         if !canvas.inbounds(p) {
             return 0.0;
         }
@@ -372,19 +377,29 @@ where
         } else {
             // Insertion
 
-            let mut friends = FnvHashSet::<Tile>::default();
+            match self.insertcache.cache_get(&(tn, te, ts, tw)) {
+                Some(acc) => {*acc},
 
-            if tn != 0 {friends.extend(&self.friends_s[tn]);}
-            if te != 0 {friends.extend(&self.friends_w[te]);}
-            if ts != 0 {friends.extend(&self.friends_n[ts]);}
-            if tw != 0 {friends.extend(&self.friends_e[tw]);}
+                None => {
+                    let mut friends = FnvHashSet::<Tile>::default();
 
-            let mut acc = 0.;
-            for t in friends.drain() {
-                acc += self.tile_rates[t];
+                    if tn != 0 {friends.extend(&self.friends_s[tn]);}
+                    if te != 0 {friends.extend(&self.friends_w[te]);}
+                    if ts != 0 {friends.extend(&self.friends_n[ts]);}
+                    if tw != 0 {friends.extend(&self.friends_e[tw]);}
+        
+                    let mut acc = 0.;
+                    for t in friends.drain() {
+                        acc += self.tile_rates[t];
+                    }
+        
+                    self.insertcache.cache_set((tn, te, ts, tw), acc);
+
+                    acc
+                }
             }
 
-            acc
+
 
         //     Zip::from(self.energy_ns.row(tn))
         //         .and(self.energy_we.column(te))
@@ -465,7 +480,7 @@ where
 {
     fn evolve_in_size_range(
         &mut self,
-        system: &S,
+        system: &mut S,
         minsize: NumTiles,
         maxsize: NumTiles,
         maxevents: NumEvents,
@@ -572,7 +587,7 @@ where
         return ((y, x), threshold);
     }
 
-    pub fn create_we_pair(sys: &S, w: Tile, e: Tile, size: usize) -> Self {
+    pub fn create_we_pair(sys: &mut S, w: Tile, e: Tile, size: usize) -> Self {
         assert!(size.is_power_of_two());
         assert!(size > 8);
 
@@ -611,7 +626,7 @@ where
         ret
     }
 
-    pub fn create_ns_pair(sys: &S, n: Tile, s: Tile, size: usize) -> Self {
+    pub fn create_ns_pair(sys: &mut S, n: Tile, s: Tile, size: usize) -> Self {
         assert!(size.is_power_of_two());
         assert!(size > 8);
 
@@ -650,7 +665,7 @@ where
         ret
     }
 
-    pub fn set_point(&mut self, sys: &S, p: Point, t: Tile) -> &Self {
+    pub fn set_point(&mut self, sys: &mut S, p: Point, t: Tile) -> &Self {
         let ot = self.canvas.canvas[p];
         self.canvas.canvas[p] = t;
         self.update_rates_ps(sys, p);
@@ -663,7 +678,7 @@ where
         self
     }
 
-    fn do_event_at_location(&mut self, system: &S, p: Point, acc: Rate) -> &Self {
+    fn do_event_at_location(&mut self, system: &mut S, p: Point, acc: Rate) -> &Self {
         let newtile = system.choose_event_at_point(&self.canvas, p, acc);
 
         if newtile == 0 {
@@ -680,7 +695,7 @@ where
         self.update_rates_ps(system, p)
     }
 
-    fn update_rates_ps(&mut self, system: &S, p: Point) -> &Self {
+    fn update_rates_ps(&mut self, system: &mut S, p: Point) -> &Self {
         let mut rtiter = self.rates.iter_mut();
 
         // The base level
@@ -721,7 +736,8 @@ where
         return self;
     }
 
-    fn update_rates_single(&mut self, system: &S, p: Point) -> &Self {
+    #[allow(dead_code)]
+    fn update_rates_single(&mut self, system: &mut S, p: Point) -> &Self {
         let mut rtiter = self.rates.iter_mut();
         let mut rt = rtiter.next().unwrap();
         let mut np: (usize, usize) = p.clone();
@@ -739,8 +755,8 @@ where
         return self;
     }
 
-    fn update_rates_single_noprop(&mut self, system: &S, p: Point) -> &Self {
-        let mut rt = self.rates.iter_mut().next().unwrap();
+    fn update_rates_single_noprop(&mut self, system: &mut S, p: Point) -> &Self {
+        let rt = self.rates.iter_mut().next().unwrap();
 
         rt[p] = system.event_rate_at_point(&self.canvas, p);
 
@@ -793,7 +809,7 @@ impl<S> StateStep<Canvas2D, S> for State2DQT<S>
 where
     S: System<Canvas2D>,
 {
-    fn take_step(&mut self, system: &S) -> &Self {
+    fn take_step(&mut self, system: &mut S) -> &Self {
         // Decide on a point.
         let (p, acc) = self.choose_event_point();
 

@@ -38,13 +38,13 @@ fn main() {
 
     canvas.slice_mut(s![0..10,0..10]).assign(&internal);
 
-    let sys = StaticKTAM::new(tc, te, gs, gse);
+    let mut sys = StaticKTAM::new(tc, te, gs, gse);
 
-    let mut state = State2DQT::create(&canvas, &sys);
+    let mut state = State2DQT::create(&canvas, &mut sys);
 
     let now = Instant::now();
 
-    state.evolve_in_size_range(&sys, 2, 100000, 50000000);
+    state.evolve_in_size_range(&mut sys, 2, 100000, 50000000);
 
     let el = now.elapsed().as_secs_f64();
 
