@@ -1,0 +1,21 @@
+[package]
+name = "pyrgrow"
+version = "0.1.0"
+authors = ["Constantine Evans <cevans@costinet.org>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "rgrow"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+numpy = "0.11"
+ndarray = "0.13"
+rgrow = { path = "../rgrow/" }
+
+[dependencies.pyo3]
+version = "0.11"
+features = ["extension-module"]
