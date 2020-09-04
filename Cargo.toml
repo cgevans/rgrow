@@ -19,7 +19,20 @@ ndarray = "0.13"
 rand = "0.7"
 num-format = "0.4.0"
 fnv = "1.0"
-cached = "0.18"
+bimap = "0.5"
+clap = "3.0.0-beta.1"
+serde_yaml = "0.8"
+#pixels = "0.2"
+#winit = "0"
+#winit_input_helper = "0"
+
+[dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[dependencies.cached]
+version = "0.18"
+default-features = false
 
 [dependencies.num-traits]
 version = "0.2"
