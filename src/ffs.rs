@@ -1,9 +1,9 @@
 use super::*;
-use ndarray::prelude::*;
-use ndarray::Zip;
+//use ndarray::prelude::*;
+//use ndarray::Zip;
 use rand::thread_rng;
 use rand::seq::SliceRandom;
-use std::convert::{TryFrom, TryInto};
+//use std::convert::{TryFrom, TryInto};
 
 pub struct FFSLevel<S: System<CanvasSquare>, T: StateTracker> {
     pub state_list: Vec<State2DQT<S,T>>,
@@ -22,7 +22,7 @@ impl<S: System<CanvasSquare> + Clone, T: StateTracker + Clone> FFSLevel<S, T> {
         while state_list.len() < self.state_list.len() {
             let mut state = self.state_list.choose(&mut rng).unwrap().clone();
 
-            state.evolve_in_size_range(system, 0, target_size, 50_000);
+            state.evolve_in_size_range_events_max(system, 0, target_size, 50_000);
 
             if state.ntiles() == target_size {
                 state_list.push(state)

@@ -16,13 +16,13 @@ pub trait StateEvolve<C: Canvas, S: System<C>>: StateStatus + StateStep<C, S> {
         let mut events: NumEvents = 0;
 
         while !condition(&self, events) {
-            self.take_step(system);
+            self.take_step(system).unwrap();
             events += 1;
         }
         self
     }
 
-    fn evolve_in_size_range_cond(
+    fn evolve_in_size_range_emax_cond(
         &mut self,
         system: &S,
         minsize: NumTiles,
@@ -30,16 +30,13 @@ pub trait StateEvolve<C: Canvas, S: System<C>>: StateStatus + StateStep<C, S> {
         maxevents: NumEvents,
     ) -> &mut Self {
         let condition = move |state: &Self, events| -> bool {
-            if events > maxevents {
-                panic!("Too many events!")
-            };
-            (state.ntiles() <= minsize) | (state.ntiles() >= maxsize)
+            (state.ntiles() <= minsize) | (state.ntiles() >= maxsize) | (events < maxevents)
         };
 
         self.evolve_until_condition(system, &condition)
     }
 
-    fn evolve_in_size_range(
+    fn evolve_in_size_range_events_max(
         &mut self,
         system: &S,
         minsize: NumTiles,
@@ -48,33 +45,44 @@ pub trait StateEvolve<C: Canvas, S: System<C>>: StateStatus + StateStep<C, S> {
     ) -> &mut Self {
         let mut events: NumEvents = 0;
 
-        while events < maxevents {
-            self.take_step(system);
-
-            if (self.ntiles() <= minsize) | (self.ntiles() >= maxsize) {
-                return self;
-            }
-
+        while (events < maxevents) | (self.ntiles() < maxsize) | (self.ntiles() > minsize) {
+            self.take_step(system).unwrap();
             events += 1;
         }
-
-        panic!("Too many events!");
+        self
     }
 }
 
 pub trait StateUpdateSingle<C: Canvas, S: System<C>> {
     fn choose_event_point(&self) -> (Point, Rate);
-    fn do_single_event_at_location(&mut self, system: &S, point: Point, acc: Rate)
-        -> &mut Self;
+    fn do_single_event_at_location(&mut self, system: &S, point: Point, acc: Rate) -> &mut Self;
     fn update_after_single_event(&mut self, system: &S, point: Point) -> &mut Self;
     fn update_entire_state(&mut self, system: &S) -> &mut Self;
     fn set_point(&mut self, sys: &S, p: Point, t: Tile) -> &mut Self;
 }
 
-pub trait StateStep<C: Canvas, S: System<C>>: StateUpdateSingle<C, S> {
-    fn take_step(&mut self, system: &S) -> &Self {
+#[derive(Debug)]
+pub enum StateStepError {
+    EmptyCanvas,
+    ZeroRate,
+    Unknown,
+}
+
+pub trait StateStep<C: Canvas, S: System<C>>: StateUpdateSingle<C, S> + StateStatus {
+    fn take_step(&mut self, system: &S) -> Result<&Self, StateStepError> {
         let (p, acc) = self.choose_event_point();
-        self.do_single_event_at_location(system, p, acc)
+        if p == (0, 0) {
+            // This happens when we have no tiles, or a zero rate.
+            if self.ntiles() == 0 {
+                Err(StateStepError::EmptyCanvas)
+            } else if self.total_rate() == 0. {
+                Err(StateStepError::ZeroRate)
+            } else {
+                Err(StateStepError::Unknown)
+            }
+        } else {
+            Ok(self.do_single_event_at_location(system, p, acc))
+        }
     }
 }
 
@@ -124,7 +132,7 @@ pub trait StateCreate<C: Canvas, S: System<C>>:
 
     fn insert_seed(&mut self, sys: &S) -> &mut Self {
         for (p, t) in sys.seed_locs() {
-            // FIXME: for large seeds, 
+            // FIXME: for large seeds,
             // this could be faster by doing raw writes, then update_entire_state
             // but we would need to distinguish sizing.
             // Or maybe there is fancier way with a set?
@@ -136,6 +144,7 @@ pub trait StateCreate<C: Canvas, S: System<C>>:
 pub trait StateStatus {
     fn ntiles(&self) -> NumTiles;
     fn total_events(&self) -> NumEvents;
+    fn total_rate(&self) -> Rate;
 
     //fn time(&self) -> Time;
 
@@ -200,23 +209,37 @@ impl TileSubsetTracker {
 #[derive(Clone, Debug)]
 pub struct OrderTracker {
     pub orders: Array2<usize>,
-    cur_order: usize
+    cur_order: usize,
 }
 
 impl OrderTracker {
     pub fn new(size: usize) -> Self {
-        OrderTracker{ orders: Array2::zeros((size, size)), cur_order: 1 }
+        OrderTracker {
+            orders: Array2::zeros((size, size)),
+            cur_order: 1,
+        }
     }
 }
 
 impl StateTracker for OrderTracker {
     fn default(canvas: &dyn CanvasSize) -> Self {
-        OrderTracker{ orders: Array2::zeros(canvas.raw_dim()), cur_order: 1 }
+        OrderTracker {
+            orders: Array2::zeros(canvas.raw_dim()),
+            cur_order: 1,
+        }
     }
 
     fn record_single_event(&mut self, p: Point, _old_tile: Tile, new_tile: Tile) -> &mut Self {
-        if new_tile == 0 { unsafe {*self.orders.uget_mut(p) = 0; } }
-        else { unsafe {*self.orders.uget_mut(p) = self.cur_order; self.cur_order += 1;} };
+        if new_tile == 0 {
+            unsafe {
+                *self.orders.uget_mut(p) = 0;
+            }
+        } else {
+            unsafe {
+                *self.orders.uget_mut(p) = self.cur_order;
+                self.cur_order += 1;
+            }
+        };
         self
     }
 }
@@ -255,7 +278,6 @@ where
         assert!(canvas.nrows().is_power_of_two());
         assert!(canvas.ncols() == canvas.nrows());
 
-
         let p: u32 = (1 + canvas.nrows().trailing_zeros()).try_into().unwrap();
 
         let mut rates = Vec::<Array2<Rate>>::new();
@@ -293,6 +315,11 @@ where
     fn total_events(&self) -> NumEvents {
         self.total_events
     }
+
+    #[inline(always)]
+    fn total_rate(&self) -> Rate {
+        self.total_rate
+    }
 }
 
 impl<S, T> StateUpdateSingle<CanvasSquare, S> for State2DQT<S, T>
@@ -309,33 +336,33 @@ where
         for r in self.rates.iter().rev() {
             y *= 2;
             x *= 2;
-            let mut v = unsafe {*r.uget((y, x))};
+            let mut v = unsafe { *r.uget((y, x)) };
             if threshold - v <= 0. {
                 continue;
             } else {
                 threshold -= v;
                 x += 1;
-                v = unsafe {*r.uget((y, x))};
+                v = unsafe { *r.uget((y, x)) };
             }
-             if threshold - v <= 0. {
+            if threshold - v <= 0. {
                 continue;
             } else {
                 threshold -= v;
                 x -= 1;
                 y += 1;
-                v = unsafe {*r.uget((y, x))};
+                v = unsafe { *r.uget((y, x)) };
             }
             if threshold - v <= 0. {
                 continue;
             } else {
                 threshold -= v;
                 x += 1;
-                v = unsafe {*r.uget((y, x))};
+                v = unsafe { *r.uget((y, x)) };
             }
             if threshold - v <= 0. {
                 continue;
             } else {
-                panic!();
+                panic!("Failure in quadtree position finding: remaining threshold {:?}, ratetree array {:?}.", threshold, r);
             }
         }
         return ((y, x), threshold);

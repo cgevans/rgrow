@@ -266,8 +266,7 @@ where
     #[inline]
     fn choose_event_at_point(&self, canvas: &C, p: Point, acc: Rate) -> Tile {
         if !canvas.inbounds(p) {
-            println!("{:?}", p);
-            panic!("Oh dear!");
+            panic!("Out of bounds point in choose_event_at_point: {:?}", p);
         }
 
         // Bound is previously checked.
@@ -303,7 +302,7 @@ where
             match r {
                 FoldWhile::Done((_acc, i)) => i,
 
-                FoldWhile::Continue((_acc, _i)) => panic!(),
+                FoldWhile::Continue((_acc, _i)) => panic!("Reached end of insertion possibilities, but still have {:?} rate remaining.", _acc),
             }
         }
     }
@@ -426,7 +425,7 @@ where
 
     fn choose_event_at_point(&self, canvas: &C, p: Point, mut acc: Rate) -> Tile {
         if !canvas.inbounds(p) {
-            panic!("Oh dear!");
+            panic!("Out of bounds point in choose_event_at_point: {:?}", p);
         }
 
         // Bound is previously checked.

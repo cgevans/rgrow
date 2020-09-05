@@ -76,7 +76,7 @@ fn run_atam(input: String) {
     //state.evolve_in_size_range(&mut system, 0, parsed.options.smax.unwrap(), 1_000_000);
 
     loop {
-        state.take_step(&mut system);
+        state.take_step(&mut system).unwrap();
         println!("{:?}", state.canvas.canvas);
     }
 
@@ -141,7 +141,7 @@ fn run_example() {
 
     let now = Instant::now();
 
-    state.evolve_in_size_range_cond(&mut sys, 2, 100_000, 50_000_000);
+    state.evolve_in_size_range_emax_cond(&mut sys, 2, 100_000, 50_000_000);
 
     let el = now.elapsed().as_secs_f64();
 
