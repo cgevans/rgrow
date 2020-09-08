@@ -30,7 +30,7 @@ pub trait StateEvolve<C: Canvas, S: System<C>>: StateStatus + StateStep<C, S> {
         maxevents: NumEvents,
     ) -> &mut Self {
         let condition = move |state: &Self, events| -> bool {
-            (state.ntiles() <= minsize) | (state.ntiles() >= maxsize) | (events < maxevents)
+            (state.ntiles() <= minsize) | (state.ntiles() >= maxsize) | (events > maxevents)
         };
 
         self.evolve_until_condition(system, &condition)
@@ -45,7 +45,7 @@ pub trait StateEvolve<C: Canvas, S: System<C>>: StateStatus + StateStep<C, S> {
     ) -> &mut Self {
         let mut events: NumEvents = 0;
 
-        while (events < maxevents) | (self.ntiles() < maxsize) | (self.ntiles() > minsize) {
+        while (events < maxevents) & (self.ntiles() < maxsize) & (self.ntiles() > minsize) {
             self.take_step(system).unwrap();
             events += 1;
         }
@@ -459,7 +459,7 @@ where
     S: System<CanvasSquare>,
     T: StateTracker,
 {
-    pub fn create_we_pair_with_tracker(sys: &S, w: Tile, e: Tile, size: usize, tracker: T) -> Self {
+    pub fn create_we_pair_with_tracker(sys: &S, w: Tile, e: Tile, size: CanvasLength, tracker: T) -> Self {
         assert!(size > 8);
         let mut ret = Self::empty((size, size));
         ret.tracker = tracker;
@@ -469,7 +469,7 @@ where
         ret
     }
 
-    pub fn create_ns_pair_with_tracker(sys: &S, n: Tile, s: Tile, size: usize, tracker: T) -> Self {
+    pub fn create_ns_pair_with_tracker(sys: &S, n: Tile, s: Tile, size: CanvasLength, tracker: T) -> Self {
         assert!(size > 8);
         let mut ret = Self::empty((size, size));
         ret.tracker = tracker;

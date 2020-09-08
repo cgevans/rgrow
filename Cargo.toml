@@ -22,9 +22,10 @@ fnv = "1.0"
 bimap = "0.5"
 clap = "3.0.0-beta.1"
 serde_yaml = "0.8"
-#pixels = "0.2"
-#winit = "0"
-#winit_input_helper = "0"
+lazy_static = "1.4.0"
+pixels = "0.2"
+winit = "0"
+winit_input_helper = "0"
 
 [dependencies.serde]
 version = "1"

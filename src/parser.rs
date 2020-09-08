@@ -1,4 +1,5 @@
-use super::base::Glue;
+use super::base::{Glue, CanvasLength};
+use super::*;
 use super::system::{StaticATAM, Seed, StaticKTAM};
 use bimap::BiMap;
 use serde::{Deserialize, Serialize};
@@ -10,15 +11,15 @@ use ndarray::prelude::*;
 #[serde(untagged)]
 enum GlueIdent {
     Name(String),
-    Num(usize),
+    Num(Glue),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 enum ParsedSeed {
     None(),
-    Single((usize, usize, usize)),
-    Multi(Vec<(usize, usize, usize)>)
+    Single((CanvasLength, CanvasLength, base::Tile)),
+    Multi(Vec<(CanvasLength, CanvasLength, base::Tile)>)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -46,8 +47,8 @@ pub struct TileSet {
 fn alpha_default() -> f64 {0.0}
 fn gse_default() -> f64 {8.0}
 fn gmc_default() -> f64 {16.0}
-fn size_default() -> usize {32}
-fn update_rate_default() -> usize {1000}
+fn size_default() -> CanvasLength {32}
+fn update_rate_default() -> NumEvents {1000}
 fn seed_default() -> ParsedSeed { ParsedSeed::None() }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -61,11 +62,11 @@ pub struct Args {
     #[serde(default="seed_default")]
     seed: ParsedSeed,
     #[serde(default="size_default")]
-    pub size: usize,
+    pub size: CanvasLength,
     pub tau: Option<f64>,
-    pub smax: Option<usize>,
+    pub smax: Option<NumTiles>,
     #[serde(default="update_rate_default")]
-    pub update_rate: usize,
+    pub update_rate: NumEvents,
     pub kf: Option<f64>
 }
 
@@ -79,7 +80,7 @@ impl TileSet {
 
         let mut glue_strength_vec = Vec::<f64>::new();
 
-        let mut i = 0usize;
+        let mut i:base::Glue = 0;
         for (j, v) in gluestrengthmap {
             assert!(j==i);
             glue_strength_vec.push(v);
@@ -108,7 +109,7 @@ impl TileSet {
 
         let mut glue_strength_vec = Vec::<f64>::new();
 
-        let mut i = 0usize;
+        let mut i:base::Glue = 0;
         for (j, v) in gluestrengthmap {
             assert!(j==i);
             glue_strength_vec.push(v);
@@ -125,11 +126,11 @@ impl TileSet {
         StaticATAM::new(tile_concs, tile_edges, Array1::from(glue_strength_vec), self.options.tau.unwrap(), Some(seed))
     }
 
-    pub fn number_glues(&self) -> Result<(BiMap<&str, Glue>, BTreeMap<usize, f64>), ()> {
+    pub fn number_glues(&self) -> Result<(BiMap<&str, Glue>, BTreeMap<Glue, f64>), ()> {
         let mut gluemap = BiMap::new();
-        let mut gluestrengthmap = BTreeMap::<usize, f64>::new();
+        let mut gluestrengthmap = BTreeMap::<Glue, f64>::new();
 
-        let mut gluenum: usize = 1;
+        let mut gluenum: Glue = 1;
 
         // We'll deal with zero first, which must be null.
         gluestrengthmap.insert(0, 0.);
@@ -202,12 +203,12 @@ impl TileSet {
         Ok((gluemap, gluestrengthmap))
     }
 
-    pub fn tile_edge_process(&self, gluemap: &BiMap<&str, Glue>) -> Array2<usize> {
-        let mut tile_edges: Vec<usize> = Vec::new();
+    pub fn tile_edge_process(&self, gluemap: &BiMap<&str, Glue>) -> Array2<Glue> {
+        let mut tile_edges: Vec<Glue> = Vec::new();
 
         tile_edges.append(&mut vec![0, 0, 0, 0]);
 
-        let mut v: Vec<usize> = Vec::new();
+        let mut v: Vec<Glue> = Vec::new();
         for tile in &self.tiles {
             for te in &tile.edges {
                 match te {

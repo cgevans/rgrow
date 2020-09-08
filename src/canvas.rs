@@ -5,6 +5,10 @@ pub trait Canvas {
     unsafe fn uv_e(&self, p: Point) -> Tile;
     unsafe fn uv_s(&self, p: Point) -> Tile;
     unsafe fn uv_w(&self, p: Point) -> Tile;
+    unsafe fn uv_nw(&self, p: Point) -> Tile;
+    unsafe fn uv_ne(&self, p: Point) -> Tile;
+    unsafe fn uv_sw(&self, p: Point) -> Tile;
+    unsafe fn uv_se(&self, p: Point) -> Tile;
     unsafe fn uv_p(&self, p: Point) -> Tile;
     unsafe fn uvm_n(&mut self, p: Point) -> &mut Tile;
     unsafe fn uvm_e(&mut self, p: Point) -> &mut Tile;
@@ -53,6 +57,27 @@ impl Canvas for CanvasSquare {
     unsafe fn uv_n(&self, p: Point) -> Tile {
         *self.canvas.uget((p.0 - 1, p.1))
     }
+
+    #[inline(always)]
+    unsafe fn uv_nw(&self, p: Point) -> Tile {
+        *self.canvas.uget((p.0 - 1, p.1 -1))
+    }
+
+    #[inline(always)]
+    unsafe fn uv_ne(&self, p: Point) -> Tile {
+        *self.canvas.uget((p.0 - 1, p.1 + 1))
+    }
+
+    #[inline(always)]
+    unsafe fn uv_sw(&self, p: Point) -> Tile {
+        *self.canvas.uget((p.0 + 1, p.1 - 1))
+    }
+
+    #[inline(always)]
+    unsafe fn uv_se(&self, p: Point) -> Tile {
+        *self.canvas.uget((p.0 + 1, p.1 + 1))
+    }
+
 
     #[inline(always)]
     unsafe fn uv_e(&self, p: Point) -> Tile {
