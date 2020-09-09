@@ -2,7 +2,7 @@ use super::*;
 use ndarray::prelude::*;
 use ndarray::Zip;
 
-struct FFSSystem<S: System<CanvasSquare>> {
+pub struct FFSSystem<S: System<CanvasSquare>> {
     system: S,
     states: Vec<Vec<State2DQT<S,NullStateTracker>>>,
 }

@@ -18,7 +18,7 @@ bonds:
 # use stxg.py to generate an xgrow input file, the name of the tilewill be put
 # in a comment.
 tiles:
-    - { name: corner, edges: [ B, 0, 0, B ], color: red  }
+    - { name: corner, edges: [ B, 0, 0, B ], color: red, stoic: 0  }
     - { name: topboundary, edges: [B, 0, B, v1], color: magenta }
     - { name: leftboundary, edges: [v1, B, 0, B], color: purple }
     - { edges: [ v0, v0, v0, v0 ], color: blue3 }
@@ -34,10 +34,11 @@ tiles:
 # * doubletiles - a list of two-item lists, specifying the names of double tile pairs.
 # * vdoubletiles - the same for vertical double tiles.
 xgrowargs:
-    size: 512
+    size: 128
     seed:
-    - [500,500,1]
-    smax: 500000
-    update_rate: 5000
-    Gse: 22
-    Gmc: 40
+    - [126,126,1]
+    smax: 5000000
+    update_rate: 1000
+    Gse: 8.1
+    Gmc: 16.0
+    fission: 'just-detach'

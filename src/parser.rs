@@ -1,7 +1,8 @@
 use super::base::{Glue, CanvasLength};
 use super::*;
-use super::system::{StaticATAM, Seed, StaticKTAM};
+use super::system::{StaticATAM, Seed, StaticKTAM, FissionHandling};
 use bimap::BiMap;
+use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use ndarray::prelude::*;
@@ -50,6 +51,8 @@ fn gmc_default() -> f64 {16.0}
 fn size_default() -> CanvasLength {32}
 fn update_rate_default() -> NumEvents {1000}
 fn seed_default() -> ParsedSeed { ParsedSeed::None() }
+fn fission_default() -> FissionHandling { FissionHandling::KeepLargest }
+fn block_default() -> usize {5}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Args {
@@ -67,7 +70,11 @@ pub struct Args {
     pub smax: Option<NumTiles>,
     #[serde(default="update_rate_default")]
     pub update_rate: NumEvents,
-    pub kf: Option<f64>
+    pub kf: Option<f64>,
+    #[serde(default="fission_default")]
+    pub fission: FissionHandling,
+    #[serde(default="block_default")]
+    pub block: usize
 }
 
 impl TileSet {
@@ -87,6 +94,8 @@ impl TileSet {
             i+=1;
         } 
 
+        println!("self.options.fission: {:?}", self.options.fission);
+
         let seed = match &self.options.seed {
             ParsedSeed::Single((y, x, v)) => {Seed::SingleTile{point: (*y,*x), tile: *v}}
             ParsedSeed::None() => {Seed::None()}
@@ -95,7 +104,7 @@ impl TileSet {
         };
 
         StaticKTAM::from_ktam(self.tile_stoics(), tile_edges, Array1::from(glue_strength_vec),
-                        self.options.gse, self.options.gmc, Some(self.options.alpha), self.options.kf, Some(seed))
+                        self.options.gse, self.options.gmc, Some(self.options.alpha), self.options.kf, Some(seed), Some(self.options.fission),Some(self.tile_names()), Some(self.tile_colors()))
 
     }
 
@@ -224,5 +233,27 @@ impl TileSet {
 
     pub fn tile_stoics(&self) -> Array1<f64> {
         std::iter::once(0.).chain(self.tiles.iter().map(|x| x.stoic.unwrap_or(1.))).collect()
+    }
+
+    pub fn tile_names(&self) -> Vec<String> {
+        std::iter::once("empty".to_string()).chain(self.tiles.iter().enumerate().map(|(i, x)| x.name.clone().unwrap_or((i+1).to_string()) )).collect()
+    }
+
+    pub fn tile_colors(&self) -> Vec<[u8;4]> {
+        let mut tc = Vec::new();
+
+        tc.push([0, 0, 0, 0]);
+        let mut rng = rand::thread_rng();
+        let ug = rand::distributions::Uniform::new(100u8, 254);
+        let ntiles = self.tiles.len()+1;
+
+        for tile in &self.tiles {
+            tc.push(match &tile.color {
+                Some(tc) => {*super::colors::COLORS.get(tc.as_str()).unwrap()}
+                None => {[ug.sample(&mut rng), ug.sample(&mut rng), ug.sample(&mut rng), 0xffu8]}
+            });
+        }
+
+        tc
     }
 }

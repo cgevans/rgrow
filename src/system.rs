@@ -1,8 +1,10 @@
+use rand::prelude::Distribution;
 use cached::{stores::SizedCache, Cached};
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
 use ndarray::prelude::*;
 use ndarray::{FoldWhile, Zip};
+use serde::{Deserialize, Serialize};
 
 use super::base::{CanvasLength, Energy, Glue, Point, Rate, Tile};
 use super::canvas::Canvas;
@@ -10,8 +12,6 @@ use super::canvas::Canvas;
 use super::fission;
 
 use std::sync::{Arc, RwLock};
-
-
 
 //type Cache = FnvHashMap<(Tile, Tile, Tile, Tile), f64>;
 type Cache = SizedCache<(Tile, Tile, Tile, Tile), f64>;
@@ -28,19 +28,47 @@ pub struct DimerInfo {
     pub equilibrium_conc: f64,
 }
 
+pub enum Event {
+    None,
+    SingleTileAttach(Tile),
+    SingleTileDetach,
+    SingleTileChange(Tile),
+    MultiTileDetach(Vec<Point>),
+}
+
 pub trait System<C: Canvas> {
     /// Returns the total event rate at a given point.  These should correspond with the events chosen by `choose_event_at_point`.
     fn event_rate_at_point(&self, canvas: &C, p: Point) -> Rate;
 
     /// Given a point, and an accumulated random rate choice `acc` (which should be less than the total rate at the point),
-    /// return the tile that point should change to.  TODO: we should support more general events than just a single tile change.
-    fn choose_event_at_point(&self, canvas: &C, p: Point, acc: Rate) -> Tile;
+    /// return the event that should take place.
+    fn choose_event_at_point(&self, canvas: &C, p: Point, acc: Rate) -> Event;
 
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(Point, Tile)>;
 
     /// Returns information on dimers that the system can form, similarly useful for starting out a state.
     fn calc_dimers(&self) -> Vec<DimerInfo>;
+}
+
+pub trait TileBondInfo {
+    fn tile_color(&self, tile_number: Tile) -> [u8;4];
+    fn tile_name(&self, tile_number: Tile) -> &str;
+    fn bond_name(&self, bond_number: usize) -> &str;
+}
+
+impl TileBondInfo for StaticKTAM {
+    fn tile_color(&self, tile_number: Tile) -> [u8;4] {
+        self.tile_colors[tile_number as usize]
+    }
+
+    fn tile_name(&self, tile_number: Tile) -> &str {
+        self.tile_names[tile_number as usize].as_str()
+    }
+
+    fn bond_name(&self, _bond_number: usize) -> &str {
+        todo!()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -59,6 +87,20 @@ pub struct StaticATAM {
     seed: Seed,
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+pub enum FissionHandling {
+    #[serde(alias = "off", alias = "no-fission")]
+    NoFission,
+    #[serde(alias = "just-detach", alias = "surface")]
+    JustDetach,
+    #[serde(alias = "on", alias = "keep-seeded")]
+    KeepSeeded,
+    #[serde(alias = "keep-largest")]
+    KeepLargest,
+    #[serde(alias = "keep-weighted")]
+    KeepWeighted,
+}
+
 #[derive(Clone, Debug)]
 pub struct StaticKTAM {
     pub tile_adj_concs: Array1<Rate>,
@@ -74,6 +116,9 @@ pub struct StaticKTAM {
     alpha: f64,
     g_se: Option<f64>,
     g_mc: Option<f64>,
+    fission_handling: FissionHandling,
+    tile_names: Vec<String>,
+    tile_colors: Vec<[u8;4]>,
 }
 
 impl StaticATAM {
@@ -157,6 +202,9 @@ impl StaticKTAM {
         alpha: Option<f64>,
         k_f: Option<f64>,
         seed: Option<Seed>,
+        fission_handling: Option<FissionHandling>,
+        tile_names: Option<Vec<String>>,
+        tile_colors: Option<Vec<[u8; 4]>>,
     ) -> Self {
         let ntiles = tile_stoics.len();
         assert!(ntiles == tile_edges.nrows());
@@ -177,6 +225,23 @@ impl StaticKTAM {
             }
         }
 
+        let tile_names_processed = match tile_names {
+            Some(tn) => tn,
+            None => (0..ntiles).into_iter().map(|x| x.to_string()).collect(),
+        };
+
+        let tile_colors_processed = match tile_colors {
+            Some(tc) => tc,
+            None => {
+                let mut rng = rand::thread_rng();
+                let ug = rand::distributions::Uniform::new(100u8, 254);
+                (0..ntiles)
+                    .into_iter()
+                    .map(|_x| [ug.sample(&mut rng), ug.sample(&mut rng), ug.sample(&mut rng), 0xffu8])
+                    .collect()
+            }
+        };
+
         let (friends_n, friends_e, friends_s, friends_w) =
             create_friend_data(&energy_ns, &energy_we);
         return StaticKTAM {
@@ -193,6 +258,9 @@ impl StaticKTAM {
             g_mc: Some(g_mc),
             g_se: Some(g_se),
             k_f: k_f.unwrap_or(1e6),
+            fission_handling: fission_handling.unwrap_or(FissionHandling::NoFission),
+            tile_names: tile_names_processed,
+            tile_colors: tile_colors_processed,
         };
     }
 
@@ -210,9 +278,23 @@ impl StaticKTAM {
         energy_we: Array2<Energy>,
         k_f: f64,
         alpha: f64,
+        fission_handling: Option<FissionHandling>,
     ) -> Self {
         let (friends_n, friends_e, friends_s, friends_w) =
             create_friend_data(&energy_ns, &energy_we);
+
+            let ntiles = tile_adj_concs.len();
+
+            let tile_names = (0..ntiles).into_iter().map(|x| x.to_string()).collect();
+    
+            let tile_colors = {
+                    let mut rng = rand::thread_rng();
+                    let ug = rand::distributions::Uniform::new(100u8, 254);
+                    (0..ntiles)
+                        .into_iter()
+                        .map(|_x| [ug.sample(&mut rng), ug.sample(&mut rng), ug.sample(&mut rng), 0xff])
+                        .collect()
+                };
 
         StaticKTAM {
             tile_adj_concs,
@@ -228,6 +310,9 @@ impl StaticKTAM {
             g_mc: None,
             g_se: None,
             k_f: k_f,
+            fission_handling: fission_handling.unwrap_or(FissionHandling::NoFission),
+            tile_names,
+            tile_colors
         }
     }
 }
@@ -272,7 +357,7 @@ where
     }
 
     #[inline]
-    fn choose_event_at_point(&self, canvas: &C, p: Point, acc: Rate) -> Tile {
+    fn choose_event_at_point(&self, canvas: &C, p: Point, acc: Rate) -> Event {
         if !canvas.inbounds(p) {
             panic!("Out of bounds point in choose_event_at_point: {:?}", p);
         }
@@ -308,7 +393,7 @@ where
                 });
 
             match r {
-                FoldWhile::Done((_acc, i)) => i as Tile,
+                FoldWhile::Done((_acc, i)) => Event::SingleTileAttach(i as Tile),
 
                 FoldWhile::Continue((_acc, _i)) => panic!(
                     "Reached end of insertion possibilities, but still have {:?} rate remaining.",
@@ -441,7 +526,7 @@ where
         }
     }
 
-    fn choose_event_at_point(&self, canvas: &C, p: Point, mut acc: Rate) -> Tile {
+    fn choose_event_at_point(&self, canvas: &C, p: Point, mut acc: Rate) -> Event {
         if !canvas.inbounds(p) {
             panic!("Out of bounds point in choose_event_at_point: {:?}", p);
         }
@@ -456,12 +541,35 @@ where
 
         if tile != 0 {
             // Deletion is easy! But first, check if we might have a fission problem.
-            match self.determine_fission(canvas, &[canvas.move_point_n(p), canvas.move_point_e(p), canvas.move_point_s(p), canvas.move_point_w(p)], &[p]) {
-                fission::FissionResult::NoFission => {0}
-                // Disallow fission for now! FIXME FIXME
-                fission::FissionResult::FissionGroups(m, g) => {println!("Actual fission, {:?}", g); 0 }
+            match self.determine_fission(
+                canvas,
+                &[
+                    canvas.move_point_n(p),
+                    canvas.move_point_e(p),
+                    canvas.move_point_s(p),
+                    canvas.move_point_w(p),
+                ],
+                &[p],
+            ) {
+                fission::FissionResult::NoFission => Event::SingleTileDetach,
+                fission::FissionResult::FissionGroups(g) => {
+                    //println!("Fission handling {:?} {:?} {:?}", p, tile, g);
+                    match self.fission_handling {
+                        FissionHandling::NoFission => Event::None,
+                        FissionHandling::JustDetach => Event::SingleTileDetach,
+                        FissionHandling::KeepSeeded => {
+                            let sl = System::<C>::seed_locs(self);
+                            Event::MultiTileDetach(g.choose_deletions_seed_unattached(sl))
+                        }
+                        FissionHandling::KeepLargest => {
+                            Event::MultiTileDetach(g.choose_deletions_keep_largest_group())
+                        }
+                        FissionHandling::KeepWeighted => {
+                            Event::MultiTileDetach(g.choose_deletions_size_weighted())
+                        }
+                    }
+                }
             }
-            
         } else {
             let mut friends = FnvHashSet::<Tile>::default();
 
@@ -473,7 +581,7 @@ where
             for t in friends.drain() {
                 acc -= self.tile_adj_concs[t as usize];
                 if acc <= 0. {
-                    return t;
+                    return Event::SingleTileAttach(t);
                 };
             }
 

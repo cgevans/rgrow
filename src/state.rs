@@ -375,24 +375,59 @@ where
 
     #[inline(always)]
     fn do_single_event_at_location(&mut self, system: &S, p: Point, acc: Rate) -> &mut Self {
-        let new_tile = system.choose_event_at_point(&self.canvas, p, acc);
+        let event = system.choose_event_at_point(&self.canvas, p, acc);
 
-        if new_tile == 0 {
-            self.ntiles -= 1
-        } else {
-            self.ntiles += 1
-        };
+        match event {
+            Event::None => {
+                println!("dead event")
+                // The event was probably cancelled: do nothing.
+            }
+            Event::SingleTileAttach(new_tile) => {
+                self.ntiles += 1;
+                self.total_events += 1;
 
-        self.total_events += 1;
+                // Repeatedly checked!
+                let loc = unsafe { self.canvas.uvm_p(p) };
 
-        // Repeatedly checked!
-        let loc = unsafe { self.canvas.uvm_p(p) };
+                let old_tile: Tile = *loc;
+                *loc = new_tile;
 
-        let old_tile: Tile = *loc;
-        *loc = new_tile;
+                self.update_after_single_event(system, p)
+                .record_single_event(p, old_tile, new_tile);
+            }
+            Event::SingleTileDetach => {
+                self.ntiles -= 1;
+                self.total_events += 1;
 
-        self.update_after_single_event(system, p)
-            .record_single_event(p, old_tile, new_tile)
+                // Repeatedly checked!
+                let loc = unsafe { self.canvas.uvm_p(p) };
+
+                let old_tile: Tile = *loc;
+                *loc = 0;
+
+                self.update_after_single_event(system, p)
+                .record_single_event(p, old_tile, 0);
+            }
+            Event::SingleTileChange(_) => { todo!() }
+            Event::MultiTileDetach(pointvec) => {
+                self.total_events += 1;
+
+                for point in pointvec {
+                    let loc = unsafe {self.canvas.uvm_p(point)};
+                    let old_tile: Tile = *loc;
+
+                    self.ntiles -= 1;
+
+                    *loc = 0;
+
+                    self.update_after_single_event(system, point)
+                    .record_single_event(point, old_tile, 0);
+
+                }
+            }
+        }
+
+        self
     }
 
     fn update_entire_state(&mut self, system: &S) -> &mut Self {
@@ -459,7 +494,13 @@ where
     S: System<CanvasSquare>,
     T: StateTracker,
 {
-    pub fn create_we_pair_with_tracker(sys: &S, w: Tile, e: Tile, size: CanvasLength, tracker: T) -> Self {
+    pub fn create_we_pair_with_tracker(
+        sys: &S,
+        w: Tile,
+        e: Tile,
+        size: CanvasLength,
+        tracker: T,
+    ) -> Self {
         assert!(size > 8);
         let mut ret = Self::empty((size, size));
         ret.tracker = tracker;
@@ -469,7 +510,13 @@ where
         ret
     }
 
-    pub fn create_ns_pair_with_tracker(sys: &S, n: Tile, s: Tile, size: CanvasLength, tracker: T) -> Self {
+    pub fn create_ns_pair_with_tracker(
+        sys: &S,
+        n: Tile,
+        s: Tile,
+        size: CanvasLength,
+        tracker: T,
+    ) -> Self {
         assert!(size > 8);
         let mut ret = Self::empty((size, size));
         ret.tracker = tracker;

@@ -1,9 +1,10 @@
-use super::base::Point;
+use super::base::{Point, Tile};
 use super::Canvas;
 use crate::StaticKTAM;
-use fnv::FnvHashMap;
+use fnv::{FnvHashMap, FnvHashSet};
 use std::collections::VecDeque;
 use std::iter::repeat;
+use rand::{random, seq::SliceRandom, distributions::weighted::WeightedIndex, distributions::Distribution};
 
 // lazy_static! {
 //     /// A vector specifying whether or not the 1 bits of the index are in a single
@@ -46,19 +47,43 @@ static CONNECTED_RING: &[bool] = &[
     false, false, true, true, true, false, true, true, true, true, true,
 ];
 
-
 type GroupNum = usize;
 
-struct GroupInfo {
+#[derive(Debug)]
+pub struct GroupInfo {
     /// Contains mappings of point -> (unmerged) group number.
     map: FnvHashMap<Point, GroupNum>,
     /// Contains mappings of unmerged group number to merged group number.
     groupmerges: Vec<GroupNum>,
     /// Contains lists of points in each (unmerged) group number.
-    pointlist: Vec<Vec<Point>>
+    pointlist: Vec<Vec<Point>>,
 }
 
 impl GroupInfo {
+    fn new(start_points: &Vec<&Point>, now_empty: &[Point]) -> Self {
+        let mut groupmerges = (0usize..=start_points.len()).collect();
+
+        let mut map = FnvHashMap::<Point, usize>::default();
+
+        let mut pointlist = Vec::new();
+
+        for point in now_empty {
+            map.insert(*point, 0usize);
+            pointlist.push(vec![*point]);
+        }
+
+        for (i, point) in start_points.iter().enumerate() {
+            map.insert(**point, i + 1);
+            pointlist.push(vec![**point]);
+        }
+
+        GroupInfo {
+            map,
+            groupmerges,
+            pointlist,
+        }
+    }
+
     /// If point1 and point2 are in different (nonzero) groups,
     /// merge the groups, and return true (no further movement needed).  
     /// If they are in the same group, return true.
@@ -66,7 +91,11 @@ impl GroupInfo {
     /// return false (further movement into point2 needed).
     /// Point1 must be in a group, and debug checks to make sure it isn't in zero.
     fn merge_or_add(&mut self, point1: &Point, point2: &Point) -> bool {
-        debug_assert!(self.map.get(point1) != Some(&0));
+        assert!(self.map.get(point1) != Some(&0));
+
+        if self.map.get(point2) == Some(&0) {
+            return true
+        }
 
         if let Some(g2) = self.map.get(point2) {
             let g1 = self.map.get(point1).unwrap(); // point1 must be in group.
@@ -87,16 +116,84 @@ impl GroupInfo {
         }
     }
 
-    fn choose_deletions_size_weighted(&self) {
-        todo!();
+    pub fn choose_deletions_size_weighted(&self) -> Vec<Point> {
+        let mpl = self.merged_pointlist();
+        let mut rng = rand::thread_rng();
+
+        let sizes:Vec<usize> = mpl.iter().map(|x| x.len()).collect();
+        let dist = WeightedIndex::new(&sizes).unwrap();
+        
+        let keep = dist.sample(&mut rng);
+
+        let mut deletions = Vec::new();
+
+        for (i, pv) in mpl.iter().enumerate() {
+            if i == keep {
+                continue
+            } else {
+                deletions.extend(pv);
+            }
+        }
+
+        deletions
     }
 
-    fn choose_deletions_largest_group(&self) {
-        todo!();
+    pub fn choose_deletions_keep_largest_group(&self) -> Vec<Point> {
+        let mut mpl = self.merged_pointlist();
+
+        let mut deletions = Vec::new();
+
+        mpl.sort_by(|a, b| a.len().cmp(&b.len()).reverse() );
+
+        let mi = mpl.iter().skip(1);
+
+        for pv in mi {
+            deletions.extend(pv)
+        }
+
+        deletions
     }
 
-    fn choose_deletions_seed_unattached(&self) {
-        todo!();
+    pub fn choose_deletions_seed_unattached(&self, seeds: Vec<(Point, Tile)>) -> Vec<Point> {
+        let mut deletions = Vec::new();
+
+        let seed_points:Vec<Point> = seeds.iter().map(|x| x.0).collect();
+
+        let mergedpoints = self.merged_pointlist();
+
+        for group in mergedpoints {
+            let mut contains_seed = false;
+            for seed_point in &seed_points {
+                if group.contains(seed_point) {
+                    contains_seed = true;
+                }
+            }
+            if contains_seed {
+                continue
+            } else {
+                deletions.extend(group);
+            }
+        }
+
+        deletions
+    }
+
+    pub fn merged_pointlist(&self) -> Vec<Vec<Point>> {
+        let mut mergedpoints = Vec::new();
+        for (i, pointvec) in self.pointlist.iter().enumerate() {
+            // Exclude deletion group
+            if i == 0 {
+                continue
+            }
+            if i == self.groupmerges[i] {
+                //assert!(mergedpoints.len() == i-1);
+                mergedpoints.push(pointvec.clone());
+            } else {
+                let mut group = mergedpoints.get_mut(self.groupmerges[i]-1).unwrap();
+                group.extend(pointvec);
+            }
+        }
+        mergedpoints
     }
 
     fn n_groups(&self) -> usize {
@@ -107,7 +204,7 @@ impl GroupInfo {
     }
 }
 
-struct GroupVec{
+struct GroupVec {
     ident: Vec<usize>,
 }
 
@@ -134,7 +231,7 @@ impl GroupVec {
 
 pub enum FissionResult {
     NoFission,
-    FissionGroups(FnvHashMap<Point, usize>, Vec<usize>),
+    FissionGroups(GroupInfo),
 }
 
 impl StaticKTAM {
@@ -170,36 +267,32 @@ impl StaticKTAM {
                 + (((self.energy_ns[(tnw, tw)] != 0.) & (self.energy_we[(tnw, tn)] != 0.)) as u8);
 
             if CONNECTED_RING[ri as usize] {
-                return FissionResult::NoFission
+                return FissionResult::NoFission;
             }
 
             if ri == 0 {
-                println!("Unattached tile detaching!");
-                return FissionResult::NoFission
+                //println!("Unattached tile detaching!");
+                return FissionResult::NoFission;
             }
+
+            //println!("Ring check failed");
         }
 
-        let start_points:Vec<&(usize, usize)> = (*possible_start_points).iter().filter(|x| unsafe {canvas.uv_p(**x)} != 0 ).collect();
+        let start_points: Vec<&(usize, usize)> = (*possible_start_points)
+            .iter()
+            .filter(|x| unsafe { canvas.uv_p(**x) } != 0)
+            .collect();
 
-        // Not a single site...
-        let mut groups = GroupVec {
-            ident: (0usize..=start_points.len()).collect(),
-        };
-        let now_empty_group = 0usize;
-        let mut groupmap = FnvHashMap::<Point, usize>::default();
-        for point in now_empty {
-            groupmap.insert(*point, now_empty_group);
-        }
+        let mut groupinfo = GroupInfo::new(&start_points, now_empty);
 
         let mut queue = VecDeque::<Point>::new();
 
-        // Put all the starting points in the queue, with different group numbers.
-        // Group numbers start from 1 because 0 is the group of now-emptied sites.
+        // Put all the starting points in the queue.
         for (i, point) in start_points.iter().enumerate() {
             queue.push_back(**point);
-            groupmap.insert(**point, i + 1);
         }
 
+        //println!("Start queue {:?}", queue);
         while let Some(p) = queue.pop_front() {
             let t = unsafe { canvas.uv_p(p) } as usize;
             let pn = canvas.move_point_n(p);
@@ -211,60 +304,46 @@ impl StaticKTAM {
             let ps = canvas.move_point_s(p);
             let ts = unsafe { canvas.uv_p(ps) } as usize;
 
-            let pg = groupmap[&p]; // Must have a group, because we're here!
-
             if (unsafe { *self.energy_ns.uget((tn, t)) } != 0.) {
-                match groupmap.get(&pn) {
-                    None => {
-                        groupmap.insert(pn, groups.ident[*groupmap.get(&p).unwrap()]);
-                        queue.push_back(pn);
+                match groupinfo.merge_or_add(&p, &pn) {
+                    true => {
                     }
-                    Some(ng) => {
-                        if *ng != 0 {
-                            groups.merge_groups(pg, *ng);
-                        }
+                    false => {
+                        queue.push_back(pn);
+
                     }
                 }
             }
 
             if (unsafe { *self.energy_we.uget((t, te)) } != 0.) {
-                match groupmap.get(&pe) {
-                    None => {
-                        groupmap.insert(pe, groups.ident[*groupmap.get(&p).unwrap()]);
-                        queue.push_back(pe);
+                match groupinfo.merge_or_add(&p, &pe) {
+                    true => {
                     }
-                    Some(ng) => {
-                        if *ng != 0 {
-                            groups.merge_groups(pg, *ng);
-                        }
+                    false => {
+                        queue.push_back(pe);
+
                     }
                 }
             }
 
             if (unsafe { *self.energy_ns.uget((t, ts)) } != 0.) {
-                match groupmap.get(&ps) {
-                    None => {
-                        groupmap.insert(ps, groups.ident[*groupmap.get(&p).unwrap()]);
-                        queue.push_back(ps);
+                match groupinfo.merge_or_add(&p, &ps) {
+                    true => {
                     }
-                    Some(ng) => {
-                        if *ng != 0 {
-                            groups.merge_groups(pg, *ng);
-                        }
+                    false => {
+                        queue.push_back(ps);
+
                     }
                 }
             }
 
             if (unsafe { *self.energy_we.uget((tw, t)) } != 0.) {
-                match groupmap.get(&pw) {
-                    None => {
-                        groupmap.insert(pw, groups.ident[*groupmap.get(&p).unwrap()]);
-                        queue.push_back(pw);
+                match groupinfo.merge_or_add(&p, &pw) {
+                    true => {
                     }
-                    Some(ng) => {
-                        if *ng != 0 {
-                            groups.merge_groups(pg, *ng);
-                        }
+                    false => {
+                        queue.push_back(pw);
+
                     }
                 }
             }
@@ -272,11 +351,14 @@ impl StaticKTAM {
             // We break on *two* groups, because group 0 is the removed area,
             // and so there will be two groups (0 and something) if there
             // is one contiguous area.
-            if groups.n_groups() <= 2 {
+            if groupinfo.n_groups() <= 2 {
+                //println!("Found 2 groups");
                 return FissionResult::NoFission;
             }
         }
 
-        FissionResult::FissionGroups(groupmap, groups.ident)
+        //println!("Finished queue");
+
+        FissionResult::FissionGroups(groupinfo)
     }
 }

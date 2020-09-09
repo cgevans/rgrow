@@ -3,7 +3,7 @@ use ndarray::prelude::*;
 use num_format::{Locale, ToFormattedString};
 use rgrow::{
     ffs, NullStateTracker, State2DQT, StateCreate, StateEvolve, StateStatus, StateTracked,
-    StaticKTAM, TileSubsetTracker, Tile, Glue, System, CanvasSquare, Canvas, CanvasSize
+    StaticKTAM, TileSubsetTracker, Tile, Glue, System, CanvasSquare, Canvas, CanvasSize, FissionHandling, TileBondInfo
 };
 use std::time::Instant;
 
@@ -145,7 +145,7 @@ fn run_example() {
 
     canvas.slice_mut(s![0..10, 0..10]).assign(&internal);
 
-    let mut sys = StaticKTAM::from_ktam(tc, te, gs, gse, 16., None, None, None);
+    let mut sys = StaticKTAM::from_ktam(tc, te, gs, gse, 16., None, None, None, Some(FissionHandling::KeepLargest), None, None);
 
     let mut state = State2DQT::<_, NullStateTracker>::from_canvas(&mut sys, canvas);
 
@@ -199,7 +199,7 @@ fn run_example_subs() {
 
     canvas.slice_mut(s![0..10, 0..10]).assign(&internal);
 
-    let mut sys = StaticKTAM::from_ktam(tc, te, gs, gse, 16.0, None, None, None);
+    let mut sys = StaticKTAM::from_ktam(tc, te, gs, gse, 16.0, None, None, None, Some(FissionHandling::KeepLargest), None, None);
 
     let mut state = State2DQT::<_, TileSubsetTracker>::from_canvas(&mut sys, canvas);
 
@@ -232,27 +232,28 @@ use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
 
+
 trait Draw<S>
 where
-    S: System<CanvasSquare>,
+    S: System<CanvasSquare> + TileBondInfo,
 {
-    fn draw(&self, frame: &mut [u8]);
+    fn draw(&self, frame: &mut [u8], scaled: usize, system: &S);
 }
 
 impl<S> Draw<S> for State2DQT<S, NullStateTracker>
 where
-    S: System<CanvasSquare>,
+    S: System<CanvasSquare> + TileBondInfo,
 {
-    fn draw(&self, frame: &mut [u8]) {
+    fn draw(&self, frame: &mut [u8], scaled: usize, system: &S) {
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let x = i % self.canvas.size();
-            let y = i / self.canvas.size();
+            let x = i % (self.canvas.size()*scaled);
+            let y = i / (self.canvas.size()*scaled);
 
-            let tv = unsafe { self.canvas.uv_p((x, y)) };
+            let tv = unsafe { self.canvas.uv_p((x/scaled, y/scaled)) };
 
             pixel.copy_from_slice(
                 &(if tv > 0 {
-                    [(20 * tv).try_into().unwrap(), 50, 50, 0xff]
+                    system.tile_color(tv)
                 } else {
                     [0, 0, 0, 0xff]
                 }),
@@ -271,10 +272,12 @@ fn run_ktam_window(input: String) {
         &mut system,
     );
 
+    let scaled = parsed.options.block;
+
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
     let window = {
-        let size = LogicalSize::new(state.canvas.size() as f64, state.canvas.size() as f64);
+        let size = LogicalSize::new((state.canvas.size()*scaled) as f64, (state.canvas.size()*scaled) as f64);
         WindowBuilder::new()
             .with_title("rgrow!")
             .with_inner_size(size)
@@ -288,8 +291,8 @@ fn run_ktam_window(input: String) {
         let surface_texture = SurfaceTexture::new(window_size.width, 
             window_size.height, &window);
         Pixels::new(
-            state.canvas.size().try_into().unwrap(),
-            state.canvas.size().try_into().unwrap(),
+            (state.canvas.size()*scaled).try_into().unwrap(),
+            (state.canvas.size()*scaled).try_into().unwrap(),
             surface_texture,
         )
         .unwrap()
@@ -310,7 +313,7 @@ fn run_ktam_window(input: String) {
             if state.ntiles() > parsed.options.smax.unwrap_or(500).try_into().unwrap() {
                 break
             }
-            state.draw(ap.lock().unwrap().get_frame());
+            state.draw(ap.lock().unwrap().get_frame(), scaled, &system);
             proxy.send_event(warc.request_redraw()).unwrap();
         }
     });
