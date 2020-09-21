@@ -35,10 +35,10 @@ tiles:
 # * vdoubletiles - the same for vertical double tiles.
 xgrowargs:
     size: 128
-    seed:
-    - [126,126,1]
+    #seed:
+    #- [126,126,1]
     smax: 5000000
     update_rate: 1000
     Gse: 8.1
     Gmc: 16.0
-    fission: 'just-detach'
+    fission: 'keep-weighted'

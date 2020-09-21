@@ -1,3 +1,6 @@
+
+use std::{thread, sync::Arc, sync::Mutex, convert::TryInto};
+
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 
@@ -6,49 +9,51 @@ use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
 
+use crate::{System, CanvasSquare, TileBondInfo, State2DQT, NullStateTracker, CanvasSize, Canvas, state::StateCreate, StateStep, StateStatus};
+
+
 trait Draw<S>
 where
-    S: System<CanvasSquare>,
+    S: System<CanvasSquare> + TileBondInfo,
 {
-    fn draw(&self, frame: &mut [u8]);
+    fn draw(&self, frame: &mut [u8], scaled: usize, system: &S);
 }
 
 impl<S> Draw<S> for State2DQT<S, NullStateTracker>
 where
-    S: System<CanvasSquare>,
+    S: System<CanvasSquare> + TileBondInfo,
 {
-    fn draw(&self, frame: &mut [u8]) {
+    fn draw(&self, frame: &mut [u8], scaled: usize, system: &S) {
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let x = i % self.canvas.size();
-            let y = i / self.canvas.size();
+            let x = i % (self.canvas.size()*scaled);
+            let y = i / (self.canvas.size()*scaled);
 
-            let tv = unsafe { self.canvas.uv_p((x, y)) };
+            let tv = unsafe { self.canvas.uv_p((y/scaled, x/scaled)) };
 
             pixel.copy_from_slice(
                 &(if tv > 0 {
-                    [(20 * tv).try_into().unwrap(), 50, 50, 0xff]
+                    system.tile_color(tv)
                 } else {
-                    [0, 0, 0, 0xff]
+                    [0, 0, 0, 0x00]
                 }),
             );
         }
     }
 }
 
-fn run_atam_window(input: String) {
-    let file = File::open(input).unwrap();
-    let parsed: TileSet = serde_yaml::from_reader(file).unwrap();
-
+pub fn run_ktam_window(parsed: crate::parser::TileSet) {
     let mut system = parsed.into_static_seeded_ktam();
     let mut state = State2DQT::<_, NullStateTracker>::default(
         (parsed.options.size, parsed.options.size),
         &mut system,
     );
 
+    let scaled = parsed.options.block;
+
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
     let window = {
-        let size = LogicalSize::new(state.canvas.size() as f64, state.canvas.size() as f64);
+        let size = LogicalSize::new((state.canvas.size()*scaled) as f64, (state.canvas.size()*scaled) as f64);
         WindowBuilder::new()
             .with_title("rgrow!")
             .with_inner_size(size)
@@ -62,8 +67,8 @@ fn run_atam_window(input: String) {
         let surface_texture = SurfaceTexture::new(window_size.width, 
             window_size.height, &window);
         Pixels::new(
-            state.canvas.size().try_into().unwrap(),
-            state.canvas.size().try_into().unwrap(),
+            (state.canvas.size()*scaled).try_into().unwrap(),
+            (state.canvas.size()*scaled).try_into().unwrap(),
             surface_texture,
         )
         .unwrap()
@@ -79,12 +84,17 @@ fn run_atam_window(input: String) {
     let _x = thread::spawn(move || {
         loop {
             for _ in 0..parsed.options.update_rate {
-                state.take_step(&mut system);
+                state.take_step(&mut system).unwrap();
             }
-            if state.ntiles() > parsed.options.smax.unwrap_or(500).try_into().unwrap() {
-                break
-            }
-            state.draw(ap.lock().unwrap().get_frame());
+            match parsed.options.smax {
+                Some(smax) => {if state.ntiles() > smax {break}}
+                None => {}
+            };
+            //match parsed.options.emax {
+            //    Some(emax) => {if state.total_events() > emax {break}}
+            //    None => {}
+            //};
+            state.draw(ap.lock().unwrap().get_frame(), scaled, &system);
             proxy.send_event(warc.request_redraw()).unwrap();
         }
     });

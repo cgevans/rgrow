@@ -1,24 +1,36 @@
 use super::base::{Point, Tile, NumTiles};
 use ndarray::prelude::*;
 pub trait Canvas {
-    unsafe fn uv_n(&self, p: Point) -> Tile;
-    unsafe fn uv_e(&self, p: Point) -> Tile;
-    unsafe fn uv_s(&self, p: Point) -> Tile;
-    unsafe fn uv_w(&self, p: Point) -> Tile;
+    unsafe fn uv_p(&self, p: Point) -> Tile;
+    #[inline(always)]
+    unsafe fn uv_n(&self, p: Point) -> Tile {
+        self.uv_p(self.u_move_point_n(p))
+    }
+    #[inline(always)]
+    unsafe fn uv_e(&self, p: Point) -> Tile {
+        self.uv_p(self.u_move_point_e(p))
+    }
+    #[inline(always)]
+    unsafe fn uv_s(&self, p: Point) -> Tile {
+        self.uv_p(self.u_move_point_s(p))
+    }
+    #[inline(always)]
+    unsafe fn uv_w(&self, p: Point) -> Tile {
+        self.uv_p(self.u_move_point_w(p))
+    }
     unsafe fn uv_nw(&self, p: Point) -> Tile;
     unsafe fn uv_ne(&self, p: Point) -> Tile;
     unsafe fn uv_sw(&self, p: Point) -> Tile;
     unsafe fn uv_se(&self, p: Point) -> Tile;
-    unsafe fn uv_p(&self, p: Point) -> Tile;
     unsafe fn uvm_n(&mut self, p: Point) -> &mut Tile;
     unsafe fn uvm_e(&mut self, p: Point) -> &mut Tile;
     unsafe fn uvm_s(&mut self, p: Point) -> &mut Tile;
     unsafe fn uvm_w(&mut self, p: Point) -> &mut Tile;
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile;
-    fn move_point_n(&self, p: Point) -> Point;
-    fn move_point_e(&self, p: Point) -> Point;
-    fn move_point_s(&self, p: Point) -> Point;
-    fn move_point_w(&self, p: Point) -> Point;
+    fn u_move_point_n(&self, p: Point) -> Point;
+    fn u_move_point_e(&self, p: Point) -> Point;
+    fn u_move_point_s(&self, p: Point) -> Point;
+    fn u_move_point_w(&self, p: Point) -> Point;
     fn inbounds(&self, p: Point) -> bool;
     fn calc_ntiles(&self) -> NumTiles;
     fn from_canvas(canvas: Array2<Tile>) -> Self;
@@ -131,22 +143,22 @@ impl Canvas for CanvasSquare {
 
 
     #[inline(always)]
-    fn move_point_n(&self, p: Point) -> Point {
+    fn u_move_point_n(&self, p: Point) -> Point {
         (p.0-1, p.1)
     }
 
     #[inline(always)]
-    fn move_point_e(&self, p: Point) -> Point {
+    fn u_move_point_e(&self, p: Point) -> Point {
         (p.0, p.1+1)
     }
 
     #[inline(always)]
-    fn move_point_s(&self, p: Point) -> Point {
+    fn u_move_point_s(&self, p: Point) -> Point {
         (p.0+1, p.1)
     }
 
     #[inline(always)]
-    fn move_point_w(&self, p: Point) -> Point {
+    fn u_move_point_w(&self, p: Point) -> Point {
         (p.0, p.1-1)
     }
 

@@ -4,6 +4,7 @@ use super::system::*;
 use ndarray::prelude::*;
 use rand::random;
 use std::{convert::TryInto, iter::FromIterator, marker::PhantomData};
+use thiserror::Error;
 
 type HashSet<T> = fnv::FnvHashSet<T>;
 
@@ -54,35 +55,27 @@ pub trait StateEvolve<C: Canvas, S: System<C>>: StateStatus + StateStep<C, S> {
 }
 
 pub trait StateUpdateSingle<C: Canvas, S: System<C>> {
-    fn choose_event_point(&self) -> (Point, Rate);
+    fn choose_event_point(&self) -> Result<(Point, Rate), StateError>;
     fn do_single_event_at_location(&mut self, system: &S, point: Point, acc: Rate) -> &mut Self;
     fn update_after_single_event(&mut self, system: &S, point: Point) -> &mut Self;
     fn update_entire_state(&mut self, system: &S) -> &mut Self;
     fn set_point(&mut self, sys: &S, p: Point, t: Tile) -> &mut Self;
 }
 
-#[derive(Debug)]
-pub enum StateStepError {
+#[derive(Debug, Error)]
+pub enum StateError {
+    #[error("the canvas is empty")]
     EmptyCanvas,
+    #[error("the total event rate is zero")]
     ZeroRate,
+    #[error("an unknown error occured")]
     Unknown,
 }
 
 pub trait StateStep<C: Canvas, S: System<C>>: StateUpdateSingle<C, S> + StateStatus {
-    fn take_step(&mut self, system: &S) -> Result<&Self, StateStepError> {
-        let (p, acc) = self.choose_event_point();
-        if p == (0, 0) {
-            // This happens when we have no tiles, or a zero rate.
-            if self.ntiles() == 0 {
-                Err(StateStepError::EmptyCanvas)
-            } else if self.total_rate() == 0. {
-                Err(StateStepError::ZeroRate)
-            } else {
-                Err(StateStepError::Unknown)
-            }
-        } else {
-            Ok(self.do_single_event_at_location(system, p, acc))
-        }
+    fn take_step(&mut self, system: &S) -> Result<&Self, StateError> {
+        let (p, acc) = self.choose_event_point()?;
+        Ok(self.do_single_event_at_location(system, p, acc))
     }
 }
 
@@ -327,7 +320,7 @@ where
     S: System<CanvasSquare>,
     T: StateTracker,
 {
-    fn choose_event_point(&self) -> (Point, Rate) {
+    fn choose_event_point(&self) -> Result<(Point, Rate), StateError> {
         let mut threshold = self.total_rate * random::<Rate>();
 
         let mut x: usize = 0;
@@ -365,7 +358,17 @@ where
                 panic!("Failure in quadtree position finding: remaining threshold {:?}, ratetree array {:?}.", threshold, r);
             }
         }
-        return ((y, x), threshold);
+
+        if (y, x) == (0, 0) {
+            // This happens when we have no tiles, or a zero rate.
+            if self.ntiles() == 0 {
+                Err(StateError::EmptyCanvas)
+            } else if self.total_rate() == 0. {
+                Err(StateError::ZeroRate)
+            } else {
+                Err(StateError::Unknown)
+            }
+        } else {Ok(((y, x), threshold))}
     }
 
     #[inline(always)]
@@ -423,6 +426,20 @@ where
                     self.update_after_single_event(system, point)
                     .record_single_event(point, old_tile, 0);
 
+                }
+            }
+            Event::MultiTileAttach(pointvec) => {
+                self.total_events += 1;
+
+                for (point, tile) in pointvec {
+                    let loc = unsafe {self.canvas.uvm_p(point)};
+                    let old_tile: Tile = *loc;
+
+                    self.ntiles += 1;
+
+                    *loc = tile;
+
+                    self.update_after_single_event(system, point).record_single_event(point, old_tile, tile);
                 }
             }
         }
@@ -534,11 +551,11 @@ where
         let mut np: (usize, usize) = p.clone();
 
         for ps in &[
-            self.canvas.move_point_w(p),
+            self.canvas.u_move_point_w(p),
             p,
-            self.canvas.move_point_e(p),
-            self.canvas.move_point_n(p),
-            self.canvas.move_point_s(p),
+            self.canvas.u_move_point_e(p),
+            self.canvas.u_move_point_n(p),
+            self.canvas.u_move_point_s(p),
         ] {
             rt[*ps] = system.event_rate_at_point(&self.canvas, *ps);
         }

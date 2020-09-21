@@ -6,7 +6,7 @@ use ndarray::prelude::*;
 use ndarray::{FoldWhile, Zip};
 use serde::{Deserialize, Serialize};
 
-use super::base::{CanvasLength, Energy, Glue, Point, Rate, Tile};
+use super::base::{Energy, Glue, Point, Rate, Tile};
 use super::canvas::Canvas;
 
 use super::fission;
@@ -33,7 +33,19 @@ pub enum Event {
     SingleTileAttach(Tile),
     SingleTileDetach,
     SingleTileChange(Tile),
+    MultiTileAttach(Vec<(Point, Tile)>),
     MultiTileDetach(Vec<Point>),
+}
+
+pub enum ChunkHandling {
+    None,
+    Detach,
+    Equilibrium
+}
+
+pub enum ChunkSize {
+    Single,
+    Dimer
 }
 
 pub trait System<C: Canvas> {
@@ -532,7 +544,7 @@ where
         }
 
         // Bound is previously checked.
-        let tile = unsafe { canvas.uv_p(p) };
+        let tile = unsafe { canvas.uv_p(p) as usize };
 
         let tn = unsafe { canvas.uv_n(p) as usize };
         let tw = unsafe { canvas.uv_w(p) as usize };
@@ -541,14 +553,17 @@ where
 
         if tile != 0 {
             // Deletion is easy! But first, check if we might have a fission problem.
+            let mut possible_starts = Vec::new();
+
+            if self.energy_ns[(tn, tile)] > 0. {possible_starts.push(canvas.u_move_point_n(p))};
+            if self.energy_we[(tw, tile)] > 0. {possible_starts.push(canvas.u_move_point_w(p))};
+            if self.energy_ns[(tile, ts)] > 0. {possible_starts.push(canvas.u_move_point_s(p))};
+            if self.energy_we[(tile, te)] > 0. {possible_starts.push(canvas.u_move_point_e(p))};
+
+
             match self.determine_fission(
                 canvas,
-                &[
-                    canvas.move_point_n(p),
-                    canvas.move_point_e(p),
-                    canvas.move_point_s(p),
-                    canvas.move_point_w(p),
-                ],
+                &possible_starts,
                 &[p],
             ) {
                 fission::FissionResult::NoFission => Event::SingleTileDetach,

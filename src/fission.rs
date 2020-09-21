@@ -1,10 +1,9 @@
 use super::base::{Point, Tile};
 use super::Canvas;
 use crate::StaticKTAM;
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::{FnvHashMap};
 use std::collections::VecDeque;
-use std::iter::repeat;
-use rand::{random, seq::SliceRandom, distributions::weighted::WeightedIndex, distributions::Distribution};
+use rand::{distributions::weighted::WeightedIndex, distributions::Distribution};
 
 // lazy_static! {
 //     /// A vector specifying whether or not the 1 bits of the index are in a single
@@ -61,7 +60,7 @@ pub struct GroupInfo {
 
 impl GroupInfo {
     fn new(start_points: &Vec<&Point>, now_empty: &[Point]) -> Self {
-        let mut groupmerges = (0usize..=start_points.len()).collect();
+        let groupmerges = (0usize..=start_points.len()).collect();
 
         let mut map = FnvHashMap::<Point, usize>::default();
 
@@ -134,6 +133,7 @@ impl GroupInfo {
                 deletions.extend(pv);
             }
         }
+        deletions.extend(&self.pointlist[0]);
 
         deletions
     }
@@ -150,6 +150,9 @@ impl GroupInfo {
         for pv in mi {
             deletions.extend(pv)
         }
+        deletions.extend(&self.pointlist[0]);
+
+        println!("{:?} {:?}", deletions, self.groupmerges);
 
         deletions
     }
@@ -174,26 +177,25 @@ impl GroupInfo {
                 deletions.extend(group);
             }
         }
+        
+        deletions.extend(&self.pointlist[0]);
 
         deletions
     }
 
     pub fn merged_pointlist(&self) -> Vec<Vec<Point>> {
-        let mut mergedpoints = Vec::new();
-        for (i, pointvec) in self.pointlist.iter().enumerate() {
+        let mut mergedpointhash = FnvHashMap::<usize, Vec<Point>>::default();
+        for (pointvec, i) in self.pointlist.iter().zip(&self.groupmerges) {
             // Exclude deletion group
-            if i == 0 {
+            if *i == 0 {
                 continue
             }
-            if i == self.groupmerges[i] {
-                //assert!(mergedpoints.len() == i-1);
-                mergedpoints.push(pointvec.clone());
-            } else {
-                let mut group = mergedpoints.get_mut(self.groupmerges[i]-1).unwrap();
-                group.extend(pointvec);
-            }
-        }
-        mergedpoints
+            match mergedpointhash.get_mut(i) {
+                Some(v) => { v.extend(pointvec); }
+                None => { mergedpointhash.insert(*i, pointvec.clone()); }
+            };
+        };
+        mergedpointhash.into_iter().map(|(_x,y)| y).collect()
     }
 
     fn n_groups(&self) -> usize {
@@ -204,30 +206,6 @@ impl GroupInfo {
     }
 }
 
-struct GroupVec {
-    ident: Vec<usize>,
-}
-
-impl GroupVec {
-    fn merge_groups(&mut self, g1: usize, g2: usize) -> usize {
-        let ng = g1.min(g2);
-
-        for gv in self.ident.iter_mut() {
-            if (*gv == g1) | (*gv == g2) {
-                *gv = ng;
-            }
-        }
-
-        ng
-    }
-
-    fn n_groups(&self) -> usize {
-        let mut sg = self.ident.clone();
-        sg.sort();
-        sg.dedup();
-        sg.len()
-    }
-}
 
 pub enum FissionResult {
     NoFission,
@@ -288,20 +266,20 @@ impl StaticKTAM {
         let mut queue = VecDeque::<Point>::new();
 
         // Put all the starting points in the queue.
-        for (i, point) in start_points.iter().enumerate() {
+        for (_i, point) in start_points.iter().enumerate() {
             queue.push_back(**point);
         }
 
         //println!("Start queue {:?}", queue);
         while let Some(p) = queue.pop_front() {
             let t = unsafe { canvas.uv_p(p) } as usize;
-            let pn = canvas.move_point_n(p);
+            let pn = canvas.u_move_point_n(p);
             let tn = unsafe { canvas.uv_p(pn) } as usize;
-            let pw = canvas.move_point_w(p);
+            let pw = canvas.u_move_point_w(p);
             let tw = unsafe { canvas.uv_p(pw) } as usize;
-            let pe = canvas.move_point_e(p);
+            let pe = canvas.u_move_point_e(p);
             let te = unsafe { canvas.uv_p(pe) } as usize;
-            let ps = canvas.move_point_s(p);
+            let ps = canvas.u_move_point_s(p);
             let ts = unsafe { canvas.uv_p(ps) } as usize;
 
             if (unsafe { *self.energy_ns.uget((tn, t)) } != 0.) {

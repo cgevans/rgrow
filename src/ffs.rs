@@ -3,16 +3,19 @@ use super::*;
 //use ndarray::Zip;
 use rand::thread_rng;
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
+#[cfg(feature = "rayon")] use rayon::prelude::*;
+#[cfg(feature = "rayon")] use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(feature = "rayon")] use std::sync::Arc;
 //use std::convert::{TryFrom, TryInto};
 
-pub struct FFSRun<S: System<CanvasSquare> + Clone> {
-    pub level_list: Vec<FFSLevel<S>>,
+pub struct FFSRun {
+    pub level_list: Vec<FFSLevel>,
     pub dimerization_rate: f64
 }
 
-impl<S: System<CanvasSquare> + Clone> FFSRun<S> {
+impl FFSRun {
     pub fn create(
-        system: &S,
+        system: &StaticKTAM,
         num_states: usize,
         target_size: NumTiles,
         canvas_size: CanvasLength,
@@ -36,7 +39,7 @@ impl<S: System<CanvasSquare> + Clone> FFSRun<S> {
             );
         }
 
-        let dimerization_rate = system.calc_dimers().iter().fold(0., |acc, d| acc + d.formation_rate);
+        let dimerization_rate = System::<CanvasSquare>::calc_dimers(system).iter().fold(0., |acc, d| acc + d.formation_rate);
 
         Self { level_list, dimerization_rate }
     }
@@ -57,15 +60,16 @@ impl<S: System<CanvasSquare> + Clone> FFSRun<S> {
     }
 }
 
-pub struct FFSLevel<S: System<CanvasSquare> + Clone> {
-    pub state_list: Vec<State2DQT<S, NullStateTracker>>,
+pub struct FFSLevel {
+    pub state_list: Vec<State2DQT<StaticKTAM, NullStateTracker>>,
     pub previous_list: Vec<usize>,
     pub p_r: f64,
     pub target_size: NumTiles,
 }
 
-impl<S: System<CanvasSquare> + Clone> FFSLevel<S> {
-    pub fn next_level(&self, system: &S, size_step: u32, max_events: u64) -> Self {
+impl FFSLevel {
+    #[cfg(not(feature = "use_rayon"))]
+    pub fn next_level(&self, system: &StaticKTAM, size_step: u32, max_events: u64) -> Self {
         let mut rng = thread_rng();
 
         let mut state_list = Vec::new();
@@ -97,8 +101,53 @@ impl<S: System<CanvasSquare> + Clone> FFSLevel<S> {
         }
     }
 
+    #[cfg(feature = "use_rayon")]
+    pub fn next_level(&self, system: &StaticKTAM, size_step: u32, max_events: u64) -> Self {
+        let mut rng = thread_rng();
+
+        let mut n_attempts = AtomicUsize::new(0);
+        let mut n_successes = AtomicUsize::new(0);
+
+        let sysref = Arc::new(system);
+
+        let num_states = self.state_list.len() as usize;
+
+        let target_size = (self.target_size + size_step);
+
+        let chooser = Uniform::new(0, self.state_list.len());
+
+        let state_list = rayon::iter::repeat(()).map( |_| {
+            if n_successes.load(Ordering::SeqCst) >= num_states {return None};
+            let mut rng = rand::thread_rng();
+            let i_old_state = chooser.sample(&mut rng);
+            let mut state = self.state_list[i_old_state].clone();
+            state.evolve_in_size_range_events_max(*sysref, 0, target_size, max_events);
+            if state.ntiles() == target_size {
+                n_attempts.fetch_add(1, Ordering::SeqCst);
+                n_successes.fetch_add(1, Ordering::SeqCst);
+                Some(Some(state))
+            } else {
+                n_attempts.fetch_add(1, Ordering::SeqCst);
+                Some(None)
+            }
+        }).while_some().filter_map(|x| x).collect::<Vec<_>>();
+
+
+        let mut previous_list = Vec::new();
+
+
+        let p_r = (n_successes.load(Ordering::SeqCst) as f64) / (n_attempts.load(Ordering::SeqCst) as f64);
+
+        Self {
+            state_list: state_list,
+            previous_list: previous_list,
+            p_r,
+            target_size,
+        }
+    }
+
     pub fn nmers_from_dimers(
-        system: &S,
+        system: &StaticKTAM,
         num_states: usize,
         canvas_size: CanvasLength,
         max_events: u64,
@@ -106,7 +155,7 @@ impl<S: System<CanvasSquare> + Clone> FFSLevel<S> {
     ) -> Self {
         let mut rng = thread_rng();
 
-        let dimers = system.calc_dimers();
+        let dimers = System::<CanvasSquare>::calc_dimers(system);
 
         let mut state_list = Vec::new();
         let mut previous_list = Vec::new();

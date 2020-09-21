@@ -6,41 +6,55 @@ use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use ndarray::prelude::*;
+use serde_json;
+use std::io;
 
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ParserError {
+    #[error("I/O error: {source}")]
+    Io {
+        #[source]
+        source: io::Error,
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
-enum GlueIdent {
+pub enum GlueIdent {
     Name(String),
     Num(Glue),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
-enum ParsedSeed {
+pub enum ParsedSeed {
     None(),
-    Single((CanvasLength, CanvasLength, base::Tile)),
+    Single(CanvasLength, CanvasLength, base::Tile),
     Multi(Vec<(CanvasLength, CanvasLength, base::Tile)>)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Tile {
-    name: Option<String>,
-    edges: Vec<GlueIdent>,
-    stoic: Option<f64>,
-    color: Option<String>,
+pub struct Tile {
+    pub name: Option<String>,
+    pub edges: Vec<GlueIdent>,
+    pub stoic: Option<f64>,
+    pub color: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Bond {
-    name: GlueIdent,
-    strength: f64,
+pub struct Bond {
+    pub name: GlueIdent,
+    pub strength: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TileSet {
-    tiles: Vec<Tile>,
-    bonds: Vec<Bond>,
+    pub tiles: Vec<Tile>,
+    #[serde(default="Vec::new")]
+    pub bonds: Vec<Bond>,
     #[serde(alias="xgrowargs")]
     pub options: Args,
 }
@@ -57,13 +71,13 @@ fn block_default() -> usize {5}
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Args {
     #[serde(default="gse_default", alias="Gse")]
-    gse: f64,
+    pub gse: f64,
     #[serde(default="gmc_default", alias="Gmc")]
-    gmc: f64,
+    pub gmc: f64,
     #[serde(default="alpha_default")]
-    alpha: f64,
+    pub alpha: f64,
     #[serde(default="seed_default")]
-    seed: ParsedSeed,
+    pub seed: ParsedSeed,
     #[serde(default="size_default")]
     pub size: CanvasLength,
     pub tau: Option<f64>,
@@ -77,13 +91,40 @@ pub struct Args {
     pub block: usize
 }
 
+impl Args {
+    pub fn default() -> Self {
+        Args {
+            gse: gse_default(),
+            gmc: gmc_default(),
+            alpha: alpha_default(),
+            seed: seed_default(),
+            size: size_default(),
+            tau: None,
+            smax: None,
+            update_rate: update_rate_default(),
+            kf: None,
+            fission: fission_default(),
+            block: block_default(),
+            
+        }
+    }
+}
+
 impl TileSet {
+    pub fn from_json(data: &str) -> serde_json::Result<Self> {
+        serde_json::from_str(data)
+    }
+
+    pub fn from_yaml(data: &str) -> Result<Self, ()> {
+        serde_yaml::from_str(data).unwrap_or(Err(()))
+    }
+
     pub fn into_static_seeded_ktam(&self) -> StaticKTAM {
         let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
 
         let tile_edges = self.tile_edge_process(&gluemap);
         let mut tile_concs = self.tile_stoics();
-        tile_concs *= f64::exp(- self.options.gmc - self.options.alpha);
+        tile_concs *= f64::exp(- self.options.gmc + self.options.alpha);
 
         let mut glue_strength_vec = Vec::<f64>::new();
 
@@ -97,7 +138,7 @@ impl TileSet {
         println!("self.options.fission: {:?}", self.options.fission);
 
         let seed = match &self.options.seed {
-            ParsedSeed::Single((y, x, v)) => {Seed::SingleTile{point: (*y,*x), tile: *v}}
+            ParsedSeed::Single(y, x, v) => {Seed::SingleTile{point: (*y,*x), tile: *v}}
             ParsedSeed::None() => {Seed::None()}
             ParsedSeed::Multi(vec) => {let mut hm = HashMap::default();
                 hm.extend(vec.iter().map(|(y,x,v)| ((*y,*x),*v))); Seed::MultiTile(hm) }
@@ -126,7 +167,7 @@ impl TileSet {
         } 
 
         let seed = match &self.options.seed {
-            ParsedSeed::Single((y, x, v)) => {Seed::SingleTile{point: (*y,*x), tile: *v}}
+            ParsedSeed::Single(y, x, v) => {Seed::SingleTile{point: (*y,*x), tile: *v}}
             ParsedSeed::None() => {Seed::None()}
             ParsedSeed::Multi(vec) => {let mut hm = HashMap::default();
                 hm.extend(vec.iter().map(|(y,x,v)| ((*y,*x),*v))); Seed::MultiTile(hm) }
@@ -245,7 +286,6 @@ impl TileSet {
         tc.push([0, 0, 0, 0]);
         let mut rng = rand::thread_rng();
         let ug = rand::distributions::Uniform::new(100u8, 254);
-        let ntiles = self.tiles.len()+1;
 
         for tile in &self.tiles {
             tc.push(match &tile.color {
