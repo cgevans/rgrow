@@ -144,8 +144,8 @@ pub trait StateStatus {
     //fn last_step_time(&self) -> Time;
 }
 
-pub trait StateTracker {
-    fn default(state: &dyn CanvasSize) -> Self;
+pub trait StateTracker: Clone {
+    fn default(canvas: &dyn Canvas) -> Self;
 
     fn record_single_event(&mut self, p: Point, old_tile: Tile, new_tile: Tile) -> &mut Self;
 }
@@ -154,7 +154,7 @@ pub trait StateTracker {
 pub struct NullStateTracker();
 
 impl StateTracker for NullStateTracker {
-    fn default(_state: &dyn CanvasSize) -> Self {
+    fn default(_state: &dyn Canvas) -> Self {
         Self()
     }
 
@@ -170,7 +170,7 @@ pub struct TileSubsetTracker {
 }
 
 impl StateTracker for TileSubsetTracker {
-    fn default(_state: &dyn CanvasSize) -> Self {
+    fn default(_canvas: &dyn Canvas) -> Self {
         // Default is to track nothing.
         Self {
             num_in_subset: 0,
@@ -199,72 +199,89 @@ impl TileSubsetTracker {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct OrderTracker {
-    pub orders: Array2<usize>,
-    cur_order: usize,
-}
+// #[derive(Clone, Debug)]
+// pub struct OrderTracker {
+//     pub orders: Box<dyn Canvas>,
+//     cur_order: usize,
+// }
 
-impl OrderTracker {
-    pub fn new(size: usize) -> Self {
-        OrderTracker {
-            orders: Array2::zeros((size, size)),
-            cur_order: 1,
-        }
-    }
-}
+// impl OrderTracker {
+//     pub fn new(canvas: &dyn Canvas) -> Self {
+//         OrderTracker {
+//             orders: canvas.clone(),
+//             cur_order: 1,
+//         }
+//     }
+// }
 
-impl StateTracker for OrderTracker {
-    fn default(canvas: &dyn CanvasSize) -> Self {
-        OrderTracker {
-            orders: Array2::zeros(canvas.raw_dim()),
-            cur_order: 1,
-        }
-    }
+// impl StateTracker for OrderTracker {
+//     fn default(canvas: &dyn Canvas) -> Self {
+//         OrderTracker {
+//             orders: canvas.clone(),
+//             cur_order: 1,
+//         }
+//     }
 
-    fn record_single_event(&mut self, p: Point, _old_tile: Tile, new_tile: Tile) -> &mut Self {
-        if new_tile == 0 {
-            unsafe {
-                *self.orders.uget_mut(p) = 0;
-            }
-        } else {
-            unsafe {
-                *self.orders.uget_mut(p) = self.cur_order;
-                self.cur_order += 1;
-            }
-        };
-        self
-    }
-}
+//     fn record_single_event(&mut self, p: Point, _old_tile: Tile, new_tile: Tile) -> &mut Self {
+//         if new_tile == 0 {
+//             unsafe {
+//                 *self.orders.uget_mut(p) = 0;
+//             }
+//         } else {
+//             unsafe {
+//                 *self.orders.uget_mut(p) = self.cur_order;
+//                 self.cur_order += 1;
+//             }
+//         };
+//         self
+//     }
+// }
 
-#[derive(Clone, Debug)]
-pub struct State2DQT<S: System<CanvasSquare>, T: StateTracker> {
+#[derive(Debug)]
+pub struct QuadTreeState<C: CanvasSquarable, S: System<C>, T: StateTracker> {
     pub rates: Vec<Array2<Rate>>,
-    pub canvas: CanvasSquare,
-    phantomsys: PhantomData<S>,
+    pub canvas: C,
+    phantomsys: PhantomData<*const S>,
     ntiles: NumTiles,
     total_rate: Rate,
     total_events: NumEvents,
     pub tracker: T,
 }
 
-impl<S, T> StateEvolve<CanvasSquare, S> for State2DQT<S, T>
+impl<C: CanvasSquarable + Clone, S: System<C>, T: StateTracker + Clone> Clone for QuadTreeState<C, S, T> {
+    fn clone(&self) -> Self {
+        Self {
+            rates: self.rates.clone(),
+            canvas: self.canvas.clone(),
+            phantomsys: self.phantomsys,
+            ntiles: self.ntiles,
+            total_rate: self.total_rate,
+            total_events: self.total_events,
+            tracker: self.tracker.clone()
+        }
+    }
+}
+
+impl<C,S, T> StateEvolve<C, S> for QuadTreeState<C, S, T>
 where
-    S: System<CanvasSquare>,
+    C: CanvasSquarable,
+    S: System<C>,
     T: StateTracker,
 {
 }
 
-impl<S, T> StateStep<CanvasSquare, S> for State2DQT<S, T>
+impl<C, S, T> StateStep<C, S> for QuadTreeState<C, S, T>
 where
-    S: System<CanvasSquare>,
+C: CanvasSquarable,
+    S: System<C>,
     T: StateTracker,
 {
 }
 
-impl<S, T> StateCreate<CanvasSquare, S> for State2DQT<S, T>
+impl<C, S, T> StateCreate<C, S> for QuadTreeState<C, S, T>
 where
-    S: System<CanvasSquare>,
+    C: CanvasSquarable + CanvasCreate,
+    S: System<C>,
     T: StateTracker,
 {
     fn create_raw(canvas: Array2<Tile>) -> Self {
@@ -279,10 +296,10 @@ where
             rates.push(Array2::<Rate>::zeros((2usize.pow(i), 2usize.pow(i))))
         }
 
-        let canvas = CanvasSquare::from_canvas(canvas);
+        let canvas = C::from_array(canvas);
         let tracker = T::default(&canvas);
 
-        State2DQT::<S, T> {
+        QuadTreeState::<C, S, T> {
             rates,
             canvas,
             phantomsys: PhantomData,
@@ -294,9 +311,9 @@ where
     }
 }
 
-impl<S, T> StateStatus for State2DQT<S, T>
+impl<C: CanvasSquarable, S, T> StateStatus for QuadTreeState<C, S, T>
 where
-    S: System<CanvasSquare>,
+    S: System<C>,
     T: StateTracker,
 {
     #[inline(always)]
@@ -315,9 +332,9 @@ where
     }
 }
 
-impl<S, T> StateUpdateSingle<CanvasSquare, S> for State2DQT<S, T>
+impl<C: CanvasSquarable, S, T> StateUpdateSingle<C, S> for QuadTreeState<C, S, T>
 where
-    S: System<CanvasSquare>,
+    S: System<C>,
     T: StateTracker,
 {
     fn choose_event_point(&self) -> Result<(Point, Rate), StateError> {
@@ -373,7 +390,23 @@ where
 
     #[inline(always)]
     fn update_after_single_event(&mut self, system: &S, point: Point) -> &mut Self {
-        self.update_rates_ps(system, point)
+        match system.updates_around_point() {
+            Updates::Plus => {             self.update_rates_ps(system, point)
+            }
+            Updates::DimerChunk => { 
+                self.update_rates_ps(system, point);
+                let pww = unsafe { self.canvas.u_move_point_w(self.canvas.u_move_point_w(point)) };
+                if self.canvas.inbounds(pww) {self.update_rates_single(system, pww);}
+                let pnn = unsafe { self.canvas.u_move_point_n(self.canvas.u_move_point_n(point)) };
+                if self.canvas.inbounds(pnn) {self.update_rates_single(system, pnn);}
+                let pnw = self.canvas.u_move_point_nw(point);
+                let pse = self.canvas.u_move_point_sw(point);
+                let pne = self.canvas.u_move_point_ne(point);
+                self.update_rates_single(system, pnw)
+                    .update_rates_single(system, pse)
+                    .update_rates_single(system, pne)
+             }
+        }
     }
 
     #[inline(always)]
@@ -486,9 +519,10 @@ where
     fn record_single_event(&mut self, _p: Point, old_tile: Tile, new_tile: Tile) -> &mut Self;
 }
 
-impl<S, T> StateTracked<CanvasSquare, S, T> for State2DQT<S, T>
+impl<C, S, T> StateTracked<C, S, T> for QuadTreeState<C, S, T>
 where
-    S: System<CanvasSquare>,
+    C: CanvasSquarable,
+    S: System<C>,
     T: StateTracker,
 {
     fn set_tracker(&mut self, tracker: T) -> &mut Self {
@@ -506,9 +540,9 @@ where
     }
 }
 
-impl<S, T> State2DQT<S, T>
+impl<C: CanvasSquarable + CanvasCreate, S, T> QuadTreeState<C, S, T>
 where
-    S: System<CanvasSquare>,
+    S: System<C>,
     T: StateTracker,
 {
     pub fn create_we_pair_with_tracker(
@@ -542,7 +576,14 @@ where
             .set_point(sys, (mid + 1, mid), s);
         ret
     }
+}
 
+
+impl<C: CanvasSquarable, S, T> QuadTreeState<C, S, T>
+where
+    S: System<C>,
+    T: StateTracker + Clone,
+{
     fn update_rates_ps(&mut self, system: &S, p: Point) -> &mut Self {
         let mut rtiter = self.rates.iter_mut();
 
@@ -632,6 +673,55 @@ where
 
         self
     }
+
+    /// Efficiently, but dangerously, copies a state into zeroed state, when certain conditions are satisfied:
+    /// 
+    /// - The system must be fully unseeded kTAM: specifically, all locations with tiles must have a nonzero rate.
+    /// - The assignee state is assumed to have all zero rates, and an all zero canvas.  This is not checked!
+    /// 
+    /// This is fast when the number of tiles << the size of the canvas, eg, when putting in dimers.
+    /// 
+    /// If on debug, conditions should be checked (TODO)
+    pub fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self {
+        self.copy_level_quad(source, 0, (0,0))
+    }
+
+
+    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self {
+        let (y, x) = point;
+
+        if level < self.rates.len()-1 {
+            for (yy, xx) in &[(y,x), (y,x+1), (y+1, x), (y, x+1)] {
+                let z = source.rates[level][(*yy, *xx)];
+                if z > 0. {
+                    self.rates[level][(*yy, *xx)] = z;
+                    self.copy_level_quad(source, level+1, (*yy * 2, *xx *2));
+                }
+            }
+        } else {
+            for (yy, xx) in &[(y,x), (y,x+1), (y+1, x), (y, x+1)] {
+                let z = source.rates[level][(*yy, *xx)];
+                let t = unsafe { source.canvas.uv_p((*yy, *xx)) };
+                if z > 0. {
+                    self.rates[level][(*yy, *xx)] = z;
+                if t > 0 { // Tile must have nonzero rate, so we only check if the rate is nonzero.
+                    let v = unsafe { self.canvas.uvm_p((*yy, *xx)) };
+                    *v = t;
+                    drop(v);
+                }
+                }
+            }
+        };
+
+        // General housekeeping
+        self.ntiles = source.ntiles;
+        self.total_rate = source.total_rate;
+        self.total_events = source.total_events;
+        self.tracker = source.tracker.clone();
+
+        self
+    }
+
 }
 
 #[inline(always)]

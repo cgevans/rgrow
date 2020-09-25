@@ -1,6 +1,6 @@
 [package]
 name = "rgrow"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Constantine Evans <cevans@costinet.org>"]
 edition = "2018"
 
@@ -29,7 +29,7 @@ bimap = "0.5"
 clap = "3.0.0-beta.1"
 serde_yaml = "0.8"
 serde_json = "1"
-#lazy_static = "1.4.0"
+dashmap = "4.0.0-rc6"
 pixels = { version = "0.2", optional = true}
 phf = { version = "0.8", features = ["macros"] }
 nom = { version = "5.1", optional = false }

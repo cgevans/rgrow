@@ -51,7 +51,7 @@ type GroupNum = usize;
 #[derive(Debug)]
 pub struct GroupInfo {
     /// Contains mappings of point -> (unmerged) group number.
-    map: FnvHashMap<Point, GroupNum>,
+    pub map: FnvHashMap<Point, GroupNum>,
     /// Contains mappings of unmerged group number to merged group number.
     groupmerges: Vec<GroupNum>,
     /// Contains lists of points in each (unmerged) group number.
@@ -90,27 +90,30 @@ impl GroupInfo {
     /// return false (further movement into point2 needed).
     /// Point1 must be in a group, and debug checks to make sure it isn't in zero.
     fn merge_or_add(&mut self, point1: &Point, point2: &Point) -> bool {
-        assert!(self.map.get(point1) != Some(&0));
+        let g1 = self.groupmerges[*self.map.get(point1).unwrap()];
+        
+        assert!(g1 != 0);
 
-        if self.map.get(point2) == Some(&0) {
+        let mp2 = self.map.get(point2);
+
+        if mp2 == Some(&0) {
             return true
         }
 
-        if let Some(g2) = self.map.get(point2) {
-            let g1 = self.map.get(point1).unwrap(); // point1 must be in group.
-            if *g1 != *g2 {
-                let new_group = *g1.min(g2);
+        if let Some(g2) = mp2 {
+            let g2 = self.groupmerges[*g2];
+            if g1 != g2 {
+                let new_group = g1.min(g2);
                 for gv in self.groupmerges.iter_mut() {
-                    if (*gv == *g1) | (*gv == *g2) {
+                    if (*gv == g1) | (*gv == g2) {
                         *gv = new_group;
                     }
                 }
             }
             true
         } else {
-            let g1 = *self.map.get(point1).unwrap(); // point1 must be in group.
-            self.map.insert(*point2, g1);
-            self.pointlist[g1].push(*point2);
+            self.map.insert(point2.clone(), g1);
+            self.pointlist[g1].push(point2.clone());
             false
         }
     }
@@ -152,7 +155,7 @@ impl GroupInfo {
         }
         deletions.extend(&self.pointlist[0]);
 
-        println!("{:?} {:?}", deletions, self.groupmerges);
+        //println!("{:?} {:?}", deletions, self.groupmerges);
 
         deletions
     }
@@ -206,14 +209,14 @@ impl GroupInfo {
     }
 }
 
-
+#[derive(Debug)]
 pub enum FissionResult {
     NoFission,
     FissionGroups(GroupInfo),
 }
 
-impl StaticKTAM {
-    pub fn determine_fission<C: Canvas>(
+impl<C: Canvas> StaticKTAM<C> {
+    pub fn determine_fission(
         &self,
         canvas: &C,
         possible_start_points: &[Point],
@@ -336,7 +339,7 @@ impl StaticKTAM {
         }
 
         //println!("Finished queue");
-
+        //println!("{:?}", groupinfo);
         FissionResult::FissionGroups(groupinfo)
     }
 }

@@ -15,7 +15,7 @@ pub struct FFSRun {
 
 impl FFSRun {
     pub fn create(
-        system: &StaticKTAM,
+        system: &StaticKTAM<CanvasSquare>,
         num_states: usize,
         target_size: NumTiles,
         canvas_size: CanvasLength,
@@ -61,15 +61,15 @@ impl FFSRun {
 }
 
 pub struct FFSLevel {
-    pub state_list: Vec<State2DQT<StaticKTAM, NullStateTracker>>,
+    pub state_list: Vec<QuadTreeState<CanvasSquare, StaticKTAM<CanvasSquare>, NullStateTracker>>,
     pub previous_list: Vec<usize>,
     pub p_r: f64,
     pub target_size: NumTiles,
 }
 
-impl FFSLevel {
+impl<'a> FFSLevel {
     #[cfg(not(feature = "use_rayon"))]
-    pub fn next_level(&self, system: &StaticKTAM, size_step: u32, max_events: u64) -> Self {
+    pub fn next_level(&self, system: &StaticKTAM<CanvasSquare>, size_step: u32, max_events: u64) -> Self {
         let mut rng = thread_rng();
 
         let mut state_list = Vec::new();
@@ -147,7 +147,7 @@ impl FFSLevel {
     }
 
     pub fn nmers_from_dimers(
-        system: &StaticKTAM,
+        system: &StaticKTAM<CanvasSquare>,
         num_states: usize,
         canvas_size: CanvasLength,
         max_events: u64,
@@ -170,14 +170,14 @@ impl FFSLevel {
             let dimer = &dimers[i_old_state];
 
             let mut state = match dimer.orientation {
-                Orientation::NS => State2DQT::create_ns_pair_with_tracker(
+                Orientation::NS => QuadTreeState::create_ns_pair_with_tracker(
                     system,
                     dimer.t1,
                     dimer.t2,
                     canvas_size,
                     NullStateTracker(),
                 ),
-                Orientation::WE => State2DQT::create_we_pair_with_tracker(
+                Orientation::WE => QuadTreeState::create_we_pair_with_tracker(
                     system,
                     dimer.t1,
                     dimer.t2,

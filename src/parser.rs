@@ -1,14 +1,13 @@
-use super::base::{Glue, CanvasLength};
+use super::base::{CanvasLength, Glue};
+use super::system::{FissionHandling, Seed, StaticATAM, StaticKTAM};
 use super::*;
-use super::system::{StaticATAM, Seed, StaticKTAM, FissionHandling};
 use bimap::BiMap;
+use ndarray::prelude::*;
 use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
-use ndarray::prelude::*;
 use serde_json;
+use std::collections::{BTreeMap, HashMap};
 use std::io;
-
 
 use thiserror::Error;
 
@@ -18,7 +17,7 @@ pub enum ParserError {
     Io {
         #[source]
         source: io::Error,
-    }
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -33,7 +32,7 @@ pub enum GlueIdent {
 pub enum ParsedSeed {
     None(),
     Single(CanvasLength, CanvasLength, base::Tile),
-    Multi(Vec<(CanvasLength, CanvasLength, base::Tile)>)
+    Multi(Vec<(CanvasLength, CanvasLength, base::Tile)>),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -53,46 +52,64 @@ pub struct Bond {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TileSet {
     pub tiles: Vec<Tile>,
-    #[serde(default="Vec::new")]
+    #[serde(default = "Vec::new")]
     pub bonds: Vec<Bond>,
-    #[serde(alias="xgrowargs")]
+    #[serde(alias = "xgrowargs")]
     pub options: Args,
 }
 
-fn alpha_default() -> f64 {0.0}
-fn gse_default() -> f64 {8.0}
-fn gmc_default() -> f64 {16.0}
-fn size_default() -> CanvasLength {32}
-fn update_rate_default() -> NumEvents {1000}
-fn seed_default() -> ParsedSeed { ParsedSeed::None() }
-fn fission_default() -> FissionHandling { FissionHandling::KeepLargest }
-fn block_default() -> usize {5}
+fn alpha_default() -> f64 {
+    0.0
+}
+fn gse_default() -> f64 {
+    8.0
+}
+fn gmc_default() -> f64 {
+    16.0
+}
+fn size_default() -> CanvasLength {
+    32
+}
+fn update_rate_default() -> NumEvents {
+    1000
+}
+fn seed_default() -> ParsedSeed {
+    ParsedSeed::None()
+}
+fn fission_default() -> FissionHandling {
+    FissionHandling::KeepLargest
+}
+fn block_default() -> usize {
+    5
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Args {
-    #[serde(default="gse_default", alias="Gse")]
+    #[serde(default = "gse_default", alias = "Gse")]
     pub gse: f64,
-    #[serde(default="gmc_default", alias="Gmc")]
+    #[serde(default = "gmc_default", alias = "Gmc")]
     pub gmc: f64,
-    #[serde(default="alpha_default")]
+    #[serde(default = "alpha_default")]
     pub alpha: f64,
-    #[serde(default="seed_default")]
+    #[serde(default = "seed_default")]
     pub seed: ParsedSeed,
-    #[serde(default="size_default")]
+    #[serde(default = "size_default")]
     pub size: CanvasLength,
     pub tau: Option<f64>,
     pub smax: Option<NumTiles>,
-    #[serde(default="update_rate_default")]
+    #[serde(default = "update_rate_default")]
     pub update_rate: NumEvents,
     pub kf: Option<f64>,
-    #[serde(default="fission_default")]
+    #[serde(default = "fission_default")]
     pub fission: FissionHandling,
-    #[serde(default="block_default")]
-    pub block: usize
+    #[serde(default = "block_default")]
+    pub block: usize,
+    pub chunk_handling: Option<ChunkHandling>,
+    pub chunk_size: Option<ChunkSize>
 }
 
-impl Args {
-    pub fn default() -> Self {
+impl Default for Args {
+    fn default() -> Self {
         Args {
             gse: gse_default(),
             gmc: gmc_default(),
@@ -105,7 +122,8 @@ impl Args {
             kf: None,
             fission: fission_default(),
             block: block_default(),
-            
+            chunk_handling: None,
+            chunk_size: None
         }
     }
 }
@@ -119,34 +137,50 @@ impl TileSet {
         serde_yaml::from_str(data).unwrap_or(Err(()))
     }
 
-    pub fn into_static_seeded_ktam(&self) -> StaticKTAM {
+    pub fn into_static_seeded_ktam(&self) -> StaticKTAM<CanvasSquare> {
         let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
 
         let tile_edges = self.tile_edge_process(&gluemap);
         let mut tile_concs = self.tile_stoics();
-        tile_concs *= f64::exp(- self.options.gmc + self.options.alpha);
+        tile_concs *= f64::exp(-self.options.gmc + self.options.alpha);
 
         let mut glue_strength_vec = Vec::<f64>::new();
 
-        let mut i:base::Glue = 0;
+        let mut i: base::Glue = 0;
         for (j, v) in gluestrengthmap {
-            assert!(j==i);
+            assert!(j == i);
             glue_strength_vec.push(v);
-            i+=1;
-        } 
-
-        println!("self.options.fission: {:?}", self.options.fission);
+            i += 1;
+        }
 
         let seed = match &self.options.seed {
-            ParsedSeed::Single(y, x, v) => {Seed::SingleTile{point: (*y,*x), tile: *v}}
-            ParsedSeed::None() => {Seed::None()}
-            ParsedSeed::Multi(vec) => {let mut hm = HashMap::default();
-                hm.extend(vec.iter().map(|(y,x,v)| ((*y,*x),*v))); Seed::MultiTile(hm) }
+            ParsedSeed::Single(y, x, v) => Seed::SingleTile {
+                point: (*y, *x),
+                tile: *v,
+            },
+            ParsedSeed::None() => Seed::None(),
+            ParsedSeed::Multi(vec) => {
+                let mut hm = HashMap::default();
+                hm.extend(vec.iter().map(|(y, x, v)| ((*y, *x), *v)));
+                Seed::MultiTile(hm)
+            }
         };
 
-        StaticKTAM::from_ktam(self.tile_stoics(), tile_edges, Array1::from(glue_strength_vec),
-                        self.options.gse, self.options.gmc, Some(self.options.alpha), self.options.kf, Some(seed), Some(self.options.fission),Some(self.tile_names()), Some(self.tile_colors()))
-
+        StaticKTAM::from_ktam(
+            self.tile_stoics(),
+            tile_edges,
+            Array1::from(glue_strength_vec),
+            self.options.gse,
+            self.options.gmc,
+            Some(self.options.alpha),
+            self.options.kf,
+            Some(seed),
+            Some(self.options.fission),
+            self.options.chunk_handling,
+            self.options.chunk_size,
+            Some(self.tile_names()),
+            Some(self.tile_colors()),
+        )
     }
 
     pub fn into_static_seeded_atam(&self) -> StaticATAM {
@@ -155,25 +189,37 @@ impl TileSet {
         let tile_edges = self.tile_edge_process(&gluemap);
 
         let mut tile_concs = self.tile_stoics();
-        tile_concs *= f64::exp(- self.options.gmc - self.options.alpha);
+        tile_concs *= f64::exp(-self.options.gmc - self.options.alpha);
 
         let mut glue_strength_vec = Vec::<f64>::new();
 
-        let mut i:base::Glue = 0;
+        let mut i: base::Glue = 0;
         for (j, v) in gluestrengthmap {
-            assert!(j==i);
+            assert!(j == i);
             glue_strength_vec.push(v);
-            i+=1;
-        } 
+            i += 1;
+        }
 
         let seed = match &self.options.seed {
-            ParsedSeed::Single(y, x, v) => {Seed::SingleTile{point: (*y,*x), tile: *v}}
-            ParsedSeed::None() => {Seed::None()}
-            ParsedSeed::Multi(vec) => {let mut hm = HashMap::default();
-                hm.extend(vec.iter().map(|(y,x,v)| ((*y,*x),*v))); Seed::MultiTile(hm) }
+            ParsedSeed::Single(y, x, v) => Seed::SingleTile {
+                point: (*y, *x),
+                tile: *v,
+            },
+            ParsedSeed::None() => Seed::None(),
+            ParsedSeed::Multi(vec) => {
+                let mut hm = HashMap::default();
+                hm.extend(vec.iter().map(|(y, x, v)| ((*y, *x), *v)));
+                Seed::MultiTile(hm)
+            }
         };
 
-        StaticATAM::new(tile_concs, tile_edges, Array1::from(glue_strength_vec), self.options.tau.unwrap(), Some(seed))
+        StaticATAM::new(
+            tile_concs,
+            tile_edges,
+            Array1::from(glue_strength_vec),
+            self.options.tau.unwrap(),
+            Some(seed),
+        )
     }
 
     pub fn number_glues(&self) -> Result<(BiMap<&str, Glue>, BTreeMap<Glue, f64>), ()> {
@@ -263,24 +309,33 @@ impl TileSet {
             for te in &tile.edges {
                 match te {
                     GlueIdent::Name(n) => v.push(*gluemap.get_by_left(&n.as_str()).unwrap()),
-                    GlueIdent::Num(i) => v.push(*i)
+                    GlueIdent::Num(i) => v.push(*i),
                 }
             }
             assert!(v.len() == 4);
             tile_edges.append(&mut v);
         }
-        return Array2::from_shape_vec((tile_edges.len()/4, 4), tile_edges).unwrap()
+        return Array2::from_shape_vec((tile_edges.len() / 4, 4), tile_edges).unwrap();
     }
 
     pub fn tile_stoics(&self) -> Array1<f64> {
-        std::iter::once(0.).chain(self.tiles.iter().map(|x| x.stoic.unwrap_or(1.))).collect()
+        std::iter::once(0.)
+            .chain(self.tiles.iter().map(|x| x.stoic.unwrap_or(1.)))
+            .collect()
     }
 
     pub fn tile_names(&self) -> Vec<String> {
-        std::iter::once("empty".to_string()).chain(self.tiles.iter().enumerate().map(|(i, x)| x.name.clone().unwrap_or((i+1).to_string()) )).collect()
+        std::iter::once("empty".to_string())
+            .chain(
+                self.tiles
+                    .iter()
+                    .enumerate()
+                    .map(|(i, x)| x.name.clone().unwrap_or((i + 1).to_string())),
+            )
+            .collect()
     }
 
-    pub fn tile_colors(&self) -> Vec<[u8;4]> {
+    pub fn tile_colors(&self) -> Vec<[u8; 4]> {
         let mut tc = Vec::new();
 
         tc.push([0, 0, 0, 0]);
@@ -289,8 +344,13 @@ impl TileSet {
 
         for tile in &self.tiles {
             tc.push(match &tile.color {
-                Some(tc) => {*super::colors::COLORS.get(tc.as_str()).unwrap()}
-                None => {[ug.sample(&mut rng), ug.sample(&mut rng), ug.sample(&mut rng), 0xffu8]}
+                Some(tc) => *super::colors::COLORS.get(tc.as_str()).unwrap(),
+                None => [
+                    ug.sample(&mut rng),
+                    ug.sample(&mut rng),
+                    ug.sample(&mut rng),
+                    0xffu8,
+                ],
             });
         }
 
