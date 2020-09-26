@@ -1,6 +1,0 @@
-/target
-/rgrow-venv
-perf.data*
-settings.json
-/*.ipynb
-.ipynb_checkpoints/*
