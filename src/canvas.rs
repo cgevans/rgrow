@@ -1,8 +1,8 @@
-use super::base::{Point, Tile, NumTiles};
+use super::base::{Point, Tile, NumTiles, GrowResult, GrowError};
 use ndarray::prelude::*;
 
-pub trait CanvasCreate {
-    fn from_array(canvas: Array2<Tile>) -> Self;
+pub trait CanvasCreate: Sized + Canvas {
+    fn from_array(canvas: Array2<Tile>) -> GrowResult<Self>;
 }
 
 pub trait Canvas: std::fmt::Debug {
@@ -14,6 +14,7 @@ pub trait Canvas: std::fmt::Debug {
     fn u_move_point_w(&self, p: Point) -> Point;
     fn inbounds(&self, p: Point) -> bool;
     fn calc_ntiles(&self) -> NumTiles;
+    fn raw_array(&self) -> ArrayView2<Tile>;
 
     #[inline(always)]
     fn u_move_point_ne(&self, p: Point) -> Point {
@@ -91,26 +92,32 @@ pub trait Canvas: std::fmt::Debug {
 }
 
 pub trait CanvasSquarable: Canvas {
-    fn size(&self) -> usize;
+    fn square_size(&self) -> usize;
 }
 
 #[derive(Clone, Debug)]
 pub struct CanvasSquare {
-    pub canvas: Array2<Tile>,
+    canvas: Array2<Tile>,
     size: usize,
 }
 
 impl CanvasSquarable for CanvasSquare {
     #[inline(always)]
-    fn size(&self) -> usize {
+    fn square_size(&self) -> usize {
         return self.size;
     }
 }
 
 impl CanvasCreate for CanvasSquare {
-    fn from_array(canvas: Array2<Tile>) -> Self {
+    fn from_array(canvas: Array2<Tile>) -> GrowResult<Self> {
         let size = canvas.nrows();
-        Self { canvas, size }
+        if canvas.nrows() != canvas.ncols() {
+            Err(GrowError::WrongCanvasSize(size, canvas.ncols()))
+        } else if (size & (size-1)) != 0 {
+            Err(GrowError::WrongCanvasSize(size, canvas.ncols()))
+        } else {
+        Ok(Self { canvas, size })
+        }
     }
 }
 
@@ -178,7 +185,70 @@ impl Canvas for CanvasSquare {
         .canvas
         .fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 }))
     }
+
+    fn raw_array(&self) -> ArrayView2<Tile> {
+        self.canvas.view()
+    }
 }
+
+#[derive(Debug)]
+pub struct CanvasPeriodic {
+    values: Array2<Tile>
+}
+
+impl CanvasCreate for CanvasPeriodic {
+    fn from_array(values: Array2<Tile>) -> GrowResult<Self> {
+        Ok(Self { values })
+    }
+}
+
+impl CanvasSquarable for CanvasPeriodic {
+    fn square_size(&self) -> usize {
+        let largest = self.values.nrows().max(self.values.ncols());
+        2usize.pow(f64::log2(largest as f64).ceil() as u32)
+    }
+}
+
+impl Canvas for CanvasPeriodic {
+    unsafe fn uv_p(&self, p: Point) -> Tile {
+        *self.values.uget(p)
+    }
+
+    unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {
+        self.values.uget_mut(p)
+    }
+
+    fn u_move_point_n(&self, p: Point) -> Point {
+        (((p.0-1)%self.values.nrows()), p.1)
+    }
+
+    fn u_move_point_e(&self, p: Point) -> Point {
+        (p.0, (p.1+1)%self.values.ncols())
+    }
+
+    fn u_move_point_s(&self, p: Point) -> Point {
+        (((p.0+1)%self.values.nrows()), p.1)
+    }
+
+    fn u_move_point_w(&self, p: Point) -> Point {
+        (p.0, (p.1-1)%self.values.ncols())
+    }
+
+    fn inbounds(&self, p: Point) -> bool {
+        (p.0 < self.values.nrows()) & (p.1 < self.values.ncols())
+    }
+
+    fn calc_ntiles(&self) -> NumTiles {
+        self
+        .values
+        .fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 }))
+    }
+
+    fn raw_array(&self) -> ArrayView2<Tile> {
+        self.values.view()
+    }
+}
+
 
 #[derive(Debug)]
 pub struct CanvasTube {
@@ -216,6 +286,12 @@ impl Canvas for CanvasTube {
     }
 
     fn calc_ntiles(&self) -> NumTiles {
-        todo!()
+        self
+        .values
+        .fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 }))
+    }
+
+    fn raw_array(&self) -> ArrayView2<Tile> {
+        self.values.view()
     }
 }

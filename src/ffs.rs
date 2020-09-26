@@ -8,14 +8,14 @@ use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distri
 #[cfg(feature = "rayon")] use std::sync::Arc;
 //use std::convert::{TryFrom, TryInto};
 
-pub struct FFSRun {
-    pub level_list: Vec<FFSLevel>,
+pub struct FFSRun<C: CanvasCreate + Canvas + CanvasSquarable> {
+    pub level_list: Vec<FFSLevel<C>>,
     pub dimerization_rate: f64
 }
 
-impl FFSRun {
+impl<C: CanvasCreate + Canvas + CanvasSquarable> FFSRun<C> {
     pub fn create(
-        system: &StaticKTAM<CanvasSquare>,
+        system: &StaticKTAM<C>,
         num_states: usize,
         target_size: NumTiles,
         canvas_size: CanvasLength,
@@ -26,6 +26,7 @@ impl FFSRun {
     ) -> Self {
         let level = FFSLevel::nmers_from_dimers(system, num_states, canvas_size, max_init_events, start_size);
 
+        println!("Done with dimers");
         let mut level_list = Vec::new();
 
         level_list.push(level);
@@ -37,9 +38,10 @@ impl FFSRun {
                     .unwrap()
                     .next_level(system, size_step, max_subseq_events),
             );
+            println!("Done with target size {}.", level_list.last().unwrap().target_size);
         }
 
-        let dimerization_rate = System::<CanvasSquare>::calc_dimers(system).iter().fold(0., |acc, d| acc + d.formation_rate);
+        let dimerization_rate = System::<C>::calc_dimers(system).iter().fold(0., |acc, d| acc + d.formation_rate);
 
         Self { level_list, dimerization_rate }
     }
@@ -60,16 +62,16 @@ impl FFSRun {
     }
 }
 
-pub struct FFSLevel {
-    pub state_list: Vec<QuadTreeState<CanvasSquare, StaticKTAM<CanvasSquare>, NullStateTracker>>,
+pub struct FFSLevel<C: Canvas + CanvasCreate + CanvasSquarable> {
+    pub state_list: Vec<QuadTreeState<C, StaticKTAM<C>, NullStateTracker>>,
     pub previous_list: Vec<usize>,
     pub p_r: f64,
     pub target_size: NumTiles,
 }
 
-impl<'a> FFSLevel {
+impl<'a, C: Canvas + CanvasCreate + CanvasSquarable> FFSLevel<C> {
     #[cfg(not(feature = "use_rayon"))]
-    pub fn next_level(&self, system: &StaticKTAM<CanvasSquare>, size_step: u32, max_events: u64) -> Self {
+    pub fn next_level(&self, system: &StaticKTAM<C>, size_step: u32, max_events: u64) -> Self {
         let mut rng = thread_rng();
 
         let mut state_list = Vec::new();
@@ -79,17 +81,29 @@ impl<'a> FFSLevel {
 
         let chooser = Uniform::new(0, self.state_list.len());
 
+        let canvas_size = self.state_list[0].canvas.square_size();
+
         while state_list.len() < self.state_list.len() {
-            let i_old_state = chooser.sample(&mut rng);
-            let mut state = self.state_list[i_old_state].clone();
-            state.evolve_in_size_range_events_max(system, 0, target_size, max_events);
+            let mut state = QuadTreeState::empty((canvas_size, canvas_size));
+
+            let mut i_old_state: usize = 0;
+
+            while state.ntiles() == 0 {
+                assert!(state.total_rate() == 0.);
+                i_old_state = chooser.sample(&mut rng);
+
+                state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
+                state.evolve_in_size_range_events_max(system, 0, target_size, max_events);
+                i+=1;
+            };
 
             if state.ntiles() == target_size {
-                state_list.push(state);
-                previous_list.push(i_old_state);
+            state_list.push(state);
+            previous_list.push(i_old_state);
+            } else {
+                println!("Ran out of events.");
             }
 
-            i += 1;
         }
         let p_r = (state_list.len() as f64) / (i as f64);
 
@@ -147,7 +161,7 @@ impl<'a> FFSLevel {
     }
 
     pub fn nmers_from_dimers(
-        system: &StaticKTAM<CanvasSquare>,
+        system: &StaticKTAM<C>,
         num_states: usize,
         canvas_size: CanvasLength,
         max_events: u64,
@@ -155,7 +169,7 @@ impl<'a> FFSLevel {
     ) -> Self {
         let mut rng = thread_rng();
 
-        let dimers = System::<CanvasSquare>::calc_dimers(system);
+        let dimers = System::<C>::calc_dimers(system);
 
         let mut state_list = Vec::new();
         let mut previous_list = Vec::new();
@@ -164,36 +178,42 @@ impl<'a> FFSLevel {
         let weights: Vec<_> = dimers.iter().map(|d| d.formation_rate).collect();
         let chooser = WeightedIndex::new(&weights).unwrap();
 
+        let mid = canvas_size / 2;
+
         while state_list.len() < num_states {
-            let i_old_state = chooser.sample(&mut rng);
 
-            let dimer = &dimers[i_old_state];
+            let mut state = QuadTreeState::empty((canvas_size, canvas_size));
 
-            let mut state = match dimer.orientation {
-                Orientation::NS => QuadTreeState::create_ns_pair_with_tracker(
-                    system,
-                    dimer.t1,
-                    dimer.t2,
-                    canvas_size,
-                    NullStateTracker(),
-                ),
-                Orientation::WE => QuadTreeState::create_we_pair_with_tracker(
-                    system,
-                    dimer.t1,
-                    dimer.t2,
-                    canvas_size,
-                    NullStateTracker(),
-                ),
-            };
+            while state.ntiles() == 0 {
+                let i_old_state = chooser.sample(&mut rng);
+                let dimer = &dimers[i_old_state];
 
-            state.evolve_in_size_range_events_max(system, 0, next_size, max_events);
+                match dimer.orientation {
+                    Orientation::NS => {
+                        state.set_point(system, (mid, mid), dimer.t1)
+                            .set_point(system, (mid+1, mid), dimer.t2);
+                    },
+                    Orientation::WE => {
+                        state.set_point(system, (mid, mid), dimer.t1)
+                            .set_point(system, (mid, mid+1), dimer.t2);
+                    }
+                };
 
-            if state.ntiles() == next_size {
-                state_list.push(state);
-                previous_list.push(i_old_state);
+                state.evolve_in_size_range_events_max(system, 0, next_size, max_events);
+                i += 1;
+
+                if state.ntiles() == next_size {
+                    state_list.push(state);
+                    previous_list.push(i_old_state);
+                    break;
+                } else {
+                    if state.ntiles() != 0 {
+                        panic!("{} {:?}", state.ntiles(), state.canvas);
+                    }
+                    assert!(state.total_rate() == 0.);
+                }
             }
 
-            i += 1;
         }
 
         let p_r = (num_states as f64) / (i as f64);

@@ -11,10 +11,7 @@ use super::canvas::Canvas;
 
 use super::fission;
 
-use std::{
-    marker::PhantomData,
-    sync::{Arc, RwLock},
-};
+use std::{fmt::Debug, marker::PhantomData, sync::{Arc, RwLock}};
 
 
 use dashmap::DashMap;
@@ -67,7 +64,7 @@ pub enum Updates {
     DimerChunk
 }
 
-pub trait System<C: Canvas> {
+pub trait System<C: Canvas>: Debug {
     /// Returns the total event rate at a given point.  These should correspond with the events chosen by `choose_event_at_point`.
     fn event_rate_at_point(&self, canvas: &C, p: Point) -> Rate;
 

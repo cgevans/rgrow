@@ -3,8 +3,7 @@ use super::canvas::*;
 use super::system::*;
 use ndarray::prelude::*;
 use rand::random;
-use std::{convert::TryInto, iter::FromIterator, marker::PhantomData};
-use thiserror::Error;
+use std::{convert::TryInto, fmt::Debug, iter::FromIterator, marker::PhantomData};
 
 type HashSet<T> = fnv::FnvHashSet<T>;
 
@@ -62,7 +61,7 @@ pub trait StateUpdateSingle<C: Canvas, S: System<C>> {
     fn set_point(&mut self, sys: &S, p: Point, t: Tile) -> &mut Self;
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum StateError {
     #[error("the canvas is empty")]
     EmptyCanvas,
@@ -144,7 +143,7 @@ pub trait StateStatus {
     //fn last_step_time(&self) -> Time;
 }
 
-pub trait StateTracker: Clone {
+pub trait StateTracker: Clone + Debug {
     fn default(canvas: &dyn Canvas) -> Self;
 
     fn record_single_event(&mut self, p: Point, old_tile: Tile, new_tile: Tile) -> &mut Self;
@@ -248,7 +247,11 @@ pub struct QuadTreeState<C: CanvasSquarable, S: System<C>, T: StateTracker> {
     pub tracker: T,
 }
 
-impl<C: CanvasSquarable + Clone, S: System<C>, T: StateTracker + Clone> Clone for QuadTreeState<C, S, T> {
+unsafe impl<C: CanvasSquarable, S: System<C>, T: StateTracker> Send for QuadTreeState<C, S, T> {}
+
+impl<C: CanvasSquarable + Clone, S: System<C>, T: StateTracker + Clone> Clone
+    for QuadTreeState<C, S, T>
+{
     fn clone(&self) -> Self {
         Self {
             rates: self.rates.clone(),
@@ -257,12 +260,12 @@ impl<C: CanvasSquarable + Clone, S: System<C>, T: StateTracker + Clone> Clone fo
             ntiles: self.ntiles,
             total_rate: self.total_rate,
             total_events: self.total_events,
-            tracker: self.tracker.clone()
+            tracker: self.tracker.clone(),
         }
     }
 }
 
-impl<C,S, T> StateEvolve<C, S> for QuadTreeState<C, S, T>
+impl<C, S, T> StateEvolve<C, S> for QuadTreeState<C, S, T>
 where
     C: CanvasSquarable,
     S: System<C>,
@@ -272,7 +275,7 @@ where
 
 impl<C, S, T> StateStep<C, S> for QuadTreeState<C, S, T>
 where
-C: CanvasSquarable,
+    C: CanvasSquarable,
     S: System<C>,
     T: StateTracker,
 {
@@ -296,7 +299,7 @@ where
             rates.push(Array2::<Rate>::zeros((2usize.pow(i), 2usize.pow(i))))
         }
 
-        let canvas = C::from_array(canvas);
+        let canvas = C::from_array(canvas).unwrap();
         let tracker = T::default(&canvas);
 
         QuadTreeState::<C, S, T> {
@@ -385,27 +388,38 @@ where
             } else {
                 Err(StateError::Unknown)
             }
-        } else {Ok(((y, x), threshold))}
+        } else {
+            Ok(((y, x), threshold))
+        }
     }
 
     #[inline(always)]
     fn update_after_single_event(&mut self, system: &S, point: Point) -> &mut Self {
         match system.updates_around_point() {
-            Updates::Plus => {             self.update_rates_ps(system, point)
-            }
-            Updates::DimerChunk => { 
+            Updates::Plus => self.update_rates_ps(system, point),
+            Updates::DimerChunk => {
                 self.update_rates_ps(system, point);
-                let pww = unsafe { self.canvas.u_move_point_w(self.canvas.u_move_point_w(point)) };
-                if self.canvas.inbounds(pww) {self.update_rates_single(system, pww);}
-                let pnn = unsafe { self.canvas.u_move_point_n(self.canvas.u_move_point_n(point)) };
-                if self.canvas.inbounds(pnn) {self.update_rates_single(system, pnn);}
+                let pww = unsafe {
+                    self.canvas
+                        .u_move_point_w(self.canvas.u_move_point_w(point))
+                };
+                if self.canvas.inbounds(pww) {
+                    self.update_rates_single(system, pww);
+                }
+                let pnn = unsafe {
+                    self.canvas
+                        .u_move_point_n(self.canvas.u_move_point_n(point))
+                };
+                if self.canvas.inbounds(pnn) {
+                    self.update_rates_single(system, pnn);
+                }
                 let pnw = self.canvas.u_move_point_nw(point);
                 let pse = self.canvas.u_move_point_sw(point);
                 let pne = self.canvas.u_move_point_ne(point);
                 self.update_rates_single(system, pnw)
                     .update_rates_single(system, pse)
                     .update_rates_single(system, pne)
-             }
+            }
         }
     }
 
@@ -429,7 +443,7 @@ where
                 *loc = new_tile;
 
                 self.update_after_single_event(system, p)
-                .record_single_event(p, old_tile, new_tile);
+                    .record_single_event(p, old_tile, new_tile);
             }
             Event::SingleTileDetach => {
                 self.ntiles -= 1;
@@ -442,14 +456,14 @@ where
                 *loc = 0;
 
                 self.update_after_single_event(system, p)
-                .record_single_event(p, old_tile, 0);
+                    .record_single_event(p, old_tile, 0);
             }
-            Event::SingleTileChange(_) => { todo!() }
+            Event::SingleTileChange(_) => todo!(),
             Event::MultiTileDetach(pointvec) => {
                 self.total_events += 1;
 
                 for point in pointvec {
-                    let loc = unsafe {self.canvas.uvm_p(point)};
+                    let loc = unsafe { self.canvas.uvm_p(point) };
                     let old_tile: Tile = *loc;
 
                     self.ntiles -= 1;
@@ -457,22 +471,22 @@ where
                     *loc = 0;
 
                     self.update_after_single_event(system, point)
-                    .record_single_event(point, old_tile, 0);
-
+                        .record_single_event(point, old_tile, 0);
                 }
             }
             Event::MultiTileAttach(pointvec) => {
                 self.total_events += 1;
 
                 for (point, tile) in pointvec {
-                    let loc = unsafe {self.canvas.uvm_p(point)};
+                    let loc = unsafe { self.canvas.uvm_p(point) };
                     let old_tile: Tile = *loc;
 
                     self.ntiles += 1;
 
                     *loc = tile;
 
-                    self.update_after_single_event(system, point).record_single_event(point, old_tile, tile);
+                    self.update_after_single_event(system, point)
+                        .record_single_event(point, old_tile, tile);
                 }
             }
         }
@@ -481,10 +495,12 @@ where
     }
 
     fn update_entire_state(&mut self, system: &S) -> &mut Self {
-        let size = self.canvas.size();
-        for y in 1..size - 1 {
-            for x in 1..size - 1 {
-                self.update_rates_single_noprop(system, (y, x));
+        let size = self.rates.first().unwrap().dim();
+        for y in 0..size.0 {
+            for x in 1..size.1 {
+                if self.canvas.inbounds((y,x)) {
+                    self.update_rates_single_noprop(system, (y, x));
+                }
             }
         }
         self.ntiles = self.canvas.calc_ntiles();
@@ -577,7 +593,6 @@ where
         ret
     }
 }
-
 
 impl<C: CanvasSquarable, S, T> QuadTreeState<C, S, T>
 where
@@ -675,53 +690,61 @@ where
     }
 
     /// Efficiently, but dangerously, copies a state into zeroed state, when certain conditions are satisfied:
-    /// 
+    ///
     /// - The system must be fully unseeded kTAM: specifically, all locations with tiles must have a nonzero rate.
     /// - The assignee state is assumed to have all zero rates, and an all zero canvas.  This is not checked!
-    /// 
+    ///
     /// This is fast when the number of tiles << the size of the canvas, eg, when putting in dimers.
-    /// 
+    ///
     /// If on debug, conditions should be checked (TODO)
     pub fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self {
-        self.copy_level_quad(source, 0, (0,0))
-    }
+        let max_level = self.rates.len()-1;
 
+        self.copy_level_quad(source, max_level, (0, 0));
 
-    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self {
-        let (y, x) = point;
-
-        if level < self.rates.len()-1 {
-            for (yy, xx) in &[(y,x), (y,x+1), (y+1, x), (y, x+1)] {
-                let z = source.rates[level][(*yy, *xx)];
-                if z > 0. {
-                    self.rates[level][(*yy, *xx)] = z;
-                    self.copy_level_quad(source, level+1, (*yy * 2, *xx *2));
-                }
-            }
-        } else {
-            for (yy, xx) in &[(y,x), (y,x+1), (y+1, x), (y, x+1)] {
-                let z = source.rates[level][(*yy, *xx)];
-                let t = unsafe { source.canvas.uv_p((*yy, *xx)) };
-                if z > 0. {
-                    self.rates[level][(*yy, *xx)] = z;
-                if t > 0 { // Tile must have nonzero rate, so we only check if the rate is nonzero.
-                    let v = unsafe { self.canvas.uvm_p((*yy, *xx)) };
-                    *v = t;
-                    drop(v);
-                }
-                }
-            }
-        };
-
+        
         // General housekeeping
         self.ntiles = source.ntiles;
         self.total_rate = source.total_rate;
         self.total_events = source.total_events;
         self.tracker = source.tracker.clone();
 
+        if self.canvas.calc_ntiles() != self.ntiles {
+            panic!("sink {:?} / source {:?}", self, source);
+        }
+
         self
     }
 
+    #[inline(never)]
+    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self {
+        let (y, x) = point;
+
+        if level > 0 {
+            for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
+                let z = source.rates[level][(*yy, *xx)];
+                if z > 0. {
+                    self.rates[level][(*yy, *xx)] = z;
+                    self.copy_level_quad(source, level - 1, (*yy * 2, *xx * 2));
+                }
+            }
+        } else {
+            for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
+                let z = source.rates[level][(*yy, *xx)];
+                let t = unsafe { source.canvas.uv_p((*yy, *xx)) };
+                if z > 0. {
+                    self.rates[level][(*yy, *xx)] = z;
+                    if t > 0 {
+                        // Tile must have nonzero rate, so we only check if the rate is nonzero.
+                        let v = unsafe { self.canvas.uvm_p((*yy, *xx)) };
+                        *v = t;
+                        drop(v);
+                    }
+                }
+            }
+        };
+        self
+    }
 }
 
 #[inline(always)]
