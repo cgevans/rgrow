@@ -1,57 +1,92 @@
-use numpy::{IntoPyArray, ToPyArray};
+#![feature(associated_type_bounds)]
+
+use numpy::ToPyArray;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use pyo3::exceptions::ValueError;
 use pyo3::types::PyType;
 use pyo3::{prelude::*, wrap_pyfunction};
-use rgrow::{
-    ffs, Energy, NullStateTracker, Seed, State2DQT, StateCreate, StateEvolve, StateStatus,
-    StateStep, StateTracked, StateUpdateSingle, StaticATAM, StaticKTAM, Tile, TileSubsetTracker, NumTiles
-};
+use rgrow as rg;
+use rgrow::ffs;
+use rgrow::state::{StateCreate, StateEvolve, StateStatus, StateStep, StateUpdateSingle};
+use rgrow::system::FissionHandling;
+use rgrow::canvas::{Canvas};
 
 #[pymodule]
 fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
+    /// Static (no changes to concentrations, bond strengths, parameters, etc) kTAM system.
+    /// Currently implements fission, but not Xgrow's chunk fission, and not double tiles.
+    /// Can be used by multiple simulations.
+    /// Currently, Python can't handle seeds.
+    ///
+    /// Parameters:
+    ///
+    /// tile_concs: an array of f64s
+    /// tile_edges: an array of u32s
+    /// glue_strengths: an array of f64s
+    /// gse, gmc: f64s
+    /// alpha (optional, default 0.0)
+    /// k_f (optional, default 1e6)
+    /// fission (optional): one of "off", "just-detach", "on", "keep-largest", "keep-weighted"
+    /// tile_names (optional): list of strings
     #[pyclass]
-    #[derive(Clone, Debug)]
-    struct PyStaticKTAM {
-        sys: StaticKTAM,
+    #[derive(Debug)]
+    #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
+    struct StaticKTAM {
+        inner: rg::StaticKTAM<rg::CanvasSquare>,
+    }
+    #[pyclass]
+    struct System {
+        inner: Box<dyn rg::System<dyn Canvas> + Send>
     }
 
     #[pyclass]
-    #[derive(Clone, Debug)]
-    struct PyStaticATAM {
-        sys: StaticATAM,
+    #[derive(Debug)]
+    #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
+    struct StaticKTAMPeriodic {
+        inner: rg::StaticKTAM<rg::CanvasPeriodic>,
     }
 
+    /// Static (no changes to concentrations, bond strengths, parameters, etc) aTAM system.
     #[pyclass]
     #[derive(Clone, Debug)]
-    struct PyStateKTAM {
-        state: State2DQT<StaticKTAM, NullStateTracker>,
+    struct StaticATAM {
+        inner: rg::StaticATAM,
     }
 
+    /// A simulation state for a static aTAM simulation, using a square canvas.
     #[pyclass]
     #[derive(Clone, Debug)]
-    struct PyStateKTAMSubTrack {
-        state: State2DQT<StaticKTAM, TileSubsetTracker>,
-    }
-
-    #[pyclass]
-    #[derive(Clone, Debug)]
-    struct PyStateATAM {
-        state: State2DQT<StaticATAM, NullStateTracker>,
+    struct StateATAM {
+        inner: rg::QuadTreeState<rg::CanvasSquare, rg::StaticATAM, rg::NullStateTracker>,
     }
 
     #[pymethods]
-    impl PyStaticKTAM {
+    impl StaticKTAM {
         #[new]
         fn new(
             tile_concs: PyReadonlyArray1<f64>,
-            tile_edges: PyReadonlyArray2<Tile>,
-            glue_strengths: PyReadonlyArray1<Energy>,
-            gse: Energy,
-            gmc: Energy,
+            tile_edges: PyReadonlyArray2<rg::Tile>,
+            glue_strengths: PyReadonlyArray1<rg::Energy>,
+            gse: rg::Energy,
+            gmc: rg::Energy,
             alpha: Option<f64>,
             k_f: Option<f64>,
+            fission: Option<&str>,
+            tile_names: Option<Vec<String>>,
         ) -> PyResult<Self> {
-            let sys = StaticKTAM::from_ktam(
+            let fission_handling = match fission {
+                Some(fs) => Some(match fs {
+                    "off" => FissionHandling::NoFission,
+                    "just-detach" => FissionHandling::JustDetach,
+                    "on" => FissionHandling::KeepSeeded,
+                    "keep-largest" => FissionHandling::KeepLargest,
+                    "keep-weighted" => FissionHandling::KeepWeighted,
+                    _ => return Err(ValueError::py_err("Invalid fission handling option")),
+                }),
+                None => None,
+            };
+
+            let inner = rg::StaticKTAM::from_ktam(
                 tile_concs.to_owned_array(),
                 tile_edges.to_owned_array(),
                 glue_strengths.to_owned_array(),
@@ -59,395 +94,267 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 gmc,
                 alpha,
                 k_f,
-                Some(Seed::None()),
+                Some(rg::Seed::None()),
+                fission_handling,
+                None,
+                None,
+                tile_names,
+                None,
             );
 
-            Ok(PyStaticKTAM { sys })
+            Ok(StaticKTAM { inner })
         }
 
-        /// PyStaticKTAM.from_raw(tile_rates, energy_ns, energy_we, k_f, alpha)
+        #[classmethod]
+        fn from_json(
+            _cls: &PyType,
+            json_data: &str
+        ) -> PyResult<Self> {
+            let tileset = match rgrow::parser::TileSet::from_json(json_data) {
+                Ok(t) => t,
+                Err(e) => return Err(ValueError::py_err(format!("Couldn't parse tileset json: {:?}", e)))
+            };
+            Ok(StaticKTAM { inner: tileset.into_static_seeded_ktam() })
+        }
+
+        /// StaticKTAM.from_raw(tile_rates, energy_ns, energy_we, k_f, alpha, fission)
+        #[text_signature = "(tile_rates, energy_ns, energy_we, k_f, alpha, fission)"]
         #[classmethod]
         fn from_raw(
             _cls: &PyType,
             tile_rates: PyReadonlyArray1<f64>,
-            energy_ns: PyReadonlyArray2<Energy>,
-            energy_we: PyReadonlyArray2<Energy>,
+            energy_ns: PyReadonlyArray2<rg::Energy>,
+            energy_we: PyReadonlyArray2<rg::Energy>,
             k_f: f64,
             alpha: f64,
-        ) -> Self {
-            Self {
-                sys: StaticKTAM::from_raw(
+            fission: Option<&str>,
+        ) -> PyResult<Self> {
+            let fission_handling = match fission {
+                Some(fs) => Some(match fs {
+                    "off" => FissionHandling::NoFission,
+                    "just-detach" => FissionHandling::JustDetach,
+                    "on" => FissionHandling::KeepSeeded,
+                    "keep-largest" => FissionHandling::KeepLargest,
+                    "keep-weighted" => FissionHandling::KeepWeighted,
+                    _ => return Err(ValueError::py_err("Invalid fission handling option")),
+                }),
+                None => None,
+            };
+
+            Ok(Self {
+                inner: rg::StaticKTAM::from_raw(
                     tile_rates.to_owned_array(),
                     energy_ns.to_owned_array(),
                     energy_we.to_owned_array(),
                     k_f,
                     alpha,
+                    fission_handling,
                 ),
-            }
+            })
         }
 
         #[getter]
         fn tile_rates<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
-            self.sys.tile_adj_concs.to_pyarray(py)
+            self.inner.tile_adj_concs.to_pyarray(py)
         }
 
         #[getter]
         fn energy_ns<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
-            self.sys.energy_ns.to_pyarray(py)
+            self.inner.energy_ns.to_pyarray(py)
         }
 
         #[getter]
         fn energy_we<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
-            self.sys.energy_we.to_pyarray(py)
+            self.inner.energy_we.to_pyarray(py)
         }
     }
 
     #[pymethods]
-    impl PyStaticATAM {
+    impl StaticATAM {
         #[new]
         fn new(
             tile_concs: PyReadonlyArray1<f64>,
-            tile_edges: PyReadonlyArray2<Tile>,
-            glue_strengths: PyReadonlyArray1<Energy>,
-            tau: Energy,
+            tile_edges: PyReadonlyArray2<rg::Tile>,
+            glue_strengths: PyReadonlyArray1<rg::Energy>,
+            tau: rg::Energy,
         ) -> PyResult<Self> {
-            let sys = StaticATAM::new(
+            let inner = rg::StaticATAM::new(
                 tile_concs.to_owned_array(),
                 tile_edges.to_owned_array(),
                 glue_strengths.to_owned_array(),
                 tau,
-                Some(Seed::None()),
+                Some(rg::Seed::None()),
             );
 
-            Ok(PyStaticATAM { sys })
+            Ok(StaticATAM { inner })
         }
     }
 
-    #[pymethods]
-    impl PyStateKTAM {
-        #[new]
-        fn new(canvas: PyReadonlyArray2<Tile>, system: &PyStaticKTAM) -> PyResult<Self> {
-            let state = State2DQT::from_canvas(&system.sys, canvas.to_owned_array());
+    /// A simulation state for a static kTAM simulation, using a square canvas.
+    /// Takes an initial canvas (ndarray of u32s, must be square with width 2^L)
+    /// and a StaticKTAM system instance.
+    #[pyclass]
+    #[derive(Clone, Debug)]
+    #[text_signature = "(canvas, system)"]
+    struct StateKTAM {
+        inner: rg::QuadTreeState<rg::CanvasSquare, rg::StaticKTAM<rg::CanvasSquare>, rg::NullStateTracker>,
+    }
 
-            Ok(Self { state })
+    #[pymethods]
+    impl StateKTAM {
+        #[new]
+        fn new(canvas: PyReadonlyArray2<rg::Tile>, system: &StaticKTAM) -> PyResult<Self> {
+            let inner = rg::QuadTreeState::from_canvas(&system.inner, canvas.to_owned_array());
+
+            Ok(Self { inner })
         }
 
         #[classmethod]
+        /// Creates a simulation state with the West-East dimer of tile numbers w, e, centered in
+        /// a canvas of size size (must be 2^L).
+        #[text_signature = "(system, w, e, size)"]
         fn create_we_pair(
             _cls: &PyType,
-            system: &PyStaticKTAM,
-            w: Tile,
-            e: Tile,
+            system: &StaticKTAM,
+            w: rg::Tile,
+            e: rg::Tile,
             size: usize,
         ) -> PyResult<Self> {
-            let state = State2DQT::create_we_pair(&system.sys, w, e, size);
+            let inner = rg::QuadTreeState::create_we_pair(&system.inner, w, e, size);
 
-            Ok(Self { state })
+            Ok(Self { inner })
         }
 
         #[classmethod]
+        #[text_signature = "(system, n, s, size)"]
+        /// Creates a simulation state with the North-South dimer of tile numbers n, s, centered in
+        /// a canvas of size size (must be 2^L).
         fn create_ns_pair(
             _cls: &PyType,
-            system: &PyStaticKTAM,
-            n: Tile,
-            s: Tile,
+            system: &StaticKTAM,
+            n: rg::Tile,
+            s: rg::Tile,
             size: usize,
         ) -> PyResult<Self> {
-            let state = State2DQT::create_ns_pair(&system.sys, n, s, size);
+            let inner = rg::QuadTreeState::create_ns_pair(&system.inner, n, s, size);
 
-            Ok(Self { state })
+            Ok(Self { inner })
         }
 
+        #[text_signature = "(system, point_y, point_x, tile)"]
+        /// Sets the point (py, px) to a particular tile (or empty, with 0).
         fn set_point(
             &mut self,
-            system: &PyStaticKTAM,
+            system: &StaticKTAM,
             py: usize,
             px: usize,
-            t: Tile,
+            t: rg::Tile,
         ) -> PyResult<()> {
-            self.state.set_point(&system.sys, (px, py), t);
+            self.inner.set_point(&system.inner, (px, py), t);
 
             Ok(())
         }
 
-        fn take_step(&mut self, system: &PyStaticKTAM) -> PyResult<()> {
-            self.state.take_step(&system.sys);
-
-            Ok(())
+        /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible.
+        fn take_step(&mut self, system: &StaticKTAM) -> PyResult<()> {
+            match self.inner.take_step(&system.inner) {
+                Ok(_) => Ok(()),
+                Err(_) => Err(ValueError::py_err("Step-taking failed")),
+            }
         }
 
         fn evolve_in_size_range(
             &mut self,
-            system: &PyStaticKTAM,
-            minsize: NumTiles,
-            maxsize: NumTiles,
+            system: &StaticKTAM,
+            minsize: rg::NumTiles,
+            maxsize: rg::NumTiles,
             maxevents: u64,
         ) -> PyResult<()> {
-            self.state
-                .evolve_in_size_range_events_max(&system.sys, minsize, maxsize, maxevents);
+            self.inner
+                .evolve_in_size_range_events_max(&system.inner, minsize, maxsize, maxevents);
 
             Ok(())
         }
 
-        fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<Tile> {
-            self.state.canvas.canvas.to_pyarray(py)
+        fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<rg::Tile> {
+            self.inner.canvas.raw_array().to_pyarray(py)
         }
 
         fn copy(&self) -> PyResult<Self> {
             Ok(Self {
-                state: self.state.clone(),
+                inner: self.inner.clone(),
             })
         }
 
-        fn ntiles(&self) -> NumTiles {
-            self.state.ntiles()
+        fn ntiles(&self) -> rg::NumTiles {
+            self.inner.ntiles()
         }
 
         fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
-            self.state.rates[level].to_pyarray(py)
+            self.inner.rates[level].to_pyarray(py)
         }
     }
 
     #[pymethods]
-    impl PyStateKTAMSubTrack {
+    impl StateATAM {
         #[new]
-        fn new(
-            canvas: PyReadonlyArray2<Tile>,
-            system: &PyStaticKTAM,
-            subs: Vec<Tile>,
-        ) -> PyResult<Self> {
-            let mut state = State2DQT::from_canvas(&system.sys, canvas.to_owned_array());
-            state.set_tracker(TileSubsetTracker::new(subs));
-
-            Ok(Self { state })
+        fn new(canvas: PyReadonlyArray2<rg::Tile>, system: &mut StaticATAM) -> PyResult<Self> {
+            let inner = rg::QuadTreeState::from_canvas(&system.inner, canvas.to_owned_array());
+            Ok(Self { inner })
         }
 
-        #[classmethod]
-        fn create_we_pair(
-            _cls: &PyType,
-            system: &PyStaticKTAM,
-            w: Tile,
-            e: Tile,
-            size: usize,
-            subs: Vec<Tile>,
-        ) -> PyResult<Self> {
-            let state = State2DQT::create_we_pair_with_tracker(
-                &system.sys,
-                w,
-                e,
-                size,
-                TileSubsetTracker::new(subs),
-            );
-
-            Ok(Self { state })
-        }
-
-        #[classmethod]
-        fn create_ns_pair(
-            _cls: &PyType,
-            system: &PyStaticKTAM,
-            n: Tile,
-            s: Tile,
-            size: usize,
-            subs: Vec<Tile>,
-        ) -> PyResult<Self> {
-            let state = State2DQT::create_ns_pair_with_tracker(
-                &system.sys,
-                n,
-                s,
-                size,
-                TileSubsetTracker::new(subs),
-            );
-
-            Ok(Self { state })
-        }
-
-        fn set_point(
-            &mut self,
-            system: &PyStaticKTAM,
-            py: usize,
-            px: usize,
-            t: Tile,
-        ) -> PyResult<()> {
-            self.state.set_point(&system.sys, (px, py), t);
-
-            Ok(())
-        }
-
-        fn num_tracked(&self) -> NumTiles {
-            self.state.tracker.num_in_subset
-        }
-
-        fn take_step(&mut self, system: &PyStaticKTAM) -> PyResult<()> {
-            self.state.take_step(&system.sys);
-
-            Ok(())
-        }
-
-        /// Evolve a system until the number of total tiles is >= maxsize or <= minsize.
-        /// Panics if the number of events done in the function (not total events) goes above maxevents.
-        fn evolve_in_size_range(
-            &mut self,
-            system: &PyStaticKTAM,
-            minsize:  NumTiles,
-            maxsize:  NumTiles,
-            maxevents: u64,
-        ) -> PyResult<()> {
-            self.state
-                .evolve_in_size_range_events_max(&system.sys, minsize, maxsize, maxevents);
-
-            Ok(())
-        }
-
-        /// Evolve a system until the number of subset-specified tiles is >= maxsize or <= minsize.
-        /// Panics if the number of events done in the function (not total events) goes above maxevents.
-        fn evolve_in_subset_range(
-            &mut self,
-            system: &PyStaticKTAM,
-            minsize: NumTiles,
-            maxsize:  NumTiles,
-            maxevents: u64,
-        ) -> PyResult<()> {
-            let condition = |s: &State2DQT<_, TileSubsetTracker>, events| {
-                if events > maxevents {
-                    panic!("Too many events!")
-                };
-                (s.tracker.num_in_subset <= minsize) | (s.tracker.num_in_subset >= maxsize)
-            };
-
-            self.state.evolve_until_condition(&system.sys, &condition);
-
-            Ok(())
-        }
-
-        /// Evolve a system until the number of subset-specified tiles is >= maxsize or total_tiles is <= minsize.
-        /// Panics if the number of events done in the function (not total events) goes above maxevents.
-        fn evolve_in_subset_max_or_total_min(
-            &mut self,
-            system: &PyStaticKTAM,
-            minsize: NumTiles,
-            maxsize: NumTiles,
-            maxevents: u64,
-        ) -> PyResult<()> {
-            let condition = |s: &State2DQT<_, TileSubsetTracker>, events| {
-                if events > maxevents {
-                    panic!("Too many events!")
-                };
-                println!("{:?} {:?}", s.tracker.num_in_subset, s.ntiles());
-                (s.ntiles() <= minsize) | (s.tracker.num_in_subset >= maxsize)
-            };
-
-            self.state.evolve_until_condition(&system.sys, &condition);
-
-            Ok(())
-        }
-
-        #[text_signature = "(system, minsize, maxsize, maxevents)"]
-        ///
-        /// Evolve a system until the number of subset-specified tiles is >= maxsize or total_tiles is <= minsize.
-        /// Panics if the number of events done in the function (not total events) goes above maxevents.
-        fn evolve_in_subset_max_or_total_min_nofail(
-            &mut self,
-            system: &PyStaticKTAM,
-            minsize: NumTiles,
-            maxsize: NumTiles,
-            maxevents: u64,
-        ) -> PyResult<()> {
-            let condition = |s: &State2DQT<_, TileSubsetTracker>, events| {
-                println!("{:?} {:?}", s.tracker.num_in_subset, s.ntiles());
-                (events > maxevents)
-                    | (s.ntiles() <= minsize)
-                    | (s.tracker.num_in_subset >= maxsize)
-            };
-
-            self.state.evolve_until_condition(&system.sys, &condition);
-
-            Ok(())
-        }
-
-        // fn quick_clear(&mut self, system: &PyStaticKTAM) -> PyResult<()> {
-        //     Ok(())
-        // }
-
-        fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<Tile> {
-            self.state.canvas.canvas.to_pyarray(py)
-        }
-
-        fn copy(&self) -> PyResult<Self> {
-            Ok(Self {
-                state: self.state.clone(),
-            })
-        }
-
-        fn ntiles(&self) -> NumTiles {
-            self.state.ntiles()
-        }
-
-        fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
-            self.state.rates[level].to_pyarray(py)
-        }
-    }
-
-    #[pymethods]
-    impl PyStateATAM {
-        #[new]
-        fn new(canvas: PyReadonlyArray2<Tile>, system: &mut PyStaticATAM) -> PyResult<Self> {
-            let state = State2DQT::from_canvas(&system.sys, canvas.to_owned_array());
-            Ok(Self { state })
-        }
-
-        fn take_step(&mut self, system: &mut PyStaticATAM) -> PyResult<()> {
-            self.state.take_step(&system.sys).unwrap();
+        fn take_step(&mut self, system: &mut StaticATAM) -> PyResult<()> {
+            self.inner.take_step(&system.inner).unwrap();
             Ok(())
         }
 
         fn evolve_in_size_range(
             &mut self,
-            system: &mut PyStaticATAM,
-            minsize: NumTiles,
-            maxsize: NumTiles,
+            system: &mut StaticATAM,
+            minsize: rg::NumTiles,
+            maxsize: rg::NumTiles,
             maxevents: u64,
         ) -> PyResult<()> {
-            self.state
-                .evolve_in_size_range_events_max(&system.sys, minsize, maxsize, maxevents);
+            self.inner
+                .evolve_in_size_range_events_max(&system.inner, minsize, maxsize, maxevents);
 
             Ok(())
         }
 
-        fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<Tile> {
-            self.state.canvas.canvas.to_pyarray(py)
+        fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<rg::Tile> {
+            self.inner.canvas.raw_array().to_pyarray(py)
         }
 
-        fn ntiles(&self) -> NumTiles {
-            self.state.ntiles()
+        fn ntiles(&self) -> rg::NumTiles {
+            self.inner.ntiles()
         }
 
         fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
-            self.state.rates[level].to_pyarray(py)
+            self.inner.rates[level].to_pyarray(py)
         }
     }
-    m.add_class::<PyStaticATAM>()?;
-    m.add_class::<PyStaticKTAM>()?;
-    m.add_class::<PyStateKTAM>()?;
-    m.add_class::<PyStateKTAMSubTrack>()?;
-    m.add_class::<PyStateATAM>()?;
+    m.add_class::<StaticATAM>()?;
+    m.add_class::<StaticKTAM>()?;
+    m.add_class::<System>()?;
+    m.add_class::<StateKTAM>()?;
+    m.add_class::<StateATAM>()?;
 
     #[pyfunction]
-    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events)"]
+    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
     /// Runs Forward Flux Sampling, and returns a tuple of
     /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
     fn ffs_run(
-        system: &PyStaticKTAM,
+        system: &StaticKTAM,
         num_states: usize,
-        target_size: NumTiles,
+        target_size: rg::NumTiles,
         canvas_size: usize,
         max_init_events: u64,
         max_subseq_events: u64,
-        start_size: NumTiles,
-        size_step: NumTiles,
+        start_size: rg::NumTiles,
+        size_step: rg::NumTiles,
     ) -> (f64, f64, Vec<f64>) {
         let fr = ffs::FFSRun::create(
-            &system.sys,
+            &system.inner,
             num_states,
             target_size,
             canvas_size,
@@ -457,32 +364,36 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             size_step,
         );
 
-        (fr.nucleation_rate(), fr.dimerization_rate, fr.forward_vec())
+        let ret = (fr.nucleation_rate(), fr.dimerization_rate, fr.forward_vec());
+
+        drop(fr);
+
+        ret
     }
 
     #[pyfunction]
-    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events)"]
+    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
     /// Runs Forward Flux Sampling, and returns a tuple of
     /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
     fn ffs_run_full<'py>(
-        system: &PyStaticKTAM,
+        system: &StaticKTAM,
         num_states: usize,
-        target_size: NumTiles,
+        target_size: rg::NumTiles,
         canvas_size: usize,
         max_init_events: u64,
         max_subseq_events: u64,
-        start_size: NumTiles,
-        size_step: NumTiles,
+        start_size: rg::NumTiles,
+        size_step: rg::NumTiles,
         py: Python<'py>,
     ) -> (
         f64,
         f64,
         Vec<f64>,
         Vec<Vec<usize>>,
-        Vec<Vec<&'py PyArray2<Tile>>>,
+        Vec<Vec<&'py PyArray2<rg::Tile>>>,
     ) {
         let fr = ffs::FFSRun::create(
-            &system.sys,
+            &system.inner,
             num_states,
             target_size,
             canvas_size,
@@ -505,22 +416,145 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 level
                     .state_list
                     .iter()
-                    .map(|state| state.canvas.canvas.to_pyarray(py))
+                    .map(|state| state.canvas.raw_array().to_pyarray(py))
                     .collect()
             })
             .collect();
 
-        (
+        let ret = (
             fr.nucleation_rate(),
             fr.dimerization_rate,
             fr.forward_vec(),
             prevlist,
             assemblies,
-        )
+        );
+
+        drop(fr);
+
+        ret
+    }
+
+    #[pyfunction]
+    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    /// Runs Forward Flux Sampling, and returns a tuple of
+    /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
+    fn ffs_run_final<'py>(
+        system: &StaticKTAM,
+        num_states: usize,
+        target_size: rg::NumTiles,
+        canvas_size: usize,
+        max_init_events: u64,
+        max_subseq_events: u64,
+        start_size: rg::NumTiles,
+        size_step: rg::NumTiles,
+        py: Python<'py>,
+    ) -> (
+        f64,
+        f64,
+        Vec<f64>,
+        Vec<Vec<usize>>,
+        Vec<&'py PyArray2<rg::Tile>>,
+    ) {
+        let fr = ffs::FFSRun::create(
+            &system.inner,
+            num_states,
+            target_size,
+            canvas_size,
+            max_init_events,
+            max_subseq_events,
+            start_size,
+            size_step,
+        );
+
+        let prevlist: Vec<_> = fr
+            .level_list
+            .iter()
+            .map(|level| level.previous_list.clone())
+            .collect();
+
+        let assemblies = fr
+            .level_list
+            .last().unwrap()
+                    .state_list
+                    .iter()
+                    .map(|state| state.canvas.raw_array().to_pyarray(py))
+                    .collect();
+    
+        let ret = (
+            fr.nucleation_rate(),
+            fr.dimerization_rate,
+            fr.forward_vec(),
+            prevlist,
+            assemblies,
+        );
+
+        drop(fr);
+
+        ret
+    }
+
+    #[pyfunction]
+    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    /// Runs Forward Flux Sampling, and returns a tuple of
+    /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
+    fn ffs_run_final_p<'py>(
+        system: &StaticKTAM,
+        num_states: usize,
+        target_size: rg::NumTiles,
+        canvas_size: usize,
+        max_init_events: u64,
+        max_subseq_events: u64,
+        start_size: rg::NumTiles,
+        size_step: rg::NumTiles,
+        py: Python<'py>,
+    ) -> (
+        f64,
+        f64,
+        Vec<f64>,
+        Vec<Vec<usize>>,
+        Vec<&'py PyArray2<rg::Tile>>,
+    ) {
+        let fr = ffs::FFSRun::create(
+            &system.inner,
+            num_states,
+            target_size,
+            canvas_size,
+            max_init_events,
+            max_subseq_events,
+            start_size,
+            size_step,
+        );
+
+        let prevlist: Vec<_> = fr
+            .level_list
+            .iter()
+            .map(|level| level.previous_list.clone())
+            .collect();
+
+        let assemblies = fr
+            .level_list
+            .last().unwrap()
+                    .state_list
+                    .iter()
+                    .map(|state| state.canvas.raw_array().to_pyarray(py))
+                    .collect();
+    
+        let ret = (
+            fr.nucleation_rate(),
+            fr.dimerization_rate,
+            fr.forward_vec(),
+            prevlist,
+            assemblies,
+        );
+
+        drop(fr);
+
+        ret
     }
 
     m.add_wrapped(wrap_pyfunction!(ffs_run))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_full))?;
+    m.add_wrapped(wrap_pyfunction!(ffs_run_final))?;
 
     Ok(())
 }
