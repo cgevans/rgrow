@@ -2,7 +2,7 @@ use super::base::*;
 use super::canvas::*;
 use super::system::*;
 use ndarray::prelude::*;
-use rand::random;
+use rand::{SeedableRng, random};
 use std::{convert::TryInto, fmt::Debug, iter::FromIterator, marker::PhantomData};
 
 type HashSet<T> = fnv::FnvHashSet<T>;
@@ -65,6 +65,15 @@ pub trait StateEvolve<C: Canvas, S: System<C>>: StateStatus + StateStep<C, S> {
     }
 }
 
+
+pub trait StateStep<C: Canvas, S: System<C>>: StateUpdateSingle<C, S> + StateStatus {
+    fn take_step(&mut self, system: &S) -> Result<&Self, StateError> {
+        let (p, acc) = self.choose_event_point()?;
+        Ok(self.do_single_event_at_location(system, p, acc))
+    }
+}
+
+
 pub trait StateUpdateSingle<C: Canvas, S: System<C>> {
     fn choose_event_point(&self) -> Result<(Point, Rate), StateError>;
     fn do_single_event_at_location(&mut self, system: &S, point: Point, acc: Rate) -> &mut Self;
@@ -83,16 +92,10 @@ pub enum StateError {
     Unknown,
 }
 
-pub trait StateStep<C: Canvas, S: System<C>>: StateUpdateSingle<C, S> + StateStatus {
-    fn take_step(&mut self, system: &S) -> Result<&Self, StateError> {
-        let (p, acc) = self.choose_event_point()?;
-        Ok(self.do_single_event_at_location(system, p, acc))
-    }
-}
-
 pub trait StateCreate<C: Canvas, S: System<C>>:
     StateUpdateSingle<C, S> + Sized + StateUpdateSingle<C, S>
 {
+    /// Given a canvas array as an initial configuration, create a state.
     fn create_raw(canvas: Array2<Tile>) -> Self;
 
     fn from_canvas(system: &S, canvas: Array2<Tile>) -> Self {
@@ -155,106 +158,14 @@ pub trait StateStatus {
     //fn last_step_time(&self) -> Time;
 }
 
-pub trait StateTracker: Clone + Debug {
-    fn default(canvas: &dyn Canvas) -> Self;
-
-    fn record_single_event(&mut self, p: Point, old_tile: Tile, new_tile: Tile) -> &mut Self;
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct NullStateTracker();
-
-impl StateTracker for NullStateTracker {
-    fn default(_state: &dyn Canvas) -> Self {
-        Self()
-    }
-
-    fn record_single_event(&mut self, _p: Point, _old_tile: Tile, _new_tile: Tile) -> &mut Self {
-        self
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct TileSubsetTracker {
-    pub num_in_subset: NumTiles,
-    set: HashSet<Tile>,
-}
-
-impl StateTracker for TileSubsetTracker {
-    fn default(_canvas: &dyn Canvas) -> Self {
-        // Default is to track nothing.
-        Self {
-            num_in_subset: 0,
-            set: HashSet::<Tile>::default(),
-        }
-    }
-
-    fn record_single_event(&mut self, _p: Point, old_tile: Tile, new_tile: Tile) -> &mut Self {
-        if (old_tile == 0) & self.set.contains(&new_tile) {
-            self.num_in_subset += 1
-        } else if (new_tile == 0) & self.set.contains(&old_tile) {
-            self.num_in_subset -= 1
-        } else {
-            // FIXME: ignores tile swaps
-        };
-        self
-    }
-}
-
-impl TileSubsetTracker {
-    pub fn new(tiles: Vec<Tile>) -> Self {
-        Self {
-            num_in_subset: 0,
-            set: HashSet::<Tile>::from_iter(tiles),
-        }
-    }
-}
-
-// #[derive(Clone, Debug)]
-// pub struct OrderTracker {
-//     pub orders: Box<dyn Canvas>,
-//     cur_order: usize,
-// }
-
-// impl OrderTracker {
-//     pub fn new(canvas: &dyn Canvas) -> Self {
-//         OrderTracker {
-//             orders: canvas.clone(),
-//             cur_order: 1,
-//         }
-//     }
-// }
-
-// impl StateTracker for OrderTracker {
-//     fn default(canvas: &dyn Canvas) -> Self {
-//         OrderTracker {
-//             orders: canvas.clone(),
-//             cur_order: 1,
-//         }
-//     }
-
-//     fn record_single_event(&mut self, p: Point, _old_tile: Tile, new_tile: Tile) -> &mut Self {
-//         if new_tile == 0 {
-//             unsafe {
-//                 *self.orders.uget_mut(p) = 0;
-//             }
-//         } else {
-//             unsafe {
-//                 *self.orders.uget_mut(p) = self.cur_order;
-//                 self.cur_order += 1;
-//             }
-//         };
-//         self
-//     }
-// }
+use crate::ratestore::{RateStore, QuadTreeArray, CreateSizedRateStore};
 
 #[derive(Debug)]
 pub struct QuadTreeState<C: CanvasSquarable, S: System<C>, T: StateTracker> {
-    pub rates: Vec<Array2<Rate>>,
+    pub rates: QuadTreeArray<Rate>,
     pub canvas: C,
     phantomsys: PhantomData<*const S>,
     ntiles: NumTiles,
-    total_rate: Rate,
     total_events: NumEvents,
     pub tracker: T,
 }
@@ -270,7 +181,6 @@ impl<C: CanvasSquarable + Clone, S: System<C>, T: StateTracker + Clone> Clone
             canvas: self.canvas.clone(),
             phantomsys: self.phantomsys,
             ntiles: self.ntiles,
-            total_rate: self.total_rate,
             total_events: self.total_events,
             tracker: self.tracker.clone(),
         }
@@ -303,14 +213,7 @@ where
         assert!(canvas.nrows().is_power_of_two());
         assert!(canvas.ncols() == canvas.nrows());
 
-        let p: u32 = (1 + canvas.nrows().trailing_zeros()).try_into().unwrap();
-
-        let mut rates = Vec::<Array2<Rate>>::new();
-
-        for i in (1..p).rev() {
-            rates.push(Array2::<Rate>::zeros((2usize.pow(i), 2usize.pow(i))))
-        }
-
+        let rates = QuadTreeArray::new_with_size(canvas.nrows());
         let canvas = C::from_array(canvas).unwrap();
         let tracker = T::default(&canvas);
 
@@ -319,7 +222,6 @@ where
             canvas,
             phantomsys: PhantomData,
             ntiles: 0,
-            total_rate: 0.,
             total_events: 0,
             tracker,
         }
@@ -343,7 +245,7 @@ where
 
     #[inline(always)]
     fn total_rate(&self) -> Rate {
-        self.total_rate
+        self.rates.total_rate()
     }
 }
 
@@ -353,43 +255,9 @@ where
     T: StateTracker,
 {
     fn choose_event_point(&self) -> Result<(Point, Rate), StateError> {
-        let mut threshold = self.total_rate * random::<Rate>();
+        let mut rng = rand::rngs::SmallRng::from_entropy();
 
-        let mut x: usize = 0;
-        let mut y: usize = 0;
-
-        for r in self.rates.iter().rev() {
-            y *= 2;
-            x *= 2;
-            let mut v = unsafe { *r.uget((y, x)) };
-            if threshold - v <= 0. {
-                continue;
-            } else {
-                threshold -= v;
-                x += 1;
-                v = unsafe { *r.uget((y, x)) };
-            }
-            if threshold - v <= 0. {
-                continue;
-            } else {
-                threshold -= v;
-                x -= 1;
-                y += 1;
-                v = unsafe { *r.uget((y, x)) };
-            }
-            if threshold - v <= 0. {
-                continue;
-            } else {
-                threshold -= v;
-                x += 1;
-                v = unsafe { *r.uget((y, x)) };
-            }
-            if threshold - v <= 0. {
-                continue;
-            } else {
-                panic!("Failure in quadtree position finding: remaining threshold {:?}, ratetree array {:?}.", threshold, r);
-            }
-        }
+        let ((y, x), threshold) = self.rates.choose_point(&mut rng);
 
         if (y, x) == (0, 0) {
             // This happens when we have no tiles, or a zero rate.
@@ -397,7 +265,10 @@ where
                 Err(StateError::EmptyCanvas)
             } else if self.total_rate() == 0. {
                 Err(StateError::ZeroRate)
-            } else {
+            } else if self.canvas.inbounds((0,0)) {
+                Ok(((y, x), threshold))
+            }
+            else {
                 Err(StateError::Unknown)
             }
         } else {
@@ -409,6 +280,7 @@ where
     fn update_after_single_event(&mut self, system: &S, point: Point) -> &mut Self {
         match system.updates_around_point() {
             Updates::Plus => self.update_rates_ps(system, point),
+
             Updates::DimerChunk => {
                 self.update_rates_ps(system, point);
                 let pww = unsafe {
@@ -507,16 +379,16 @@ where
     }
 
     fn update_entire_state(&mut self, system: &S) -> &mut Self {
-        let size = self.rates.first().unwrap().dim();
-        for y in 0..size.0 {
-            for x in 1..size.1 {
+        let size = self.canvas.square_size();
+        for y in 0..size {
+            for x in 0..size {
                 if self.canvas.inbounds((y,x)) {
-                    self.update_rates_single_noprop(system, (y, x));
+                    self.update_rates_single(system, (y, x));
                 }
             }
         }
         self.ntiles = self.canvas.calc_ntiles();
-        self.rebuild_ratetree()
+        self
     }
 
     fn set_point(&mut self, sys: &S, p: Point, t: Tile) -> &mut Self {
@@ -612,92 +484,25 @@ where
     T: StateTracker + Clone,
 {
     fn update_rates_ps(&mut self, system: &S, p: Point) -> &mut Self {
-        let mut rtiter = self.rates.iter_mut();
 
-        // The base level
-        let mut rt = rtiter.next().unwrap();
-        let mut np: (usize, usize) = p.clone();
-
-        for ps in &[
+        let points =  &[
             self.canvas.u_move_point_w(p),
             p,
             self.canvas.u_move_point_e(p),
             self.canvas.u_move_point_n(p),
             self.canvas.u_move_point_s(p),
-        ] {
-            rt[*ps] = system.event_rate_at_point(&self.canvas, *ps);
-        }
+        ];
+        
+        let rates = points.into_iter().map(|x| system.event_rate_at_point(&self.canvas, *x)).collect::<Vec<_>>();
 
-        let mut div: usize = 2;
-
-        for rn in rtiter {
-            np = (np.0 / 2, np.1 / 2);
-
-            qt_update_level(rn, rt, np);
-
-            // If on boundary of , update to N; if on
-            if p.0 % div == 0 {
-                qt_update_level(rn, rt, (np.0 - 1, np.1))
-            } else if (p.0 + 1) % div == 0 {
-                qt_update_level(rn, rt, (np.0 + 1, np.1))
-            };
-
-            if p.1 % div == 0 {
-                qt_update_level(rn, rt, (np.0, np.1 - 1))
-            } else if (p.1 + 1) % div == 0 {
-                qt_update_level(rn, rt, (np.0, np.1 + 1))
-            };
-
-            div *= 2;
-            rt = rn;
-        }
-
-        self.total_rate = rt.sum();
-
-        return self;
+        self.rates.update_multiple(points, &rates);
+        
+        self
     }
 
     #[allow(dead_code)]
-    fn update_rates_single(&mut self, system: &S, p: Point) -> &mut Self {
-        let mut rtiter = self.rates.iter_mut();
-        let mut rt = rtiter.next().unwrap();
-        let mut np: (usize, usize) = p.clone();
-
-        rt[p] = system.event_rate_at_point(&self.canvas, p);
-
-        for rn in rtiter {
-            np = (np.0 / 2, np.1 / 2);
-            qt_update_level(rn, rt, np);
-            rt = rn;
-        }
-
-        self.total_rate = rt.sum();
-
-        return self;
-    }
-
-    fn update_rates_single_noprop(&mut self, system: &S, p: Point) -> &mut Self {
-        let rt = self.rates.iter_mut().next().unwrap();
-
-        rt[p] = system.event_rate_at_point(&self.canvas, p);
-
-        return self;
-    }
-
-    fn rebuild_ratetree(&mut self) -> &mut Self {
-        let mut rtiter = self.rates.iter_mut();
-        let mut rt = rtiter.next().unwrap();
-
-        for rn in rtiter {
-            for (p, v) in rn.indexed_iter_mut() {
-                qt_update_level_val(v, rt, p)
-            }
-
-            rt = rn;
-        }
-
-        self.total_rate = rt.sum();
-
+    fn update_rates_single(&mut self, system: &S, mut p: Point) -> &mut Self {
+        self.rates.update_point(p, system.event_rate_at_point(&self.canvas, p));
         self
     }
 
@@ -710,14 +515,13 @@ where
     ///
     /// If on debug, conditions should be checked (TODO)
     pub fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self {
-        let max_level = self.rates.len()-1;
+        let max_level = self.rates.0.len()-1; // FIXME: should not go into RateStore
 
         self.copy_level_quad(source, max_level, (0, 0));
 
         
         // General housekeeping
         self.ntiles = source.ntiles;
-        self.total_rate = source.total_rate;
         self.total_events = source.total_events;
         self.tracker = source.tracker.clone();
 
@@ -729,23 +533,23 @@ where
     }
 
     #[inline(never)]
-    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self {
+    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self { // FIXME: should not go into ratestore
         let (y, x) = point;
 
         if level > 0 {
             for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
-                let z = source.rates[level][(*yy, *xx)];
+                let z = source.rates.0[level][(*yy, *xx)];
                 if z > 0. {
-                    self.rates[level][(*yy, *xx)] = z;
+                    self.rates.0[level][(*yy, *xx)] = z;
                     self.copy_level_quad(source, level - 1, (*yy * 2, *xx * 2));
                 }
             }
         } else {
             for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
-                let z = source.rates[level][(*yy, *xx)];
+                let z = source.rates.0[level][(*yy, *xx)];
                 let t = unsafe { source.canvas.uv_p((*yy, *xx)) };
                 if z > 0. {
-                    self.rates[level][(*yy, *xx)] = z;
+                    self.rates.0[level][(*yy, *xx)] = z;
                     if t > 0 {
                         // Tile must have nonzero rate, so we only check if the rate is nonzero.
                         let v = unsafe { self.canvas.uvm_p((*yy, *xx)) };
@@ -759,19 +563,96 @@ where
     }
 }
 
-#[inline(always)]
-fn qt_update_level(rn: &mut Array2<Rate>, rt: &Array2<Rate>, np: Point) {
-    qt_update_level_val(unsafe { rn.uget_mut(np) }, rt, np);
+
+pub trait StateTracker: Clone + Debug {
+    fn default(canvas: &dyn Canvas) -> Self;
+
+    fn record_single_event(&mut self, p: Point, old_tile: Tile, new_tile: Tile) -> &mut Self;
 }
 
-#[inline(always)]
-fn qt_update_level_val(rn: &mut f64, rt: &Array2<Rate>, np: Point) {
-    let ip = (np.0 * 2, np.1 * 2);
+#[derive(Copy, Clone, Debug)]
+pub struct NullStateTracker();
 
-    unsafe {
-        *rn = *rt.uget(ip)
-            + *rt.uget((ip.0, ip.1 + 1))
-            + *rt.uget((ip.0 + 1, ip.1))
-            + *rt.uget((ip.0 + 1, ip.1 + 1));
+impl StateTracker for NullStateTracker {
+    fn default(_state: &dyn Canvas) -> Self {
+        Self()
+    }
+
+    fn record_single_event(&mut self, _p: Point, _old_tile: Tile, _new_tile: Tile) -> &mut Self {
+        self
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct TileSubsetTracker {
+    pub num_in_subset: NumTiles,
+    set: HashSet<Tile>,
+}
+
+impl StateTracker for TileSubsetTracker {
+    fn default(_canvas: &dyn Canvas) -> Self {
+        // Default is to track nothing.
+        Self {
+            num_in_subset: 0,
+            set: HashSet::<Tile>::default(),
+        }
+    }
+
+    fn record_single_event(&mut self, _p: Point, old_tile: Tile, new_tile: Tile) -> &mut Self {
+        if (old_tile == 0) & self.set.contains(&new_tile) {
+            self.num_in_subset += 1
+        } else if (new_tile == 0) & self.set.contains(&old_tile) {
+            self.num_in_subset -= 1
+        } else {
+            // FIXME: ignores tile swaps
+        };
+        self
+    }
+}
+
+impl TileSubsetTracker {
+    pub fn new(tiles: Vec<Tile>) -> Self {
+        Self {
+            num_in_subset: 0,
+            set: HashSet::<Tile>::from_iter(tiles),
+        }
+    }
+}
+
+// #[derive(Clone, Debug)]
+// pub struct OrderTracker {
+//     pub orders: Box<dyn Canvas>,
+//     cur_order: usize,
+// }
+
+// impl OrderTracker {
+//     pub fn new(canvas: &dyn Canvas) -> Self {
+//         OrderTracker {
+//             orders: canvas.clone(),
+//             cur_order: 1,
+//         }
+//     }
+// }
+
+// impl StateTracker for OrderTracker {
+//     fn default(canvas: &dyn Canvas) -> Self {
+//         OrderTracker {
+//             orders: canvas.clone(),
+//             cur_order: 1,
+//         }
+//     }
+
+//     fn record_single_event(&mut self, p: Point, _old_tile: Tile, new_tile: Tile) -> &mut Self {
+//         if new_tile == 0 {
+//             unsafe {
+//                 *self.orders.uget_mut(p) = 0;
+//             }
+//         } else {
+//             unsafe {
+//                 *self.orders.uget_mut(p) = self.cur_order;
+//                 self.cur_order += 1;
+//             }
+//         };
+//         self
+//     }
+// }

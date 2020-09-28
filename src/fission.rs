@@ -203,7 +203,7 @@ impl GroupInfo {
 
     fn n_groups(&self) -> usize {
         let mut sg = self.groupmerges.clone();
-        sg.sort();
+        sg.sort_unstable();
         sg.dedup();
         sg.len()
     }

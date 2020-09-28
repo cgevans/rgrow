@@ -94,10 +94,7 @@ fn run_atam(input: String) {
         (parsed.options.size, parsed.options.size),
         &mut system,
     );
-
-    println!("{:?}", state.canvas);
-    println!("{:?}", state.rates[2]);
-
+    
     //state.evolve_in_size_range(&mut system, 0, parsed.options.smax.unwrap(), 1_000_000);
 
     loop {
