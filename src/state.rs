@@ -152,10 +152,6 @@ pub trait StateStatus {
     fn ntiles(&self) -> NumTiles;
     fn total_events(&self) -> NumEvents;
     fn total_rate(&self) -> Rate;
-
-    //fn time(&self) -> Time;
-
-    //fn last_step_time(&self) -> Time;
 }
 
 use crate::ratestore::{RateStore, QuadTreeArray, CreateSizedRateStore};
