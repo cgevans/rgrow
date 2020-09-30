@@ -1,9 +1,13 @@
-use super::base::{Point, Tile};
-use super::Canvas;
-use crate::StaticKTAM;
-use fnv::{FnvHashMap};
-use std::collections::VecDeque;
+use crate::state::State;
+use crate::{
+    canvas::PointSafeAdjs,
+    system::{StaticKTAM},
+};
+
+use super::base::{Tile};
+use fnv::FnvHashMap;
 use rand::{distributions::weighted::WeightedIndex, distributions::Distribution};
+use std::collections::VecDeque;
 
 // lazy_static! {
 //     /// A vector specifying whether or not the 1 bits of the index are in a single
@@ -51,18 +55,18 @@ type GroupNum = usize;
 #[derive(Debug)]
 pub struct GroupInfo {
     /// Contains mappings of point -> (unmerged) group number.
-    pub map: FnvHashMap<Point, GroupNum>,
+    pub map: FnvHashMap<PointSafeAdjs, GroupNum>,
     /// Contains mappings of unmerged group number to merged group number.
     groupmerges: Vec<GroupNum>,
     /// Contains lists of points in each (unmerged) group number.
-    pointlist: Vec<Vec<Point>>,
+    pointlist: Vec<Vec<PointSafeAdjs>>,
 }
 
 impl GroupInfo {
-    fn new(start_points: &Vec<&Point>, now_empty: &[Point]) -> Self {
+    fn new(start_points: &Vec<&PointSafeAdjs>, now_empty: &[PointSafeAdjs]) -> Self {
         let groupmerges = (0usize..=start_points.len()).collect();
 
-        let mut map = FnvHashMap::<Point, usize>::default();
+        let mut map = FnvHashMap::default();
 
         let mut pointlist = Vec::new();
 
@@ -89,15 +93,15 @@ impl GroupInfo {
     /// If point2 is not in a group, add point2 to point1's group, then
     /// return false (further movement into point2 needed).
     /// Point1 must be in a group, and debug checks to make sure it isn't in zero.
-    fn merge_or_add(&mut self, point1: &Point, point2: &Point) -> bool {
+    fn merge_or_add(&mut self, point1: &PointSafeAdjs, point2: &PointSafeAdjs) -> bool {
         let g1 = self.groupmerges[*self.map.get(point1).unwrap()];
-        
+
         assert!(g1 != 0);
 
         let mp2 = self.map.get(point2);
 
         if mp2 == Some(&0) {
-            return true
+            return true;
         }
 
         if let Some(g2) = mp2 {
@@ -118,20 +122,20 @@ impl GroupInfo {
         }
     }
 
-    pub fn choose_deletions_size_weighted(&self) -> Vec<Point> {
+    pub fn choose_deletions_size_weighted(&self) -> Vec<PointSafeAdjs> {
         let mpl = self.merged_pointlist();
         let mut rng = rand::thread_rng();
 
-        let sizes:Vec<usize> = mpl.iter().map(|x| x.len()).collect();
+        let sizes: Vec<usize> = mpl.iter().map(|x| x.len()).collect();
         let dist = WeightedIndex::new(&sizes).unwrap();
-        
+
         let keep = dist.sample(&mut rng);
 
         let mut deletions = Vec::new();
 
         for (i, pv) in mpl.iter().enumerate() {
             if i == keep {
-                continue
+                continue;
             } else {
                 deletions.extend(pv);
             }
@@ -141,12 +145,12 @@ impl GroupInfo {
         deletions
     }
 
-    pub fn choose_deletions_keep_largest_group(&self) -> Vec<Point> {
+    pub fn choose_deletions_keep_largest_group(&self) -> Vec<PointSafeAdjs> {
         let mut mpl = self.merged_pointlist();
 
         let mut deletions = Vec::new();
 
-        mpl.sort_by(|a, b| a.len().cmp(&b.len()).reverse() );
+        mpl.sort_by(|a, b| a.len().cmp(&b.len()).reverse());
 
         let mi = mpl.iter().skip(1);
 
@@ -160,10 +164,13 @@ impl GroupInfo {
         deletions
     }
 
-    pub fn choose_deletions_seed_unattached(&self, seeds: Vec<(Point, Tile)>) -> Vec<Point> {
+    pub fn choose_deletions_seed_unattached(
+        &self,
+        seeds: Vec<(PointSafeAdjs, Tile)>,
+    ) -> Vec<PointSafeAdjs> {
         let mut deletions = Vec::new();
 
-        let seed_points:Vec<Point> = seeds.iter().map(|x| x.0).collect();
+        let seed_points = seeds.iter().map(|x| x.0).collect::<Vec<_>>();
 
         let mergedpoints = self.merged_pointlist();
 
@@ -175,30 +182,34 @@ impl GroupInfo {
                 }
             }
             if contains_seed {
-                continue
+                continue;
             } else {
                 deletions.extend(group);
             }
         }
-        
+
         deletions.extend(&self.pointlist[0]);
 
         deletions
     }
 
-    pub fn merged_pointlist(&self) -> Vec<Vec<Point>> {
-        let mut mergedpointhash = FnvHashMap::<usize, Vec<Point>>::default();
+    pub fn merged_pointlist(&self) -> Vec<Vec<PointSafeAdjs>> {
+        let mut mergedpointhash = FnvHashMap::<usize, Vec<PointSafeAdjs>>::default();
         for (pointvec, i) in self.pointlist.iter().zip(&self.groupmerges) {
             // Exclude deletion group
             if *i == 0 {
-                continue
+                continue;
             }
             match mergedpointhash.get_mut(i) {
-                Some(v) => { v.extend(pointvec); }
-                None => { mergedpointhash.insert(*i, pointvec.clone()); }
+                Some(v) => {
+                    v.extend(pointvec);
+                }
+                None => {
+                    mergedpointhash.insert(*i, pointvec.clone());
+                }
             };
-        };
-        mergedpointhash.into_iter().map(|(_x,y)| y).collect()
+        }
+        mergedpointhash.into_iter().map(|(_x, y)| y).collect()
     }
 
     fn n_groups(&self) -> usize {
@@ -215,25 +226,25 @@ pub enum FissionResult {
     FissionGroups(GroupInfo),
 }
 
-impl<C: Canvas> StaticKTAM<C> {
+impl<C: State> StaticKTAM<C> {
     pub fn determine_fission(
         &self,
         canvas: &C,
-        possible_start_points: &[Point],
-        now_empty: &[Point],
+        possible_start_points: &[PointSafeAdjs],
+        now_empty: &[PointSafeAdjs],
     ) -> FissionResult {
         // Optimizations for a single empty site.
         if now_empty.len() == 1 {
             let p = now_empty[0];
 
-            let tn = unsafe { canvas.uv_n(p) } as usize;
-            let tw = unsafe { canvas.uv_w(p) } as usize;
-            let te = unsafe { canvas.uv_e(p) } as usize;
-            let ts = unsafe { canvas.uv_s(p) } as usize;
-            let tnw = unsafe { canvas.uv_nw(p) as usize };
-            let tne = unsafe { canvas.uv_ne(p) as usize };
-            let tsw = unsafe { canvas.uv_sw(p) as usize };
-            let tse = unsafe { canvas.uv_se(p) as usize };
+            let tn = canvas.v_sa_n(p) as usize;
+            let tw = canvas.v_sa_w(p) as usize;
+            let te = canvas.v_sa_e(p) as usize;
+            let ts = canvas.v_sa_s(p) as usize;
+            let tnw = canvas.v_sa_nw(p) as usize;
+            let tne = canvas.v_sa_ne(p) as usize;
+            let tsw = canvas.v_sa_sw(p) as usize;
+            let tse = canvas.v_sa_se(p) as usize;
 
             let ri: u8 = (((tn != 0) as u8) << 7)
                 + ((((self.energy_we[(tn, tne)] != 0.) & (self.energy_ns[(tne, te)] != 0.)) as u8)
@@ -259,14 +270,14 @@ impl<C: Canvas> StaticKTAM<C> {
             //println!("Ring check failed");
         }
 
-        let start_points: Vec<&(usize, usize)> = (*possible_start_points)
+        let start_points = (*possible_start_points)
             .iter()
-            .filter(|x| unsafe { canvas.uv_p(**x) } != 0)
+            .filter(|x| canvas.v_sa(**x) != 0)
             .collect();
 
         let mut groupinfo = GroupInfo::new(&start_points, now_empty);
 
-        let mut queue = VecDeque::<Point>::new();
+        let mut queue = VecDeque::new();
 
         // Put all the starting points in the queue.
         for (_i, point) in start_points.iter().enumerate() {
@@ -275,56 +286,52 @@ impl<C: Canvas> StaticKTAM<C> {
 
         //println!("Start queue {:?}", queue);
         while let Some(p) = queue.pop_front() {
-            let t = unsafe { canvas.uv_p(p) } as usize;
-            let pn = canvas.u_move_point_n(p);
-            let tn = unsafe { canvas.uv_p(pn) } as usize;
-            let pw = canvas.u_move_point_w(p);
-            let tw = unsafe { canvas.uv_p(pw) } as usize;
-            let pe = canvas.u_move_point_e(p);
-            let te = unsafe { canvas.uv_p(pe) } as usize;
-            let ps = canvas.u_move_point_s(p);
-            let ts = unsafe { canvas.uv_p(ps) } as usize;
+            let t = canvas.v_sa(p) as usize;
+            let pn = canvas.move_sa_n(p);
+            let tn = canvas.v_sh(pn) as usize;
+            let pw = canvas.move_sa_w(p);
+            let tw = canvas.v_sh(pw) as usize;
+            let pe = canvas.move_sa_e(p);
+            let te = canvas.v_sh(pe) as usize;
+            let ps = canvas.move_sa_s(p);
+            let ts = canvas.v_sh(ps) as usize;
 
             if (unsafe { *self.energy_ns.uget((tn, t)) } != 0.) {
+                let pn = PointSafeAdjs(pn.0); // FIXME
                 match groupinfo.merge_or_add(&p, &pn) {
-                    true => {
-                    }
+                    true => {}
                     false => {
                         queue.push_back(pn);
-
                     }
                 }
             }
 
             if (unsafe { *self.energy_we.uget((t, te)) } != 0.) {
+                let pe = PointSafeAdjs(pe.0); // FIXME
                 match groupinfo.merge_or_add(&p, &pe) {
-                    true => {
-                    }
+                    true => {}
                     false => {
                         queue.push_back(pe);
-
                     }
                 }
             }
 
             if (unsafe { *self.energy_ns.uget((t, ts)) } != 0.) {
+                let ps = PointSafeAdjs(ps.0); // FIXME
                 match groupinfo.merge_or_add(&p, &ps) {
-                    true => {
-                    }
+                    true => {}
                     false => {
                         queue.push_back(ps);
-
                     }
                 }
             }
 
             if (unsafe { *self.energy_we.uget((tw, t)) } != 0.) {
+                let pw = PointSafeAdjs(pw.0); // FIXME
                 match groupinfo.merge_or_add(&p, &pw) {
-                    true => {
-                    }
+                    true => {}
                     false => {
                         queue.push_back(pw);
-
                     }
                 }
             }

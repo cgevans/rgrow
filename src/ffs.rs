@@ -1,56 +1,83 @@
 use super::*;
 //use ndarray::prelude::*;
 //use ndarray::Zip;
-use rand::thread_rng;
+use base::{CanvasLength, NumEvents, NumTiles, Rate};
+use canvas::CanvasCreate;
+use ndarray::Array2;
+use rand::{SeedableRng, prelude::SmallRng, thread_rng};
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
-#[cfg(feature = "rayon")] use rayon::prelude::*;
-#[cfg(feature = "rayon")] use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(feature = "rayon")] use std::sync::Arc;
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
+use state::{DangerousStateClone, RateStoreP, State, StateCreate};
+#[cfg(feature = "rayon")]
+use std::{marker::PhantomData, sync::atomic::{AtomicUsize, Ordering}};
+#[cfg(feature = "rayon")]
+use std::sync::Arc;
+use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
 
-pub struct FFSRun<C: CanvasCreate + Canvas + CanvasSquarable> {
-    pub level_list: Vec<FFSLevel<C>>,
-    pub dimerization_rate: f64
+pub struct FFSRun<St: State, Sy: System<St>> {
+    pub system: Sy,
+    pub level_list: Vec<FFSLevel<St, Sy>>,
+    pub dimerization_rate: f64,
 }
 
-impl<C: CanvasCreate + Canvas + CanvasSquarable> FFSRun<C> {
+impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, Sy> {
     pub fn create(
-        system: &StaticKTAM<C>,
+        system: Sy,
         num_states: usize,
         target_size: NumTiles,
         canvas_size: CanvasLength,
         max_init_events: NumEvents,
         max_subseq_events: NumEvents,
         start_size: NumTiles,
-        size_step: NumTiles
+        size_step: NumTiles,
     ) -> Self {
-        let level = FFSLevel::nmers_from_dimers(system, num_states, canvas_size, max_init_events, start_size);
 
-        println!("Done with dimers");
         let mut level_list = Vec::new();
 
-        level_list.push(level);
+        let dimerization_rate = system
+        .calc_dimers()
+        .iter()
+        .fold(0., |acc, d| acc + d.formation_rate);
+        
+        let mut ret = Self {
+            level_list,
+            dimerization_rate,
+            system: system,
+        };
+        
+            
+        ret.level_list.push(FFSLevel::nmers_from_dimers(
+            &mut ret.system,
+            num_states,
+            canvas_size,
+            max_init_events,
+            start_size,
+        ));
 
-        while level_list.last().unwrap().target_size < target_size {
-            level_list.push(
-                level_list
+        while ret.level_list.last().unwrap().target_size < target_size {
+            ret.level_list.push(
+                ret.level_list
                     .last()
                     .unwrap()
-                    .next_level(system, size_step, max_subseq_events),
+                    .next_level(&mut ret.system, size_step, max_subseq_events),
             );
-            println!("Done with target size {}.", level_list.last().unwrap().target_size);
+            println!(
+                "Done with target size {}.",
+                ret.level_list.last().unwrap().target_size
+            );
         }
 
-        let dimerization_rate = System::<C>::calc_dimers(system).iter().fold(0., |acc, d| acc + d.formation_rate);
-
-        Self { level_list, dimerization_rate }
+        ret
     }
 
     pub fn nucleation_rate(&self) -> Rate {
-        self.dimerization_rate *
-        self.level_list
-            .iter()
-            .fold(1., |acc, level| acc * level.p_r)
+        self.dimerization_rate
+            * self
+                .level_list
+                .iter()
+                .fold(1., |acc, level| acc * level.p_r)
     }
 
     pub fn forward_vec(&self) -> Vec<f64> {
@@ -60,19 +87,20 @@ impl<C: CanvasCreate + Canvas + CanvasSquarable> FFSRun<C> {
     pub fn dimer_conc(&self) -> f64 {
         self.level_list[0].p_r
     }
+
 }
 
-pub struct FFSLevel<C: Canvas + CanvasCreate + CanvasSquarable> {
-    pub state_list: Vec<QuadTreeState<C, StaticKTAM<C>, NullStateTracker>>,
+pub struct FFSLevel<St: State, Sy: System<St>> {
+    pub system: std::marker::PhantomData<Sy>,
+    pub state_list: Vec<St>,
     pub previous_list: Vec<usize>,
     pub p_r: f64,
     pub target_size: NumTiles,
 }
 
-impl<'a, C: Canvas + CanvasCreate + CanvasSquarable> FFSLevel<C> {
-    #[cfg(not(feature = "use_rayon"))]
-    pub fn next_level(&self, system: &StaticKTAM<C>, size_step: u32, max_events: u64) -> Self {
-        let mut rng = thread_rng();
+impl<'a, St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSLevel<St, Sy> {
+    pub fn next_level(&self, system: &mut Sy, size_step: u32, max_events: u64) -> Self {
+        let mut rng = SmallRng::from_entropy();
 
         let mut state_list = Vec::new();
         let mut previous_list = Vec::new();
@@ -81,10 +109,10 @@ impl<'a, C: Canvas + CanvasCreate + CanvasSquarable> FFSLevel<C> {
 
         let chooser = Uniform::new(0, self.state_list.len());
 
-        let canvas_size = self.state_list[0].canvas.square_size();
+        let canvas_size = (self.state_list[0].nrows(), self.state_list[0].ncols());
 
         while state_list.len() < self.state_list.len() {
-            let mut state = QuadTreeState::empty((canvas_size, canvas_size));
+            let mut state = St::create_raw(Array2::zeros(canvas_size)).unwrap();
 
             let mut i_old_state: usize = 0;
 
@@ -93,17 +121,17 @@ impl<'a, C: Canvas + CanvasCreate + CanvasSquarable> FFSLevel<C> {
                 i_old_state = chooser.sample(&mut rng);
 
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
-                state.evolve_in_size_range_events_max(system, 0, target_size, max_events);
-                i+=1;
-            };
-
-            if state.ntiles() == target_size {
-            state_list.push(state);
-            previous_list.push(i_old_state);
-            } else {
-                println!("Ran out of events.");
+                system
+                    .evolve_in_size_range_events_max(&mut state, 0, target_size, max_events, &mut rng);
+                i += 1;
             }
 
+            if state.ntiles() == target_size {
+                state_list.push(state);
+                previous_list.push(i_old_state);
+            } else {
+                println!("Ran out of events: {}t {}c. {} {:?}", state.ntiles(), state.calc_ntiles(), target_size, state);
+            }
         }
         let p_r = (state_list.len() as f64) / (i as f64);
 
@@ -112,64 +140,20 @@ impl<'a, C: Canvas + CanvasCreate + CanvasSquarable> FFSLevel<C> {
             previous_list,
             p_r,
             target_size,
-        }
-    }
-
-    #[cfg(feature = "use_rayon")]
-    pub fn next_level(&self, system: &StaticKTAM, size_step: u32, max_events: u64) -> Self {
-        let mut rng = thread_rng();
-
-        let mut n_attempts = AtomicUsize::new(0);
-        let mut n_successes = AtomicUsize::new(0);
-
-        let sysref = Arc::new(system);
-
-        let num_states = self.state_list.len() as usize;
-
-        let target_size = (self.target_size + size_step);
-
-        let chooser = Uniform::new(0, self.state_list.len());
-
-        let state_list = rayon::iter::repeat(()).map( |_| {
-            if n_successes.load(Ordering::SeqCst) >= num_states {return None};
-            let mut rng = rand::thread_rng();
-            let i_old_state = chooser.sample(&mut rng);
-            let mut state = self.state_list[i_old_state].clone();
-            state.evolve_in_size_range_events_max(*sysref, 0, target_size, max_events);
-            if state.ntiles() == target_size {
-                n_attempts.fetch_add(1, Ordering::SeqCst);
-                n_successes.fetch_add(1, Ordering::SeqCst);
-                Some(Some(state))
-            } else {
-                n_attempts.fetch_add(1, Ordering::SeqCst);
-                Some(None)
-            }
-        }).while_some().filter_map(|x| x).collect::<Vec<_>>();
-
-
-        let mut previous_list = Vec::new();
-
-
-        let p_r = (n_successes.load(Ordering::SeqCst) as f64) / (n_attempts.load(Ordering::SeqCst) as f64);
-
-        Self {
-            state_list: state_list,
-            previous_list: previous_list,
-            p_r,
-            target_size,
+            system: std::marker::PhantomData::<Sy>,
         }
     }
 
     pub fn nmers_from_dimers(
-        system: &StaticKTAM<C>,
+        system: &mut Sy,
         num_states: usize,
         canvas_size: CanvasLength,
         max_events: u64,
-        next_size: NumTiles
+        next_size: NumTiles,
     ) -> Self {
-        let mut rng = thread_rng();
+        let mut rng = SmallRng::from_entropy();
 
-        let dimers = System::<C>::calc_dimers(system);
+        let dimers = system.calc_dimers();
 
         let mut state_list = Vec::new();
         let mut previous_list = Vec::new();
@@ -181,8 +165,7 @@ impl<'a, C: Canvas + CanvasCreate + CanvasSquarable> FFSLevel<C> {
         let mid = canvas_size / 2;
 
         while state_list.len() < num_states {
-
-            let mut state = QuadTreeState::empty((canvas_size, canvas_size));
+            let mut state = St::create_raw(Array2::zeros((canvas_size, canvas_size))).unwrap();
 
             while state.ntiles() == 0 {
                 let i_old_state = chooser.sample(&mut rng);
@@ -190,17 +173,28 @@ impl<'a, C: Canvas + CanvasCreate + CanvasSquarable> FFSLevel<C> {
 
                 match dimer.orientation {
                     Orientation::NS => {
-                        state.set_point(system, (mid, mid), dimer.t1)
-                            .set_point(system, (mid+1, mid), dimer.t2);
-                    },
+                        system.set_point(&mut state, (mid, mid), dimer.t1);
+                        system.set_point(
+                            &mut state,
+                            (mid + 1, mid),
+                            dimer.t2,
+                        );
+                    }
                     Orientation::WE => {
-                        state.set_point(system, (mid, mid), dimer.t1)
-                            .set_point(system, (mid, mid+1), dimer.t2);
+                        system.set_point(&mut state, (mid, mid), dimer.t1);
+                        system.set_point(
+                            &mut state,
+                            (mid, mid + 1),
+                            dimer.t2,
+                        );
                     }
                 };
 
-                state.evolve_in_size_range_events_max(system, 0, next_size, max_events);
+                system.evolve_in_size_range_events_max(&mut state, 0, next_size, max_events, &mut rng);
                 i += 1;
+
+
+
 
                 if state.ntiles() == next_size {
                     state_list.push(state);
@@ -208,17 +202,19 @@ impl<'a, C: Canvas + CanvasCreate + CanvasSquarable> FFSLevel<C> {
                     break;
                 } else {
                     if state.ntiles() != 0 {
-                        panic!("{} {:?}", state.ntiles(), state.canvas);
+                        panic!("{}", state.panicinfo())
                     }
-                    assert!(state.total_rate() == 0.);
+                    if state.total_rate() != 0. {
+                        panic!("{}", state.panicinfo())
+                    };
                 }
             }
-
         }
 
         let p_r = (num_states as f64) / (i as f64);
 
         Self {
+            system: std::marker::PhantomData::<Sy>,
             state_list,
             previous_list,
             p_r,

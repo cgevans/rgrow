@@ -1,6 +1,8 @@
 //! A parser for the original Xgrow tileset files.  Note that this tries to fit Xgrow's behavior closely, so parsing is occasionally weird
 //! (eg, *no* whitespace is needed to separate things)
 
+use crate::system::FissionHandling;
+
 use super::parser;
 use super::parser::GlueIdent;
 use nom::{
@@ -250,7 +252,7 @@ fn xgrow_args(input: &str) -> IResult<&str, parser::Args> {
         args.seed = parser::ParsedSeed::Single(args.size-2, args.size-2, 1);
     }
 
-    args.fission = crate::FissionHandling::NoFission;
+    args.fission = FissionHandling::NoFission;
 
     Ok((i2, args))
 }

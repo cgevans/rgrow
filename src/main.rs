@@ -1,12 +1,11 @@
 extern crate ndarray;
 use ndarray::prelude::*;
 use num_format::{Locale, ToFormattedString};
-use rgrow::{CanvasSquare, FissionHandling, NullStateTracker, QuadTreeState, StateCreate, StateEvolve, StateStatus, StateTracked, StaticKTAM, Tile, TileSubsetTracker, ffs, parser_xgrow};
 use std::{time::Instant};
 
 use clap::Clap;
 
-use rgrow::{parser::TileSet, StateStep};
+use rgrow::{ffs, parser::TileSet, parser_xgrow};
 
 use serde_yaml;
 use std::fs::File;
@@ -24,14 +23,14 @@ struct Opts {
 
 #[derive(Clap)]
 enum SubCommand {
-    Run(EO),
-    RunSubs(EO),
-    Parse(PO),
-    RunAtam(PO),
+    //Run(EO),
+    //RunSubs(EO),
+    //Parse(PO),
+    //RunAtam(PO),
     RunKtamWindow(PO),
     NucRate(PO),
     RunXgrow(PO),
-    FissionTest(EO)
+    //FissionTest(EO)
 }
 
 #[derive(Clap)]
@@ -46,10 +45,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts = Opts::parse();
 
     match opts.subcmd {
-        SubCommand::Run(_) => run_example(),
-        SubCommand::RunSubs(_) => run_example_subs(),
-        SubCommand::Parse(po) => parse_example(po.input),
-        SubCommand::RunAtam(po) => run_atam(po.input),
+        //SubCommand::Run(_) => run_example(),
+        //SubCommand::RunSubs(_) => run_example_subs(),
+        //SubCommand::Parse(po) => parse_example(po.input),
+        //SubCommand::RunAtam(po) => run_atam(po.input),
         SubCommand::RunKtamWindow(po) => {
             #[cfg(feature="ui")] {
                 let file = match File::open(po.input) {
@@ -66,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let parsed = parser_xgrow::parse_xgrow(po.input)?;
             run_ktam_window(parsed)
         }}
-        SubCommand::FissionTest(_) => { fission_test() }
+        //SubCommand::FissionTest(_) => { fission_test() }
     };
 
     Ok(())
@@ -79,201 +78,168 @@ fn nucrate(input: String) {
 
     let system = parsed.into_static_seeded_ktam();
 
-    let ffsrun = ffs::FFSRun::create(&system, 1000, 30, parsed.options.size, 1_000, 50_000, 4, 2);
+    let ffsrun = ffs::FFSRun::create(system, 1000, 30, parsed.options.size, 1_000, 50_000, 3, 2);
 
-    println!("Nuc rate: {:?}", ffsrun.nucleation_rate());
+    println!("Nuc rate: {:e}", ffsrun.nucleation_rate());
     println!("Forwards: {:?}", ffsrun.forward_vec());
 }
 
-fn run_atam(input: String) {
-    let file = File::open(input).unwrap();
-    let parsed: TileSet = serde_yaml::from_reader(file).unwrap();
 
-    let mut system = parsed.into_static_seeded_atam();
-    let mut state = QuadTreeState::<CanvasSquare, _, NullStateTracker>::default(
-        (parsed.options.size, parsed.options.size),
-        &mut system,
-    );
-    
-    //state.evolve_in_size_range(&mut system, 0, parsed.options.smax.unwrap(), 1_000_000);
+// fn run_example() {
+//     let gs = arr1(&[0.0, 2.0, 1.0, 1.0]);
 
-    loop {
-        state.take_step(&mut system).unwrap();
-        println!("{:?}", state.canvas);
-    }
-}
+//     let tc = arr1(&[0.00000e+00, 1., 1., 1., 1., 1., 1., 1.]);
 
-fn parse_example(filename: String) {
-    let file = File::open(filename).unwrap();
+//     let te = arr2(&[
+//         [0, 0, 0, 0],
+//         [0, 1, 1, 0],
+//         [0, 1, 3, 1],
+//         [1, 3, 1, 0],
+//         [2, 2, 2, 2],
+//         [3, 3, 3, 2],
+//         [2, 3, 3, 3],
+//         [3, 2, 2, 3],
+//     ]);
 
-    let parsed: TileSet = serde_yaml::from_reader(file).unwrap();
+//     let gse = 8.1;
 
-    println!("{:?}", parsed);
+//     let mut canvas = Array2::<Tile>::zeros((512, 512));
 
-    let (gm, ng) = parsed.number_glues().unwrap();
+//     let internal = arr2(&[
+//         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+//         [0, 1, 2, 2, 2, 2, 2, 2, 2, 2],
+//         [0, 3, 7, 5, 7, 5, 7, 5, 7, 5],
+//         [0, 3, 6, 7, 4, 5, 6, 7, 4, 5],
+//         [0, 3, 7, 4, 4, 5, 7, 4, 4, 5],
+//         [0, 3, 6, 6, 6, 7, 4, 4, 4, 5],
+//         [0, 3, 7, 5, 7, 4, 4, 4, 4, 5],
+//         [0, 3, 6, 7, 4, 4, 4, 4, 4, 5],
+//         [0, 3, 7, 4, 4, 4, 4, 4, 4, 5],
+//         [0, 3, 6, 6, 6, 6, 6, 6, 6, 7],
+//     ]);
 
-    let te = parsed.tile_edge_process(&gm);
+//     canvas.slice_mut(s![0..10, 0..10]).assign(&internal);
 
-    println!("{:?} {:?} {:?}", gm, ng, te);
+//     let mut sys = StaticKTAM::from_ktam(tc, te, gs, gse, 16., None, None, None, Some(FissionHandling::KeepLargest), None, None, None, None);
 
-    println!("{:?}", parsed.into_static_seeded_atam());
-}
+//     let mut state = QuadTreeState::<CanvasSquare, _, NullStateTracker>::from_canvas(&mut sys, canvas);
 
-fn run_example() {
-    let gs = arr1(&[0.0, 2.0, 1.0, 1.0]);
+//     let now = Instant::now();
 
-    let tc = arr1(&[0.00000e+00, 1., 1., 1., 1., 1., 1., 1.]);
+//     state.evolve_in_size_range_emax_cond(&mut sys, 2, 100000, 50_000_000);
 
-    let te = arr2(&[
-        [0, 0, 0, 0],
-        [0, 1, 1, 0],
-        [0, 1, 3, 1],
-        [1, 3, 1, 0],
-        [2, 2, 2, 2],
-        [3, 3, 3, 2],
-        [2, 3, 3, 3],
-        [3, 2, 2, 3],
-    ]);
+//     let el = now.elapsed().as_secs_f64();
 
-    let gse = 8.1;
+//     let evps = ((state.total_events() as f64 / el).round() as u64).to_formatted_string(&Locale::en);
 
-    let mut canvas = Array2::<Tile>::zeros((512, 512));
+//     let ev = state.total_events().to_formatted_string(&Locale::en);
 
-    let internal = arr2(&[
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 2, 2, 2, 2, 2, 2, 2, 2],
-        [0, 3, 7, 5, 7, 5, 7, 5, 7, 5],
-        [0, 3, 6, 7, 4, 5, 6, 7, 4, 5],
-        [0, 3, 7, 4, 4, 5, 7, 4, 4, 5],
-        [0, 3, 6, 6, 6, 7, 4, 4, 4, 5],
-        [0, 3, 7, 5, 7, 4, 4, 4, 4, 5],
-        [0, 3, 6, 7, 4, 4, 4, 4, 4, 5],
-        [0, 3, 7, 4, 4, 4, 4, 4, 4, 5],
-        [0, 3, 6, 6, 6, 6, 6, 6, 6, 7],
-    ]);
+//     let nt = state.ntiles().to_formatted_string(&Locale::en);
 
-    canvas.slice_mut(s![0..10, 0..10]).assign(&internal);
+//     println!("{} tiles, {} events, {} secs, {} ev/sec", nt, ev, el, evps);
+// }
 
-    let mut sys = StaticKTAM::from_ktam(tc, te, gs, gse, 16., None, None, None, Some(FissionHandling::KeepLargest), None, None, None, None);
+// fn fission_test() {
+//     let gs = arr1(&[0.0, 2.0, 1.0, 1.0]);
 
-    let mut state = QuadTreeState::<CanvasSquare, _, NullStateTracker>::from_canvas(&mut sys, canvas);
+//     let tc = arr1(&[0.00000e+00, 1., 1., 1., 1., 1., 1., 1.]);
 
-    let now = Instant::now();
+//     let te = arr2(&[
+//         [0, 0, 0, 0],
+//         [0, 1, 1, 0],
+//         [0, 1, 3, 1],
+//         [1, 3, 1, 0],
+//         [2, 2, 2, 2],
+//         [3, 3, 3, 2],
+//         [2, 3, 3, 3],
+//         [3, 2, 2, 3],
+//     ]);
 
-    state.evolve_in_size_range_emax_cond(&mut sys, 2, 100000, 50_000_000);
+//     let gse = 8.1;
 
-    let el = now.elapsed().as_secs_f64();
+//     let mut canvas = Array2::<Tile>::zeros((512, 512));
 
-    let evps = ((state.total_events() as f64 / el).round() as u64).to_formatted_string(&Locale::en);
+//     let internal = arr2(&[
+//         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+//         [0, 1, 2, 2, 2, 2, 2, 2, 2, 2],
+//         [0, 3, 0, 0, 0, 0, 0, 0, 7, 5],
+//         [0, 3, 0, 7, 4, 5, 6, 0, 4, 5],
+//         [0, 3, 0, 4, 4, 5, 7, 0, 4, 5],
+//         [0, 3, 6, 6, 6, 7, 4, 0, 4, 5],
+//         [0, 3, 0, 5, 7, 4, 4, 0, 4, 5],
+//         [0, 3, 0, 7, 4, 4, 4, 0, 0, 0],
+//         [0, 3, 7, 4, 4, 4, 4, 4, 4, 5],
+//         [0, 3, 6, 6, 6, 6, 6, 6, 6, 7],
+//     ]);
 
-    let ev = state.total_events().to_formatted_string(&Locale::en);
+//     canvas.slice_mut(s![0..10, 0..10]).assign(&internal);
 
-    let nt = state.ntiles().to_formatted_string(&Locale::en);
+//     let mut sys = StaticKTAM::from_ktam(tc, te, gs, gse, 16., None, None, None, Some(FissionHandling::KeepLargest), None, None, None, None);
 
-    println!("{} tiles, {} events, {} secs, {} ev/sec", nt, ev, el, evps);
-}
+//     let mut state = QuadTreeState::<CanvasSquare, _, NullStateTracker>::from_canvas(&mut sys, canvas);
 
-fn fission_test() {
-    let gs = arr1(&[0.0, 2.0, 1.0, 1.0]);
+//     let x = sys.determine_fission(&state.canvas, &[(4, 1), (5, 2), (6, 1)], &[(5,1)]);
 
-    let tc = arr1(&[0.00000e+00, 1., 1., 1., 1., 1., 1., 1.]);
+//     println!("{:?}", x);
+// }
 
-    let te = arr2(&[
-        [0, 0, 0, 0],
-        [0, 1, 1, 0],
-        [0, 1, 3, 1],
-        [1, 3, 1, 0],
-        [2, 2, 2, 2],
-        [3, 3, 3, 2],
-        [2, 3, 3, 3],
-        [3, 2, 2, 3],
-    ]);
+// fn run_example_subs() {
+//     let gs = arr1(&[0.0, 2.0, 1.0, 1.0]);
 
-    let gse = 8.1;
+//     let tc = arr1(&[0.00000e+00, 1., 1., 1., 1., 1., 1., 1.]);
 
-    let mut canvas = Array2::<Tile>::zeros((512, 512));
+//     let te = arr2(&[
+//         [0, 0, 0, 0],
+//         [0, 1, 1, 0],
+//         [0, 1, 3, 1],
+//         [1, 3, 1, 0],
+//         [2, 2, 2, 2],
+//         [3, 3, 3, 2],
+//         [2, 3, 3, 3],
+//         [3, 2, 2, 3],
+//     ]);
 
-    let internal = arr2(&[
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 2, 2, 2, 2, 2, 2, 2, 2],
-        [0, 3, 0, 0, 0, 0, 0, 0, 7, 5],
-        [0, 3, 0, 7, 4, 5, 6, 0, 4, 5],
-        [0, 3, 0, 4, 4, 5, 7, 0, 4, 5],
-        [0, 3, 6, 6, 6, 7, 4, 0, 4, 5],
-        [0, 3, 0, 5, 7, 4, 4, 0, 4, 5],
-        [0, 3, 0, 7, 4, 4, 4, 0, 0, 0],
-        [0, 3, 7, 4, 4, 4, 4, 4, 4, 5],
-        [0, 3, 6, 6, 6, 6, 6, 6, 6, 7],
-    ]);
+//     let gse = 8.1;
 
-    canvas.slice_mut(s![0..10, 0..10]).assign(&internal);
+//     let mut canvas = Array2::<Tile>::zeros((512, 512));
 
-    let mut sys = StaticKTAM::from_ktam(tc, te, gs, gse, 16., None, None, None, Some(FissionHandling::KeepLargest), None, None, None, None);
+//     let internal = arr2(&[
+//         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+//         [0, 1, 2, 2, 2, 2, 2, 2, 2, 2],
+//         [0, 3, 7, 5, 7, 5, 7, 5, 7, 5],
+//         [0, 3, 6, 7, 4, 5, 6, 7, 4, 5],
+//         [0, 3, 7, 4, 4, 5, 7, 4, 4, 5],
+//         [0, 3, 6, 6, 6, 7, 4, 4, 4, 5],
+//         [0, 3, 7, 5, 7, 4, 4, 4, 4, 5],
+//         [0, 3, 6, 7, 4, 4, 4, 4, 4, 5],
+//         [0, 3, 7, 4, 4, 4, 4, 4, 4, 5],
+//         [0, 3, 6, 6, 6, 6, 6, 6, 6, 7],
+//     ]);
 
-    let mut state = QuadTreeState::<CanvasSquare, _, NullStateTracker>::from_canvas(&mut sys, canvas);
+//     canvas.slice_mut(s![0..10, 0..10]).assign(&internal);
 
-    let x = sys.determine_fission(&state.canvas, &[(4, 1), (5, 2), (6, 1)], &[(5,1)]);
+//     let mut sys = StaticKTAM::from_ktam(tc, te, gs, gse, 16.0, None, None, None, Some(FissionHandling::KeepLargest), None, None, None, None);
 
-    println!("{:?}", x);
-}
+//     let mut state = QuadTreeState::<CanvasSquare, _, TileSubsetTracker>::from_canvas(&mut sys, canvas);
 
-fn run_example_subs() {
-    let gs = arr1(&[0.0, 2.0, 1.0, 1.0]);
+//     let tracker = TileSubsetTracker::new(vec![2, 3]);
 
-    let tc = arr1(&[0.00000e+00, 1., 1., 1., 1., 1., 1., 1.]);
+//     state.set_tracker(tracker);
 
-    let te = arr2(&[
-        [0, 0, 0, 0],
-        [0, 1, 1, 0],
-        [0, 1, 3, 1],
-        [1, 3, 1, 0],
-        [2, 2, 2, 2],
-        [3, 3, 3, 2],
-        [2, 3, 3, 3],
-        [3, 2, 2, 3],
-    ]);
+//     let now = Instant::now();
 
-    let gse = 8.1;
+//     let condition = |s: &QuadTreeState<CanvasSquare, _, TileSubsetTracker>, _events| s.tracker.num_in_subset > 200;
+//     state.evolve_until_condition(&mut sys, &condition);
 
-    let mut canvas = Array2::<Tile>::zeros((512, 512));
+//     let el = now.elapsed().as_secs_f64();
 
-    let internal = arr2(&[
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 2, 2, 2, 2, 2, 2, 2, 2],
-        [0, 3, 7, 5, 7, 5, 7, 5, 7, 5],
-        [0, 3, 6, 7, 4, 5, 6, 7, 4, 5],
-        [0, 3, 7, 4, 4, 5, 7, 4, 4, 5],
-        [0, 3, 6, 6, 6, 7, 4, 4, 4, 5],
-        [0, 3, 7, 5, 7, 4, 4, 4, 4, 5],
-        [0, 3, 6, 7, 4, 4, 4, 4, 4, 5],
-        [0, 3, 7, 4, 4, 4, 4, 4, 4, 5],
-        [0, 3, 6, 6, 6, 6, 6, 6, 6, 7],
-    ]);
+//     let evps = ((state.total_events() as f64 / el).round() as u64).to_formatted_string(&Locale::en);
 
-    canvas.slice_mut(s![0..10, 0..10]).assign(&internal);
+//     let ev = state.total_events().to_formatted_string(&Locale::en);
 
-    let mut sys = StaticKTAM::from_ktam(tc, te, gs, gse, 16.0, None, None, None, Some(FissionHandling::KeepLargest), None, None, None, None);
+//     let nt = state.ntiles().to_formatted_string(&Locale::en);
 
-    let mut state = QuadTreeState::<CanvasSquare, _, TileSubsetTracker>::from_canvas(&mut sys, canvas);
-
-    let tracker = TileSubsetTracker::new(vec![2, 3]);
-
-    state.set_tracker(tracker);
-
-    let now = Instant::now();
-
-    let condition = |s: &QuadTreeState<CanvasSquare, _, TileSubsetTracker>, _events| s.tracker.num_in_subset > 200;
-    state.evolve_until_condition(&mut sys, &condition);
-
-    let el = now.elapsed().as_secs_f64();
-
-    let evps = ((state.total_events() as f64 / el).round() as u64).to_formatted_string(&Locale::en);
-
-    let ev = state.total_events().to_formatted_string(&Locale::en);
-
-    let nt = state.ntiles().to_formatted_string(&Locale::en);
-
-    println!("{} tiles, {} events, {} secs, {} ev/sec", nt, ev, el, evps);
-}
+//     println!("{} tiles, {} events, {} secs, {} ev/sec", nt, ev, el, evps);
+// }
 
 

@@ -1,6 +1,8 @@
 
 use std::{thread, sync::Arc, sync::Mutex, convert::TryInto};
 
+use ndarray::Array2;
+use rand::SeedableRng;
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 
@@ -9,32 +11,27 @@ use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
 
-use crate::{Canvas, CanvasSquarable, CanvasSquare, NullStateTracker, QuadTreeState, StateStatus, StateStep, System, TileBondInfo, state::StateCreate};
+use crate::{canvas::Canvas, canvas::CanvasSquarable, state::NullStateTracker, state::QuadTreeState, state::State, system::System, system::TileBondInfo};
 
+use crate::state::{StateCreate};
 
-trait Draw<C,S>
-where
-    S: System<C> + TileBondInfo,
-    C: Canvas
+trait Draw<S: State>
 {
-    fn draw(&self, frame: &mut [u8], scaled: usize, system: &S);
+    fn draw(&self, state: &S, frame: &mut [u8], scaled: usize);
 }
 
-impl<C,S> Draw<C,S> for QuadTreeState<C, S, NullStateTracker>
-where
-    S: System<C> + TileBondInfo,
-    C: Canvas + CanvasSquarable
+impl<S: State, Sy: System<S> + TileBondInfo> Draw<S> for Sy
 {
-    fn draw(&self, frame: &mut [u8], scaled: usize, system: &S) {
+    fn draw(&self, state: &S, frame: &mut [u8], scaled: usize) {
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let x = i % (self.canvas.square_size()*scaled);
-            let y = i / (self.canvas.square_size()*scaled);
+            let x = i % (state.nrows()*scaled);
+            let y = i / (state.ncols()*scaled);
 
-            let tv = unsafe { self.canvas.uv_p((y/scaled, x/scaled)) };
+            let tv = unsafe { state.uv_p((y/scaled, x/scaled)) };
 
             pixel.copy_from_slice(
                 &(if tv > 0 {
-                    system.tile_color(tv)
+                    self.tile_color(tv)
                 } else {
                     [0, 0, 0, 0x00]
                 }),
@@ -45,17 +42,27 @@ where
 
 pub fn run_ktam_window(parsed: crate::parser::TileSet) {
     let mut system = parsed.into_static_seeded_ktam_p();
-    let mut state = QuadTreeState::<_, _, NullStateTracker>::default(
-        (parsed.options.size, parsed.options.size),
-        &mut system,
-    );
+    let mut state = QuadTreeState::<_, NullStateTracker>::create_raw(
+        Array2::zeros((parsed.options.size, parsed.options.size)),
+    ).unwrap();
+
+    for (p, t) in system.seed_locs() {
+        // FIXME: for large seeds,
+        // this could be faster by doing raw writes, then update_entire_state
+        // but we would need to distinguish sizing.
+        // Or maybe there is fancier way with a set?
+        system.set_point(&mut state, p.0, t);
+    }
+
 
     let scaled = parsed.options.block;
+
+    let mut rng = rand::rngs::SmallRng::from_entropy();
 
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
     let window = {
-        let size = LogicalSize::new((state.canvas.square_size()*scaled) as f64, (state.canvas.square_size()*scaled) as f64);
+        let size = LogicalSize::new((state.ncols()*scaled) as f64, (state.nrows()*scaled) as f64);
         WindowBuilder::new()
             .with_title("rgrow!")
             .with_inner_size(size)
@@ -69,8 +76,8 @@ pub fn run_ktam_window(parsed: crate::parser::TileSet) {
         let surface_texture = SurfaceTexture::new(window_size.width, 
             window_size.height, &window);
         Pixels::new(
-            (state.canvas.square_size()*scaled).try_into().unwrap(),
-            (state.canvas.square_size()*scaled).try_into().unwrap(),
+            (state.ncols()*scaled).try_into().unwrap(),
+            (state.nrows()*scaled).try_into().unwrap(),
             surface_texture,
         )
         .unwrap()
@@ -96,7 +103,7 @@ pub fn run_ktam_window(parsed: crate::parser::TileSet) {
         }
 
         for _ in 0..parsed.options.update_rate {
-                state.take_step(&mut system).unwrap();
+                system.state_step(&mut state, &mut rng, 1e20);
             
         }
         // match parsed.options.smax {
@@ -104,7 +111,7 @@ pub fn run_ktam_window(parsed: crate::parser::TileSet) {
         //     None => {}
         // };
 
-            state.draw(pixels.get_frame(), scaled, &system);
+            system.draw(&state, pixels.get_frame(), scaled);
         window.request_redraw();
     });
 

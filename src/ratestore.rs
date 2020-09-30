@@ -1,7 +1,7 @@
 use ndarray::Array2;
 use rand::{Rng, prelude::SmallRng};
 
-use crate::{Point, Rate};
+use crate::base::{Point, Rate};
 
 // Storage for event rates,
 pub trait RateStore {
@@ -17,7 +17,7 @@ pub trait CreateSizedRateStore {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct QuadTreeArray<R>(pub Vec<Array2<R>>, R);
+pub struct QuadTreeArray<R>(pub Vec<Array2<R>>, pub R);
 
 impl<R> QuadTreeArray<R> {
     pub fn rebuild(&mut self) {

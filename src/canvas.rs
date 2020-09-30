@@ -5,8 +5,17 @@ pub trait CanvasCreate: Sized + Canvas {
     fn from_array(canvas: Array2<Tile>) -> GrowResult<Self>;
 }
 
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
+pub struct PointSafeAdjs(pub Point);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
+pub struct PointSafeHere(pub Point);
+
+
 pub trait Canvas: std::fmt::Debug {
-    unsafe fn uv_p(&self, p: Point) -> Tile;
+    unsafe fn uv_p(&self, p: Point) -> Tile { *self.uv_pr(p) }
+    unsafe fn uv_pr(&self, p: Point) -> &Tile;
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile;
     fn u_move_point_n(&self, p: Point) -> Point;
     fn u_move_point_e(&self, p: Point) -> Point;
@@ -15,6 +24,27 @@ pub trait Canvas: std::fmt::Debug {
     fn inbounds(&self, p: Point) -> bool;
     fn calc_ntiles(&self) -> NumTiles;
     fn raw_array(&self) -> ArrayView2<Tile>;
+    fn nrows(&self) -> usize;
+    fn ncols(&self) -> usize;
+
+    fn move_sa_n(&self, p: PointSafeAdjs) -> PointSafeHere { PointSafeHere(self.u_move_point_n(p.0)) }
+    fn move_sa_e(&self, p: PointSafeAdjs) -> PointSafeHere { PointSafeHere(self.u_move_point_e(p.0)) }
+    fn move_sa_s(&self, p: PointSafeAdjs) -> PointSafeHere { PointSafeHere(self.u_move_point_s(p.0)) }
+    fn move_sa_w(&self, p: PointSafeAdjs) -> PointSafeHere { PointSafeHere(self.u_move_point_w(p.0)) }
+
+    fn move_sa_nw(&self, p: PointSafeAdjs) -> PointSafeHere { PointSafeHere(self.u_move_point_nw(p.0)) }
+    fn move_sa_ne(&self, p: PointSafeAdjs) -> PointSafeHere { PointSafeHere(self.u_move_point_ne(p.0)) }
+    fn move_sa_se(&self, p: PointSafeAdjs) -> PointSafeHere { PointSafeHere(self.u_move_point_se(p.0)) }
+    fn move_sa_sw(&self, p: PointSafeAdjs) -> PointSafeHere { PointSafeHere(self.u_move_point_sw(p.0)) }
+
+    fn move_sh_n(&self, p: PointSafeHere) -> Point {self.u_move_point_n(p.0)}
+    fn move_sh_e(&self, p: PointSafeHere) -> Point {self.u_move_point_e(p.0)}
+    fn move_sh_s(&self, p: PointSafeHere) -> Point {self.u_move_point_s(p.0)}
+    fn move_sh_w(&self, p: PointSafeHere) -> Point {self.u_move_point_w(p.0)}
+
+    fn set_sa(&mut self, p: &PointSafeAdjs, t: &Tile) {
+        unsafe { *self.uvm_p(p.0) = *t };
+    }
 
     #[inline(always)]
     fn u_move_point_ne(&self, p: Point) -> Point {
@@ -34,6 +64,47 @@ pub trait Canvas: std::fmt::Debug {
     #[inline(always)]
     fn u_move_point_nw(&self, p: Point) -> Point {
         self.u_move_point_n(self.u_move_point_w(p))
+    }
+
+    fn v_sa(&self, p: PointSafeAdjs) -> Tile {
+        unsafe { self.uv_p(p.0) }
+    }
+
+    fn v_sh(&self, p: PointSafeHere) -> Tile {
+        unsafe { self.uv_p(p.0) }
+    }
+
+
+    fn v_sa_n(&self, p: PointSafeAdjs) -> Tile {
+        self.v_sh(self.move_sa_n(p))
+    }
+
+    fn v_sa_e(&self, p: PointSafeAdjs) -> Tile {
+        self.v_sh(self.move_sa_e(p))
+    }
+
+    fn v_sa_s(&self, p: PointSafeAdjs) -> Tile {
+        self.v_sh(self.move_sa_s(p))
+    }
+
+    fn v_sa_w(&self, p: PointSafeAdjs) -> Tile {
+        self.v_sh(self.move_sa_w(p))
+    }
+
+    fn v_sa_nw(&self, p: PointSafeAdjs) -> Tile {
+        self.v_sh(self.move_sa_nw(p))
+    }
+
+    fn v_sa_ne(&self, p: PointSafeAdjs) -> Tile {
+        self.v_sh(self.move_sa_ne(p))
+    }
+
+    fn v_sa_se(&self, p: PointSafeAdjs) -> Tile {
+        self.v_sh(self.move_sa_se(p))
+    }
+
+    fn v_sa_sw(&self, p: PointSafeAdjs) -> Tile {
+        self.v_sh(self.move_sa_sw(p))
     }
 
     #[inline(always)]
@@ -123,8 +194,8 @@ impl CanvasCreate for CanvasSquare {
 
 impl Canvas for CanvasSquare {
     #[inline(always)]
-    unsafe fn uv_p(&self, p: Point) -> Tile {
-        *self.canvas.uget(p)
+    unsafe fn uv_pr(&self, p: Point) -> &Tile {
+        self.canvas.uget(p)
     }
 
     #[inline(always)]
@@ -189,6 +260,14 @@ impl Canvas for CanvasSquare {
     fn raw_array(&self) -> ArrayView2<Tile> {
         self.canvas.view()
     }
+
+    fn nrows(&self) -> usize {
+        self.canvas.nrows()
+    }
+
+    fn ncols(&self) -> usize {
+        self.canvas.ncols()
+    }
 }
 
 #[derive(Debug)]
@@ -210,8 +289,8 @@ impl CanvasSquarable for CanvasPeriodic {
 }
 
 impl Canvas for CanvasPeriodic {
-    unsafe fn uv_p(&self, p: Point) -> Tile {
-        *self.values.uget(p)
+    unsafe fn uv_pr(&self, p: Point) -> &Tile {
+        &self.values.uget(p)
     }
 
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {
@@ -219,7 +298,7 @@ impl Canvas for CanvasPeriodic {
     }
 
     fn u_move_point_n(&self, p: Point) -> Point {
-        (((p.0-1)%self.values.nrows()), p.1)
+        if p.0 == 0 { (self.values.nrows()-1, p.1) } else { (p.0-1, p.1)}
     }
 
     fn u_move_point_e(&self, p: Point) -> Point {
@@ -231,7 +310,7 @@ impl Canvas for CanvasPeriodic {
     }
 
     fn u_move_point_w(&self, p: Point) -> Point {
-        (p.0, (p.1-1)%self.values.ncols())
+        if p.1 == 0 { (p.0, self.values.ncols()-1) } else { (p.0, p.1-1) }
     }
 
     fn inbounds(&self, p: Point) -> bool {
@@ -247,6 +326,14 @@ impl Canvas for CanvasPeriodic {
     fn raw_array(&self) -> ArrayView2<Tile> {
         self.values.view()
     }
+
+    fn nrows(&self) -> usize {
+        self.values.nrows()
+    }
+
+    fn ncols(&self) -> usize {
+        self.values.ncols()
+    }
 }
 
 
@@ -256,8 +343,8 @@ pub struct CanvasTube {
 }
 
 impl Canvas for CanvasTube {
-    unsafe fn uv_p(&self, p: Point) -> Tile {
-        *self.values.uget((p.1 - p.0, p.0))
+    unsafe fn uv_pr(&self, p: Point) -> &Tile {
+        self.values.uget((p.1 - p.0, p.0))
     }
 
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {
@@ -293,5 +380,13 @@ impl Canvas for CanvasTube {
 
     fn raw_array(&self) -> ArrayView2<Tile> {
         self.values.view()
+    }
+
+    fn nrows(&self) -> usize {
+        self.values.nrows()
+    }
+
+    fn ncols(&self) -> usize {
+        self.values.ncols()
     }
 }
