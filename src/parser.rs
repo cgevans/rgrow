@@ -8,8 +8,8 @@ use ndarray::prelude::*;
 use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use state::{NullStateTracker, QuadTreeState, State};
-use system::{ChunkHandling, ChunkSize, System};
+use state::{NullStateTracker, QuadTreeState};
+use system::{ChunkHandling, ChunkSize};
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 
@@ -155,52 +155,52 @@ impl TileSet {
         serde_yaml::from_str(data).unwrap_or(Err(()))
     }
 
-    pub fn into_system(&self) -> Box<dyn System<dyn State>> {
-        let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
+    // pub fn into_system(&self) -> Box<dyn System<dyn State>> {
+    //     let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
 
-        let tile_edges = self.tile_edge_process(&gluemap);
-        let mut tile_concs = self.tile_stoics();
-        tile_concs *= f64::exp(-self.options.gmc + self.options.alpha);
+    //     let tile_edges = self.tile_edge_process(&gluemap);
+    //     let mut tile_concs = self.tile_stoics();
+    //     tile_concs *= f64::exp(-self.options.gmc + self.options.alpha);
 
-        let mut glue_strength_vec = Vec::<f64>::new();
+    //     let mut glue_strength_vec = Vec::<f64>::new();
 
-        let mut i: base::Glue = 0;
-        for (j, v) in gluestrengthmap {
-            assert!(j == i);
-            glue_strength_vec.push(v);
-            i += 1;
-        }
+    //     let mut i: base::Glue = 0;
+    //     for (j, v) in gluestrengthmap {
+    //         assert!(j == i);
+    //         glue_strength_vec.push(v);
+    //         i += 1;
+    //     }
 
-        let seed = match &self.options.seed {
-            ParsedSeed::Single(y, x, v) => Seed::SingleTile {
-                point: (*y, *x),
-                tile: *v,
-            },
-            ParsedSeed::None() => Seed::None(),
-            ParsedSeed::Multi(vec) => {
-                let mut hm = HashMap::default();
-                hm.extend(vec.iter().map(|(y, x, v)| ((*y, *x), *v)));
-                Seed::MultiTile(hm)
-            }
-        };
+    //     let seed = match &self.options.seed {
+    //         ParsedSeed::Single(y, x, v) => Seed::SingleTile {
+    //             point: (*y, *x),
+    //             tile: *v,
+    //         },
+    //         ParsedSeed::None() => Seed::None(),
+    //         ParsedSeed::Multi(vec) => {
+    //             let mut hm = HashMap::default();
+    //             hm.extend(vec.iter().map(|(y, x, v)| ((*y, *x), *v)));
+    //             Seed::MultiTile(hm)
+    //         }
+    //     };
 
-        Box::new(StaticKTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::from_ktam(
-            self.tile_stoics(),
-            tile_edges,
-            Array1::from(glue_strength_vec),
-            self.options.gse,
-            self.options.gmc,
-            Some(self.options.alpha),
-            self.options.kf,
-            Some(seed),
-            Some(self.options.fission),
-            self.options.chunk_handling,
-            self.options.chunk_size,
-            Some(self.tile_names()),
-            Some(self.tile_colors()),
-        ))
+    //     Box::new(StaticKTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::from_ktam(
+    //         self.tile_stoics(),
+    //         tile_edges,
+    //         Array1::from(glue_strength_vec),
+    //         self.options.gse,
+    //         self.options.gmc,
+    //         Some(self.options.alpha),
+    //         self.options.kf,
+    //         Some(seed),
+    //         Some(self.options.fission),
+    //         self.options.chunk_handling,
+    //         self.options.chunk_size,
+    //         Some(self.tile_names()),
+    //         Some(self.tile_colors()),
+    //     ))
 
-    }
+    // }
 
 
     pub fn into_static_seeded_ktam(&self) -> StaticKTAM<QuadTreeState<CanvasSquare, NullStateTracker>> {

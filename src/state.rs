@@ -271,7 +271,7 @@ impl StateTracker for NullStateTracker {
         Self
     }
 
-    fn record_single_event(&mut self, event: system::Event) -> &mut Self {
+    fn record_single_event(&mut self, _event: system::Event) -> &mut Self {
         self
     }
 }

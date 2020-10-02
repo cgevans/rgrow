@@ -2,17 +2,20 @@ use super::*;
 //use ndarray::prelude::*;
 //use ndarray::Zip;
 use base::{CanvasLength, NumEvents, NumTiles, Rate};
-use canvas::CanvasCreate;
+
 use ndarray::Array2;
-use rand::{SeedableRng, prelude::SmallRng, thread_rng};
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
+use rand::{prelude::SmallRng, SeedableRng};
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
-use state::{DangerousStateClone, RateStoreP, State, StateCreate};
-#[cfg(feature = "rayon")]
-use std::{marker::PhantomData, sync::atomic::{AtomicUsize, Ordering}};
+use state::{DangerousStateClone, State, StateCreate};
 #[cfg(feature = "rayon")]
 use std::sync::Arc;
+#[cfg(feature = "rayon")]
+use std::{
+    marker::PhantomData,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
 
@@ -33,21 +36,19 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
         start_size: NumTiles,
         size_step: NumTiles,
     ) -> Self {
-
-        let mut level_list = Vec::new();
+        let level_list = Vec::new();
 
         let dimerization_rate = system
-        .calc_dimers()
-        .iter()
-        .fold(0., |acc, d| acc + d.formation_rate);
-        
+            .calc_dimers()
+            .iter()
+            .fold(0., |acc, d| acc + d.formation_rate);
+
         let mut ret = Self {
             level_list,
             dimerization_rate,
             system: system,
         };
-        
-            
+
         ret.level_list.push(FFSLevel::nmers_from_dimers(
             &mut ret.system,
             num_states,
@@ -57,12 +58,59 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
         ));
 
         while ret.level_list.last().unwrap().target_size < target_size {
-            ret.level_list.push(
-                ret.level_list
-                    .last()
-                    .unwrap()
-                    .next_level(&mut ret.system, size_step, max_subseq_events),
+            ret.level_list
+                .push(ret.level_list.last().unwrap().next_level(
+                    &mut ret.system,
+                    size_step,
+                    max_subseq_events,
+                ));
+            println!(
+                "Done with target size {}.",
+                ret.level_list.last().unwrap().target_size
             );
+        }
+
+        ret
+    }
+
+    pub fn create_without_history(
+        system: Sy,
+        num_states: usize,
+        target_size: NumTiles,
+        canvas_size: CanvasLength,
+        max_init_events: NumEvents,
+        max_subseq_events: NumEvents,
+        start_size: NumTiles,
+        size_step: NumTiles,
+    ) -> Self {
+        let level_list = Vec::new();
+
+        let dimerization_rate = system
+            .calc_dimers()
+            .iter()
+            .fold(0., |acc, d| acc + d.formation_rate);
+
+        let mut ret = Self {
+            level_list,
+            dimerization_rate,
+            system: system,
+        };
+
+        ret.level_list.push(FFSLevel::nmers_from_dimers(
+            &mut ret.system,
+            num_states,
+            canvas_size,
+            max_init_events,
+            start_size,
+        ));
+
+        while ret.level_list.last().unwrap().target_size < target_size {
+            let next = ret.level_list.pop().unwrap().next_level(
+                &mut ret.system,
+                size_step,
+                max_subseq_events,
+            );
+            ret.level_list.push(next);
             println!(
                 "Done with target size {}.",
                 ret.level_list.last().unwrap().target_size
@@ -87,7 +135,6 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
     pub fn dimer_conc(&self) -> f64 {
         self.level_list[0].p_r
     }
-
 }
 
 pub struct FFSLevel<St: State, Sy: System<St>> {
@@ -121,8 +168,13 @@ impl<'a, St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSLevel
                 i_old_state = chooser.sample(&mut rng);
 
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
-                system
-                    .evolve_in_size_range_events_max(&mut state, 0, target_size, max_events, &mut rng);
+                system.evolve_in_size_range_events_max(
+                    &mut state,
+                    0,
+                    target_size,
+                    max_events,
+                    &mut rng,
+                );
                 i += 1;
             }
 
@@ -130,7 +182,13 @@ impl<'a, St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSLevel
                 state_list.push(state);
                 previous_list.push(i_old_state);
             } else {
-                println!("Ran out of events: {}t {}c. {} {:?}", state.ntiles(), state.calc_ntiles(), target_size, state);
+                println!(
+                    "Ran out of events: {}t {}c. {} {:?}",
+                    state.ntiles(),
+                    state.calc_ntiles(),
+                    target_size,
+                    state
+                );
             }
         }
         let p_r = (state_list.len() as f64) / (i as f64);
@@ -174,27 +232,18 @@ impl<'a, St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSLevel
                 match dimer.orientation {
                     Orientation::NS => {
                         system.set_point(&mut state, (mid, mid), dimer.t1);
-                        system.set_point(
-                            &mut state,
-                            (mid + 1, mid),
-                            dimer.t2,
-                        );
+                        system.set_point(&mut state, (mid + 1, mid), dimer.t2);
                     }
                     Orientation::WE => {
                         system.set_point(&mut state, (mid, mid), dimer.t1);
-                        system.set_point(
-                            &mut state,
-                            (mid, mid + 1),
-                            dimer.t2,
-                        );
+                        system.set_point(&mut state, (mid, mid + 1), dimer.t2);
                     }
                 };
 
-                system.evolve_in_size_range_events_max(&mut state, 0, next_size, max_events, &mut rng);
+                system.evolve_in_size_range_events_max(
+                    &mut state, 0, next_size, max_events, &mut rng,
+                );
                 i += 1;
-
-
-
 
                 if state.ntiles() == next_size {
                     state_list.push(state);

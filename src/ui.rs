@@ -1,5 +1,5 @@
 
-use std::{thread, sync::Arc, sync::Mutex, convert::TryInto};
+use std::{convert::TryInto};
 
 use ndarray::Array2;
 use rand::SeedableRng;
@@ -11,7 +11,7 @@ use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
 
-use crate::{canvas::Canvas, canvas::CanvasSquarable, state::NullStateTracker, state::QuadTreeState, state::State, system::System, system::TileBondInfo};
+use crate::{canvas::Canvas, state::NullStateTracker, state::QuadTreeState, state::State, system::System, system::TileBondInfo};
 
 use crate::state::{StateCreate};
 

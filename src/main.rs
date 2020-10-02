@@ -1,7 +1,4 @@
 extern crate ndarray;
-use ndarray::prelude::*;
-use num_format::{Locale, ToFormattedString};
-use std::{time::Instant};
 
 use clap::Clap;
 

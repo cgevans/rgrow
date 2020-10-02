@@ -2,7 +2,6 @@ use cached::{stores::SizedCache, Cached};
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
 use ndarray::prelude::*;
-use ndarray::{FoldWhile, Zip};
 use rand::{
     prelude::{Distribution, SmallRng},
     Rng,
@@ -12,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::{base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::State};
 
 use super::base::{Energy, Glue, Point, Rate, Tile};
-use crate::canvas::{Canvas, PointSafeAdjs};
+use crate::canvas::{PointSafeAdjs};
 
 use super::fission;
 
@@ -117,12 +116,11 @@ pub trait System<S: State>: Debug {
         while (events < maxevents) & (state.ntiles() < maxsize) & (state.ntiles() > minsize) {
             match self.state_step(state, rng, 1e100) {
                 StepOutcome::HadEventAt(_) => { events += 1; }
-                StepOutcome::NoEventIn(_) => { println!("Timeout {:?}", state);}
+                StepOutcome::NoEventIn(_) => { println!("Timeout {:?}", state); }
                 StepOutcome::DeadEventAt(_) => { println!("Dead"); }
                 StepOutcome::ZeroRate => {panic!()}
             }
         }
-        self
     }
 
     fn set_point(&mut self, state: &mut S, point: Point, tile: Tile) {
