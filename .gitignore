@@ -4,3 +4,13 @@ perf.data*
 settings.json
 /*.ipynb
 .ipynb_checkpoints/*
+src/test.rs
+heaptrack.rgrow-bin.360194.zst
+rgb.txt
+sham-nesw.yaml
+sham-wnes.yaml
+sham-wsen.yaml
+sham.yaml
+sierpinski.stxg
+test
+test.xgrowtest

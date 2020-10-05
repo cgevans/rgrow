@@ -23,6 +23,7 @@ pub struct FFSRun<St: State, Sy: System<St>> {
     pub system: Sy,
     pub level_list: Vec<FFSLevel<St, Sy>>,
     pub dimerization_rate: f64,
+    pub forward_prob: Vec<f64>,
 }
 
 impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, Sy> {
@@ -43,10 +44,13 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
             .iter()
             .fold(0., |acc, d| acc + d.formation_rate);
 
+        let forward_prob = Vec::with_capacity((target_size/size_step) as usize);
+
         let mut ret = Self {
             level_list,
             dimerization_rate,
             system: system,
+            forward_prob: forward_prob,
         };
 
         ret.level_list.push(FFSLevel::nmers_from_dimers(
@@ -56,6 +60,7 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
             max_init_events,
             start_size,
         ));
+
 
         while ret.level_list.last().unwrap().target_size < target_size {
             ret.level_list
@@ -69,6 +74,8 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
                 ret.level_list.last().unwrap().target_size
             );
         }
+
+        ret.forward_prob.extend(ret.level_list.iter().map(|x| x.p_r)) ;
 
         ret
     }
@@ -94,15 +101,18 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
             level_list,
             dimerization_rate,
             system: system,
+            forward_prob: Vec::new(),
         };
 
-        ret.level_list.push(FFSLevel::nmers_from_dimers(
+        let first_level = FFSLevel::nmers_from_dimers(
             &mut ret.system,
             num_states,
             canvas_size,
             max_init_events,
             start_size,
-        ));
+        );
+        ret.forward_prob.push(first_level.p_r);
+        ret.level_list.push(first_level);
 
         while ret.level_list.last().unwrap().target_size < target_size {
             let next = ret.level_list.pop().unwrap().next_level(
@@ -110,6 +120,7 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
                 size_step,
                 max_subseq_events,
             );
+            ret.forward_prob.push(next.p_r);
             ret.level_list.push(next);
             println!(
                 "Done with target size {}.",
@@ -123,13 +134,13 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
     pub fn nucleation_rate(&self) -> Rate {
         self.dimerization_rate
             * self
-                .level_list
+                .forward_prob
                 .iter()
-                .fold(1., |acc, level| acc * level.p_r)
+                .fold(1., |acc, level| acc * *level)
     }
 
-    pub fn forward_vec(&self) -> Vec<f64> {
-        self.level_list.iter().map(|level| level.p_r).collect()
+    pub fn forward_vec(&self) -> &Vec<f64> {
+        &self.forward_prob
     }
 
     pub fn dimer_conc(&self) -> f64 {
@@ -183,11 +194,11 @@ impl<'a, St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSLevel
                 previous_list.push(i_old_state);
             } else {
                 println!(
-                    "Ran out of events: {}t {}c. {} {:?}",
+                    "Ran out of events: {} tiles, {} events, {} time, {} total rate.",
                     state.ntiles(),
-                    state.calc_ntiles(),
-                    target_size,
-                    state
+                    state.total_events(),
+                    state.time(),
+                    state.total_rate(),
                 );
             }
         }

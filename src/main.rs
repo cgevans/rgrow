@@ -24,7 +24,7 @@ enum SubCommand {
     //RunSubs(EO),
     //Parse(PO),
     //RunAtam(PO),
-    RunKtamWindow(PO),
+    Run(PO),
     NucRate(PO),
     RunXgrow(PO),
     //FissionTest(EO)
@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //SubCommand::RunSubs(_) => run_example_subs(),
         //SubCommand::Parse(po) => parse_example(po.input),
         //SubCommand::RunAtam(po) => run_atam(po.input),
-        SubCommand::RunKtamWindow(po) => {
+        SubCommand::Run(po) => {
             #[cfg(feature="ui")] {
                 let file = match File::open(po.input) {
                     Ok(f) => {f}

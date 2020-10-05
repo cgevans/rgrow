@@ -100,6 +100,7 @@ pub trait System<S: State>: Debug {
 
         self.perform_event(&mut state, &event);
         self.update_after_event(&mut state, &event);
+        state.add_time(time_step);
         StepOutcome::HadEventAt(time_step)
     }
 
@@ -174,6 +175,13 @@ pub trait System<S: State>: Debug {
     /// Returns information on dimers that the system can form, similarly useful for starting out a state.
     fn calc_dimers(&self) -> Vec<DimerInfo>;
 
+    fn calc_mismatch_locations(&self, state: &S) -> Array2<usize>;
+
+    fn calc_mismatches(&self, state: &S) -> NumTiles {
+        let arr = self.calc_mismatch_locations(state);
+        arr.sum() as u32 / 2
+    }
+
     fn update_points(&self, state: &mut S, points: &[PointSafeHere]) {
         let rates = points.iter().map(|p| self.event_rate_at_point(state, *p)).collect::<Vec<_>>();
 
@@ -239,6 +247,15 @@ fn create_friend_data(
 }
 
 #[derive(Debug)]
+struct ClonableCache(RwLock<Cache>);
+
+impl Clone for ClonableCache {
+    fn clone(&self) -> Self {
+         Self(RwLock::new(self.0.read().unwrap().clone()))
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct StaticKTAM<C: State> {
     pub tile_adj_concs: Array1<Rate>,
     pub energy_ns: Array2<Energy>,
@@ -247,7 +264,7 @@ pub struct StaticKTAM<C: State> {
     friends_e: Vec<FnvHashSet<Tile>>,
     friends_s: Vec<FnvHashSet<Tile>>,
     friends_w: Vec<FnvHashSet<Tile>>,
-    insertcache: RwLock<Cache>,
+    insertcache: ClonableCache,
     seed: Seed,
     k_f: f64,
     alpha: f64,
@@ -260,6 +277,10 @@ pub struct StaticKTAM<C: State> {
     tile_colors: Vec<[u8; 4]>,
     _canvas: PhantomData<*const C>,
 }
+
+
+
+unsafe impl<C: State> Send for StaticKTAM<C> {}
 
 impl<C: State> TileBondInfo for StaticKTAM<C> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
@@ -348,7 +369,7 @@ impl<C: State> StaticKTAM<C> {
             friends_e,
             friends_s,
             friends_w,
-            insertcache: RwLock::new(Cache::with_size(10000)),
+            insertcache: ClonableCache(RwLock::new(Cache::with_size(10000))),
             seed: seed.unwrap_or(Seed::None()),
             alpha: alpha.unwrap_or(0.),
             g_mc: Some(g_mc),
@@ -444,7 +465,7 @@ impl<C: State> StaticKTAM<C> {
             friends_e,
             friends_s,
             friends_w,
-            insertcache: RwLock::new(Cache::with_size(10000)),
+            insertcache: ClonableCache(RwLock::new(Cache::with_size(10000))),
             seed: Seed::None(),
             alpha: alpha,
             g_mc: None,
@@ -501,7 +522,7 @@ impl<C: State> StaticKTAM<C> {
         } else {
             let t2 = unsafe { canvas.uv_p(p2) };
              {
-                Rate::exp(
+                self.k_f_hat() * Rate::exp(
                     -ts - self.bond_strength_of_tile_at_point(canvas, PointSafeAdjs(p2), t2) // FIXME
                         + 2. * self.energy_ns[(t as usize, t2 as usize)],
                 )
@@ -517,7 +538,7 @@ impl<C: State> StaticKTAM<C> {
         } else {
             let t2 = unsafe { canvas.uv_p(p2) };
              {
-                Rate::exp(
+                self.k_f_hat() * Rate::exp(
                     -ts - self.bond_strength_of_tile_at_point(canvas, PointSafeAdjs(p2), t2) // FIXME
                         + 2. * self.energy_we[(t as usize, t2 as usize)],
                 )
@@ -640,7 +661,7 @@ where
             match self.chunk_handling {
                 ChunkHandling::None => Rate::exp(-bound_energy),
                 ChunkHandling::Detach | ChunkHandling::Equilibrium => {
-                    Rate::exp(-bound_energy) + self.chunk_detach_rate(canvas, p.0, tile) // FIXME
+                    self.k_f_hat() * Rate::exp(-bound_energy) + self.chunk_detach_rate(canvas, p.0, tile) // FIXME
                 }
             }
         } else {
@@ -655,10 +676,10 @@ where
             }
 
             // Insertion
-            let mut ic = self.insertcache.write().unwrap();
+            let mut ic = self.insertcache.0.write().unwrap();
 
             match ic.cache_get(&(tn, te, ts, tw)) {
-                Some(acc) => *acc,
+                Some(acc) => self.k_f_hat() * *acc,
 
                 None => {
                     drop(ic);
@@ -683,12 +704,12 @@ where
                         acc += self.tile_adj_concs[t as usize];
                     }
 
-                    self.insertcache
+                    self.insertcache.0
                         .write()
                         .unwrap()
                         .cache_set((tn, te, ts, tw), acc);
 
-                    acc
+                    self.k_f_hat() * acc
                 }
             }
 
@@ -717,7 +738,7 @@ where
 
         if tile != 0 {
             acc -=  {
-                Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile as u32))
+                self.k_f_hat() * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile as u32))
             };
 
             let mut possible_starts = Vec::new();
@@ -806,7 +827,7 @@ where
             friends.extend(&self.friends_n[ts as usize]);
 
             for t in friends.drain() {
-                acc -= self.tile_adj_concs[t as usize];
+                acc -= self.k_f_hat() * self.tile_adj_concs[t as usize];
                 if acc <= 0. {
                     return Event::SingleTileAttach(p, t);
                 };
@@ -863,12 +884,12 @@ where
 
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
             if *e != 0. {
-                let biconc = self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
+                let biconc = f64::exp(-2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::NS,
-                    formation_rate: self.k_f_hat() * biconc,
+                    formation_rate: self.k_f * biconc,
                     equilibrium_conc: biconc * f64::exp(-*e + 2. * self.alpha),
                 });
             }
@@ -876,12 +897,12 @@ where
 
         for ((t1, t2), e) in self.energy_we.indexed_iter() {
             if *e != 0. {
-                let biconc = self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
+                let biconc = f64::exp(-2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::WE,
-                    formation_rate: self.k_f_hat() * biconc,
+                    formation_rate: self.k_f * biconc,
                     equilibrium_conc: biconc * f64::exp(-*e + 2. * self.alpha),
                 });
             }
@@ -948,5 +969,34 @@ where
         }
     }
 
-    
+    fn calc_mismatch_locations(&self, state: &C) -> Array2<usize> {
+        let threshold = 0.1;
+        let mut arr = Array2::zeros(state.raw_array().raw_dim());
+
+        for y in 1..(arr.nrows()-1) {
+            for x in 1..(arr.ncols()-1) {
+                let p = PointSafeAdjs((y,x));
+                let t = state.v_sa(p) as usize;
+
+                if t == 0 {
+                    arr[(y,x)] = 0;
+                    continue;
+                }
+
+                let tn = state.v_sa_n(p) as usize;
+                let te = state.v_sa_e(p) as usize;
+                let ts = state.v_sa_s(p) as usize;
+                let tw = state.v_sa_w(p) as usize;
+
+                let nm = ((tn != 0) & (self.energy_ns[(tn,t)] < threshold)) as usize;
+                let ne = ((te != 0) & (self.energy_we[(t,te)] < threshold)) as usize;
+                let ns = ((ts != 0) & (self.energy_ns[(t,ts)] < threshold)) as usize;
+                let nw = ((tw != 0) & (self.energy_we[(tw,t)] < threshold)) as usize;
+
+                arr[(y,x)] = nm + ne + ns + nw;
+            }
+        }
+
+        arr
+    }
 }

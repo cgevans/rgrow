@@ -270,7 +270,7 @@ impl Canvas for CanvasSquare {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CanvasPeriodic {
     values: Array2<Tile>
 }

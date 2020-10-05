@@ -13,6 +13,7 @@ pub trait StateStatus {
     fn ntiles(&self) -> NumTiles;
     fn total_events(&self) -> NumEvents;
     fn add_time(&mut self, time: f64);
+    fn time(&self) -> f64;
 }
 
 pub trait StateCreate: Sized {
@@ -163,6 +164,10 @@ impl<C: Canvas + CanvasSquarable, T: StateTracker> StateStatus for QuadTreeState
 
     fn add_time(&mut self, time: f64) {
         self.time += time;
+    }
+
+    fn time(&self) -> f64 {
+        self.time
     }
 }
 
