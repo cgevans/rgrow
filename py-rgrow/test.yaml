@@ -1,0 +1,3401 @@
+options:
+  Gmc: 10.7
+  Gse: 5.8
+  alpha: -7.2
+  block: 7
+  fission: keep-seeded
+  chunk_size: dimer
+  chunk_handling: detach
+  seed:
+  - 20
+  - 20
+  - 154
+  size: 32
+  update_rate: 1000
+tiles:
+- edges:
+  - nullT10W
+  - e1
+  - e2
+  - nullT10N
+  name: H0
+  sequence: TGGGAATATCT TTTTTTTTTT TTTTTTTTTT TTCATGTTGTT
+- edges:
+  - nullT11W
+  - e3
+  - e4
+  - e1
+  name: S1
+  sequence: AACTTCTCGA TTTTTTTTTTT AGATATTCCCA ATCACCCAAA
+- edges:
+  - nullT10W
+  - e5
+  - e6
+  - e3
+  name: N2
+  sequence: AGGTTAAGAGA TTTTTTTTTT TCGAGAAGTT TAAAAGGCAAA
+- edges:
+  - nullT11W
+  - e7
+  - e8
+  - e5
+  name: S3
+  sequence: TCACATACGT TTTTTTTTTTT TCTCTTAACCT AATCGATCCA
+- edges:
+  - nullT10W
+  - e9
+  - e10
+  - e7
+  name: H4
+  sequence: TTAGTATCGGT TTTTTTTTTT ACGTATGTGA TACATGATGGA
+- edges:
+  - nullT11W
+  - e11
+  - e12
+  - e9
+  name: N5
+  sequence: ACTGCTTCTT TTTTTTTTTTT ACCGATACTAA AATCGTTCCT
+- edges:
+  - nullT10W
+  - e13
+  - e14
+  - e11
+  name: H6
+  sequence: TTGTTCATTGT TTTTTTTTTT AAGAAGCAGT TGGTGAGATTA
+- edges:
+  - nullT11W
+  - nullT10S
+  - e15
+  - e13
+  name: H7
+  sequence: TTTTTTTTTT TTTTTTTTTTT ACAATGAACAA TTCTCGACAT
+- edges:
+  - nullT10W
+  - e16
+  - e17
+  - nullT10N
+  name: H8
+  sequence: TACGGTATTGA TTTTTTTTTT TTTTTTTTTT AGGAGTTTACT
+- edges:
+  - nullT11W
+  - e18
+  - e19
+  - e16
+  name: S9
+  sequence: TAGCATCACA TTTTTTTTTTT TCAATACCGTA ACTAGCACAA
+- edges:
+  - nullT10W
+  - e20
+  - e21
+  - e18
+  name: N10
+  sequence: AAGATACGAGA TTTTTTTTTT TGTGATGCTA TTTCATAGGGA
+- edges:
+  - nullT11W
+  - e22
+  - e23
+  - e20
+  name: S11
+  sequence: TTTCGCTCTA TTTTTTTTTTT TCTCGTATCTT AAAGAACCCA
+- edges:
+  - nullT10W
+  - e20
+  - e25
+  - e22
+  name: H12
+  sequence: AAGATACGAGA TTTTTTTTTT TAGAGCGAAA TGTGATAGACA
+- edges:
+  - nullT11W
+  - e26
+  - e27
+  - e20
+  name: S13
+  sequence: AACGTTACCT TTTTTTTTTTT TCTCGTATCTT AGCCTTTCTT
+- edges:
+  - nullT10W
+  - e28
+  - e29
+  - e26
+  name: H14
+  sequence: TTTCGGATAGA TTTTTTTTTT AGGTAACGTT TTAGTAGGTGT
+- edges:
+  - nullT11W
+  - nullT10S
+  - e30
+  - e28
+  name: S15
+  sequence: TTTTTTTTTT TTTTTTTTTTT TCTATCCGAAA ACTCAACACA
+- edges:
+  - e2
+  - e31
+  - e32
+  - nullT11N
+  name: S16
+  sequence: TTACACCGAT AACAACATGAA TTTTTTTTTTT TCACCAAACT
+- edges:
+  - e4
+  - e33
+  - e34
+  - e31
+  name: B17
+  sequence: TGCGATATTTT TTTGGGTGAT ATCGGTGTAA AGCTAGTGTTA
+- edges:
+  - e6
+  - e35
+  - e36
+  - e33
+  name: N18
+  sequence: TTTTCCCTGA TTTGCCTTTTA AAAATATCGCA TATCAACGCT
+- edges:
+  - e8
+  - e37
+  - e38
+  - e35
+  name: H19
+  sequence: AAGGGATTAGT TGGATCGATT TCAGGGAAAA ATTGTTTGACA
+- edges:
+  - e10
+  - e39
+  - e40
+  - e37
+  name: S20
+  sequence: AAACTCCGAA TCCATCATGTA ACTAATCCCTT TTGTACCACA
+- edges:
+  - e12
+  - e41
+  - e42
+  - e39
+  name: N21
+  sequence: TGGATGATACT AGGAACGATT TTCGGAGTTT TCAAGAAGGTA
+- edges:
+  - e14
+  - e43
+  - e44
+  - e41
+  name: N22
+  sequence: TCTTTCACGT TAATCTCACCA AGTATCATCCA AAAACGCAAT
+- edges:
+  - e15
+  - nullT11S
+  - e45
+  - e43
+  name: H23
+  sequence: TTTTTTTTTTT ATGTCGAGAA ACGTGAAAGA TGAGGTATGAT
+- edges:
+  - e17
+  - e46
+  - e47
+  - nullT11N
+  name: S24
+  sequence: ACAGCCATTA AGTAAACTCCT TTTTTTTTTTT TTCAACTCGT
+- edges:
+  - e19
+  - e48
+  - e49
+  - e46
+  name: B25
+  sequence: TGCAGTTTTTA TTGTGCTAGT TAATGGCTGT ATTAGTGGGTA
+- edges:
+  - e21
+  - e50
+  - e51
+  - e48
+  name: N26
+  sequence: TTCATCGCTA TCCCTATGAAA TAAAAACTGCA AGTCAAACCT
+- edges:
+  - e23
+  - e52
+  - e53
+  - e50
+  name: H27
+  sequence: TGGCAAAATAA TGGGTTCTTT TAGCGATGAA AGTATTACGGA
+- edges:
+  - e25
+  - e54
+  - e55
+  - e52
+  name: B28
+  sequence: ACTTGTTCCT TGTCTATCACA TTATTTTGCCA ACCACTTCTT
+- edges:
+  - e27
+  - e56
+  - e57
+  - e54
+  name: H29
+  sequence: AGTAGTGAAGT AAGAAAGGCT AGGAACAAGT ATAGACAGGAA
+- edges:
+  - e29
+  - e58
+  - e59
+  - e56
+  name: S30
+  sequence: TTCTACGCAT ACACCTACTAA ACTTCACTACT ATCACCACAA
+- edges:
+  - e30
+  - nullT11S
+  - e60
+  - e58
+  name: H31
+  sequence: TTTTTTTTTTT TGTGTTGAGT ATGCGTAGAA TAGGAAGACAA
+- edges:
+  - e32
+  - e61
+  - e62
+  - nullT10N
+  name: B32
+  sequence: TTGAGGGATAT AGTTTGGTGA TTTTTTTTTT TCGAGAGATAA
+- edges:
+  - e34
+  - e63
+  - e64
+  - e61
+  name: S33
+  sequence: TTCGTACACA TAACACTAGCT ATATCCCTCAA TGCTCATCAT
+- edges:
+  - e36
+  - e65
+  - e66
+  - e63
+  name: B34
+  sequence: TGGCTATTAGA AGCGTTGATA TGTGTACGAA ACGGAAATTTT
+- edges:
+  - e38
+  - e67
+  - e68
+  - e65
+  name: S35
+  sequence: ACCTCACATT TGTCAAACAAT TCTAATAGCCA ACCCATTTCA
+- edges:
+  - e40
+  - e69
+  - e70
+  - e67
+  name: H36
+  sequence: ATGGGATTAGA TGTGGTACAA AATGTGAGGT TTTTTAAGCGT
+- edges:
+  - e42
+  - e71
+  - e72
+  - e69
+  name: S37
+  sequence: ACCCTTCAAT TACCTTCTTGA TCTAATCCCAT AATCACCAGT
+- edges:
+  - e44
+  - e73
+  - e74
+  - e71
+  name: B38
+  sequence: AGTAGACTGAA ATTGCGTTTT ATTGAAGGGT TAATACGAGGA
+- edges:
+  - e45
+  - nullT10S
+  - e75
+  - e73
+  name: S39
+  sequence: TTTTTTTTTT ATCATACCTCA TTCAGTCTACT TATGCACTCA
+- edges:
+  - e47
+  - e76
+  - e62
+  - nullT10N
+  name: H40
+  sequence: TGAGGACTATT ACGAGTTGAA TTTTTTTTTT TCGAGAGATAA
+- edges:
+  - e49
+  - e78
+  - e79
+  - e76
+  name: S41
+  sequence: TGCATATCCA TACCCACTAAT AATAGTCCTCA TTAGCAACCA
+- edges:
+  - e51
+  - e48
+  - e81
+  - e78
+  name: H42
+  sequence: TGCAGTTTTTA AGGTTTGACT TGGATATGCA AAAATTAGCGT
+- edges:
+  - e53
+  - e82
+  - e83
+  - e48
+  name: S43
+  sequence: TTGACACCAT TCCGTAATACT TAAAAACTGCA TTACCCAACA
+- edges:
+  - e55
+  - e84
+  - e85
+  - e82
+  name: H44
+  sequence: AAGTTAGGGTA AAGAAGTGGT ATGGTGTCAA TGGTATTCAGA
+- edges:
+  - e57
+  - e86
+  - e87
+  - e84
+  name: S45
+  sequence: ACCCTTCTTT TTCCTGTCTAT TACCCTAACTT ATTGCCACTA
+- edges:
+  - e59
+  - e88
+  - e89
+  - e86
+  name: N46
+  sequence: AGGGATGTAAT TTGTGGTGAT AAAGAAGGGT ATATGGTAGCT
+- edges:
+  - e60
+  - nullT10S
+  - e90
+  - e88
+  name: S47
+  sequence: TTTTTTTTTT TTGTCTTCCTA ATTACATCCCT ATTCACCGTA
+- edges:
+  - e62
+  - e91
+  - e92
+  - nullT11N
+  name: S48
+  sequence: ATGTCCACTT TTATCTCTCGA TTTTTTTTTTT TCGATCCAAT
+- edges:
+  - e64
+  - e93
+  - e94
+  - e91
+  name: B49
+  sequence: AATAGGGTACA ATGATGAGCA AAGTGGACAT AGGATATAGCA
+- edges:
+  - e66
+  - e95
+  - e96
+  - e93
+  name: S50
+  sequence: ATTGACCCTT AAAATTTCCGT TGTACCCTATT ATTACAGCCA
+- edges:
+  - e68
+  - e97
+  - e98
+  - e95
+  name: H51
+  sequence: TGGTAGTAACT TGAAATGGGT AAGGGTCAAT ATAGAGTTGGA
+- edges:
+  - e70
+  - e99
+  - e100
+  - e97
+  name: S52
+  sequence: AACTTCAGCT ACGCTTAAAAA AGTTACTACCA ATCACGCTTA
+- edges:
+  - e72
+  - e101
+  - e102
+  - e99
+  name: H53
+  sequence: TGGAAGAGTAT ACTGGTGATT AGCTGAAGTT AAATTGGAACA
+- edges:
+  - e74
+  - e103
+  - e104
+  - e101
+  name: S54
+  sequence: AAACCAGTCT TCCTCGTATTA ATACTCTTCCA ATTACTGCCA
+- edges:
+  - e75
+  - nullT11S
+  - e105
+  - e103
+  name: H55
+  sequence: TTTTTTTTTTT TGAGTGCATA AGACTGGTTT ATTTTTGACGT
+- edges:
+  - e62
+  - e106
+  - e107
+  - nullT11N
+  name: S56
+  sequence: TTACCGACAT TTATCTCTCGA TTTTTTTTTTT ATCCATCGAA
+- edges:
+  - e79
+  - e108
+  - e109
+  - e106
+  name: H57
+  sequence: AGAATTAGGGA TGGTTGCTAA ATGTCGGTAA TAGAGAATCGA
+- edges:
+  - e81
+  - e110
+  - e111
+  - e108
+  name: S58
+  sequence: ACTGAACCTT ACGCTAATTTT TCCCTAATTCT ACTCGTAACA
+- edges:
+  - e83
+  - e112
+  - e113
+  - e110
+  name: H59
+  sequence: ATCTTGGAGTA TGTTGGGTAA AAGGTTCAGT TTTTGGTTCAA
+- edges:
+  - e85
+  - e114
+  - e115
+  - e112
+  name: B60
+  sequence: AGCCTACAAA TCTGAATACCA TACTCCAAGAT AATCCTTGCT
+- edges:
+  - e87
+  - e116
+  - e117
+  - e114
+  name: B61
+  sequence: ACAAGGATAGA TAGTGGCAAT TTTGTAGGCT TAGGGTAACAT
+- edges:
+  - e89
+  - e118
+  - e119
+  - e116
+  name: N62
+  sequence: AAGTCACCAA AGCTACCATAT TCTATCCTTGT TTCTTCACGT
+- edges:
+  - e90
+  - nullT11S
+  - e120
+  - e118
+  name: H63
+  sequence: TTTTTTTTTTT TACGGTGAAT TTGGTGACTT ATGCAAAGATT
+- edges:
+  - e92
+  - e121
+  - e122
+  - nullT10N
+  name: H64
+  sequence: AAGTACTGAGA ATTGGATCGA TTTTTTTTTT AGTAGGAAGAA
+- edges:
+  - e94
+  - e123
+  - e124
+  - e121
+  name: S65
+  sequence: ACTGCCATAA TGCTATATCCT TCTCAGTACTT ATGCATACCA
+- edges:
+  - e96
+  - e125
+  - e126
+  - e123
+  name: H66
+  sequence: TTATCTGTGGA TGGCTGTAAT TTATGGCAGT AGACTTAGGAA
+- edges:
+  - e98
+  - e127
+  - e128
+  - e125
+  name: S67
+  sequence: TACGTTCCAA TCCAACTCTAT TCCACAGATAA ACATCTGCTT
+- edges:
+  - e100
+  - e129
+  - e130
+  - e127
+  name: H68
+  sequence: ATACTGGATGA TAAGCGTGAT TTGGAACGTA AATAGTCTGGT
+- edges:
+  - e102
+  - e131
+  - e27
+  - e129
+  name: S69
+  sequence: AACCTCGAAA TGTTCCAATTT TCATCCAGTAT AGCCTTTCTT
+- edges:
+  - e104
+  - e133
+  - e34
+  - e131
+  name: H70
+  sequence: TGTTTGAACTT TGGCAGTAAT TTTCGAGGTT AGCTAGTGTTA
+- edges:
+  - e105
+  - nullT10S
+  - e135
+  - e133
+  name: B71
+  sequence: TTTTTTTTTT ACGTCAAAAAT AAGTTCAAACA ATCTTCTGCA
+- edges:
+  - e107
+  - e136
+  - e137
+  - nullT10N
+  name: H72
+  sequence: AGAACTAAGGA TTCGATGGAT TTTTTTTTTT AACTATGAGGA
+- edges:
+  - e109
+  - e138
+  - e139
+  - e136
+  name: S73
+  sequence: TAGCCAACAA TCGATTCTCTA TCCTTAGTTCT TCGACTTCTT
+- edges:
+  - e111
+  - e140
+  - e141
+  - e138
+  name: H74
+  sequence: ACGAGATAGAA TGTTACGAGT TTGTTGGCTA AATGTGGAAAA
+- edges:
+  - e113
+  - e142
+  - e143
+  - e140
+  name: N75
+  sequence: AACGTCTTCT TTGAACCAAAA TTCTATCTCGT TCCAATCCAA
+- edges:
+  - e115
+  - e144
+  - e145
+  - e142
+  name: H76
+  sequence: AGTGATTAGGA AGCAAGGATT AGAAGACGTT AGGTTCTAGTT
+- edges:
+  - e117
+  - e146
+  - e147
+  - e144
+  name: S77
+  sequence: AGCTTCATCA ATGTTACCCTA TCCTAATCACT ATGCACTACT
+- edges:
+  - e119
+  - e148
+  - e149
+  - e146
+  name: H78
+  sequence: TGGACAAATTT ACGTGAAGAA TGATGAAGCT ATGGGATCATA
+- edges:
+  - e120
+  - nullT10S
+  - e150
+  - e148
+  name: B79
+  sequence: TTTTTTTTTT AATCTTTGCAT AAATTTGTCCA TAACACCCAA
+- edges:
+  - e122
+  - e151
+  - e152
+  - nullT11N
+  name: S80
+  sequence: ACATCCATGA TTCTTCCTACT TTTTTTTTTTT ATTCACCCTT
+- edges:
+  - e124
+  - e153
+  - e154
+  - e151
+  name: H81
+  sequence: TAGAGGAAAGT TGGTATGCAT TCATGGATGT AGAACTATGGT
+- edges:
+  - e126
+  - e155
+  - e156
+  - e153
+  name: S82
+  sequence: AACCCTCTTT TTCCTAAGTCT ACTTTCCTCTA ACTAACGACA
+- edges:
+  - e128
+  - e157
+  - e158
+  - e155
+  name: H83
+  sequence: ACAGTAGGATT AAGCAGATGT AAAGAGGGTT ATTATCAGGGT
+- edges:
+  - e130
+  - e159
+  - e160
+  - e157
+  name: N84
+  sequence: AATCACAGCT ACCAGACTATT AATCCTACTGT TCCGATCAAA
+- edges:
+  - e27
+  - e161
+  - e130
+  - e159
+  name: N85
+  sequence: AGGGTTCTAAT AAGAAAGGCT AGCTGTGATT AATAGTCTGGT
+- edges:
+  - e34
+  - e163
+  - e160
+  - e161
+  name: S86
+  sequence: TTCGCATCTA TAACACTAGCT ATTAGAACCCT TCCGATCAAA
+- edges:
+  - e135
+  - nullT11S
+  - e165
+  - e163
+  name: B87
+  sequence: TTTTTTTTTTT TGCAGAAGAT TAGATGCGAA AGTGAACAAAA
+- edges:
+  - e137
+  - e166
+  - e167
+  - nullT11N
+  name: S88
+  sequence: ACACAGAACA TCCTCATAGTT TTTTTTTTTTT TCATAGCCAA
+- edges:
+  - e139
+  - e168
+  - e169
+  - e166
+  name: H89
+  sequence: AGAGTTTAGGA AAGAAGTCGA TGTTCTGTGT AGATCAGTGTA
+- edges:
+  - e141
+  - e146
+  - e171
+  - e168
+  name: S90
+  sequence: AGCTTCATCA TTTTCCACATT TCCTAAACTCT TAGCAAACCA
+- edges:
+  - e143
+  - e172
+  - e173
+  - e146
+  name: B91
+  sequence: TGGAGATACAT TTGGATTGGA TGATGAAGCT TCTAAGTGTGA
+- edges:
+  - e145
+  - e174
+  - e4
+  - e172
+  name: S92
+  sequence: AAACCCAGAT AACTAGAACCT ATGTATCTCCA ATCACCCAAA
+- edges:
+  - e147
+  - e176
+  - e177
+  - e174
+  name: H93
+  sequence: TATCGGAAGTA AGTAGTGCAT ATCTGGGTTT AGCAAAAGAAA
+- edges:
+  - e149
+  - e178
+  - e179
+  - e176
+  name: N94
+  sequence: TGCTCCATTA TATGATCCCAT TACTTCCGATA AAACCTCCTT
+- edges:
+  - e150
+  - nullT11S
+  - e180
+  - e178
+  name: N95
+  sequence: TTTTTTTTTTT TTGGGTGTTA TAATGGAGCA ACTTTAGAGGT
+- edges:
+  - e152
+  - e181
+  - e182
+  - nullT10N
+  name: H96
+  sequence: AGCTTAGATGA AAGGGTGAAT TTTTTTTTTT AGAGCTATGAT
+- edges:
+  - e154
+  - e183
+  - e184
+  - e181
+  name: B97
+  sequence: TCTTGCTTCT ACCATAGTTCT TCATCTAAGCT TTCTGACCAA
+- edges:
+  - e156
+  - e185
+  - e186
+  - e183
+  name: H98
+  sequence: TTAGGATGACA TGTCGTTAGT AGAAGCAAGA TGGAGTAAGAT
+- edges:
+  - e158
+  - e187
+  - e188
+  - e185
+  name: B99
+  sequence: TTCCCAAAGA ACCCTGATAAT TGTCATCCTAA ATCGAACCTT
+- edges:
+  - e160
+  - e189
+  - e190
+  - e187
+  name: B100
+  sequence: AGTTGATAGGT TTTGATCGGA TCTTTGGGAA TTTAAATGCGA
+- edges:
+  - e130
+  - e191
+  - e192
+  - e189
+  name: B101
+  sequence: TTTACACCGA ACCAGACTATT ACCTATCAACT TTCGACACTT
+- edges:
+  - e160
+  - e193
+  - e194
+  - e191
+  name: H102
+  sequence: TATATGGTCGT TTTGATCGGA TCGGTGTAAA AGAGTTAGGAA
+- edges:
+  - e165
+  - e195
+  - e196
+  - e193
+  name: B103
+  sequence: TGACAACCAT TTTTGTTCACT ACGACCATATA TCATTGCCTA
+- edges:
+  - nullT10W
+  - e197
+  - e198
+  - e195
+  name: H104
+  sequence: AGATGTGATCT TTTTTTTTTT ATGGTTGTCA ATGATTGCAAT
+- edges:
+  - nullT11W
+  - e67
+  - e200
+  - e197
+  name: S105
+  sequence: ACCTCACATT TTTTTTTTTTT AGATCACATCT AACTCCGATT
+- edges:
+  - nullT10W
+  - e5
+  - e202
+  - e67
+  name: H106
+  sequence: AGGTTAAGAGA TTTTTTTTTT AATGTGAGGT AATTTTTCGGT
+- edges:
+  - nullT11W
+  - e203
+  - e204
+  - e5
+  name: N107
+  sequence: ACCAGCAATA TTTTTTTTTTT TCTCTTAACCT ACACCATCAT
+- edges:
+  - nullT10W
+  - e28
+  - e206
+  - e203
+  name: H108
+  sequence: TTTCGGATAGA TTTTTTTTTT TATTGCTGGT AAAAGTTGTGT
+- edges:
+  - nullT11W
+  - e207
+  - e196
+  - e28
+  name: S109
+  sequence: TTTCCCTTGA TTTTTTTTTTT TCTATCCGAAA TCATTGCCTA
+- edges:
+  - nullT10W
+  - e209
+  - e210
+  - e207
+  name: H110
+  sequence: AGTTTGTTTGT TTTTTTTTTT TCAAGGGAAA TATATGACGGA
+- edges:
+  - nullT11W
+  - e211
+  - e59
+  - e209
+  name: S111
+  sequence: AAACTTCCCA TTTTTTTTTTT ACAAACAAACT ATCACCACAA
+- edges:
+  - e167
+  - e213
+  - e214
+  - e211
+  name: H112
+  sequence: TTCTATGTGGA TTGGCTATGA TGGGAAGTTT AGATTATCGGA
+- edges:
+  - e169
+  - e215
+  - e216
+  - e213
+  name: S113
+  sequence: ATCCACCATT TACACTGATCT TCCACATAGAA TCATTGCTCT
+- edges:
+  - e171
+  - e217
+  - e218
+  - e215
+  name: H114
+  sequence: TCGTTTAGAGA TGGTTTGCTA AATGGTGGAT TCTTAGAAGGT
+- edges:
+  - e173
+  - e155
+  - e220
+  - e217
+  name: N115
+  sequence: AACCCTCTTT TCACACTTAGA TCTCTAAACGA ACTGTCACAT
+- edges:
+  - e4
+  - e136
+  - e222
+  - e155
+  name: N116
+  sequence: AGAACTAAGGA TTTGGGTGAT AAAGAGGGTT AAAGAGAGGAA
+- edges:
+  - e177
+  - e223
+  - e224
+  - e136
+  name: S117
+  sequence: ATATGCACCA TTTCTTTTGCT TCCTTAGTTCT ATGACCCAAT
+- edges:
+  - e179
+  - e225
+  - e226
+  - e223
+  name: H118
+  sequence: AAGTCGAGTAT AAGGAGGTTT TGGTGCATAT AGAGTAGTGTT
+- edges:
+  - e180
+  - nullT10S
+  - e227
+  - e225
+  name: B119
+  sequence: TTTTTTTTTT ACCTCTAAAGT ATACTCGACTT TGAACCAACT
+- edges:
+  - e182
+  - e110
+  - e229
+  - nullT11N
+  name: S120
+  sequence: ACTGAACCTT ATCATAGCTCT TTTTTTTTTTT TCTACCTCCT
+- edges:
+  - e184
+  - e172
+  - e231
+  - e110
+  name: N121
+  sequence: TGGAGATACAT TTGGTCAGAA AAGGTTCAGT TAAGAAGGTCA
+- edges:
+  - e186
+  - e232
+  - e87
+  - e172
+  name: B122
+  sequence: ACTCGCAATA ATCTTACTCCA ATGTATCTCCA ATTGCCACTA
+- edges:
+  - e188
+  - e234
+  - e235
+  - e232
+  name: H123
+  sequence: AGAACAGAGTA AAGGTTCGAT TATTGCGAGT TCTGGGATTAT
+- edges:
+  - e190
+  - e236
+  - e237
+  - e234
+  name: S124
+  sequence: TTGACATCCA TCGCATTTAAA TACTCTGTTCT ACTTGCCTAA
+- edges:
+  - e192
+  - e238
+  - e239
+  - e236
+  name: H125
+  sequence: TTGAGAGTAGT AAGTGTCGAA TGGATGTCAA ACAATGGAAAA
+- edges:
+  - e194
+  - e240
+  - e241
+  - e238
+  name: S126
+  sequence: TCGATTCCTT TTCCTAACTCT ACTACTCTCAA ACTGCTACAT
+- edges:
+  - e196
+  - e41
+  - e243
+  - e240
+  name: H127
+  sequence: TGGATGATACT TAGGCAATGA AAGGAATCGA TTCGGTATAGA
+- edges:
+  - e198
+  - e244
+  - e87
+  - e41
+  name: S128
+  sequence: ACGTCCATAA ATTGCAATCAT AGTATCATCCA ATTGCCACTA
+- edges:
+  - e200
+  - e246
+  - e194
+  - e244
+  name: H129
+  sequence: TGTTGTTGATT AATCGGAGTT TTATGGACGT AGAGTTAGGAA
+- edges:
+  - e202
+  - e248
+  - e64
+  - e246
+  name: S130
+  sequence: AATCCGAACT ACCGAAAAATT AATCAACAACA TGCTCATCAT
+- edges:
+  - e204
+  - e250
+  - e251
+  - e248
+  name: N131
+  sequence: ACTGAGGATAA ATGATGGTGT AGTTCGGATT TAATAGTCGGA
+- edges:
+  - e206
+  - e187
+  - e253
+  - e250
+  name: S132
+  sequence: TTCCCAAAGA ACACAACTTTT TTATCCTCAGT TCAAGAACCA
+- edges:
+  - e196
+  - e112
+  - e255
+  - e187
+  name: B133
+  sequence: ATCTTGGAGTA TAGGCAATGA TCTTTGGGAA TATAGACGTGT
+- edges:
+  - e210
+  - e256
+  - e257
+  - e112
+  name: N134
+  sequence: ACCTGACATT TCCGTCATATA TACTCCAAGAT AGAAACACCT
+- edges:
+  - e59
+  - e258
+  - e259
+  - e256
+  name: B135
+  sequence: AACGTGAAATT TTGTGGTGAT AATGTCAGGT ATGTAGTAGCA
+- edges:
+  - e214
+  - e260
+  - e237
+  - e258
+  name: S136
+  sequence: AATCAGCCTT TCCGATAATCT AATTTCACGTT ACTTGCCTAA
+- edges:
+  - e216
+  - e262
+  - e263
+  - e260
+  name: H137
+  sequence: TAGTCAGTTGA AGAGCAATGA AAGGCTGATT TTAGTTCAGGA
+- edges:
+  - e218
+  - e110
+  - e265
+  - e262
+  name: S138
+  sequence: ACTGAACCTT ACCTTCTAAGA TCAACTGACTA TTTCCGTCTT
+- edges:
+  - e220
+  - e266
+  - e267
+  - e110
+  name: H139
+  sequence: TGTAGATGAGT ATGTGACAGT AAGGTTCAGT TAGGGATGAAA
+- edges:
+  - e222
+  - e268
+  - e269
+  - e266
+  name: N140
+  sequence: ATCGTAACCA TTCCTCTCTTT ACTCATCTACA ATCTCAGCAT
+- edges:
+  - e224
+  - e270
+  - e271
+  - e268
+  name: N141
+  sequence: AGGAAGGAATA ATTGGGTCAT TGGTTACGAT TGAAGTAAGGA
+- edges:
+  - e226
+  - e272
+  - e273
+  - e270
+  name: S142
+  sequence: TCTTTCACGA AACACTACTCT TATTCCTTCCT AGCTCTCATT
+- edges:
+  - e227
+  - nullT11S
+  - e274
+  - e272
+  name: H143
+  sequence: TTTTTTTTTTT AGTTGGTTCA TCGTGAAAGA ATTGAAGCAAA
+- edges:
+  - e229
+  - e275
+  - e276
+  - nullT10N
+  name: H144
+  sequence: AGAGATGACTT AGGAGGTAGA TTTTTTTTTT TAGTTAGTCGT
+- edges:
+  - e231
+  - e277
+  - e265
+  - e275
+  name: S145
+  sequence: TCACCCATTT TGACCTTCTTA AAGTCATCTCT TTTCCGTCTT
+- edges:
+  - e87
+  - e279
+  - e280
+  - e277
+  name: H146
+  sequence: ACTTGTAGGAT TAGTGGCAAT AAATGGGTGA AGGAAAGACTA
+- edges:
+  - e235
+  - e281
+  - e282
+  - e279
+  name: S147
+  sequence: TAACTGCACA ATAATCCCAGA ATCCTACAAGT TCACAACGTA
+- edges:
+  - e237
+  - e283
+  - e102
+  - e281
+  name: H148
+  sequence: ATGTGAGTAGT TTAGGCAAGT TGTGCAGTTA AAATTGGAACA
+- edges:
+  - e239
+  - e285
+  - e286
+  - e283
+  name: S149
+  sequence: ATATCGCACA TTTTCCATTGT ACTACTCACAT AATCTCGACA
+- edges:
+  - e241
+  - e287
+  - e288
+  - e285
+  name: H150
+  sequence: TGTATGAAGGA ATGTAGCAGT TGTGCGATAT AAAGGCTAGTA
+- edges:
+  - e243
+  - e289
+  - e290
+  - e287
+  name: N151
+  sequence: ACACACAAGA TCTATACCGAA TCCTTCATACA AGTTCACACA
+- edges:
+  - e87
+  - e168
+  - e109
+  - e289
+  name: N152
+  sequence: AGAGTTTAGGA TAGTGGCAAT TCTTGTGTGT TAGAGAATCGA
+  stoic: 20.0
+- edges:
+  - e194
+  - e293
+  - e294
+  - e168
+  name: S153
+  sequence: TGTACCCAAA TTCCTAACTCT TCCTAAACTCT TCATGCCTTA
+  stoic: 1.0
+- edges:
+  - e64
+  - e295
+  - e296
+  - e293
+  name: H154
+  sequence: ATGTAGGACTT ATGATGAGCA TTTGGGTACA TGGAGACTAAT
+  stoic: 20.0
+- edges:
+  - e251
+  - e297
+  - e298
+  - e295
+  name: N155
+  sequence: ACATGTCACA TCCGACTATTA AAGTCCTACAT TCATCACCAT
+  stoic: 1.0
+- edges:
+  - e253
+  - e299
+  - e251
+  - e297
+  name: H156
+  sequence: ATGGATGTCTA TGGTTCTTGA TGTGACATGT TAATAGTCGGA
+  stoic: 20.0
+- edges:
+  - e255
+  - e301
+  - e302
+  - e299
+  name: S157
+  sequence: TTCCAACAGA ACACGTCTATA TAGACATCCAT TTCAACCCAT
+- edges:
+  - e257
+  - e303
+  - e304
+  - e301
+  name: H158
+  sequence: ATGTAGGGTAA AGGTGTTTCT TCTGTTGGAA AAGAGAGTGTA
+- edges:
+  - e259
+  - e86
+  - e306
+  - e303
+  name: S159
+  sequence: ACCCTTCTTT TGCTACTACAT TTACCCTACAT ACCATCCAAA
+- edges:
+  - e237
+  - e307
+  - e308
+  - e86
+  name: H160
+  sequence: TAGAAGGCATA TTAGGCAAGT AAAGAAGGGT AGCAAAGAAAT
+- edges:
+  - e263
+  - e309
+  - e310
+  - e307
+  name: S161
+  sequence: TTCGCTCTAA TCCTGAACTAA TATGCCTTCTA AGCACTTACA
+- edges:
+  - e265
+  - e311
+  - e49
+  - e309
+  name: H162
+  sequence: TGGATAGCTTA AAGACGGAAA TTAGAGCGAA ATTAGTGGGTA
+- edges:
+  - e267
+  - e313
+  - e314
+  - e311
+  name: B163
+  sequence: ACGATCATCA TTTCATCCCTA TAAGCTATCCA TTCCTGACAA
+- edges:
+  - e269
+  - e315
+  - e316
+  - e313
+  name: H164
+  sequence: AGGTATCGTAT ATGCTGAGAT TGATGATCGT AAAATGCAAGA
+- edges:
+  - e271
+  - e313
+  - e318
+  - e315
+  name: N165
+  sequence: ACGATCATCA TCCTTACTTCA ATACGATACCT TCAAGACACA
+- edges:
+  - e273
+  - e319
+  - e320
+  - e313
+  name: S166
+  sequence: TAAAATTGGCA AATGAGAGCT TGATGATCGT AATGTCTAGGA
+- edges:
+  - e274
+  - nullT10S
+  - e321
+  - e319
+  name: S167
+  sequence: TTTTTTTTTT TTTGCTTCAAT TGCCAATTTTA TCAATCAGCT
+- edges:
+  - e276
+  - e142
+  - e323
+  - nullT11N
+  name: B168
+  sequence: AACGTCTTCT ACGACTAACTA TTTTTTTTTTT TCACCGTTAT
+- edges:
+  - e265
+  - e324
+  - e325
+  - e142
+  name: N169
+  sequence: TTAGGTAGCAT AAGACGGAAA AGAAGACGTT ATAGTGAGGAA
+- edges:
+  - e280
+  - e326
+  - e327
+  - e324
+  name: N170
+  sequence: ACAACTTCGA TAGTCTTTCCT ATGCTACCTAA TTACCACCAA
+- edges:
+  - e282
+  - e328
+  - e329
+  - e326
+  name: H171
+  sequence: AATGCAGATTT TACGTTGTGA TCGAAGTTGT TTTCATTTGGT
+- edges:
+  - e102
+  - e330
+  - e331
+  - e328
+  name: S172
+  sequence: ACACTCCAAA TGTTCCAATTT AAATCTGCATT ATTGTCCCTT
+- edges:
+  - e286
+  - e332
+  - e180
+  - e330
+  name: H173
+  sequence: TTTTGATTCGT TGTCGAGATT TTTGGAGTGT ACTTTAGAGGT
+- edges:
+  - e288
+  - e334
+  - e335
+  - e332
+  name: S174
+  sequence: ACCATAACGA TACTAGCCTTT ACGAATCAAAA AGCATCAACT
+- edges:
+  - e290
+  - e315
+  - e42
+  - e334
+  name: H175
+  sequence: AGGTATCGTAT TGTGTGAACT TCGTTATGGT TCAAGAAGGTA
+- edges:
+  - e109
+  - e54
+  - e339
+  - e315
+  name: S176
+  sequence: ACTTGTTCCT TCGATTCTCTA ATACGATACCT AAATCCTGCT
+  stoic: 3.0
+- edges:
+  - e294
+  - e324
+  - e341
+  - e54
+  name: B177
+  sequence: TTAGGTAGCAT TAAGGCATGA AGGAACAAGT AGGTTAGACAT
+  stoic: 20.0
+- edges:
+  - e296
+  - e342
+  - e343
+  - e324
+  name: S178
+  sequence: AAACCTGCTA ATTAGTCTCCA ATGCTACCTAA ATTACGCTCT
+  stoic: 3.0
+- edges:
+  - e298
+  - e344
+  - e345
+  - e342
+  name: B179
+  sequence: TAGGAACAGAA ATGGTGATGA TAGCAGGTTT ACAGGAAGATA
+  stoic: 20.0
+- edges:
+  - e251
+  - e159
+  - e347
+  - e344
+  name: S180
+  sequence: AATCACAGCT TCCGACTATTA TTCTGTTCCTA AGCCTCATTT
+  stoic: 3.0
+- edges:
+  - e302
+  - e348
+  - e320
+  - e159
+  name: H181
+  sequence: TGGTAAGTACT ATGGGTTGAA AGCTGTGATT AATGTCTAGGA
+- edges:
+  - e304
+  - e127
+  - e351
+  - e348
+  name: S182
+  sequence: TACGTTCCAA TACACTCTCTT AGTACTTACCA TCGACTTTCA
+- edges:
+  - e306
+  - e352
+  - e177
+  - e127
+  name: N183
+  sequence: AGAAGTCAGAT TTTGGATGGT TTGGAACGTA AGCAAAAGAAA
+- edges:
+  - e308
+  - e354
+  - e273
+  - e352
+  name: N184
+  sequence: ATACACACGT ATTTCTTTGCT ATCTGACTTCT AGCTCTCATT
+- edges:
+  - e310
+  - e356
+  - e357
+  - e354
+  name: H185
+  sequence: ATGGTTTTGTT TGTAAGTGCT ACGTGTGTAT TGAAAGAGGTA
+- edges:
+  - e49
+  - e358
+  - e359
+  - e356
+  name: S186
+  sequence: ACGTATCACA TACCCACTAAT AACAAAACCAT ACCAAGCTAA
+- edges:
+  - e314
+  - e61
+  - e89
+  - e358
+  name: H187
+  sequence: TTGAGGGATAT TTGTCAGGAA TGTGATACGT ATATGGTAGCT
+- edges:
+  - e316
+  - e289
+  - e363
+  - e61
+  name: S188
+  sequence: ACACACAAGA TCTTGCATTTT ATATCCCTCAA TTAACAGCCA
+- edges:
+  - e318
+  - e364
+  - e365
+  - e289
+  name: N189
+  sequence: AGGAGTAAACT TGTGTCTTGA TCTTGTGTGT AGTTGGTAGTA
+- edges:
+  - e320
+  - e131
+  - e59
+  - e364
+  name: B190
+  sequence: AACCTCGAAA TCCTAGACATT AGTTTACTCCT ATCACCACAA
+- edges:
+  - e321
+  - nullT11S
+  - e368
+  - e131
+  name: H191
+  sequence: TTTTTTTTTTT AGCTGATTGA TTTCGAGGTT AGAATCAGGAT
+- edges:
+  - e323
+  - e250
+  - e370
+  - nullT10N
+  name: N192
+  sequence: ACTGAGGATAA ATAACGGTGA TTTTTTTTTT AAAAGTGAACA
+- edges:
+  - e325
+  - e371
+  - e27
+  - e250
+  name: N193
+  sequence: AGCCATCTTT TTCCTCACTAT TTATCCTCAGT AGCCTTTCTT
+- edges:
+  - e327
+  - e157
+  - e374
+  - e371
+  name: N194
+  sequence: ACAGTAGGATT TTGGTGGTAA AAAGATGGCT TGTAGGAATCT
+- edges:
+  - e329
+  - e375
+  - e376
+  - e157
+  name: S195
+  sequence: AACACCTCAT ACCAAATGAAA AATCCTACTGT TGCCATATCA
+- edges:
+  - e331
+  - e136
+  - e378
+  - e375
+  name: H196
+  sequence: AGAACTAAGGA AAGGGACAAT ATGAGGTGTT TATGACTGTGA
+- edges:
+  - e180
+  - e3
+  - e380
+  - e136
+  name: S197
+  sequence: AACTTCTCGA ACCTCTAAAGT TCCTTAGTTCT AAGACCAACA
+- edges:
+  - e335
+  - e381
+  - e357
+  - e3
+  name: H198
+  sequence: AGGAGTTACTT AGTTGATGCT TCGAGAAGTT TGAAAGAGGTA
+- edges:
+  - e42
+  - e383
+  - e143
+  - e381
+  name: S199
+  sequence: TCGCTTTCTA TACCTTCTTGA AAGTAACTCCT TCCAATCCAA
+- edges:
+  - e339
+  - e385
+  - e386
+  - e383
+  name: H200
+  sequence: TATGGAGTTCT AGCAGGATTT TAGAAAGCGA AGAAGTAGACA
+  stoic: 20.0
+- edges:
+  - e341
+  - e387
+  - e388
+  - e385
+  name: B201
+  sequence: TCCACGTTAT ATGTCTAACCT AGAACTCCATA AACCAGAACT
+  stoic: 1.0
+- edges:
+  - e343
+  - e389
+  - e390
+  - e387
+  name: H202
+  sequence: AGGGATTTAGT AGAGCGTAAT ATAACGTGGA AAAGCATTGAT
+  stoic: 20.0
+- edges:
+  - e345
+  - e391
+  - e310
+  - e389
+  name: S203
+  sequence: ACGAACCATA TATCTTCCTGT ACTAAATCCCT AGCACTTACA
+  stoic: 1.0
+- edges:
+  - e347
+  - e393
+  - e394
+  - e391
+  name: H204
+  sequence: TAACTGGAAGA AAATGAGGCT TATGGTTCGT AAAAATGGACA
+  stoic: 20.0
+- edges:
+  - e320
+  - e151
+  - e396
+  - e393
+  name: N205
+  sequence: ACATCCATGA TCCTAGACATT TCTTCCAGTTA ATTCACTCGA
+- edges:
+  - e351
+  - e93
+  - e398
+  - e151
+  name: N206
+  sequence: AATAGGGTACA TGAAAGTCGA TCATGGATGT TTCTGTAGTGA
+- edges:
+  - e177
+  - e399
+  - e400
+  - e93
+  name: N207
+  sequence: AAAAAACGCA TTTCTTTTGCT TGTACCCTATT TTCCTTCACA
+- edges:
+  - e273
+  - e401
+  - e38
+  - e399
+  name: H208
+  sequence: AGTAATCTGGT AATGAGAGCT TGCGTTTTTT ATTGTTTGACA
+- edges:
+  - e357
+  - e403
+  - e404
+  - e401
+  name: N209
+  sequence: ATCACGACTT TACCTCTTTCA ACCAGATTACT TTGCACCTTA
+- edges:
+  - e359
+  - e405
+  - e406
+  - e403
+  name: H210
+  sequence: TCGAGAGATTA TTAGCTTGGT AAGTCGTGAT TTTACTGGGTA
+- edges:
+  - e89
+  - e248
+  - e408
+  - e405
+  name: N211
+  sequence: AATCCGAACT AGCTACCATAT TAATCTCTCGA TTCTGCTCAA
+- edges:
+  - e363
+  - e213
+  - e410
+  - e248
+  name: H212
+  sequence: TTCTATGTGGA TGGCTGTTAA AGTTCGGATT TTATGTTTGCA
+- edges:
+  - e365
+  - e411
+  - e412
+  - e213
+  name: S213
+  sequence: ATTGCCTACA TACTACCAACT TCCACATAGAA TCGTCTTCAT
+- edges:
+  - e59
+  - e270
+  - e414
+  - e411
+  name: H214
+  sequence: AGGAAGGAATA TTGTGGTGAT TGTAGGCAAT TGATTAGGAGT
+- edges:
+  - e368
+  - nullT10S
+  - e415
+  - e270
+  name: S215
+  sequence: TTTTTTTTTT ATCCTGATTCT TATTCCTTCCT AACGTCATCT
+- edges:
+  - e370
+  - e416
+  - e417
+  - nullT11N
+  name: S216
+  sequence: TTGTTCCCTT TGTTCACTTTT TTTTTTTTTTT ATCTTCCGAA
+- edges:
+  - e27
+  - e418
+  - e419
+  - e416
+  name: H217
+  sequence: TAAATGGGAGA AAGAAAGGCT AAGGGAACAA AGATCTGAGTT
+- edges:
+  - e374
+  - e420
+  - e237
+  - e418
+  name: N218
+  sequence: ATCTGCTTCA AGATTCCTACA TCTCCCATTTA ACTTGCCTAA
+- edges:
+  - e376
+  - e422
+  - e423
+  - e420
+  name: H219
+  sequence: TTGGTTTGAAT TGATATGGCA TGAAGCAGAT ATAGCAGGATA
+- edges:
+  - e378
+  - e39
+  - e425
+  - e422
+  name: N220
+  sequence: AAACTCCGAA TCACAGTCATA ATTCAAACCAA ACATCGCTAA
+- edges:
+  - e380
+  - e332
+  - e427
+  - e39
+  name: H221
+  sequence: TTTTGATTCGT TGTTGGTCTT TTCGGAGTTT ATATAGAGGCA
+- edges:
+  - e357
+  - e428
+  - e429
+  - e332
+  name: S222
+  sequence: TTTCGTCTCA TACCTCTTTCA ACGAATCAAAA TAAGCCACAA
+- edges:
+  - e143
+  - e430
+  - e431
+  - e428
+  name: H223
+  sequence: ACTATGTGAGT TTGGATTGGA TGAGACGAAA ATTACGAGAGA
+- edges:
+  - e386
+  - e371
+  - e433
+  - e430
+  name: S224
+  sequence: AGCCATCTTT TGTCTACTTCT ACTCACATAGT TAACACAGCA
+  stoic: 3.0
+- edges:
+  - e388
+  - e434
+  - e320
+  - e371
+  name: H225
+  sequence: TAGCATGAGTA AGTTCTGGTT AAAGATGGCT AATGTCTAGGA
+  stoic: 20.0
+- edges:
+  - e390
+  - e436
+  - e224
+  - e434
+  name: S226
+  sequence: ACACGACTAA ATCAATGCTTT TACTCATGCTA ATGACCCAAT
+  stoic: 3.0
+- edges:
+  - e310
+  - e438
+  - e70
+  - e436
+  name: H227
+  sequence: TAGTGGTTGTA TGTAAGTGCT TTAGTCGTGT TTTTTAAGCGT
+  stoic: 20.0
+- edges:
+  - e394
+  - e440
+  - e441
+  - e438
+  name: S228
+  sequence: TTTACTGCCT TGTCCATTTTT TACAACCACTA ACATACACGT
+  stoic: 3.0
+- edges:
+  - e396
+  - e84
+  - e316
+  - e440
+  name: N229
+  sequence: AAGTTAGGGTA TCGAGTGAAT AGGCAGTAAA AAAATGCAAGA
+- edges:
+  - e398
+  - e301
+  - e445
+  - e84
+  name: B230
+  sequence: TTCCAACAGA TCACTACAGAA TACCCTAACTT ACGTTAACCT
+- edges:
+  - e400
+  - e319
+  - e447
+  - e301
+  name: H231
+  sequence: TAAAATTGGCA TGTGAAGGAA TCTGTTGGAA TACATGGAAGA
+- edges:
+  - e38
+  - e114
+  - e449
+  - e319
+  name: S232
+  sequence: AGCCTACAAA TGTCAAACAAT TGCCAATTTTA ACCAAACAGA
+- edges:
+  - e404
+  - e450
+  - e451
+  - e114
+  name: N233
+  sequence: AGAGAATGAGT TAAGGTGCAA TTTGTAGGCT TAGTTGTGAGA
+- edges:
+  - e406
+  - e187
+  - e12
+  - e450
+  name: S234
+  sequence: TTCCCAAAGA TACCCAGTAAA ACTCATTCTCT AATCGTTCCT
+- edges:
+  - e408
+  - e454
+  - e231
+  - e187
+  name: B235
+  sequence: AGTGTTTTGAA TTGAGCAGAA TCTTTGGGAA TAAGAAGGTCA
+- edges:
+  - e410
+  - e268
+  - e457
+  - e454
+  name: N236
+  sequence: ATCGTAACCA TGCAAACATAA TTCAAAACACT ACATAACCGA
+- edges:
+  - e412
+  - e458
+  - e451
+  - e268
+  name: H237
+  sequence: TAGCTAATGGA ATGAAGACGA TGGTTACGAT TAGTTGTGAGA
+- edges:
+  - e414
+  - e460
+  - e143
+  - e458
+  name: N238
+  sequence: TACCGTCATT ACTCCTAATCA TCCATTAGCTA TCCAATCCAA
+- edges:
+  - e415
+  - nullT11S
+  - e462
+  - e460
+  name: B239
+  sequence: TTTTTTTTTTT AGATGACGTT AATGACGGTA AGAGTTATGGA
+- edges:
+  - e417
+  - e463
+  - e464
+  - nullT10N
+  name: H240
+  sequence: AGAGTGATGAT TTCGGAAGAT TTTTTTTTTT TTGTTGCATAA
+- edges:
+  - e419
+  - e54
+  - e466
+  - e463
+  name: S241
+  sequence: ACTTGTTCCT AACTCAGATCT ATCATCACTCT ATCGACCTTT
+- edges:
+  - e237
+  - e467
+  - e271
+  - e54
+  name: N242
+  sequence: TGAGTATCTGT TTAGGCAAGT AGGAACAAGT TGAAGTAAGGA
+- edges:
+  - e423
+  - e223
+  - e396
+  - e467
+  name: S243
+  sequence: ATATGCACCA TATCCTGCTAT ACAGATACTCA ATTCACTCGA
+- edges:
+  - e425
+  - e161
+  - e117
+  - e223
+  name: N244
+  sequence: AGGGTTCTAAT TTAGCGATGT TGGTGCATAT TAGGGTAACAT
+- edges:
+  - e427
+  - e473
+  - e457
+  - e161
+  name: S245
+  sequence: ACAACTCACT TGCCTCTATAT ATTAGAACCCT ACATAACCGA
+- edges:
+  - e429
+  - e475
+  - e476
+  - e473
+  name: H246
+  sequence: AGTCGATGATA TTGTGGCTTA AGTGAGTTGT ATGAGTTAGGT
+- edges:
+  - e431
+  - e46
+  - e478
+  - e475
+  name: S247
+  sequence: ACAGCCATTA TCTCTCGTAAT TATCATCGACT AATCTCCGAA
+- edges:
+  - e433
+  - e479
+  - e480
+  - e46
+  name: H248
+  sequence: ATGGATTAGGA TGCTGTGTTA TAATGGCTGT ACAATTGGAAA
+  stoic: 20.0
+- edges:
+  - e320
+  - e481
+  - e204
+  - e479
+  name: S249
+  sequence: TCAGCATCTT TCCTAGACATT TCCTAATCCAT ACACCATCAT
+- edges:
+  - e224
+  - e483
+  - e186
+  - e481
+  name: B250
+  sequence: TTTTGTTCAGT ATTGGGTCAT AAGATGCTGA TGGAGTAAGAT
+  stoic: 20.0
+- edges:
+  - e70
+  - e485
+  - e486
+  - e483
+  name: N251
+  sequence: AATTCCCAGT ACGCTTAAAAA ACTGAACAAAA ATAACGCTCT
+- edges:
+  - e441
+  - e487
+  - e74
+  - e485
+  name: H252
+  sequence: TTGGGATATCT ACGTGTATGT ACTGGGAATT TAATACGAGGA
+  stoic: 20.0
+- edges:
+  - e316
+  - e489
+  - e490
+  - e487
+  name: N253
+  sequence: ATACTGCCAA TCTTGCATTTT AGATATCCCAA TCTTGTCACA
+- edges:
+  - e445
+  - e41
+  - e255
+  - e489
+  name: H254
+  sequence: TGGATGATACT AGGTTAACGT TTGGCAGTAT TATAGACGTGT
+- edges:
+  - e447
+  - e493
+  - e494
+  - e41
+  name: N255
+  sequence: ACTTTCTCGT TCTTCCATGTA AGTATCATCCA ATCGCTACAA
+- edges:
+  - e449
+  - e311
+  - e496
+  - e493
+  name: H256
+  sequence: TGGATAGCTTA TCTGTTTGGT ACGAGAAAGT ATATAGGACGT
+- edges:
+  - e451
+  - e497
+  - e498
+  - e311
+  name: N257
+  sequence: TTCATCCCAA TCTCACAACTA TAAGCTATCCA ATCCAACCAT
+- edges:
+  - e12
+  - e93
+  - e500
+  - e497
+  name: H258
+  sequence: AATAGGGTACA AGGAACGATT TTGGGATGAA TGGAATAGTCA
+- edges:
+  - e231
+  - e326
+  - e502
+  - e93
+  name: S259
+  sequence: ACAACTTCGA TGACCTTCTTA TGTACCCTATT AGTTCCAACA
+- edges:
+  - e457
+  - e503
+  - e504
+  - e326
+  name: H260
+  sequence: AGTAGATACGT TCGGTTATGT TCGAAGTTGT AAGGTAGTCAT
+- edges:
+  - e451
+  - e436
+  - e506
+  - e503
+  name: S261
+  sequence: ACACGACTAA TCTCACAACTA ACGTATCTACT AAAGCACTCT
+- edges:
+  - e143
+  - e153
+  - e113
+  - e436
+  name: N262
+  sequence: TAGAGGAAAGT TTGGATTGGA TTAGTCGTGT TTTTGGTTCAA
+- edges:
+  - e462
+  - nullT10S
+  - e509
+  - e153
+  name: S263
+  sequence: TTTTTTTTTT TCCATAACTCT ACTTTCCTCTA ATTCCAACCT
+- edges:
+  - e464
+  - e510
+  - e167
+  - nullT11N
+  name: S264
+  sequence: TTCACCACTT TTATGCAACAA TTTTTTTTTTT TCATAGCCAA
+- edges:
+  - e466
+  - e512
+  - e431
+  - e510
+  name: H265
+  sequence: TGGCTTTTTTA AAAGGTCGAT AAGTGGTGAA ATTACGAGAGA
+- edges:
+  - e271
+  - e514
+  - e515
+  - e512
+  name: N266
+  sequence: AAACCCATGA TCCTTACTTCA TAAAAAAGCCA AAACTGTCCA
+- edges:
+  - e396
+  - e516
+  - e222
+  - e514
+  name: B267
+  sequence: ATTAATTGCGA TCGAGTGAAT TCATGGGTTT AAAGAGAGGAA
+- edges:
+  - e117
+  - e518
+  - e519
+  - e516
+  name: S268
+  sequence: ATCGACATCA ATGTTACCCTA TCGCAATTAAT TCTGACAACA
+- edges:
+  - e457
+  - e520
+  - e345
+  - e518
+  name: B269
+  sequence: AGGGTTAGAAT TCGGTTATGT TGATGTCGAT ACAGGAAGATA
+- edges:
+  - e476
+  - e178
+  - e4
+  - e520
+  name: S270
+  sequence: TGCTCCATTA ACCTAACTCAT ATTCTAACCCT ATCACCCAAA
+- edges:
+  - e478
+  - e524
+  - e525
+  - e178
+  name: H271
+  sequence: TATGACAGAGT TTCGGAGATT TAATGGAGCA ATAGGACATGA
+- edges:
+  - e480
+  - e526
+  - e527
+  - e524
+  name: S272
+  sequence: TCGATCAACA TTTCCAATTGT ACTCTGTCATA TATCGCTCAA
+  stoic: 3.0
+- edges:
+  - e204
+  - e528
+  - e186
+  - e526
+  name: N273
+  sequence: AGACTAATGGA ATGATGGTGT TGTTGATCGA TGGAGTAAGAT
+- edges:
+  - e186
+  - e510
+  - e306
+  - e528
+  name: N274
+  sequence: TTCACCACTT ATCTTACTCCA TCCATTAGTCT ACCATCCAAA
+  stoic: 3.0
+- edges:
+  - e486
+  - e532
+  - e386
+  - e510
+  name: N275
+  sequence: AGTCTAAAGGA AGAGCGTTAT AAGTGGTGAA AGAAGTAGACA
+- edges:
+  - e74
+  - e534
+  - e19
+  - e532
+  name: S276
+  sequence: AACGCAATTT TCCTCGTATTA TCCTTTAGACT ACTAGCACAA
+  stoic: 3.0
+- edges:
+  - e490
+  - e133
+  - e537
+  - e534
+  name: H277
+  sequence: TGTTTGAACTT TGTGACAAGA AAATTGCGTT AGGAGCATATA
+- edges:
+  - e255
+  - e538
+  - e156
+  - e133
+  name: S278
+  sequence: ACATTCACCT ACACGTCTATA AAGTTCAAACA ACTAACGACA
+- edges:
+  - e494
+  - e125
+  - e541
+  - e538
+  name: N279
+  sequence: TTATCTGTGGA TTGTAGCGAT AGGTGAATGT TATTGAGGCTA
+- edges:
+  - e496
+  - e542
+  - e543
+  - e125
+  name: S280
+  sequence: ACCAACTTGA ACGTCCTATAT TCCACAGATAA ATCCAACGTA
+- edges:
+  - e498
+  - e544
+  - e345
+  - e542
+  name: H281
+  sequence: ACAGGTTAGAT ATGGTTGGAT TCAAGTTGGT ACAGGAAGATA
+- edges:
+  - e500
+  - e546
+  - e547
+  - e544
+  name: N282
+  sequence: TACAACGTCA TGACTATTCCA ATCTAACCTGT AATCCGTTCT
+- edges:
+  - e502
+  - e548
+  - e549
+  - e546
+  name: N283
+  sequence: TAAGAGTGTGA TGTTGGAACT TGACGTTGTA TTAAGGGAGAA
+- edges:
+  - e504
+  - e428
+  - e551
+  - e548
+  name: S284
+  sequence: TTTCGTCTCA ATGACTACCTT TCACACTCTTA ACGATCTCAA
+- edges:
+  - e506
+  - e552
+  - e553
+  - e428
+  name: H285
+  sequence: TAGGAAAGTCA AGAGTGCTTT TGAGACGAAA TTAGATACGGA
+- edges:
+  - e113
+  - e554
+  - e224
+  - e552
+  name: N286
+  sequence: TAACAACCGT TTGAACCAAAA TGACTTTCCTA ATGACCCAAT
+- edges:
+  - e509
+  - nullT11S
+  - e556
+  - e554
+  name: H287
+  sequence: TTTTTTTTTTT AGGTTGGAAT ACGGTTGTTA ATCAGGATGTA
+- edges:
+  - e167
+  - e557
+  - e464
+  - nullT10N
+  name: N288
+  sequence: TTCGAAATGTT TTGGCTATGA TTTTTTTTTT TTGTTGCATAA
+- edges:
+  - e431
+  - e559
+  - e560
+  - e557
+  name: S289
+  sequence: AACCTGAACA TCTCTCGTAAT AACATTTCGAA AAATCCGACT
+- edges:
+  - e515
+  - e315
+  - e341
+  - e559
+  name: H290
+  sequence: AGGTATCGTAT TGGACAGTTT TGTTCAGGTT AGGTTAGACAT
+- edges:
+  - e222
+  - e256
+  - e457
+  - e315
+  name: S291
+  sequence: ACCTGACATT TTCCTCTCTTT ATACGATACCT ACATAACCGA
+- edges:
+  - e519
+  - e565
+  - e566
+  - e256
+  name: H292
+  sequence: ACGTTGATTTT TGTTGTCAGA AATGTCAGGT TTAAAGAGGGA
+- edges:
+  - e345
+  - e567
+  - e568
+  - e565
+  name: S293
+  sequence: AACTCGCTAA TATCTTCCTGT AAAATCAACGT TTCTTCTGCT
+- edges:
+  - e4
+  - e258
+  - e173
+  - e567
+  name: H294
+  sequence: AACGTGAAATT TTTGGGTGAT TTAGCGAGTT TCTAAGTGTGA
+- edges:
+  - e525
+  - e43
+  - e572
+  - e258
+  name: B295
+  sequence: TCTTTCACGT TCATGTCCTAT AATTTCACGTT ACTTGACACA
+- edges:
+  - e527
+  - e573
+  - e190
+  - e43
+  name: N296
+  sequence: ATTTGCTGATT TTGAGCGATA ACGTGAAAGA TTTAAATGCGA
+- edges:
+  - e186
+  - e575
+  - e576
+  - e573
+  name: S297
+  sequence: TTCAGCTCAA ATCTTACTCCA AATCAGCAAAT ATTTCAGCCT
+- edges:
+  - e306
+  - e189
+  - e578
+  - e575
+  name: H298
+  sequence: AGTTGATAGGT TTTGGATGGT TTGAGCTGAA TGAGTAGAACA
+- edges:
+  - e386
+  - e215
+  - e415
+  - e189
+  name: B299
+  sequence: ATCCACCATT TGTCTACTTCT ACCTATCAACT AACGTCATCT
+- edges:
+  - e19
+  - e581
+  - e329
+  - e215
+  name: B300
+  sequence: ACATATGGAGT TTGTGCTAGT AATGGTGGAT TTTCATTTGGT
+- edges:
+  - e537
+  - e71
+  - e396
+  - e581
+  name: S301
+  sequence: ACCCTTCAAT TATATGCTCCT ACTCCATATGT ATTCACTCGA
+- edges:
+  - e156
+  - e332
+  - e94
+  - e71
+  name: H302
+  sequence: TTTTGATTCGT TGTCGTTAGT ATTGAAGGGT AGGATATAGCA
+- edges:
+  - e541
+  - e587
+  - e551
+  - e332
+  name: S303
+  sequence: AACTGCTCTT TAGCCTCAATA ACGAATCAAAA ACGATCTCAA
+- edges:
+  - e543
+  - e589
+  - e590
+  - e587
+  name: H304
+  sequence: AGTAGTGACAT TACGTTGGAT AAGAGCAGTT AAGAAAAGCAA
+- edges:
+  - e345
+  - e591
+  - e347
+  - e589
+  name: S305
+  sequence: TCCACTCAAA TATCTTCCTGT ATGTCACTACT AGCCTCATTT
+- edges:
+  - e547
+  - e512
+  - e594
+  - e591
+  name: H306
+  sequence: TGGCTTTTTTA AGAACGGATT TTTGAGTGGA AGTGAGTAAGA
+- edges:
+  - e549
+  - e46
+  - e596
+  - e512
+  name: S307
+  sequence: ACAGCCATTA TTCTCCCTTAA TAAAAAAGCCA TCAACCTGTT
+- edges:
+  - e551
+  - e597
+  - e598
+  - e46
+  name: N308
+  sequence: TCGGAATTAGA TTGAGATCGT TAATGGCTGT AGATAGCGTAT
+- edges:
+  - e553
+  - e599
+  - e515
+  - e597
+  name: N309
+  sequence: AGACAACCTT TCCGTATCTAA TCTAATTCCGA AAACTGTCCA
+- edges:
+  - e224
+  - e548
+  - e602
+  - e599
+  name: H310
+  sequence: TAAGAGTGTGA ATTGGGTCAT AAGGTTGTCT TAAAATGTGCA
+- edges:
+  - e556
+  - nullT10S
+  - e603
+  - e548
+  name: S311
+  sequence: TTTTTTTTTT TACATCCTGAT TCACACTCTTA ACGATCAACT
+- edges:
+  - e464
+  - e114
+  - e253
+  - nullT11N
+  name: S312
+  sequence: AGCCTACAAA TTATGCAACAA TTTTTTTTTTT TCAAGAACCA
+- edges:
+  - e560
+  - e606
+  - e398
+  - e114
+  name: H313
+  sequence: AGACGGTAATA AGTCGGATTT TTTGTAGGCT TTCTGTAGTGA
+- edges:
+  - e341
+  - e608
+  - e551
+  - e606
+  name: S314
+  sequence: TTACGTCCAA ATGTCTAACCT TATTACCGTCT ACGATCTCAA
+- edges:
+  - e457
+  - e610
+  - e6
+  - e608
+  name: H315
+  sequence: ATGAAAATGCT TCGGTTATGT TTGGACGTAA TAAAAGGCAAA
+- edges:
+  - e566
+  - e342
+  - e613
+  - e610
+  name: S316
+  sequence: AAACCTGCTA TCCCTCTTTAA AGCATTTTCAT TCACAAACCT
+- edges:
+  - e568
+  - e614
+  - e365
+  - e342
+  name: H317
+  sequence: AAAAGGGTCTA AGCAGAAGAA TAGCAGGTTT AGTTGGTAGTA
+- edges:
+  - e173
+  - e616
+  - e36
+  - e614
+  name: S318
+  sequence: TTAAGCACCT TCACACTTAGA TAGACCCTTTT TATCAACGCT
+- edges:
+  - e572
+  - e618
+  - e619
+  - e616
+  name: H319
+  sequence: TCGTAGTATGT TGTGTCAAGT AGGTGCTTAA AGAGAAGATGT
+- edges:
+  - e190
+  - e620
+  - e621
+  - e618
+  name: B320
+  sequence: AGACCACTTT TCGCATTTAAA ACATACTACGA TACACAAGCT
+- edges:
+  - e576
+  - e450
+  - e623
+  - e620
+  name: H321
+  sequence: AGAGAATGAGT AGGCTGAAAT AAAGTGGTCT ATTAGTCTGGA
+- edges:
+  - e578
+  - e624
+  - e408
+  - e450
+  name: S322
+  sequence: ACCAGCATAA TGTTCTACTCA ACTCATTCTCT TTCTGCTCAA
+- edges:
+  - e415
+  - e597
+  - e627
+  - e624
+  name: H323
+  sequence: TCGGAATTAGA AGATGACGTT TTATGCTGGT ATTATCGGAGA
+- edges:
+  - e329
+  - e628
+  - e629
+  - e597
+  name: S324
+  sequence: TCGCATTCTA ACCAAATGAAA TCTAATTCCGA AAGTTCCCAT
+- edges:
+  - e396
+  - e630
+  - e631
+  - e628
+  name: H325
+  sequence: TAGATGTACGT TCGAGTGAAT TAGAATGCGA TTAGAGTGACA
+- edges:
+  - e94
+  - e632
+  - e515
+  - e630
+  name: S326
+  sequence: AATACCACGA TGCTATATCCT ACGTACATCTA AAACTGTCCA
+- edges:
+  - e551
+  - e467
+  - e635
+  - e632
+  name: H327
+  sequence: TGAGTATCTGT TTGAGATCGT TCGTGGTATT TAGGAGAAACT
+- edges:
+  - e590
+  - e546
+  - e359
+  - e467
+  name: S328
+  sequence: TACAACGTCA TTGCTTTTCTT ACAGATACTCA ACCAAGCTAA
+- edges:
+  - e347
+  - e638
+  - e639
+  - e546
+  name: H329
+  sequence: AGAAGGATGAT AAATGAGGCT TGACGTTGTA AGGTTTAGGTA
+- edges:
+  - e594
+  - e342
+  - e641
+  - e638
+  name: N330
+  sequence: AAACCTGCTA TCTTACTCACT ATCATCCTTCT TTCACCTGTT
+- edges:
+  - e596
+  - e275
+  - e643
+  - e342
+  name: H331
+  sequence: AGAGATGACTT AACAGGTTGA TAGCAGGTTT AGAGTTGAGTA
+- edges:
+  - e598
+  - e155
+  - e645
+  - e275
+  name: S332
+  sequence: AACCCTCTTT ATACGCTATCT AAGTCATCTCT AAGACCACAT
+- edges:
+  - e515
+  - e646
+  - e647
+  - e155
+  name: H333
+  sequence: TTTAGTGGAGA TGGACAGTTT AAAGAGGGTT ACTAGATGGAA
+- edges:
+  - e602
+  - e648
+  - e649
+  - e646
+  name: S334
+  sequence: ACGACCAATA TGCACATTTTA TCTCCACTAAA AACGTACCTT
+- edges:
+  - e603
+  - nullT11S
+  - e650
+  - e648
+  name: H335
+  sequence: TTTTTTTTTTT AGTTGATCGT TATTGGTCGT ATAGGACAAGT
+- edges:
+  - e253
+  - e651
+  - e652
+  - nullT10N
+  name: H336
+  sequence: TTCGGATAGAA TGGTTCTTGA TTTTTTTTTT TGGGTGTATAT
+- edges:
+  - e398
+  - e653
+  - e629
+  - e651
+  name: S337
+  sequence: ACCTTCAGTT TCACTACAGAA TTCTATCCGAA AAGTTCCCAT
+- edges:
+  - e551
+  - e655
+  - e102
+  - e653
+  name: B338
+  sequence: TGTAGAGGATT TTGAGATCGT AACTGAAGGT AAATTGGAACA
+- edges:
+  - e6
+  - e526
+  - e658
+  - e655
+  name: N339
+  sequence: TCGATCAACA TTTGCCTTTTA AATCCTCTACA ACACTTCCAT
+- edges:
+  - e613
+  - e659
+  - e660
+  - e526
+  name: H340
+  sequence: AGGACTAATGT AGGTTTGTGA TGTTGATCGA TAAAACGTGTT
+- edges:
+  - e365
+  - e661
+  - e179
+  - e659
+  name: S341
+  sequence: ACCAACAAGA TACTACCAACT ACATTAGTCCT AAACCTCCTT
+- edges:
+  - e36
+  - e101
+  - e145
+  - e661
+  name: H342
+  sequence: TGGAAGAGTAT AGCGTTGATA TCTTGTTGGT AGGTTCTAGTT
+- edges:
+  - e619
+  - e665
+  - e666
+  - e101
+  name: S343
+  sequence: AGCACCTTTA ACATCTTCTCT ATACTCTTCCA TTCCAGTTCA
+- edges:
+  - e621
+  - e483
+  - e325
+  - e665
+  name: H344
+  sequence: TTTTGTTCAGT AGCTTGTGTA TAAAGGTGCT ATAGTGAGGAA
+- edges:
+  - e623
+  - e669
+  - e670
+  - e483
+  name: S345
+  sequence: TACACGAACA TCCAGACTAAT ACTGAACAAAA TCCCAGAAAA
+- edges:
+  - e408
+  - e557
+  - e271
+  - e669
+  name: H346
+  sequence: TTCGAAATGTT TTGAGCAGAA TGTTCGTGTA TGAAGTAAGGA
+- edges:
+  - e627
+  - e538
+  - e486
+  - e557
+  name: N347
+  sequence: ACATTCACCT TCTCCGATAAT AACATTTCGAA ATAACGCTCT
+- edges:
+  - e629
+  - e528
+  - e676
+  - e538
+  name: H348
+  sequence: AGACTAATGGA ATGGGAACTT AGGTGAATGT ATTGTAGGACT
+- edges:
+  - e631
+  - e534
+  - e294
+  - e528
+  name: S349
+  sequence: AACGCAATTT TGTCACTCTAA TCCATTAGTCT TCATGCCTTA
+- edges:
+  - e515
+  - e48
+  - e419
+  - e534
+  name: N350
+  sequence: TGCAGTTTTTA TGGACAGTTT AAATTGCGTT AGATCTGAGTT
+- edges:
+  - e635
+  - e681
+  - e682
+  - e48
+  name: N351
+  sequence: TTTACCGACA AGTTTCTCCTA TAAAAACTGCA TCCCAATTGA
+- edges:
+  - e359
+  - e344
+  - e190
+  - e681
+  name: H352
+  sequence: TAGGAACAGAA TTAGCTTGGT TGTCGGTAAA TTTAAATGCGA
+- edges:
+  - e639
+  - e624
+  - e686
+  - e344
+  name: S353
+  sequence: ACCAGCATAA TACCTAAACCT TTCTGTTCCTA ATTCTGCACT
+- edges:
+  - e641
+  - e116
+  - e688
+  - e624
+  name: H354
+  sequence: ACAAGGATAGA AACAGGTGAA TTATGCTGGT TGGGTACTTTA
+- edges:
+  - e643
+  - e620
+  - e494
+  - e116
+  name: S355
+  sequence: AGACCACTTT TACTCAACTCT TCTATCCTTGT ATCGCTACAA
+- edges:
+  - e645
+  - e319
+  - e231
+  - e620
+  name: H356
+  sequence: TAAAATTGGCA ATGTGGTCTT AAAGTGGTCT TAAGAAGGTCA
+- edges:
+  - e647
+  - e371
+  - e694
+  - e319
+  name: N357
+  sequence: AGCCATCTTT TTCCATCTAGT TGCCAATTTTA ACAAGTCCAT
+- edges:
+  - e649
+  - e695
+  - e10
+  - e371
+  name: H358
+  sequence: AGTTGTAGTCT AAGGTACGTT AAAGATGGCT TACATGATGGA
+- edges:
+  - e650
+  - nullT10S
+  - e697
+  - e695
+  name: S359
+  sequence: TTTTTTTTTT ACTTGTCCTAT AGACTACAACT AGAAACCCAA
+- edges:
+  - e652
+  - e698
+  - e318
+  - nullT11N
+  name: B360
+  sequence: TCAATCTCGT ATATACACCCA TTTTTTTTTTT TCAAGACACA
+- edges:
+  - e629
+  - e700
+  - e117
+  - e698
+  name: H361
+  sequence: ATTGCAATGAT ATGGGAACTT ACGAGATTGA TAGGGTAACAT
+- edges:
+  - e102
+  - e702
+  - e703
+  - e700
+  name: B362
+  sequence: TCCTATCCCT TGTTCCAATTT ATCATTGCAAT ACACACTCAA
+- edges:
+  - e658
+  - e704
+  - e705
+  - e702
+  name: H363
+  sequence: AGGTAATGGTA ATGGAAGTGT AGGGATAGGA TGCATATAGGT
+- edges:
+  - e660
+  - e99
+  - e707
+  - e704
+  name: S364
+  sequence: AACTTCAGCT AACACGTTTTA TACCATTACCT TAACTGCCAA
+- edges:
+  - e179
+  - e708
+  - e45
+  - e99
+  name: N365
+  sequence: AACTGATAGGA AAGGAGGTTT AGCTGAAGTT TGAGGTATGAT
+- edges:
+  - e145
+  - e63
+  - e347
+  - e708
+  name: S366
+  sequence: TTCGTACACA AACTAGAACCT TCCTATCAGTT AGCCTCATTT
+- edges:
+  - e666
+  - e712
+  - e713
+  - e63
+  name: H367
+  sequence: TTAAGGACTGA TGAACTGGAA TGTGTACGAA AGAATATGGGT
+- edges:
+  - e325
+  - e714
+  - nullT10E
+  - e712
+  name: S368
+  sequence: ATTCGCTACT TTCCTCACTAT TCAGTCCTTAA TTTTTTTTTT
+- edges:
+  - e670
+  - e715
+  - nullT11E
+  - e714
+  name: H369
+  sequence: TGAGGATGTTA TTTTCTGGGA AGTAGCGAAT TTTTTTTTTTT
+- edges:
+  - e271
+  - e716
+  - nullT10E
+  - e715
+  name: S370
+  sequence: TCACACAGTT TCCTTACTTCA TAACATCCTCA TTTTTTTTTT
+- edges:
+  - e486
+  - e717
+  - nullT11E
+  - e716
+  name: H371
+  sequence: AGTTCTGAGAT AGAGCGTTAT AACTGTGTGA TTTTTTTTTTT
+- edges:
+  - e676
+  - e718
+  - nullT10E
+  - e717
+  name: N372
+  sequence: ACACATCCAT AGTCCTACAAT ATCTCAGAACT TTTTTTTTTT
+- edges:
+  - e294
+  - e719
+  - nullT11E
+  - e718
+  name: H373
+  sequence: AAAGAGGAGAT TAAGGCATGA ATGGATGTGT TTTTTTTTTTT
+- edges:
+  - e419
+  - e720
+  - nullT10E
+  - e719
+  name: S374
+  sequence: TCCATCGAAA AACTCAGATCT ATCTCCTCTTT TTTTTTTTTT
+- edges:
+  - e682
+  - e266
+  - nullT11E
+  - e720
+  name: H375
+  sequence: TGTAGATGAGT TCAATTGGGA TTTCGATGGA TTTTTTTTTTT
+- edges:
+  - e190
+  - e460
+  - e318
+  - e266
+  name: S376
+  sequence: TACCGTCATT TCGCATTTAAA ACTCATCTACA TCAAGACACA
+- edges:
+  - e686
+  - e352
+  - e725
+  - e460
+  name: H377
+  sequence: AGAAGTCAGAT AGTGCAGAAT AATGACGGTA TAAGTGACTGA
+- edges:
+  - e688
+  - e726
+  - e425
+  - e352
+  name: N378
+  sequence: ACCCTTTGAT TAAAGTACCCA ATCTGACTTCT ACATCGCTAA
+- edges:
+  - e494
+  - e65
+  - e729
+  - e726
+  name: N379
+  sequence: TGGCTATTAGA TTGTAGCGAT ATCAAAGGGT AGAAAGGAAGA
+- edges:
+  - e231
+  - e730
+  - e731
+  - e65
+  name: B380
+  sequence: ATCGCAACTA TGACCTTCTTA TCTAATAGCCA ATCGTCCAAT
+- edges:
+  - e694
+  - e454
+  - e733
+  - e730
+  name: H381
+  sequence: AGTGTTTTGAA ATGGACTTGT TAGTTGCGAT TGAGAGAAAGA
+- edges:
+  - e10
+  - e734
+  - e735
+  - e454
+  name: S382
+  sequence: TTCTCTTGCT TCCATCATGTA TTCAAAACACT AACACTCGAT
+- edges:
+  - e697
+  - nullT11S
+  - e736
+  - e734
+  name: B383
+  sequence: TTTTTTTTTTT TTGGGTTTCT AGCAAGAGAA AGGTCATTAGT
+- edges:
+  - e318
+  - e737
+  - e738
+  - nullT10N
+  name: H384
+  sequence: AGTCTAAAGGT TGTGTCTTGA TTTTTTTTTT AGTGTAAGAGA
+- edges:
+  - e117
+  - e739
+  - e740
+  - e737
+  name: S385
+  sequence: TTCACGAACT ATGTTACCCTA ACCTTTAGACT ACTCAACGTA
+- edges:
+  - e703
+  - e741
+  - e742
+  - e739
+  name: H386
+  sequence: TCGGTAGATTA TTGAGTGTGT AGTTCGTGAA ATGGTAGATCA
+- edges:
+  - e705
+  - e420
+  - e204
+  - e741
+  name: B387
+  sequence: ATCTGCTTCA ACCTATATGCA TAATCTACCGA ACACCATCAT
+- edges:
+  - e707
+  - e581
+  - e746
+  - e420
+  name: H388
+  sequence: ACATATGGAGT TTGGCAGTTA TGAAGCAGAT TTAGAGTGTCT
+- edges:
+  - e45
+  - e747
+  - e44
+  - e581
+  name: S389
+  sequence: AAACCCAAGA ATCATACCTCA ACTCCATATGT AAAACGCAAT
+- edges:
+  - e347
+  - e101
+  - e141
+  - e747
+  name: B390
+  sequence: TGGAAGAGTAT AAATGAGGCT TCTTGGGTTT AATGTGGAAAA
+- edges:
+  - e713
+  - nullT10S
+  - e751
+  - e101
+  name: S391
+  sequence: TTTTTTTTTT ACCCATATTCT ATACTCTTCCA AGAACCCAAA
+- edges:
+  - e318
+  - e193
+  - e753
+  - nullT10N
+  name: B392
+  sequence: TATATGGTCGT TGTGTCTTGA TTTTTTTTTT TATCGGAGAAA
+- edges:
+  - e725
+  - e514
+  - e494
+  - e193
+  name: S393
+  sequence: AAACCCATGA TCAGTCACTTA ACGACCATATA ATCGCTACAA
+- edges:
+  - e425
+  - e756
+  - e757
+  - e514
+  name: H394
+  sequence: TATGGAGCTAT TTAGCGATGT TCATGGGTTT AGGAAATAGGA
+- edges:
+  - e729
+  - e758
+  - e124
+  - e756
+  name: S395
+  sequence: TGATCCACAT TCTTCCTTTCT ATAGCTCCATA ATGCATACCA
+- edges:
+  - e731
+  - e655
+  - e537
+  - e758
+  name: H396
+  sequence: TGTAGAGGATT ATTGGACGAT ATGTGGATCA AGGAGCATATA
+- edges:
+  - e733
+  - e142
+  - e763
+  - e655
+  name: S397
+  sequence: AACGTCTTCT TCTTTCTCTCA AATCCTCTACA TTCGATCACT
+- edges:
+  - e735
+  - e764
+  - e525
+  - e142
+  name: H398
+  sequence: TTTTTGTCTGT ATCGAGTGTT AGAAGACGTT ATAGGACATGA
+- edges:
+  - e736
+  - nullT10S
+  - e135
+  - e764
+  name: S399
+  sequence: TTTTTTTTTT ACTAATGACCT ACAGACAAAAA ATCTTCTGCA
+- edges:
+  - e738
+  - e146
+  - e768
+  - nullT11N
+  name: B400
+  sequence: AGCTTCATCA TCTCTTACACT TTTTTTTTTTT TTTCCTTCCA
+- edges:
+  - e740
+  - e307
+  - e210
+  - e146
+  name: H401
+  sequence: TAGAAGGCATA TACGTTGAGT TGATGAAGCT TATATGACGGA
+- edges:
+  - e742
+  - e771
+  - e184
+  - e307
+  name: S402
+  sequence: ATTCCGTACA TGATCTACCAT TATGCCTTCTA TTCTGACCAA
+- edges:
+  - e204
+  - e108
+  - e117
+  - e771
+  name: B403
+  sequence: AGAATTAGGGA ATGATGGTGT TGTACGGAAT TAGGGTAACAT
+- edges:
+  - e746
+  - e3
+  - e776
+  - e108
+  name: S404
+  sequence: AACTTCTCGA AGACACTCTAA TCCCTAATTCT AACACAGACA
+- edges:
+  - e44
+  - e777
+  - e778
+  - e3
+  name: H405
+  sequence: AGTGGATCTTA ATTGCGTTTT TCGAGAAGTT TGTGACAGATA
+- edges:
+  - e141
+  - e554
+  - e780
+  - e777
+  name: S406
+  sequence: TAACAACCGT TTTTCCACATT TAAGATCCACT ACATTCCACT
+- edges:
+  - e751
+  - nullT11S
+  - e781
+  - e554
+  name: H407
+  sequence: TTTTTTTTTTT TTTGGGTTCT ACGGTTGTTA TTGACGAAAAT
+- edges:
+  - e753
+  - e782
+  - e253
+  - nullT11N
+  name: S408
+  sequence: ACCATGTCAT TTTCTCCGATA TTTTTTTTTTT TCAAGAACCA
+- edges:
+  - e494
+  - e784
+  - e785
+  - e782
+  name: H409
+  sequence: AGGTGAAGTAT TTGTAGCGAT ATGACATGGT ATGACAGTAGT
+- edges:
+  - e757
+  - e309
+  - e282
+  - e784
+  name: S410
+  sequence: TTCGCTCTAA TCCTATTTCCT ATACTTCACCT TCACAACGTA
+- edges:
+  - e124
+  - e76
+  - e789
+  - e309
+  name: B411
+  sequence: TGAGGACTATT TGGTATGCAT TTAGAGCGAA TAGAGGAACAT
+- edges:
+  - e537
+  - e440
+  - e791
+  - e76
+  name: S412
+  sequence: TTTACTGCCT TATATGCTCCT AATAGTCCTCA TCATGACACA
+- edges:
+  - e763
+  - e792
+  - e10
+  - e440
+  name: H413
+  sequence: AGGGATTCATA AGTGATCGAA AGGCAGTAAA TACATGATGGA
+- edges:
+  - e525
+  - e734
+  - e502
+  - e792
+  name: S414
+  sequence: TTCTCTTGCT TCATGTCCTAT TATGAATCCCT AGTTCCAACA
+- edges:
+  - e135
+  - nullT11S
+  - e796
+  - e734
+  name: H415
+  sequence: TTTTTTTTTTT TGCAGAAGAT AGCAAGAGAA ATTACAGAGGT
+- edges:
+  - e768
+  - e88
+  - e798
+  - nullT10N
+  name: H416
+  sequence: AGGGATGTAAT TGGAAGGAAA TTTTTTTTTT AGAGTGGATAA
+- edges:
+  - e210
+  - e799
+  - e204
+  - e88
+  name: S417
+  sequence: TGCTACACAA TCCGTCATATA ATTACATCCCT ACACCATCAT
+- edges:
+  - e184
+  - e801
+  - e394
+  - e799
+  name: H418
+  sequence: AAGTGAGGATA TTGGTCAGAA TTGTGTAGCA AAAAATGGACA
+- edges:
+  - e117
+  - e771
+  - e547
+  - e801
+  name: B419
+  sequence: ATTCCGTACA ATGTTACCCTA TATCCTCACTT AATCCGTTCT
+- edges:
+  - e776
+  - e573
+  - e806
+  - e771
+  name: H420
+  sequence: ATTTGCTGATT TGTCTGTGTT TGTACGGAAT TTAAGGAAGGT
+- edges:
+  - e778
+  - e747
+  - e808
+  - e573
+  name: S421
+  sequence: AAACCCAAGA TATCTGTCACA AATCAGCAAAT ACAAAGTCCA
+- edges:
+  - e780
+  - e809
+  - e810
+  - e747
+  name: H422
+  sequence: AGTATGTCTGA AGTGGAATGT TCTTGGGTTT TCAGTTTAGGA
+- edges:
+  - e781
+  - nullT10S
+  - e811
+  - e809
+  name: B423
+  sequence: TTTTTTTTTT ATTTTCGTCAA TCAGACATACT AAAGACACCT
+- edges:
+  - e253
+  - e503
+  - e753
+  - nullT10N
+  name: N424
+  sequence: AGTAGATACGT TGGTTCTTGA TTTTTTTTTT TATCGGAGAAA
+- edges:
+  - e785
+  - e814
+  - e815
+  - e503
+  name: S425
+  sequence: ACCACTGATT ACTACTGTCAT ACGTATCTACT AAACGCAAAT
+- edges:
+  - e282
+  - e816
+  - e817
+  - e814
+  name: H426
+  sequence: TGGGATCTATT TACGTTGTGA AATCAGTGGT TATACGAAGGT
+- edges:
+  - e789
+  - e818
+  - e819
+  - e816
+  name: B427
+  sequence: TACACGTCAT ATGTTCCTCTA AATAGATCCCA ATCGACTCAA
+- edges:
+  - e791
+  - e820
+  - e821
+  - e818
+  name: H428
+  sequence: AGGTAAGAGAA TGTGTCATGA ATGACGTGTA AGGTCTTGATA
+- edges:
+  - e10
+  - e822
+  - e445
+  - e820
+  name: N429
+  sequence: AGCTCAATCA TCCATCATGTA TTCTCTTACCT ACGTTAACCT
+- edges:
+  - e502
+  - e756
+  - e154
+  - e822
+  name: H430
+  sequence: TATGGAGCTAT TGTTGGAACT TGATTGAGCT AGAACTATGGT
+- edges:
+  - e796
+  - nullT10S
+  - e826
+  - e756
+  name: S431
+  sequence: TTTTTTTTTT ACCTCTGTAAT ATAGCTCCATA TCAAACGACT
+- edges:
+  - e798
+  - e827
+  - e828
+  - nullT11N
+  name: S432
+  sequence: TATTCTCGCA TTATCCACTCT TTTTTTTTTTT ACAGCATACT
+- edges:
+  - e204
+  - e829
+  - e480
+  - e827
+  name: H433
+  sequence: AGGATGTACTT ATGATGGTGT TGCGAGAATA ACAATTGGAAA
+- edges:
+  - e394
+  - e831
+  - e351
+  - e829
+  name: S434
+  sequence: ACCAGCTTTA TGTCCATTTTT AAGTACATCCT TCGACTTTCA
+- edges:
+  - e547
+  - e833
+  - e834
+  - e831
+  name: H435
+  sequence: AACAGAGAGAT AGAACGGATT TAAAGCTGGT TATTCGAGGTA
+- edges:
+  - e806
+  - e835
+  - e836
+  - e833
+  name: S436
+  sequence: ATTCGACCAT ACCTTCCTTAA ATCTCTCTGTT AGCCATACAT
+- edges:
+  - e808
+  - e837
+  - e186
+  - e835
+  name: H437
+  sequence: AGGTATGGAAT TGGACTTTGT ATGGTCGAAT TGGAGTAAGAT
+- edges:
+  - e810
+  - e313
+  - e840
+  - e837
+  name: S438
+  sequence: ACGATCATCA TCCTAAACTGA ATTCCATACCT ATTCTCAGCT
+- edges:
+  - e811
+  - nullT11S
+  - e841
+  - e313
+  name: H439
+  sequence: TTTTTTTTTTT AGGTGTCTTT TGATGATCGT ATTTTGCAGAT
+- edges:
+  - e753
+  - e187
+  - e843
+  - nullT11N
+  name: S440
+  sequence: TTCCCAAAGA TTTCTCCGATA TTTTTTTTTTT ACGTTCACTA
+- edges:
+  - e815
+  - e844
+  - e845
+  - e187
+  name: H441
+  sequence: TTTGACTGTTT ATTTGCGTTT TCTTTGGGAA TTTTCGATTGT
+- edges:
+  - e817
+  - e58
+  - e847
+  - e844
+  name: S442
+  sequence: TTCTACGCAT ACCTTCGTATA AAACAGTCAAA TACAAGCCAA
+- edges:
+  - e819
+  - e467
+  - e789
+  - e58
+  name: H443
+  sequence: TGAGTATCTGT TTGAGTCGAT ATGCGTAGAA TAGAGGAACAT
+- edges:
+  - e821
+  - e163
+  - e19
+  - e467
+  name: S444
+  sequence: TTCGCATCTA TATCAAGACCT ACAGATACTCA ACTAGCACAA
+- edges:
+  - e445
+  - e852
+  - e853
+  - e163
+  name: H445
+  sequence: AGATGGAGATT AGGTTAACGT TAGATGCGAA TAGGTTTCAGA
+- edges:
+  - e154
+  - e854
+  - e543
+  - e852
+  name: S446
+  sequence: TAACTCGCTT ACCATAGTTCT AATCTCCATCT ATCCAACGTA
+- edges:
+  - e826
+  - nullT11S
+  - e736
+  - e854
+  name: H447
+  sequence: TTTTTTTTTTT AGTCGTTTGA AAGCGAGTTA AGGTCATTAGT
+- edges:
+  - e828
+  - e857
+  - e858
+  - nullT10N
+  name: H448
+  sequence: ATCTTAGGGAA AGTATGCTGT TTTTTTTTTT AGAGTAAGGTT
+- edges:
+  - e480
+  - e859
+  - e763
+  - e857
+  name: S449
+  sequence: TTTCCAGTCA TTTCCAATTGT TTCCCTAAGAT TTCGATCACT
+- edges:
+  - e351
+  - e861
+  - e345
+  - e859
+  name: H450
+  sequence: AGGAGTGTATT TGAAAGTCGA TGACTGGAAA ACAGGAAGATA
+- edges:
+  - e834
+  - e863
+  - e864
+  - e861
+  name: S451
+  sequence: ATTTCTCCGT TACCTCGAATA AATACACTCCT TCCACAAGTT
+- edges:
+  - e836
+  - e487
+  - e180
+  - e863
+  name: H452
+  sequence: TTGGGATATCT ATGTATGGCT ACGGAGAAAT ACTTTAGAGGT
+- edges:
+  - e186
+  - e867
+  - e282
+  - e487
+  name: S453
+  sequence: ATCGCTAACA ATCTTACTCCA AGATATCCCAA TCACAACGTA
+- edges:
+  - e840
+  - e65
+  - e374
+  - e867
+  name: H454
+  sequence: TGGCTATTAGA AGCTGAGAAT TGTTAGCGAT TGTAGGAATCT
+- edges:
+  - e841
+  - nullT10S
+  - e90
+  - e65
+  name: S455
+  sequence: TTTTTTTTTT ATCTGCAAAAT TCTAATAGCCA ATTCACCGTA
+- edges:
+  - e843
+  - e422
+  - e873
+  - nullT10N
+  name: H456
+  sequence: TTGGTTTGAAT TAGTGAACGT TTTTTTTTTT AGGCTAAGTAT
+- edges:
+  - e845
+  - e67
+  - e359
+  - e422
+  name: S457
+  sequence: ACCTCACATT ACAATCGAAAA ATTCAAACCAA ACCAAGCTAA
+- edges:
+  - e847
+  - e125
+  - e66
+  - e67
+  name: B458
+  sequence: TTATCTGTGGA TTGGCTTGTA AATGTGAGGT ACGGAAATTTT
+- edges:
+  - e789
+  - e648
+  - e335
+  - e125
+  name: S459
+  sequence: ACGACCAATA ATGTTCCTCTA TCCACAGATAA AGCATCAACT
+- edges:
+  - e19
+  - e475
+  - e235
+  - e648
+  name: B460
+  sequence: AGTCGATGATA TTGTGCTAGT TATTGGTCGT TCTGGGATTAT
+- edges:
+  - e853
+  - e289
+  - e815
+  - e475
+  name: S461
+  sequence: ACACACAAGA TCTGAAACCTA TATCATCGACT AAACGCAAAT
+- edges:
+  - e543
+  - e884
+  - e810
+  - e289
+  name: H462
+  sequence: TGATAGGACTT TACGTTGGAT TCTTGTGTGT TCAGTTTAGGA
+- edges:
+  - e736
+  - nullT10S
+  - e75
+  - e884
+  name: B463
+  sequence: TTTTTTTTTT ACTAATGACCT AAGTCCTATCA TATGCACTCA
+- edges:
+  - e858
+  - e887
+  - nullT10E
+  - nullT11N
+  name: S464
+  sequence: ACAATCCGAT AACCTTACTCT TTTTTTTTTTT TTTTTTTTTT
+- edges:
+  - e763
+  - e712
+  - nullT11E
+  - e887
+  name: N465
+  sequence: TTAAGGACTGA AGTGATCGAA ATCGGATTGT TTTTTTTTTTT
+- edges:
+  - e345
+  - e518
+  - nullT10E
+  - e712
+  name: S466
+  sequence: ATCGACATCA TATCTTCCTGT TCAGTCCTTAA TTTTTTTTTT
+- edges:
+  - e864
+  - e890
+  - nullT11E
+  - e518
+  name: H467
+  sequence: ATGGATCTGAT AACTTGTGGA TGATGTCGAT TTTTTTTTTTT
+- edges:
+  - e180
+  - e891
+  - nullT10E
+  - e890
+  name: N468
+  sequence: TACCAAAGCA ACCTCTAAAGT ATCAGATCCAT TTTTTTTTTT
+- edges:
+  - e282
+  - e73
+  - nullT11E
+  - e891
+  name: H469
+  sequence: AGTAGACTGAA TACGTTGTGA TGCTTTGGTA TTTTTTTTTTT
+- edges:
+  - e374
+  - e893
+  - nullT10E
+  - e73
+  name: S470
+  sequence: TTACCACGAA AGATTCCTACA TTCAGTCTACT TTTTTTTTTT
+- edges:
+  - e90
+  - nullT11S
+  - nullT11E
+  - e893
+  name: B471
+  sequence: TTTTTTTTTTT TACGGTGAAT TTCGTGGTAA TTTTTTTTTTT
+- edges:
+  - e873
+  - e716
+  - nullT10E
+  - nullT11N
+  name: S472
+  sequence: TCACACAGTT ATACTTAGCCT TTTTTTTTTTT TTTTTTTTTT
+- edges:
+  - e359
+  - e185
+  - nullT11E
+  - e716
+  name: N473
+  sequence: TTAGGATGACA TTAGCTTGGT AACTGTGTGA TTTTTTTTTTT
+- edges:
+  - e66
+  - e887
+  - nullT10E
+  - e185
+  name: S474
+  sequence: ACAATCCGAT AAAATTTCCGT TGTCATCCTAA TTTTTTTTTT
+- edges:
+  - e335
+  - e897
+  - nullT11E
+  - e887
+  name: H475
+  sequence: ATTCGTAGAGA AGTTGATGCT ATCGGATTGT TTTTTTTTTTT
+- edges:
+  - e235
+  - e898
+  - nullT10E
+  - e897
+  name: S476
+  sequence: ATCTCATGCA ATAATCCCAGA TCTCTACGAAT TTTTTTTTTT
+- edges:
+  - e815
+  - e890
+  - nullT11E
+  - e898
+  name: N477
+  sequence: ATGGATCTGAT ATTTGCGTTT TGCATGAGAT TTTTTTTTTTT
+- edges:
+  - e810
+  - e898
+  - nullT10E
+  - e890
+  name: N478
+  sequence: ATCTCATGCA TCCTAAACTGA ATCAGATCCAT TTTTTTTTTT
+- edges:
+  - e75
+  - nullT11S
+  - nullT11E
+  - e898
+  name: H479
+  sequence: TTTTTTTTTTT TGAGTGCATA TGCATGAGAT TTTTTTTTTTT
