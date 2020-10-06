@@ -1,7 +1,8 @@
 #![feature(associated_type_bounds)]
 
-use numpy::ToPyArray;
+use numpy::{ToPyArray};
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use ndarray::Array2;
 use pyo3::exceptions::ValueError;
 use pyo3::types::PyType;
 use pyo3::{prelude::*, wrap_pyfunction};
@@ -9,9 +10,15 @@ use rgrow::base;
 use rgrow::canvas;
 use rgrow::canvas::Canvas;
 use rgrow::ffs;
+use rand::SeedableRng;
+
 use rgrow::state;
 use rgrow::system;
+use rgrow::system::System;
+use rgrow::state::{StateCreate, StateStatus};
 use rgrow::system::FissionHandling;
+
+use std::fmt::Debug;
 
 #[pymodule]
 fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
@@ -36,6 +43,14 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     struct StaticKTAM {
         inner:
             system::StaticKTAM<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>
+    }
+
+    #[pyclass]
+    #[derive(Debug)]
+    #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
+    struct StaticKTAMCover {
+        inner:
+            system::StaticKTAMCover<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>
     }
 
     #[pyclass]
@@ -173,6 +188,77 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pymethods]
+    impl StaticKTAMCover {
+        #[classmethod]
+        fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
+            let mut tileset = match rgrow::parser::TileSet::from_json(json_data) {
+                Ok(t) => t,
+                Err(e) => {
+                    return Err(ValueError::py_err(format!(
+                        "Couldn't parse tileset json: {:?}",
+                        e
+                    )))
+                }
+            };
+            Ok(Self {
+                inner: tileset.into_static_ktam_cover(),
+            })
+        }
+
+        fn debug(&self) -> String {
+            format!("{:?}", self.inner)
+        }
+
+        fn new_state(&mut self, size: usize) -> PyResult<StateKTAM> {
+            let mut state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
+                Array2::zeros((size, size)),
+            ).unwrap();
+        
+            let sl = self.inner.seed_locs();
+
+            for (p, t) in sl {
+                // FIXME: for large seeds,
+                // this could be faster by doing raw writes, then update_entire_state
+                // but we would need to distinguish sizing.
+                // Or maybe there is fancier way with a set?
+                self.inner.set_point(&mut state, p.0, t);
+            }
+
+            Ok(StateKTAM { inner: state })
+        }
+
+        #[getter]
+        fn tile_rates<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
+            self.inner.inner.tile_adj_concs.to_pyarray(py)
+        }
+
+        #[getter]
+        fn energy_ns<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
+            self.inner.inner.energy_ns.to_pyarray(py)
+        }
+
+        #[getter]
+        fn energy_we<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
+            self.inner.inner.energy_we.to_pyarray(py)
+        }
+
+        fn calc_mismatch_locations<'py>(&self, state: &StateKTAM, py: Python<'py>) -> &'py PyArray2<usize> {
+            self.inner.calc_mismatch_locations(&state.inner).to_pyarray(py)
+        }
+
+        fn calc_mismatches(&self, state: &StateKTAM) -> u32 {
+            self.inner.calc_mismatches(&state.inner)
+        }
+
+        fn evolve_in_size_range_events_max(&mut self, state: &mut StateKTAM, minsize: u32, maxsize: u32, maxevents: u64) {
+            let mut rng = rand::rngs::SmallRng::from_entropy();
+            self.inner.evolve_in_size_range_events_max(&mut state.inner, minsize, maxsize, maxevents, &mut rng);
+        }
+    }
+
+    
+
+    #[pymethods]
     impl StaticKTAM {
         #[new]
         fn new(
@@ -283,7 +369,21 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         fn energy_we<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
             self.inner.energy_we.to_pyarray(py)
         }
+
+        fn calc_mismatch_locations<'py>(&self, state: &StateKTAM, py: Python<'py>) -> &'py PyArray2<usize> {
+            self.inner.calc_mismatch_locations(&state.inner).to_pyarray(py)
+        }
+
+        fn calc_mismatches(&self, state: &StateKTAM) -> u32 {
+            self.inner.calc_mismatches(&state.inner)
+        }
+
+        fn evolve_in_size_range_events_max(&mut self, state: &mut StateKTAM, minsize: u32, maxsize: u32, maxevents: u64) {
+            let mut rng = rand::rngs::SmallRng::from_entropy();
+            self.inner.evolve_in_size_range_events_max(&mut state.inner, minsize, maxsize, maxevents, &mut rng);
+        }
     }
+
 
     // #[pymethods]
     // impl StaticATAM {
@@ -316,14 +416,28 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         inner: state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>,
     }
 
-    // #[pymethods]
-    // impl StateKTAM {
-    //     #[new]
-    //     fn new(canvas: PyReadonlyArray2<base::Tile>, system: &StaticKTAM) -> PyResult<Self> {
-    //         let inner = state::QuadTreeState::from_canvas(&system.inner, canvas.to_owned_array());
+    #[pymethods]
+    impl StateKTAM {
+        #[new]
+        fn new(size: usize, system: &mut StaticKTAM) -> PyResult<Self> {
+            let mut state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
+                Array2::zeros((size, size)),
+            ).unwrap();
+        
+            let sl = system.inner.seed_locs();
 
-    //         Ok(Self { inner })
-    //     }
+            for (p, t) in sl {
+                // FIXME: for large seeds,
+                // this could be faster by doing raw writes, then update_entire_state
+                // but we would need to distinguish sizing.
+                // Or maybe there is fancier way with a set?
+                system.inner.set_point(&mut state, p.0, t);
+            }
+
+            Ok(Self { inner: state })
+        }
+
+
 
     //     #[classmethod]
     //     /// Creates a simulation state with the West-East dimer of tile numbers w, e, centered in
@@ -392,65 +506,37 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     //         Ok(())
     //     }
 
-    //     fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<base::Tile> {
-    //         self.inner.canvas.raw_array().to_pyarray(py)
-    //     }
+        fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<base::Tile> {
+            self.inner.canvas.raw_array().to_pyarray(py)
+        }
 
-    //     fn copy(&self) -> PyResult<Self> {
-    //         Ok(Self {
-    //             inner: self.inner.clone(),
-    //         })
-    //     }
+        fn copy(&self) -> PyResult<Self> {
+            Ok(Self {
+                inner: self.inner.clone(),
+            })
+        }
 
-    //     fn ntiles(&self) -> base::NumTiles {
-    //         self.inner.ntiles()
-    //     }
+        fn ntiles(&self) -> base::NumTiles {
+            self.inner.ntiles()
+        }
 
-    //     fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
-    //         self.inner.rates[level].to_pyarray(py)
-    //     }
-    // }
+        fn time(&self) -> f64 {
+            self.inner.time()
+        }
 
-    // #[pymethods]
-    // impl StateATAM {
-    //     #[new]
-    //     fn new(canvas: PyReadonlyArray2<base::Tile>, system: &mut StaticATAM) -> PyResult<Self> {
-    //         let inner = state::QuadTreeState::from_canvas(&system.inner, canvas.to_owned_array());
-    //         Ok(Self { inner })
-    //     }
-
-    //     fn take_step(&mut self, system: &mut StaticATAM) -> PyResult<()> {
-    //         self.inner.take_step(&system.inner).unwrap();
-    //         Ok(())
-    //     }
-
-    //     fn evolve_in_size_range(
-    //         &mut self,
-    //         system: &mut StaticATAM,
-    //         minsize: base::NumTiles,
-    //         maxsize: base::NumTiles,
-    //         maxevents: u64,
-    //     ) -> PyResult<()> {
-    //         self.inner
-    //             .evolve_in_size_range_events_max(&system.inner, minsize, maxsize, maxevents);
-
-    //         Ok(())
-    //     }
-
-    //     fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<base::Tile> {
-    //         self.inner.canvas.raw_array().to_pyarray(py)
-    //     }
-
-    //     fn ntiles(&self) -> base::NumTiles {
-    //         self.inner.ntiles()
-    //     }
+        fn events(&self) -> u64 {
+            self.inner.total_events()
+        }
 
     //     fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
     //         self.inner.rates[level].to_pyarray(py)
     //     }
     // }
+
+    }
     // m.add_class::<StaticATAM>()?;
     m.add_class::<StaticKTAM>()?;
+    m.add_class::<StaticKTAMCover>()?;
     m.add_class::<StaticKTAMPeriodic>()?;
     m.add_class::<StateKTAM>()?;
     // m.add_class::<StateATAM>()?;
@@ -601,6 +687,53 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
     /// Runs Forward Flux Sampling, and returns a tuple of
     /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
+    fn ffs_run_final_cover<'py>(
+        system: &StaticKTAMCover,
+        num_states: usize,
+        target_size: base::NumTiles,
+        canvas_size: usize,
+        max_init_events: u64,
+        max_subseq_events: u64,
+        start_size: base::NumTiles,
+        size_step: base::NumTiles,
+        py: Python<'py>,
+    ) -> (f64, f64, Vec<f64>, Vec<&'py PyArray2<base::Tile>>) {
+        let fr = ffs::FFSRun::create_without_history(
+            system.inner.to_owned(),
+            num_states,
+            target_size,
+            canvas_size,
+            max_init_events,
+            max_subseq_events,
+            start_size,
+            size_step,
+        );
+
+        let assemblies = fr
+            .level_list
+            .last()
+            .unwrap()
+            .state_list
+            .iter()
+            .map(|state| state.canvas.raw_array().to_pyarray(py))
+            .collect();
+
+        let ret = (
+            fr.nucleation_rate(),
+            fr.dimerization_rate,
+            fr.forward_vec().clone(),
+            assemblies,
+        );
+
+        drop(fr);
+
+        ret
+    }
+
+    #[pyfunction]
+    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    /// Runs Forward Flux Sampling, and returns a tuple of
+    /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
     fn ffs_run_final_p<'py>(
         system: &StaticKTAMPeriodic,
         num_states: usize,
@@ -648,6 +781,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(ffs_run_full))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_final))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_final_p))?;
+    m.add_wrapped(wrap_pyfunction!(ffs_run_final_cover))?;
 
     Ok(())
 }
