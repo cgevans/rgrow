@@ -1,3 +1,5 @@
+use crate::system::StaticKTAMCover;
+
 use super::base::{CanvasLength, Glue};
 use super::system::{FissionHandling, Seed, StaticKTAM};
 use super::*;
@@ -24,7 +26,7 @@ pub enum ParserError {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(untagged)]
 pub enum GlueIdent {
     Name(String),
@@ -47,6 +49,61 @@ pub struct Tile {
     pub color: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+pub enum Direction {
+    N,
+    E,
+    S,
+    W
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CoverStrand {
+    pub name: Option<String>,
+    pub glue: GlueIdent,
+    pub dir: Direction,
+    pub stoic: f64
+}
+
+impl CoverStrand {
+    fn to_tile(&self) -> Tile {
+        let edges = match self.dir {
+            Direction::N => { vec![self.glue.clone(), GlueIdent::Num(0),GlueIdent::Num(0),GlueIdent::Num(0)] }
+            Direction::E => { vec![GlueIdent::Num(0), self.glue.clone(), GlueIdent::Num(0),GlueIdent::Num(0)] }
+            Direction::S => { vec![GlueIdent::Num(0),GlueIdent::Num(0),self.glue.clone(), GlueIdent::Num(0)] }
+            Direction::W => { vec![GlueIdent::Num(0),GlueIdent::Num(0),GlueIdent::Num(0),self.glue.clone()] }
+        };
+
+        Tile {
+            name: None,
+            edges,
+            stoic: Some(self.stoic),
+            color: None
+        }
+    }
+
+    fn make_composite(&self, other: &CoverStrand) -> Tile {
+
+        let es1 = self.to_tile().edges;
+        let es2 = other.to_tile().edges;
+
+        let mut edges = Vec::new();
+        for (e1, e2) in es1.iter().zip(&es2) {
+            if *e1 == GlueIdent::Num(0) {
+                edges.push(e2.clone())
+            } else {
+                edges.push(e1.clone())
+            }
+        }
+
+        Tile {
+            name: None,
+            edges,
+            stoic: Some(0.),
+            color: None
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Bond {
     pub name: GlueIdent,
@@ -60,6 +117,7 @@ pub struct TileSet {
     pub bonds: Vec<Bond>,
     #[serde(alias = "xgrowargs")]
     pub options: Args,
+    pub cover_strands: Option<Vec<CoverStrand>>
 }
 
 fn alpha_default() -> f64 {
@@ -202,6 +260,109 @@ impl TileSet {
 
     // }
 
+    pub fn into_static_ktam_cover(&mut self) -> StaticKTAMCover<QuadTreeState<CanvasSquare, NullStateTracker>> {
+        let cs = self.cover_strands.as_ref().unwrap();
+
+        let mut tile_is_cover = Vec::with_capacity(self.tiles.len() + cs.len());
+        let mut cover_attach_info = Vec::with_capacity(self.tiles.len() + cs.len());
+        let mut composite_detach_info = Vec::with_capacity(self.tiles.len() + cs.len());
+
+        let mut extratiles = Vec::new();
+
+        cover_attach_info.push(Vec::new());
+        composite_detach_info.push(Vec::new());
+        tile_is_cover.push(system::CoverType::NonCover);
+
+        for _ in 0..self.tiles.len() { 
+            tile_is_cover.push(system::CoverType::NonCover); 
+            cover_attach_info.push(Vec::new());
+            composite_detach_info.push(Vec::new());
+         }
+        for c in cs { 
+            tile_is_cover.push(system::CoverType::Cover);
+            composite_detach_info.push(Vec::new());
+            cover_attach_info.push(Vec::new());
+            extratiles.push(c.to_tile());
+        }
+
+        let coverbegin = self.tiles.len() + 1;
+        let mut comp = coverbegin + cs.len();
+
+        for i in 0..cs.len() {
+            for j in i..cs.len() {
+                // Same direction: can't attach at the same place at the same time.
+                if cs[i].dir == cs[j].dir { continue }
+
+                assert!(comp == coverbegin + extratiles.len());
+                extratiles.push(cs[i].make_composite(&cs[j]));
+
+                cover_attach_info[coverbegin+i].push(system::CoverAttach{ like_tile: (coverbegin+i) as u32, new_tile: comp as u32});
+                cover_attach_info[coverbegin+j].push(system::CoverAttach{ like_tile: (coverbegin+j) as u32, new_tile: comp as u32});
+
+                tile_is_cover.push(system::CoverType::Composite);
+                composite_detach_info.push(vec![
+                    system::CompositeDetach{ like_tile: (coverbegin+i) as u32, new_tile: (coverbegin+j) as u32 },
+                    system::CompositeDetach{ like_tile: (coverbegin+j) as u32, new_tile: (coverbegin+i) as u32 }
+                ]);
+
+                comp += 1;
+            }
+        }
+
+        self.tiles.extend(extratiles);
+
+        for tile in self.tiles.iter() {
+            println!("{:?}", tile);
+        }
+
+        assert!(comp == self.tiles.len()+1);
+
+        let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
+
+        let tile_edges = self.tile_edge_process(&gluemap);
+        let mut tile_concs = self.tile_stoics();
+        tile_concs *= f64::exp(-self.options.gmc + self.options.alpha);
+
+        let mut glue_strength_vec = Vec::<f64>::new();
+
+        let mut i: base::Glue = 0;
+        for (j, v) in gluestrengthmap {
+            assert!(j == i);
+            glue_strength_vec.push(v);
+            i += 1;
+        }
+
+        let seed = match &self.options.seed {
+            ParsedSeed::Single(y, x, v) => Seed::SingleTile {
+                point: (*y, *x),
+                tile: *v,
+            },
+            ParsedSeed::None() => Seed::None(),
+            ParsedSeed::Multi(vec) => {
+                let mut hm = HashMap::default();
+                hm.extend(vec.iter().map(|(y, x, v)| ((*y, *x), *v)));
+                Seed::MultiTile(hm)
+            }
+        };
+
+        let inner = StaticKTAM::from_ktam(
+            self.tile_stoics(),
+            tile_edges,
+            Array1::from(glue_strength_vec),
+            self.options.gse,
+            self.options.gmc,
+            Some(self.options.alpha),
+            self.options.kf,
+            Some(seed),
+            Some(self.options.fission),
+            self.options.chunk_handling,
+            self.options.chunk_size,
+            Some(self.tile_names()),
+            Some(self.tile_colors()),
+        );
+
+        StaticKTAMCover { inner, tile_is_cover, cover_attach_info, composite_detach_info }
+    }
 
     pub fn into_static_seeded_ktam(&self) -> StaticKTAM<QuadTreeState<CanvasSquare, NullStateTracker>> {
         let (gluemap, gluestrengthmap) = self.number_glues().unwrap();

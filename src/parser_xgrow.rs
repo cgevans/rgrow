@@ -151,6 +151,7 @@ fn parse(input: &str) -> IResult<&str, parser::TileSet> {
             tiles,
             bonds,
             options,
+            cover_strands: None
         },
     ))
 

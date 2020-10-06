@@ -195,6 +195,7 @@ pub trait TileBondInfo {
     fn bond_name(&self, bond_number: usize) -> &str;
 }
 
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum FissionHandling {
     #[serde(alias = "off", alias = "no-fission")]
@@ -256,6 +257,289 @@ impl Clone for ClonableCache {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) enum CoverType {
+    NonCover,
+    Cover,
+    Composite
+} 
+#[derive(Debug, Clone)]
+pub(crate) struct CoverAttach {
+    pub(crate) like_tile: Tile,
+    pub(crate) new_tile: Tile
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CompositeDetach {
+    pub(crate) like_tile: Tile,
+    pub(crate) new_tile: Tile
+}
+
+#[derive(Debug, Clone)]
+pub struct StaticKTAMCover<S: State> {
+    pub inner: StaticKTAM<S>,
+    pub(crate) tile_is_cover: Vec<CoverType>,
+    pub(crate) cover_attach_info: Vec<Vec<CoverAttach>>,
+    pub(crate) composite_detach_info: Vec<Vec<CompositeDetach>>
+}
+
+enum PossibleChoice {
+    Remainder(Rate),
+    Event(Event)
+}
+
+impl<S: State> System<S> for StaticKTAMCover<S> {
+    fn update_after_event(&self, mut state: &mut S, event: &Event) {
+        match event {
+            Event::None => { panic!("Being asked to update after a dead event.") }
+            Event::SingleTileAttach(p, _) | 
+            Event::SingleTileDetach(p) |
+            Event::SingleTileChange(p, _) => {
+                match self.inner.chunk_size {
+                    ChunkSize::Single => {
+                        let points = [state.move_sa_n(*p),
+                        state.move_sa_w(*p),
+                        PointSafeHere(p.0),
+                        state.move_sa_e(*p),
+                        state.move_sa_s(*p)];
+                        self.update_points(&mut state, &points);
+                    }
+                    ChunkSize::Dimer => {
+                        let mut points = Vec::with_capacity(10);
+                        points.extend_from_slice(&[state.move_sa_n(*p),
+                        state.move_sa_w(*p),
+                        PointSafeHere(p.0),
+                        state.move_sa_e(*p),
+                        state.move_sa_s(*p),
+                        state.move_sa_nw(*p),
+                        state.move_sa_ne(*p),
+                        state.move_sa_sw(*p)]);
+                        
+                        let w = state.move_sa_w(*p);
+                        let n = state.move_sa_n(*p);
+
+                        if state.inbounds(w.0) { points.push(PointSafeHere(state.move_sh_w(w))); }
+                        if state.inbounds(n.0) { points.push(PointSafeHere(state.move_sh_n(n))); }
+
+                        self.update_points(&mut state, &points);
+                    }
+                }
+            }
+            Event::MultiTileDetach(v) => {
+                let mut points = Vec::new();
+                for p in v {
+                    points.extend(self.inner.points_to_update_around(state, p));
+                }
+                points.sort_unstable();
+                points.dedup();
+                self.update_points(&mut state, &points);
+            }
+            Event::MultiTileAttach(v) |
+            Event::MultiTileChange(v) => {
+                let mut points = Vec::new();
+                for (p, _) in v {
+                    points.extend(self.inner.points_to_update_around(state, p));
+                }
+                points.sort_unstable();
+                points.dedup();
+                self.update_points(&mut state, &points);
+            }
+        }
+    }
+
+
+    fn event_rate_at_point(&self, state: &S, p: PointSafeHere) -> Rate {
+        let t = state.v_sh(p) as usize;
+
+        if !state.inbounds(p.0) {
+            return 0.
+        }
+        
+        let sp = PointSafeAdjs(p.0);
+
+        match self.tile_is_cover[t] {
+            CoverType::NonCover => {
+                self.inner.event_rate_at_point(state, p)
+            }
+            CoverType::Cover => {
+                self.inner.event_rate_at_point(state, p) + self.cover_to_composite_rate(state, sp, t)
+            }
+            CoverType::Composite => {
+                self.composite_to_cover_rate(state, sp, t)
+            }
+        }
+    }
+
+    fn choose_event_at_point(&self, state: &S, p: PointSafeAdjs, acc: Rate) -> Event {
+        let t = state.v_sa(p) as usize;
+
+        match self.tile_is_cover[t] {
+            CoverType::NonCover => {
+                self.inner.choose_event_at_point(state, p, acc)
+            }
+            CoverType::Cover => {
+                match self.choose_cover_to_composite(state, p, t, acc) {
+                    PossibleChoice::Remainder(acc) => {self.inner.choose_event_at_point(state, p, acc)}
+                    PossibleChoice::Event(e) => {e}
+                }
+            }
+            CoverType::Composite => {
+                match self.choose_composite_to_cover(state, p, t, acc) {
+                    PossibleChoice::Remainder(_) => {panic!("Ran out of rate for composite.")}
+                    PossibleChoice::Event(e) => {e}
+                }
+            }
+        }
+    }
+
+    fn seed_locs(&self) -> Vec<(PointSafeAdjs, Tile)> {
+        self.inner.seed_locs()
+    }
+
+    fn calc_dimers(&self) -> Vec<DimerInfo> {
+        self.inner.calc_dimers()
+    }
+
+    fn calc_mismatch_locations(&self, state: &S) -> Array2<usize> {
+        self.inner.calc_mismatch_locations(state)
+    }
+
+    fn state_step(&self, mut state: &mut S, mut rng: &mut SmallRng, max_time_step: f64) -> StepOutcome {
+        let time_step = -f64::ln(rng.gen()) / state.total_rate();
+        if time_step > max_time_step {
+            state.add_time(max_time_step);
+            return StepOutcome::NoEventIn(max_time_step);
+        }
+        let (point, remainder) = state.choose_point(&mut rng); // todo: resultify
+        let event = self.choose_event_at_point(&mut state, PointSafeAdjs(point), remainder); // FIXME
+        if let Event::None = event {
+            return StepOutcome::DeadEventAt(time_step);
+        }
+
+        self.perform_event(&mut state, &event);
+        self.update_after_event(&mut state, &event);
+        state.add_time(time_step);
+        StepOutcome::HadEventAt(time_step)
+    }
+
+    fn evolve_in_size_range_events_max(
+        &mut self,
+        state: &mut S,
+        minsize: NumTiles,
+        maxsize: NumTiles,
+        maxevents: NumEvents,
+        rng: &mut SmallRng
+    ) {
+        let mut events: NumEvents = 0;
+
+        while (events < maxevents) & (state.ntiles() < maxsize) & (state.ntiles() > minsize) {
+            match self.state_step(state, rng, 1e100) {
+                StepOutcome::HadEventAt(_) => { events += 1; }
+                StepOutcome::NoEventIn(_) => { println!("Timeout {:?}", state); }
+                StepOutcome::DeadEventAt(_) => { println!("Dead"); }
+                StepOutcome::ZeroRate => {panic!()}
+            }
+        }
+    }
+
+    fn set_point(&mut self, state: &mut S, point: Point, tile: Tile) {
+        assert!(state.inbounds(point));
+
+        let point = PointSafeAdjs(point);
+
+        state.set_sa(&point, &tile);
+
+        let event = Event::SingleTileAttach(point, tile);
+
+        self.update_after_event(state, &event);
+
+    }
+
+    fn perform_event(&self, state: &mut S, event: &Event) {
+        match event {
+            Event::None => panic!("Being asked to perform null event."),
+            Event::SingleTileAttach(point, tile) | Event::SingleTileChange(point, tile) => {
+                state.set_sa(point, tile);
+            }
+            Event::SingleTileDetach(point) => {
+                state.set_sa(point, &0u32);
+            }
+            Event::MultiTileAttach(changelist) | Event::MultiTileChange(changelist) => {
+                for (point, tile) in changelist {
+                    state.set_sa(point, tile);
+                }
+            }
+            Event::MultiTileDetach(changelist) => {
+                for point in changelist {
+                    state.set_sa(point, &0u32);
+                }
+            }
+        }
+    }
+
+    fn calc_mismatches(&self, state: &S) -> NumTiles {
+        let arr = self.calc_mismatch_locations(state);
+        arr.sum() as u32 / 2
+    }
+
+    fn update_points(&self, state: &mut S, points: &[PointSafeHere]) {
+        let rates = points.iter().map(|p| self.event_rate_at_point(state, *p)).collect::<Vec<_>>();
+
+        state.update_multiple(&points, &rates);
+    }
+}
+
+impl<S: State> StaticKTAMCover<S> {
+    fn cover_to_composite_rate(&self, state: &S, p: PointSafeAdjs, t: usize) -> Rate {
+        let cc = &self.cover_attach_info[t as usize];
+
+        let mut total_rate = 0.;
+        for c in cc {
+            if self.inner.bond_strength_of_tile_at_point(state, p, c.like_tile) > 0. {
+                total_rate += self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile as usize];
+            }
+        }
+
+        total_rate
+    }
+    fn choose_cover_to_composite(&self, state: &S, p: PointSafeAdjs, t: usize, mut acc: Rate) -> PossibleChoice {
+        let cc = &self.cover_attach_info[t as usize];
+
+        for c in cc {
+            if self.inner.bond_strength_of_tile_at_point(state, p, c.like_tile) > 0. {
+                acc -= self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile as usize];
+                if acc <= 0. {
+                    return PossibleChoice::Event(Event::SingleTileChange(p, c.new_tile))
+                }
+            }
+        }
+
+        PossibleChoice::Remainder(acc)
+    } 
+    fn composite_to_cover_rate(&self, state: &S, p: PointSafeAdjs, t: usize) -> Rate {
+        let cc = &self.composite_detach_info[t as usize];
+
+        let mut total_rate = 0.;
+        for c in cc {
+            total_rate += self.inner.k_f_hat() * f64::exp(-self.inner.bond_strength_of_tile_at_point(state, p, c.like_tile));
+        }
+
+        total_rate
+    }
+    fn choose_composite_to_cover(&self, state: &S, p: PointSafeAdjs, t: usize, mut acc: Rate) -> PossibleChoice {
+        let cc = &self.composite_detach_info[t as usize];
+
+        for c in cc {
+            acc -= self.inner.k_f_hat() * f64::exp(-self.inner.bond_strength_of_tile_at_point(state, p, c.like_tile));
+            if acc <= 0. {
+                return PossibleChoice::Event(Event::SingleTileChange(p, c.new_tile))
+            }
+        }
+
+        PossibleChoice::Remainder(acc)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct StaticKTAM<C: State> {
     pub tile_adj_concs: Array1<Rate>,
     pub energy_ns: Array2<Energy>,
@@ -281,6 +565,21 @@ pub struct StaticKTAM<C: State> {
 
 
 unsafe impl<C: State> Send for StaticKTAM<C> {}
+
+
+impl<C: State> TileBondInfo for StaticKTAMCover<C> {
+    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
+        self.inner.tile_colors[tile_number as usize]
+    }
+
+    fn tile_name(&self, tile_number: Tile) -> &str {
+        self.inner.tile_names[tile_number as usize].as_str()
+    }
+
+    fn bond_name(&self, _bond_number: usize) -> &str {
+        todo!()
+    }
+}
 
 impl<C: State> TileBondInfo for StaticKTAM<C> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
@@ -884,26 +1183,26 @@ where
 
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
             if *e != 0. {
-                let biconc = f64::exp(-2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
+                let biconc = f64::exp(2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::NS,
                     formation_rate: self.k_f * biconc,
-                    equilibrium_conc: biconc * f64::exp(-*e + 2. * self.alpha),
+                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
                 });
             }
         }
 
         for ((t1, t2), e) in self.energy_we.indexed_iter() {
             if *e != 0. {
-                let biconc = f64::exp(-2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
+                let biconc = f64::exp(2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::WE,
                     formation_rate: self.k_f * biconc,
-                    equilibrium_conc: biconc * f64::exp(-*e + 2. * self.alpha),
+                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
                 });
             }
         }
