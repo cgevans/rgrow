@@ -1,6 +1,6 @@
 [package]
 name = "pyrgrow"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Constantine Evans <cevans@costinet.org>"]
 edition = "2018"
 
@@ -24,5 +24,5 @@ path = "./rgrow-project/"
 default-features = false  # Manylinux1 doesn't support X11 such that the UI works...
 
 [dependencies.pyo3]
-version = "0.11"
+version = "0.11.1"
 features = ["extension-module"]

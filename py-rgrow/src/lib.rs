@@ -17,51 +17,267 @@ use rgrow::state;
 use rgrow::system;
 use rgrow::system::{System, SystemWithStateCreate};
 use rgrow::state::{StateCreate, StateStatus};
-use rgrow::system::FissionHandling;
+use rgrow::system::{FissionHandling, ChunkSize, ChunkHandling};
 
 use std::fmt::Debug;
 
+
+/// A (somewhat rudimentary and very unstable) Python interface to Rgrow.
+///
+/// As static dispatch doesn't work with PyO3, this currently has separate types for
+/// combinations of different systems and states/canvases.
+/// 
+/// The most important classes are:
+/// - StaticKTAM (and the StaticKTAMPeriodic variant), which specify the kinetic model to use and its parameters.
+/// - StateKTAM, which stores the state of a single assembly.
 #[pymodule]
 fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
-    //? A (somewhat rudimentary and very unstable) Python interface to Rgrow.
-    //?
-    //? As static dispatch doesn't work with PyO3, this currently has separate types for
-    //? combinations of different systems and states/canvases.
 
     /// Static (no changes to concentrations, bond strengths, parameters, etc) kTAM system.
-    /// Currently implements fission, but not Xgrow's chunk fission, and not double tiles.
-    /// Can be used by multiple simulations.
+    /// Currently implements fission, and dimer chunk detachment.
+    ///
+    /// Can be used for multiple simulations / states.
+    ///
     /// Currently, Python can't handle seeds.
     ///
     /// Parameters:
-    ///
-    /// tile_concs: an array of f64s
-    /// tile_edges: an array of u32s
-    /// glue_strengths: an array of f64s
-    /// gse, gmc: f64s
-    /// alpha (optional, default 0.0)
-    /// k_f (optional, default 1e6)
-    /// fission (optional): one of "off", "just-detach", "on", "keep-largest", "keep-weighted"
-    /// tile_names (optional): list of strings
+    ///     tile_stoics (f64 N 1D array): tile stoichiometry (for N-1 tiles).  1.0 means tile concentration $e^{-G_{mc}+\alpha}$.
+    ///                                   "Tile 0" must correspond with an empty space, and should have stoic 0.
+    ///     tile_edges (u32 Nx4 array): tile edges for each tile.  First row should be [0, 0, 0, 0].
+    ///     glue_strengths (f64 G 1D array): glue strengths for each glue. 0 should have strength 0 and corresponds with a null glue. 
+    ///                                      Strength 1.0 corresponds to a glue of strength $G_{se}$.
+    ///     gse, gmc (f64): :math:`G_{mc}` and $G_{se}$.
+    ///     alpha (optional, float): Non-edge-dependent attachment strength adjustment (default 0.0).
+    ///     k_f (optional, float): Non-adjusted forward rate constant, not accounting for $\alpha$ (default 1e6).
+    ///     fission (optional): one of "off", "just-detach", "on", "keep-largest", "keep-weighted" (default "off").
+    ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
+    ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
+    ///     tile_names (optional, list[str]): list of tile names (default None).
     #[pyclass]
     #[derive(Debug)]
-    #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
+    #[text_signature = "(tile_stoics, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
     struct StaticKTAM {
         inner:
             system::StaticKTAM<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>
     }
 
-    #[pyclass]
-    #[derive(Debug)]
-    #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
-    struct StaticKTAMCover {
-        inner:
-            system::StaticKTAMCover<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>
+    #[pymethods]
+    impl StaticKTAM {
+        #[new]
+        fn new(
+            tile_concs: PyReadonlyArray1<f64>,
+            tile_edges: PyReadonlyArray2<base::Tile>,
+            glue_strengths: PyReadonlyArray1<base::Energy>,
+            gse: base::Energy,
+            gmc: base::Energy,
+            alpha: Option<f64>,
+            k_f: Option<f64>,
+            fission: Option<&str>,
+            chunk_handling: Option<&str>,
+            chunk_size: Option<&str>,
+            tile_names: Option<Vec<String>>,
+        ) -> PyResult<Self> {
+            let fission_handling = match fission {
+                Some(fs) => Some(match fs {
+                    "off" => FissionHandling::NoFission,
+                    "just-detach" => FissionHandling::JustDetach,
+                    "on" => FissionHandling::KeepSeeded,
+                    "keep-largest" => FissionHandling::KeepLargest,
+                    "keep-weighted" => FissionHandling::KeepWeighted,
+                    _ => return Err(ValueError::py_err("Invalid fission handling option")),
+                }),
+                None => None,
+            };
+
+
+            let chunk_handling = Some(match chunk_handling {
+                Some(ch) => match ch {
+                    "off" | "none" => ChunkHandling::None,
+                    "detach" => ChunkHandling::Detach,
+                    _ => return Err(ValueError::py_err("Invalid chunk handling option")),
+                 },
+                None => ChunkHandling::None
+            });
+
+            let chunk_size = match chunk_size {
+                Some(cs) => match cs {
+                    "dimer" => Some(ChunkSize::Dimer),
+                    _ => return Err(ValueError::py_err("Invalid chunk size option"))
+                },
+                None => None
+            };
+
+            let inner = system::StaticKTAM::from_ktam(
+                tile_concs.to_owned_array(),
+                tile_edges.to_owned_array(),
+                glue_strengths.to_owned_array(),
+                gse,
+                gmc,
+                alpha,
+                k_f,
+                Some(system::Seed::None()),
+                fission_handling,
+                chunk_handling,
+                chunk_size,
+                tile_names,
+                None,
+            );
+
+            Ok(Self { inner })
+        }
+
+        #[classmethod]
+        /// Creates a StaticKTAM instance from a JSON string.  Ignores canvas choice in JSON. 
+        #[text_signature="(json_data)"]
+        fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
+            let tileset = match rgrow::parser::TileSet::from_json(json_data) {
+                Ok(t) => t,
+                Err(e) => {
+                    return Err(ValueError::py_err(format!(
+                        "Couldn't parse tileset json: {:?}",
+                        e
+                    )))
+                }
+            };
+            Ok(Self {
+                inner: tileset.into_static_seeded_ktam(),
+            })
+        }
+
+        /// Generates a StaticKTAM instance from "raw" inputs, similar to what the model uses internally.
+        ///
+        /// Parameters:
+        ///     tile_adj_rates (float array, shape N): the "adjusted unitless attachment rate" for each tile (N-1 tiles, 0 is empty).  This corresponds to 
+        ///                     $e^{-G_{mc}}$ for a tile with $G_{mc}$, ie, it does not account for $k_f$ or
+        ///                     $\alpha$.
+        ///     energy_ns (float array, shape NxN): in position [i,j], the bond strength that results from tile i being north of tile j.
+        ///     energy_ws (float array, shape NxN): same, now with i the west tile, and j the east tile.
+        ///     k_f (float, optional): $k_f$, default 1e6.
+        ///     alpha (float, optional): $\alpha$, default 0.0.
+        ///     fission (optional): one of "off", "just-detach", "on", "keep-largest", "keep-weighted" (default "off").
+        ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
+        ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
+        #[text_signature = "(tile_adj_rates, energy_ns, energy_we, k_f, alpha, fission)"]
+        #[classmethod]
+        fn from_raw(
+            _cls: &PyType,
+            tile_adj_rates: PyReadonlyArray1<f64>,
+            energy_ns: PyReadonlyArray2<base::Energy>,
+            energy_we: PyReadonlyArray2<base::Energy>,
+            k_f: Option<f64>,
+            alpha: Option<f64>,
+            fission: Option<&str>,
+            chunk_handling: Option<&str>,
+            chunk_size: Option<&str>
+        ) -> PyResult<Self> {
+            let fission_handling = match fission {
+                Some(fs) => Some(match fs {
+                    "off" => FissionHandling::NoFission,
+                    "just-detach" => FissionHandling::JustDetach,
+                    "on" => FissionHandling::KeepSeeded,
+                    "keep-largest" => FissionHandling::KeepLargest,
+                    "keep-weighted" => FissionHandling::KeepWeighted,
+                    _ => return Err(ValueError::py_err("Invalid fission handling option")),
+                }),
+                None => None,
+            };
+
+            let chunk_handling = Some(match chunk_handling {
+                Some(ch) => match ch {
+                    "off" | "none" => ChunkHandling::None,
+                    "detach" => ChunkHandling::Detach,
+                    _ => return Err(ValueError::py_err("Invalid chunk handling option")),
+                 },
+                None => ChunkHandling::None
+            });
+
+            let chunk_size = match chunk_size {
+                Some(cs) => match cs {
+                    "dimer" => Some(ChunkSize::Dimer),
+                    _ => return Err(ValueError::py_err("Invalid chunk size option"))
+                },
+                None => None
+            };
+
+            Ok(Self {
+                inner: system::StaticKTAM::from_raw(
+                    tile_adj_rates.to_owned_array(),
+                    energy_ns.to_owned_array(),
+                    energy_we.to_owned_array(),
+                    k_f.unwrap_or(1e6),
+                    alpha.unwrap_or(0.),
+                    fission_handling,
+                    chunk_handling,
+                    chunk_size
+                ),
+            })
+        }
+
+        #[getter]
+        fn tile_rates<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
+            self.inner.tile_adj_concs.to_pyarray(py)
+        }
+
+        /// Debug info for model.
+        fn debug(&self) -> String {
+            format!("{:?}", self.inner)
+        }
+
+        #[getter]
+        fn energy_ns<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
+            self.inner.energy_ns.to_pyarray(py)
+        }
+
+        #[getter]
+        fn energy_we<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
+            self.inner.energy_we.to_pyarray(py)
+        }
+
+        fn calc_mismatch_locations<'py>(&self, state: &StateKTAM, py: Python<'py>) -> &'py PyArray2<usize> {
+            self.inner.calc_mismatch_locations(&state.inner).to_pyarray(py)
+        }
+
+        fn calc_mismatches(&self, state: &StateKTAM) -> u32 {
+            self.inner.calc_mismatches(&state.inner)
+        }
+
+        /// A System-centric evolve method.  Evolves the provided state until it has either <= minsize or >= maxsize tiles, or
+        /// the evolution has performed maxevents steps.
+        ///
+        /// Parameters:
+        ///     state (StateKTAM)
+        ///     minsize (int)
+        ///     maxsize (int)
+        ///     maxevents (int)
+        fn evolve_in_size_range_events_max(&mut self, state: &mut StateKTAM, minsize: u32, maxsize: u32, maxevents: u64) {
+            let mut rng = SmallRng::from_entropy();
+            self.inner.evolve_in_size_range_events_max(&mut state.inner, minsize, maxsize, maxevents, &mut rng);
+        }
     }
 
+    /// Static (no changes to concentrations, bond strengths, parameters, etc) kTAM system, with periodic boundaries.
+    /// Currently implements fission, and dimer chunk detachment.
+    ///
+    /// Can be used for multiple simulations / states.
+    ///
+    /// Currently, Python can't handle seeds.
+    ///
+    /// Parameters:
+    ///     tile_stoics (f64 N 1D array): tile stoichiometry (for N-1 tiles).  1.0 means tile concentration $e^{-G_{mc}+\alpha}$.
+    ///                                   "Tile 0" must correspond with an empty space, and should have stoic 0.
+    ///     tile_edges (u32 Nx4 array): tile edges for each tile.  First row should be [0, 0, 0, 0].
+    ///     glue_strengths (f64 G 1D array): glue strengths for each glue. 0 should have strength 0 and corresponds with a null glue. 
+    ///                                      Strength 1.0 corresponds to a glue of strength $G_{se}$.
+    ///     gse, gmc (f64): $G_{mc}$ and $G_{se}$.
+    ///     alpha (optional, float): Non-edge-dependent attachment strength adjustment (default 0.0).
+    ///     k_f (optional, float): Non-adjusted forward rate constant, not accounting for $\alpha$ (default 1e6).
+    ///     fission (optional, str): one of "off", "just-detach", "on", "keep-largest", "keep-weighted" (default "off").
+    ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
+    ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
+    ///     tile_names (optional, list[str]): list of tile names (default None).    #[pyclass]
     #[pyclass]
     #[derive(Debug)]
-    #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
+    #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, chunk_handling, chunk_size, tile_names)"]
     struct StaticKTAMPeriodic {
         inner: system::StaticKTAM<state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>>
     }
@@ -78,6 +294,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             alpha: Option<f64>,
             k_f: Option<f64>,
             fission: Option<&str>,
+            chunk_handling: Option<&str>,
+            chunk_size: Option<&str>,
             tile_names: Option<Vec<String>>,
         ) -> PyResult<Self> {
             let fission_handling = match fission {
@@ -92,6 +310,24 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 None => None,
             };
 
+            let chunk_handling = Some(match chunk_handling {
+                Some(ch) => match ch {
+                    "off" | "none" => ChunkHandling::None,
+                    "detach" => ChunkHandling::Detach,
+                    _ => return Err(ValueError::py_err("Invalid chunk handling option")),
+                 },
+                None => ChunkHandling::None
+            });
+
+            let chunk_size = match chunk_size {
+                Some(cs) => match cs {
+                    "dimer" => Some(ChunkSize::Dimer),
+                    _ => return Err(ValueError::py_err("Invalid chunk size option"))
+                },
+                None => None
+            };
+
+
             let inner = system::StaticKTAM::from_ktam(
                 tile_concs.to_owned_array(),
                 tile_edges.to_owned_array(),
@@ -102,8 +338,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 k_f,
                 Some(system::Seed::None()),
                 fission_handling,
-                None,
-                None,
+                chunk_handling,
+                chunk_size,
                 tile_names,
                 None,
             );
@@ -112,6 +348,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[classmethod]
+        /// Creates a StaticKTAMPeriodic instance from a JSON string.  Ignores canvas choice in JSON. 
         fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
             let tileset = match rgrow::parser::TileSet::from_json(json_data) {
                 Ok(t) => t,
@@ -127,8 +364,20 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             })
         }
 
-        /// StaticKTAM.from_raw(tile_rates, energy_ns, energy_we, k_f, alpha, fission)
-        #[text_signature = "(tile_rates, energy_ns, energy_we, k_f, alpha, fission)"]
+        /// Generates a StaticKTAMPeriodic instance from "raw" inputs, similar to what the model uses internally.
+        ///
+        /// Parameters:
+        ///     tile_adj_rates (float array, shape N): the "adjusted unitless attachment rate" for each tile (N-1 tiles, 0 is empty).  This corresponds to 
+        ///                     $e^{-G_{mc}}$ for a tile with $G_{mc}$, ie, it does not account for $k_f$ or
+        ///                     $\alpha$.
+        ///     energy_ns (float array, shape NxN): in position [i,j], the bond strength that results from tile i being north of tile j.
+        ///     energy_ws (float array, shape NxN): same, now with i the west tile, and j the east tile.
+        ///     k_f (float, optional): $k_f$, default 1e6.
+        ///     alpha (float, optional): $\alpha$, default 0.0.
+        ///     fission (optional): one of "off", "just-detach", "on", "keep-largest", "keep-weighted" (default "off").
+        ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
+        ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
+        #[text_signature = "(tile_rates, energy_ns, energy_we, k_f, alpha, fission, chunk_handling, chunk_size)"]
         #[classmethod]
         fn from_raw(
             _cls: &PyType,
@@ -138,6 +387,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             k_f: f64,
             alpha: f64,
             fission: Option<&str>,
+            chunk_handling: Option<&str>,
+            chunk_size: Option<&str>
         ) -> PyResult<Self> {
             let fission_handling = match fission {
                 Some(fs) => Some(match fs {
@@ -151,6 +402,23 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 None => None,
             };
 
+            let chunk_handling = Some(match chunk_handling {
+                Some(ch) => match ch {
+                    "off" | "none" => ChunkHandling::None,
+                    "detach" => ChunkHandling::Detach,
+                    _ => return Err(ValueError::py_err("Invalid chunk handling option")),
+                 },
+                None => ChunkHandling::None
+            });
+
+            let chunk_size = match chunk_size {
+                Some(cs) => match cs {
+                    "dimer" => Some(ChunkSize::Dimer),
+                    _ => return Err(ValueError::py_err("Invalid chunk size option"))
+                },
+                None => None
+            };
+
             Ok(Self {
                 inner: system::StaticKTAM::from_raw(
                     tile_rates.to_owned_array(),
@@ -159,6 +427,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                     k_f,
                     alpha,
                     fission_handling,
+                    chunk_handling,
+                    chunk_size
                 ),
             })
         }
@@ -178,6 +448,17 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.energy_we.to_pyarray(py)
         }
     }
+
+
+    /// Static KTAM with cover strands.  Currently very unstable.  Needs to be generated from json.
+    #[pyclass]
+    #[derive(Debug)]
+    #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
+    struct StaticKTAMCover {
+        inner:
+            system::StaticKTAMCover<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>
+    }
+
 
     #[pymethods]
     impl StaticKTAMCover {
@@ -249,145 +530,14 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     
-
-    #[pymethods]
-    impl StaticKTAM {
-        #[new]
-        fn new(
-            tile_concs: PyReadonlyArray1<f64>,
-            tile_edges: PyReadonlyArray2<base::Tile>,
-            glue_strengths: PyReadonlyArray1<base::Energy>,
-            gse: base::Energy,
-            gmc: base::Energy,
-            alpha: Option<f64>,
-            k_f: Option<f64>,
-            fission: Option<&str>,
-            tile_names: Option<Vec<String>>,
-        ) -> PyResult<Self> {
-            let fission_handling = match fission {
-                Some(fs) => Some(match fs {
-                    "off" => FissionHandling::NoFission,
-                    "just-detach" => FissionHandling::JustDetach,
-                    "on" => FissionHandling::KeepSeeded,
-                    "keep-largest" => FissionHandling::KeepLargest,
-                    "keep-weighted" => FissionHandling::KeepWeighted,
-                    _ => return Err(ValueError::py_err("Invalid fission handling option")),
-                }),
-                None => None,
-            };
-
-            let inner = system::StaticKTAM::from_ktam(
-                tile_concs.to_owned_array(),
-                tile_edges.to_owned_array(),
-                glue_strengths.to_owned_array(),
-                gse,
-                gmc,
-                alpha,
-                k_f,
-                Some(system::Seed::None()),
-                fission_handling,
-                None,
-                None,
-                tile_names,
-                None,
-            );
-
-            Ok(Self { inner })
-        }
-
-        #[classmethod]
-        fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
-            let tileset = match rgrow::parser::TileSet::from_json(json_data) {
-                Ok(t) => t,
-                Err(e) => {
-                    return Err(ValueError::py_err(format!(
-                        "Couldn't parse tileset json: {:?}",
-                        e
-                    )))
-                }
-            };
-            Ok(Self {
-                inner: tileset.into_static_seeded_ktam(),
-            })
-        }
-
-        /// StaticKTAM.from_raw(tile_rates, energy_ns, energy_we, k_f, alpha, fission)
-        #[text_signature = "(tile_rates, energy_ns, energy_we, k_f, alpha, fission)"]
-        #[classmethod]
-        fn from_raw(
-            _cls: &PyType,
-            tile_rates: PyReadonlyArray1<f64>,
-            energy_ns: PyReadonlyArray2<base::Energy>,
-            energy_we: PyReadonlyArray2<base::Energy>,
-            k_f: Option<f64>,
-            alpha: Option<f64>,
-            fission: Option<&str>,
-        ) -> PyResult<Self> {
-            let fission_handling = match fission {
-                Some(fs) => Some(match fs {
-                    "off" => FissionHandling::NoFission,
-                    "just-detach" => FissionHandling::JustDetach,
-                    "on" => FissionHandling::KeepSeeded,
-                    "keep-largest" => FissionHandling::KeepLargest,
-                    "keep-weighted" => FissionHandling::KeepWeighted,
-                    _ => return Err(ValueError::py_err("Invalid fission handling option")),
-                }),
-                None => None,
-            };
-
-            Ok(Self {
-                inner: system::StaticKTAM::from_raw(
-                    tile_rates.to_owned_array(),
-                    energy_ns.to_owned_array(),
-                    energy_we.to_owned_array(),
-                    k_f.unwrap_or(1e6),
-                    alpha.unwrap_or(0.),
-                    fission_handling,
-                ),
-            })
-        }
-
-        #[getter]
-        fn tile_rates<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
-            self.inner.tile_adj_concs.to_pyarray(py)
-        }
-
-
-        fn debug(&self) -> String {
-            format!("{:?}", self.inner)
-        }
-
-        #[getter]
-        fn energy_ns<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
-            self.inner.energy_ns.to_pyarray(py)
-        }
-
-        #[getter]
-        fn energy_we<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
-            self.inner.energy_we.to_pyarray(py)
-        }
-
-        fn calc_mismatch_locations<'py>(&self, state: &StateKTAM, py: Python<'py>) -> &'py PyArray2<usize> {
-            self.inner.calc_mismatch_locations(&state.inner).to_pyarray(py)
-        }
-
-        fn calc_mismatches(&self, state: &StateKTAM) -> u32 {
-            self.inner.calc_mismatches(&state.inner)
-        }
-
-        fn evolve_in_size_range_events_max(&mut self, state: &mut StateKTAM, minsize: u32, maxsize: u32, maxevents: u64) {
-            let mut rng = SmallRng::from_entropy();
-            self.inner.evolve_in_size_range_events_max(&mut state.inner, minsize, maxsize, maxevents, &mut rng);
-        }
-    }
-
-
     /// A simulation state for a static kTAM simulation, using a square canvas.
-    /// Takes an initial canvas (ndarray of u32s, must be square with width 2^L)
-    /// and a StaticKTAM system instance.
+    /// 
+    /// Parameters:
+    ///     size (int): the size of the canvas (assumed to be square).  Should be a power of 2.
+    ///     system (StaticKTAM): the system that the simulation will use.
     #[pyclass]
     #[derive(Clone, Debug)]
-    #[text_signature = "(canvas, system)"]
+    #[text_signature = "(size, system)"]
     struct StateKTAM {
         inner: state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>,
     }
@@ -413,6 +563,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             Ok(Self { inner: state })
         }
 
+        /// Prints debug information.
         fn debug(&self) -> String {
             format!("{:?}", self.inner)
         }
@@ -450,7 +601,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
        }
 
         #[text_signature = "(system, point_y, point_x, tile)"]
-        /// Sets the point (py, px) to a particular tile (or empty, with 0).
+        /// Sets the point (py, px) to a particular tile (or empty, with 0), using StaticKTAM `system`.
+        /// Updates rates after setting.
         fn set_point(
             &mut self,
             system: &mut StaticKTAM,
@@ -463,7 +615,9 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             Ok(())
         }
 
-        /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible.
+        /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible, in which case
+        /// it will raise a ValueError.
+        #[text_signature="(system)"]
         fn take_step(&mut self, system: &StaticKTAM) -> PyResult<()> {
             let mut rng = SmallRng::from_entropy();
             match system.inner.state_step(&mut self.inner, &mut rng, 1e100) {
@@ -473,6 +627,9 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             }
         }
 
+        /// Provided with a StaticKTAM system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
+        /// or until `maxevents` events have taken place during the evolution.  This is present for backward compatibility.
+        #[text_signature="(system, minsize, maxsize, maxevents)"]
         fn evolve_in_size_range(
             &mut self,
             system: &mut StaticKTAM,
@@ -487,28 +644,38 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             Ok(())
         }
 
+        /// Returns the canvas as a numpy array.  Note that this creates an array copy.
         fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<base::Tile> {
             self.inner.canvas.raw_array().to_pyarray(py)
         }
 
+        /// Returns a copy of the state.
         fn copy(&self) -> PyResult<Self> {
             Ok(Self {
                 inner: self.inner.clone(),
             })
         }
 
+        /// The number of tiles in the state (stored, not calculated).
+        #[getter]
         fn ntiles(&self) -> base::NumTiles {
             self.inner.ntiles()
         }
 
+        /// The current time since initiation (in seconds) of the state.
+        #[getter]
         fn time(&self) -> f64 {
             self.inner.time()
         }
 
+        /// The total number of events that have taken place in the state.
+        #[getter]
         fn events(&self) -> u64 {
             self.inner.total_events()
         }
 
+        #[text_signature="(level_number)"]
+        /// Returns rate array for level `level_number` (0 is full, each subsequent is shape (previous/2, previous/2)
         fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
             self.inner.rates.0[level].to_pyarray(py)
         }
@@ -521,8 +688,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
     #[pyfunction]
     #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
-    /// Runs Forward Flux Sampling, and returns a tuple of
-    /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
+    /// Runs Forward Flux Sampling on a StaticKTAM system using number of tiles as a measure, and returns 
+    /// a tuple of (nucleation_rate, dimerization_rate, forward_probs).
     fn ffs_run(
         system: &StaticKTAM,
         num_states: usize,
@@ -553,8 +720,10 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
     #[pyfunction]
     #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
-    /// Runs Forward Flux Sampling, and returns a tuple of
-    /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
+    /// Runs Forward Flux Sampling, and returns a tuple of using number of tiles as a measure, and returns
+    /// (nucleation_rate, dimerization_rate, forward_probs, final configs, configs for each level).
+    /// Note that this consumes a *large* amount of memory, and other functions that do not return every level's configurations may be better
+    /// if you don't need all of this information.
     fn ffs_run_full<'py>(
         system: &StaticKTAM,
         num_states: usize,
@@ -616,8 +785,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
     #[pyfunction]
     #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
-    /// Runs Forward Flux Sampling, and returns a tuple of
-    /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
+    /// Runs Forward Flux Sampling, and returns a tuple of using number of tiles as a measure, and returns
+    /// (nucleation_rate, dimerization_rate, forward_probs, final configs, configs for each level).
     fn ffs_run_final<'py>(
         system: &StaticKTAM,
         num_states: usize,
@@ -663,8 +832,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
     #[pyfunction]
     #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
-    /// Runs Forward Flux Sampling, and returns a tuple of
-    /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
+    /// Runs Forward Flux Sampling for StaticKTAMCover, and returns a tuple of using number of tiles as a measure, and returns
+    /// (nucleation_rate, dimerization_rate, forward_probs, final configs).
     fn ffs_run_final_cover<'py>(
         system: &StaticKTAMCover,
         num_states: usize,
@@ -710,8 +879,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
     #[pyfunction]
     #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
-    /// Runs Forward Flux Sampling, and returns a tuple of
-    /// (nucleation_rate, dimerization_rate, forward_probs[2->3, 3->4, etc])
+    /// Runs Forward Flux Sampling for StaticKTAMPeriodic, and returns a tuple of using number of tiles as a measure, and returns
+    /// (nucleation_rate, dimerization_rate, forward_probs, final configs).
     fn ffs_run_final_p<'py>(
         system: &StaticKTAMPeriodic,
         num_states: usize,
