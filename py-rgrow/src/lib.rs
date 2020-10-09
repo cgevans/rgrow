@@ -10,11 +10,12 @@ use rgrow::base;
 use rgrow::canvas;
 use rgrow::canvas::Canvas;
 use rgrow::ffs;
-use rand::SeedableRng;
+use rand::{SeedableRng, rngs::SmallRng};
+use rgrow::system::StepOutcome;
 
 use rgrow::state;
 use rgrow::system;
-use rgrow::system::System;
+use rgrow::system::{System, SystemWithStateCreate};
 use rgrow::state::{StateCreate, StateStatus};
 use rgrow::system::FissionHandling;
 
@@ -22,6 +23,11 @@ use std::fmt::Debug;
 
 #[pymodule]
 fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
+    //? A (somewhat rudimentary and very unstable) Python interface to Rgrow.
+    //?
+    //? As static dispatch doesn't work with PyO3, this currently has separate types for
+    //? combinations of different systems and states/canvases.
+
     /// Static (no changes to concentrations, bond strengths, parameters, etc) kTAM system.
     /// Currently implements fission, but not Xgrow's chunk fission, and not double tiles.
     /// Can be used by multiple simulations.
@@ -59,20 +65,6 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     struct StaticKTAMPeriodic {
         inner: system::StaticKTAM<state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>>
     }
-
-    // /// Static (no changes to concentrations, bond strengths, parameters, etc) aTAM system.
-    // #[pyclass]
-    // #[derive(Clone, Debug)]
-    // struct StaticATAM {
-    //     inner: rg::StaticATAM,
-    // }
-
-    // /// A simulation state for a static aTAM simulation, using a square canvas.
-    // #[pyclass]
-    // #[derive(Clone, Debug)]
-    // struct StateATAM {
-    //     inner: state::QuadTreeState<canvas::CanvasSquare, rg::StaticATAM, state::NullStateTracker>,
-    // }
 
     #[pymethods]
     impl StaticKTAMPeriodic {
@@ -251,7 +243,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         fn evolve_in_size_range_events_max(&mut self, state: &mut StateKTAM, minsize: u32, maxsize: u32, maxevents: u64) {
-            let mut rng = rand::rngs::SmallRng::from_entropy();
+            let mut rng = SmallRng::from_entropy();
             self.inner.evolve_in_size_range_events_max(&mut state.inner, minsize, maxsize, maxevents, &mut rng);
         }
     }
@@ -327,8 +319,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             tile_rates: PyReadonlyArray1<f64>,
             energy_ns: PyReadonlyArray2<base::Energy>,
             energy_we: PyReadonlyArray2<base::Energy>,
-            k_f: f64,
-            alpha: f64,
+            k_f: Option<f64>,
+            alpha: Option<f64>,
             fission: Option<&str>,
         ) -> PyResult<Self> {
             let fission_handling = match fission {
@@ -348,8 +340,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                     tile_rates.to_owned_array(),
                     energy_ns.to_owned_array(),
                     energy_we.to_owned_array(),
-                    k_f,
-                    alpha,
+                    k_f.unwrap_or(1e6),
+                    alpha.unwrap_or(0.),
                     fission_handling,
                 ),
             })
@@ -358,6 +350,11 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         #[getter]
         fn tile_rates<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
             self.inner.tile_adj_concs.to_pyarray(py)
+        }
+
+
+        fn debug(&self) -> String {
+            format!("{:?}", self.inner)
         }
 
         #[getter]
@@ -379,32 +376,11 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         fn evolve_in_size_range_events_max(&mut self, state: &mut StateKTAM, minsize: u32, maxsize: u32, maxevents: u64) {
-            let mut rng = rand::rngs::SmallRng::from_entropy();
+            let mut rng = SmallRng::from_entropy();
             self.inner.evolve_in_size_range_events_max(&mut state.inner, minsize, maxsize, maxevents, &mut rng);
         }
     }
 
-
-    // #[pymethods]
-    // impl StaticATAM {
-    //     #[new]
-    //     fn new(
-    //         tile_concs: PyReadonlyArray1<f64>,
-    //         tile_edges: PyReadonlyArray2<base::Tile>,
-    //         glue_strengths: PyReadonlyArray1<base::Energy>,
-    //         tau: base::Energy,
-    //     ) -> PyResult<Self> {
-    //         let inner = rg::StaticATAM::new(
-    //             tile_concs.to_owned_array(),
-    //             tile_edges.to_owned_array(),
-    //             glue_strengths.to_owned_array(),
-    //             tau,
-    //             Some(rg::Seed::None()),
-    //         );
-
-    //         Ok(StaticATAM { inner })
-    //     }
-    // }
 
     /// A simulation state for a static kTAM simulation, using a square canvas.
     /// Takes an initial canvas (ndarray of u32s, must be square with width 2^L)
@@ -437,74 +413,79 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             Ok(Self { inner: state })
         }
 
+        fn debug(&self) -> String {
+            format!("{:?}", self.inner)
+        }
 
+        #[classmethod]
+        /// Creates a simulation state with the West-East dimer of tile numbers w, e, centered in
+        /// a canvas of size size (must be 2^L).
+        #[text_signature = "(system, w, e, size)"]
+        fn create_we_pair(
+            _cls: &PyType,
+            system: &mut StaticKTAM,
+            w: base::Tile,
+            e: base::Tile,
+            size: usize,
+        ) -> PyResult<Self> {
+            let inner = system.inner.create_we_pair(w, e, size).unwrap();
 
-    //     #[classmethod]
-    //     /// Creates a simulation state with the West-East dimer of tile numbers w, e, centered in
-    //     /// a canvas of size size (must be 2^L).
-    //     #[text_signature = "(system, w, e, size)"]
-    //     fn create_we_pair(
-    //         _cls: &PyType,
-    //         system: &StaticKTAM,
-    //         w: base::Tile,
-    //         e: base::Tile,
-    //         size: usize,
-    //     ) -> PyResult<Self> {
-    //         let inner = state::QuadTreeState::create_we_pair(&system.inner, w, e, size);
+            Ok(Self { inner })
+        }
 
-    //         Ok(Self { inner })
-    //     }
+        #[classmethod]
+        #[text_signature = "(system, n, s, size)"]
+        /// Creates a simulation state with the North-South dimer of tile numbers n, s, centered in
+        /// a canvas of size size (must be 2^L).
+        fn create_ns_pair(
+            _cls: &PyType,
+            system: &mut StaticKTAM,
+            n: base::Tile,
+            s: base::Tile,
+            size: usize,
+        ) -> PyResult<Self> {
+            let inner = system.inner.create_ns_pair(n, s, size).unwrap();
 
-    //     #[classmethod]
-    //     #[text_signature = "(system, n, s, size)"]
-    //     /// Creates a simulation state with the North-South dimer of tile numbers n, s, centered in
-    //     /// a canvas of size size (must be 2^L).
-    //     fn create_ns_pair(
-    //         _cls: &PyType,
-    //         system: &StaticKTAM,
-    //         n: base::Tile,
-    //         s: base::Tile,
-    //         size: usize,
-    //     ) -> PyResult<Self> {
-    //         let inner = state::QuadTreeState::create_ns_pair(&system.inner, n, s, size);
+            Ok(Self { inner })
+       }
 
-    //         Ok(Self { inner })
-    //     }
+        #[text_signature = "(system, point_y, point_x, tile)"]
+        /// Sets the point (py, px) to a particular tile (or empty, with 0).
+        fn set_point(
+            &mut self,
+            system: &mut StaticKTAM,
+            py: usize,
+            px: usize,
+            t: base::Tile,
+        ) -> PyResult<()> {
+            system.inner.set_point(&mut self.inner, (py, px), t);
 
-    //     #[text_signature = "(system, point_y, point_x, tile)"]
-    //     /// Sets the point (py, px) to a particular tile (or empty, with 0).
-    //     fn set_point(
-    //         &mut self,
-    //         system: &StaticKTAM,
-    //         py: usize,
-    //         px: usize,
-    //         t: base::Tile,
-    //     ) -> PyResult<()> {
-    //         self.inner.set_point(&system.inner, (px, py), t);
+            Ok(())
+        }
 
-    //         Ok(())
-    //     }
+        /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible.
+        fn take_step(&mut self, system: &StaticKTAM) -> PyResult<()> {
+            let mut rng = SmallRng::from_entropy();
+            match system.inner.state_step(&mut self.inner, &mut rng, 1e100) {
+                StepOutcome::HadEventAt(_) | StepOutcome::DeadEventAt(_) => {Ok(())},
+                StepOutcome::NoEventIn(_) => {Err(ValueError::py_err("No event"))},
+                StepOutcome::ZeroRate => {Err(ValueError::py_err("Zero rate"))}
+            }
+        }
 
-    //     /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible.
-    //     fn take_step(&mut self, system: &StaticKTAM) -> PyResult<()> {
-    //         match self.inner.take_step(&system.inner) {
-    //             Ok(_) => Ok(()),
-    //             Err(_) => Err(ValueError::py_err("Step-taking failed")),
-    //         }
-    //     }
+        fn evolve_in_size_range(
+            &mut self,
+            system: &mut StaticKTAM,
+            minsize: base::NumTiles,
+            maxsize: base::NumTiles,
+            maxevents: u64,
+        ) -> PyResult<()> {
+            let mut rng = SmallRng::from_entropy();
+            system.inner
+                .evolve_in_size_range_events_max(&mut self.inner, minsize, maxsize, maxevents, &mut rng);
 
-    //     fn evolve_in_size_range(
-    //         &mut self,
-    //         system: &StaticKTAM,
-    //         minsize: base::NumTiles,
-    //         maxsize: base::NumTiles,
-    //         maxevents: u64,
-    //     ) -> PyResult<()> {
-    //         self.inner
-    //             .evolve_in_size_range_events_max(&system.inner, minsize, maxsize, maxevents);
-
-    //         Ok(())
-    //     }
+            Ok(())
+        }
 
         fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<base::Tile> {
             self.inner.canvas.raw_array().to_pyarray(py)
@@ -528,18 +509,15 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.total_events()
         }
 
-    //     fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
-    //         self.inner.rates[level].to_pyarray(py)
-    //     }
-    // }
+        fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
+            self.inner.rates.0[level].to_pyarray(py)
+        }
 
     }
-    // m.add_class::<StaticATAM>()?;
     m.add_class::<StaticKTAM>()?;
     m.add_class::<StaticKTAMCover>()?;
     m.add_class::<StaticKTAMPeriodic>()?;
     m.add_class::<StateKTAM>()?;
-    // m.add_class::<StateATAM>()?;
 
     #[pyfunction]
     #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
