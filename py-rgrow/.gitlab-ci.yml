@@ -4,13 +4,25 @@ image:
 
 stages:
   - build
-#  - publish
+  - deploy
  
 build:
   stage: build
   script:
-    - maturin build
-    
+    - maturin build --release
+  artifacts:
+    paths:
+      - target/wheels/*.whl
+  
+pages:
+  stage: deploy
+  script:
+  - pip install -U sphinx
+  - sphinx-build -b html . public
+  artifacts:
+    paths:
+    - public
+
 #publish:
 #  stage: publish
 #  script:
