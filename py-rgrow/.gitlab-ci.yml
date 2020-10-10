@@ -17,6 +17,11 @@ build:
     paths:
       - target/
 
+publish-pypi:
+  stage: deploy
+  script:
+    - MATURIN_PASSWORD=${CI_JOB_TOKEN} maturin publish -u gitlab-ci-token --repository-url https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/packages/pypi
+
 format-check:
   allow_failure: true
   stage: build
@@ -47,6 +52,8 @@ pages:
   artifacts:
     paths:
     - public
+  only:
+    - master
 
 #publish:
 #  stage: publish
