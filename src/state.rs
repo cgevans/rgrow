@@ -18,6 +18,9 @@ pub trait StateStatus {
 
 pub trait StateCreate: Sized {
     fn create_raw(canvas: Array2<Tile>) -> Result<Self, GrowError>;
+    fn empty(shape: (usize, usize)) -> Result<Self, GrowError> {
+        Self::create_raw(Array2::zeros(shape))
+    }
 }
 
 #[derive(Debug, Clone)]

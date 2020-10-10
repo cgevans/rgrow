@@ -8,7 +8,7 @@ use rand::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::State};
+use crate::{base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::State, state::StateCreate};
 
 use super::base::{Energy, Glue, Point, Rate, Tile};
 use crate::canvas::{PointSafeAdjs};
@@ -85,6 +85,39 @@ pub enum StepOutcome {
     ZeroRate,
 }
 
+pub trait SystemWithStateCreate<S: State + StateCreate>: System<S> {
+    fn new_state(&mut self, shape: (usize, usize)) -> Result<S, GrowError> {
+        let mut new_state = S::empty(shape)?;
+        self.insert_seed(&mut new_state);
+        Ok(new_state)
+    }
+
+    
+    fn create_we_pair(&mut self, w: Tile, e: Tile, size: usize) -> Result<S, GrowError> {
+        assert!(size > 8);
+        let mut ret = S::empty((size, size))?;
+        let mid = size / 2;
+        self.insert_seed(&mut ret);
+        self.set_point(&mut ret, (mid, mid), w);
+        self.set_point(&mut ret, (mid, mid + 1), e);
+        Ok(ret)
+    }
+
+    fn create_ns_pair(&mut self, n: Tile, s: Tile, size: usize) -> Result<S, GrowError> {
+        assert!(size > 8);
+        let mut ret = S::empty((size, size))?;
+        let mid = size / 2;
+        self.insert_seed(&mut ret);
+        self.set_point(&mut ret, (mid, mid), n);
+        self.set_point(&mut ret, (mid + 1, mid), s);
+        Ok(ret)
+    }
+}
+
+impl<Sy: System<S>, S: State + StateCreate> SystemWithStateCreate<S> for Sy {
+
+}
+
 pub trait System<S: State>: Debug {
     fn state_step(&self, mut state: &mut S, mut rng: &mut SmallRng, max_time_step: f64) -> StepOutcome {
         let time_step = -f64::ln(rng.gen()) / state.total_rate();
@@ -137,6 +170,11 @@ pub trait System<S: State>: Debug {
 
     }
 
+    fn insert_seed(&mut self, state: &mut S) {
+        for (p, t) in self.seed_locs() {
+            self.set_point(state, p.0, t);
+        }
+    }
 
     fn perform_event(&self, state: &mut S, event: &Event) {
         match event {
@@ -732,6 +770,8 @@ impl<C: State> StaticKTAM<C> {
         k_f: f64,
         alpha: f64,
         fission_handling: Option<FissionHandling>,
+        chunk_handling: Option<ChunkHandling>,
+        chunk_size: Option<ChunkSize>,
     ) -> Self {
         let (friends_n, friends_e, friends_s, friends_w) =
             create_friend_data(&energy_ns, &energy_we);
@@ -773,8 +813,8 @@ impl<C: State> StaticKTAM<C> {
             fission_handling: fission_handling.unwrap_or(FissionHandling::NoFission),
             tile_names,
             tile_colors,
-            chunk_handling: ChunkHandling::None,
-            chunk_size: ChunkSize::Single,
+            chunk_handling: chunk_handling.unwrap_or(ChunkHandling::None),
+            chunk_size: chunk_size.unwrap_or(ChunkSize::Single),
             _canvas: PhantomData,
         }
     }
@@ -958,7 +998,7 @@ where
             let bound_energy =  { self.bond_strength_of_tile_at_point(canvas, p, tile) };
 
             match self.chunk_handling {
-                ChunkHandling::None => Rate::exp(-bound_energy),
+                ChunkHandling::None => self.k_f_hat() * Rate::exp(-bound_energy),
                 ChunkHandling::Detach | ChunkHandling::Equilibrium => {
                     self.k_f_hat() * Rate::exp(-bound_energy) + self.chunk_detach_rate(canvas, p.0, tile) // FIXME
                 }

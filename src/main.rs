@@ -42,10 +42,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts = Opts::parse();
 
     match opts.subcmd {
-        //SubCommand::Run(_) => run_example(),
-        //SubCommand::RunSubs(_) => run_example_subs(),
-        //SubCommand::Parse(po) => parse_example(po.input),
-        //SubCommand::RunAtam(po) => run_atam(po.input),
         SubCommand::Run(po) => {
             #[cfg(feature="ui")] {
                 let file = match File::open(po.input) {
@@ -62,7 +58,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let parsed = parser_xgrow::parse_xgrow(po.input)?;
             run_ktam_window(parsed)
         }}
-        //SubCommand::FissionTest(_) => { fission_test() }
     };
 
     Ok(())

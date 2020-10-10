@@ -106,26 +106,6 @@ pub trait StateCreate<C: Canvas, S: System<C>>:
         ret
     }
 
-    fn create_we_pair(sys: &S, w: Tile, e: Tile, size: usize) -> Self {
-        assert!(size > 8);
-        let mut ret = Self::empty((size, size));
-        let mid = size / 2;
-        ret.insert_seed(sys);
-        ret.set_point(sys, (mid, mid), w)
-            .set_point(sys, (mid, mid + 1), e);
-        ret
-    }
-
-    fn create_ns_pair(sys: &S, n: Tile, s: Tile, size: usize) -> Self {
-        assert!(size > 8);
-        let mut ret = Self::empty((size, size));
-        let mid = size / 2;
-        ret.insert_seed(sys);
-        ret.set_point(sys, (mid, mid), n)
-            .set_point(sys, (mid + 1, mid), s);
-        ret
-    }
-
     fn insert_seed(&mut self, sys: &S) -> &mut Self {
         for (p, t) in sys.seed_locs() {
             // FIXME: for large seeds,

@@ -22,3 +22,5 @@ pub mod ffs;
 pub mod fission;
 
 pub mod ratestore;
+
+pub mod simulation;
