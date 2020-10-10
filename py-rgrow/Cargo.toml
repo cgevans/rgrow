@@ -20,7 +20,7 @@ ndarray = "0.13"
 rand = "0.7"
 
 [dependencies.rgrow]
-path = "./rgrow-project/"
+git = "https://framagit.org/cge/rgrow.git"
 default-features = false  # Manylinux1 doesn't support X11 such that the UI works...
 
 [dependencies.pyo3]

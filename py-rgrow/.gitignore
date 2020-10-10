@@ -6,3 +6,4 @@ venv-pyrgrow/*
 .ipynb_checkpoints/*
 *.pyi
 *.pyc
+_build/*
