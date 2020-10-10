@@ -1,5 +1,3 @@
-#![feature(associated_type_bounds)]
-
 use numpy::{ToPyArray};
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use ndarray::Array2;
@@ -28,6 +26,7 @@ use std::fmt::Debug;
 /// combinations of different systems and states/canvases.
 /// 
 /// The most important classes are:
+///
 /// - StaticKTAM (and the StaticKTAMPeriodic variant), which specify the kinetic model to use and its parameters.
 /// - StateKTAM, which stores the state of a single assembly.
 #[pymodule]
@@ -41,21 +40,21 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     /// Currently, Python can't handle seeds.
     ///
     /// Parameters:
-    ///     tile_stoics (f64 N 1D array): tile stoichiometry (for N-1 tiles).  1.0 means tile concentration $e^{-G_{mc}+\alpha}$.
+    ///     tile_stoics (f64 N 1D array): tile stoichiometry (for N-1 tiles).  1.0 means tile concentration :math:`e^{-G_{mc}+\alpha}`.
     ///                                   "Tile 0" must correspond with an empty space, and should have stoic 0.
     ///     tile_edges (u32 Nx4 array): tile edges for each tile.  First row should be [0, 0, 0, 0].
     ///     glue_strengths (f64 G 1D array): glue strengths for each glue. 0 should have strength 0 and corresponds with a null glue. 
-    ///                                      Strength 1.0 corresponds to a glue of strength $G_{se}$.
-    ///     gse, gmc (f64): :math:`G_{mc}` and $G_{se}$.
+    ///                                      Strength 1.0 corresponds to a glue of strength :math:`G_{se}`.
+    ///     gse, gmc (f64): :math:`G_{mc}` and :math:`G_{se}`.
     ///     alpha (optional, float): Non-edge-dependent attachment strength adjustment (default 0.0).
-    ///     k_f (optional, float): Non-adjusted forward rate constant, not accounting for $\alpha$ (default 1e6).
+    ///     k_f (optional, float): Non-adjusted forward rate constant, not accounting for :math:`\alpha` (default 1e6).
     ///     fission (optional): one of "off", "just-detach", "on", "keep-largest", "keep-weighted" (default "off").
     ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
     ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
     ///     tile_names (optional, list[str]): list of tile names (default None).
     #[pyclass]
     #[derive(Debug)]
-    #[text_signature = "(tile_stoics, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
+    #[text_signature = "(tile_stoics, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, chunk_handling, chunk_size, tile_names)"]
     struct StaticKTAM {
         inner:
             system::StaticKTAM<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>
@@ -128,7 +127,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         #[classmethod]
         /// Creates a StaticKTAM instance from a JSON string.  Ignores canvas choice in JSON. 
-        #[text_signature="(json_data)"]
+        #[text_signature="(self, json_data)"]
         fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
             let tileset = match rgrow::parser::TileSet::from_json(json_data) {
                 Ok(t) => t,
@@ -148,12 +147,12 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         ///
         /// Parameters:
         ///     tile_adj_rates (float array, shape N): the "adjusted unitless attachment rate" for each tile (N-1 tiles, 0 is empty).  This corresponds to 
-        ///                     $e^{-G_{mc}}$ for a tile with $G_{mc}$, ie, it does not account for $k_f$ or
-        ///                     $\alpha$.
+        ///                     :math:`e^{-G_{mc}}` for a tile with :math:`G_{mc}`, ie, it does not account for :math:`k_f` or
+        ///                     :math:`\alpha`.
         ///     energy_ns (float array, shape NxN): in position [i,j], the bond strength that results from tile i being north of tile j.
         ///     energy_ws (float array, shape NxN): same, now with i the west tile, and j the east tile.
-        ///     k_f (float, optional): $k_f$, default 1e6.
-        ///     alpha (float, optional): $\alpha$, default 0.0.
+        ///     k_f (float, optional): :math:`k_f`, default 1e6.
+        ///     alpha (float, optional): :math:`\alpha`, default 0.0.
         ///     fission (optional): one of "off", "just-detach", "on", "keep-largest", "keep-weighted" (default "off").
         ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
         ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
@@ -241,6 +240,8 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.calc_mismatches(&state.inner)
         }
 
+        /// StaticKTAM.evolve_in_size_range_events_max(self, state, minsize, maxsize, maxevents)
+        ///
         /// A System-centric evolve method.  Evolves the provided state until it has either <= minsize or >= maxsize tiles, or
         /// the evolution has performed maxevents steps.
         ///
@@ -249,6 +250,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         ///     minsize (int)
         ///     maxsize (int)
         ///     maxevents (int)
+        #[text_signature="(self, state, minsize, maxsize, maxevents)"]
         fn evolve_in_size_range_events_max(&mut self, state: &mut StateKTAM, minsize: u32, maxsize: u32, maxevents: u64) {
             let mut rng = SmallRng::from_entropy();
             self.inner.evolve_in_size_range_events_max(&mut state.inner, minsize, maxsize, maxevents, &mut rng);
@@ -263,14 +265,14 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     /// Currently, Python can't handle seeds.
     ///
     /// Parameters:
-    ///     tile_stoics (f64 N 1D array): tile stoichiometry (for N-1 tiles).  1.0 means tile concentration $e^{-G_{mc}+\alpha}$.
+    ///     tile_stoics (f64 N 1D array): tile stoichiometry (for N-1 tiles).  1.0 means tile concentration :math:`e^{-G_{mc}+\alpha}`.
     ///                                   "Tile 0" must correspond with an empty space, and should have stoic 0.
     ///     tile_edges (u32 Nx4 array): tile edges for each tile.  First row should be [0, 0, 0, 0].
     ///     glue_strengths (f64 G 1D array): glue strengths for each glue. 0 should have strength 0 and corresponds with a null glue. 
-    ///                                      Strength 1.0 corresponds to a glue of strength $G_{se}$.
-    ///     gse, gmc (f64): $G_{mc}$ and $G_{se}$.
+    ///                                      Strength 1.0 corresponds to a glue of strength :math:`G_{se}`.
+    ///     gse, gmc (f64): :math:`G_{mc}` and :math:`G_{se}`.
     ///     alpha (optional, float): Non-edge-dependent attachment strength adjustment (default 0.0).
-    ///     k_f (optional, float): Non-adjusted forward rate constant, not accounting for $\alpha$ (default 1e6).
+    ///     k_f (optional, float): Non-adjusted forward rate constant, not accounting for :math:`\alpha` (default 1e6).
     ///     fission (optional, str): one of "off", "just-detach", "on", "keep-largest", "keep-weighted" (default "off").
     ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
     ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
@@ -349,6 +351,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         #[classmethod]
         /// Creates a StaticKTAMPeriodic instance from a JSON string.  Ignores canvas choice in JSON. 
+        #[text_signature="(self, json_data)"]
         fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
             let tileset = match rgrow::parser::TileSet::from_json(json_data) {
                 Ok(t) => t,
@@ -368,12 +371,12 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         ///
         /// Parameters:
         ///     tile_adj_rates (float array, shape N): the "adjusted unitless attachment rate" for each tile (N-1 tiles, 0 is empty).  This corresponds to 
-        ///                     $e^{-G_{mc}}$ for a tile with $G_{mc}$, ie, it does not account for $k_f$ or
-        ///                     $\alpha$.
+        ///                     :math:`e^{-G_{mc}}` for a tile with :math:`G_{mc}`, ie, it does not account for :math:`k_f` or
+        ///                     :math:`\alpha`.
         ///     energy_ns (float array, shape NxN): in position [i,j], the bond strength that results from tile i being north of tile j.
         ///     energy_ws (float array, shape NxN): same, now with i the west tile, and j the east tile.
-        ///     k_f (float, optional): $k_f$, default 1e6.
-        ///     alpha (float, optional): $\alpha$, default 0.0.
+        ///     k_f (float, optional): :math:`k_f`, default 1e6.
+        ///     alpha (float, optional): :math:`\alpha`, default 0.0.
         ///     fission (optional): one of "off", "just-detach", "on", "keep-largest", "keep-weighted" (default "off").
         ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
         ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
@@ -571,7 +574,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         #[classmethod]
         /// Creates a simulation state with the West-East dimer of tile numbers w, e, centered in
         /// a canvas of size size (must be 2^L).
-        #[text_signature = "(system, w, e, size)"]
+        #[text_signature = "(self, system, w, e, size)"]
         fn create_we_pair(
             _cls: &PyType,
             system: &mut StaticKTAM,
@@ -585,7 +588,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[classmethod]
-        #[text_signature = "(system, n, s, size)"]
+        #[text_signature = "(self, system, n, s, size)"]
         /// Creates a simulation state with the North-South dimer of tile numbers n, s, centered in
         /// a canvas of size size (must be 2^L).
         fn create_ns_pair(
@@ -600,7 +603,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             Ok(Self { inner })
        }
 
-        #[text_signature = "(system, point_y, point_x, tile)"]
+        #[text_signature = "(self, system, point_y, point_x, tile)"]
         /// Sets the point (py, px) to a particular tile (or empty, with 0), using StaticKTAM `system`.
         /// Updates rates after setting.
         fn set_point(
@@ -617,7 +620,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible, in which case
         /// it will raise a ValueError.
-        #[text_signature="(system)"]
+        #[text_signature="(self, system)"]
         fn take_step(&mut self, system: &StaticKTAM) -> PyResult<()> {
             let mut rng = SmallRng::from_entropy();
             match system.inner.state_step(&mut self.inner, &mut rng, 1e100) {
@@ -629,7 +632,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         /// Provided with a StaticKTAM system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
         /// or until `maxevents` events have taken place during the evolution.  This is present for backward compatibility.
-        #[text_signature="(system, minsize, maxsize, maxevents)"]
+        #[text_signature="(self, system, minsize, maxsize, maxevents)"]
         fn evolve_in_size_range(
             &mut self,
             system: &mut StaticKTAM,
@@ -674,7 +677,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.total_events()
         }
 
-        #[text_signature="(level_number)"]
+        #[text_signature="(self, level_number)"]
         /// Returns rate array for level `level_number` (0 is full, each subsequent is shape (previous/2, previous/2)
         fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
             self.inner.rates.0[level].to_pyarray(py)
