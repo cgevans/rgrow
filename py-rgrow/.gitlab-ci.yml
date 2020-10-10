@@ -14,6 +14,9 @@ build:
     untracked: true
     paths:
       - target/wheels/*.whl
+  cache:
+    paths:
+      - target/
   
 pages:
   stage: deploy
