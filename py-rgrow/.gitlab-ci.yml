@@ -23,7 +23,8 @@ publish-pypi:
   dependencies:
     - maturin-build
   script:
-    - MATURIN_PASSWORD=${CI_JOB_TOKEN} maturin publish -u gitlab-ci-token --repository-url https://framagit.org/api/v4/projects/${CI_PROJECT_ID}/packages/pypi
+    - pip install -U twine
+    - TWINE_PASSWORD=${CI_JOB_TOKEN} TWINE_USERNAME=gitlab-ci-token twine upload --repository-url https://framagit.org/api/v4/projects/${CI_PROJECT_ID}/packages/pypi --verbose target/wheels/*.whl
 
 format-check:
   allow_failure: true
