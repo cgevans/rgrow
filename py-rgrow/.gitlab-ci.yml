@@ -11,14 +11,18 @@ build:
   script:
     - maturin build --release
   artifacts:
+    untracked: true
     paths:
       - target/wheels/*.whl
   
 pages:
   stage: deploy
   script:
+  - pip install -U --no-index --find-links=./target/wheels pyrgrow
   - pip install -U sphinx
   - sphinx-build -b html . public
+  dependencies:
+    - build
   artifacts:
     paths:
     - public
