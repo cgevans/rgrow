@@ -17,14 +17,24 @@ build:
     paths:
       - target/
 
-lint:
+format-check:
+  allow_failure: true
   stage: build
   script:
-    - cargo fmt -- --write-mode=diff
-    - cargo clippy -- -D clippy
+    - cargo fmt -- --check
   cache:
     paths:
       - target/
+
+lint:
+  allow_failure: true
+  stage: build
+  script:
+    - cargo clippy
+  cache:
+    paths:
+      - target/
+
 
 pages:
   stage: deploy
