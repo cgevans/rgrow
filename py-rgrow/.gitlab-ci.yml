@@ -16,7 +16,16 @@ build:
   cache:
     paths:
       - target/
-  
+
+lint:
+  stage: build
+  script:
+    - cargo fmt -- --write-mode=diff
+    - cargo clippy -- -D clippy
+  cache:
+    paths:
+      - target/
+
 pages:
   stage: deploy
   script:
