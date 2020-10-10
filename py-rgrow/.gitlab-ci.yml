@@ -1,0 +1,17 @@
+image: 
+  name: konstin2/maturin
+  entrypoint: [""]
+
+stages:
+  - build
+#  - publish
+ 
+build:
+  stage: build
+  script:
+    - maturin build
+    
+#publish:
+#  stage: publish
+#  script:
+#    - maturin publish -u user -p $password
