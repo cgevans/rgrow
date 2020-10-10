@@ -25,6 +25,7 @@ publish-pypi:
   script:
     - pip install -U twine
     - TWINE_PASSWORD=${CI_JOB_TOKEN} TWINE_USERNAME=gitlab-ci-token twine upload --repository-url https://framagit.org/api/v4/projects/${CI_PROJECT_ID}/packages/pypi --verbose target/wheels/*.whl
+  needs: ["maturin-build"]
 
 format-check:
   allow_failure: true
@@ -37,6 +38,7 @@ lint:
   stage: deploy
   script:
     - cargo clippy
+  needs: ["maturin-build"]
 
 pages:
   stage: deploy
@@ -51,6 +53,7 @@ pages:
     - public
   only:
     - master
+  needs: ["maturin-build"]
 
 #publish:
 #  stage: publish
