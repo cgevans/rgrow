@@ -6,40 +6,36 @@ stages:
   - build
   - deploy
  
-build:
+maturin-build:
   stage: build
   script:
     - maturin build --release
   artifacts:
     paths:
       - target/wheels/*.whl
+      - target/
   cache:
     paths:
       - target/
 
 publish-pypi:
   stage: deploy
+  dependencies:
+    - maturin-build
   script:
-    - MATURIN_PASSWORD=${CI_JOB_TOKEN} maturin publish -u gitlab-ci-token --repository-url https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/packages/pypi
+    - MATURIN_PASSWORD=${CI_JOB_TOKEN} maturin publish -u gitlab-ci-token --repository-url https://framagit.org/api/v4/projects/${CI_PROJECT_ID}/packages/pypi
 
 format-check:
   allow_failure: true
   stage: build
   script:
     - cargo fmt -- --check
-  cache:
-    paths:
-      - target/
 
 lint:
   allow_failure: true
-  stage: build
+  stage: deploy
   script:
     - cargo clippy
-  cache:
-    paths:
-      - target/
-
 
 pages:
   stage: deploy
@@ -48,7 +44,7 @@ pages:
   - pip install -U sphinx
   - sphinx-build -b html . public
   dependencies:
-    - build
+    - maturin-build
   artifacts:
     paths:
     - public
