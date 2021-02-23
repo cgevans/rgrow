@@ -40,8 +40,8 @@ impl<S: State, Sy: System<S> + TileBondInfo> Draw<S> for Sy
     }
 }
 
-pub fn run_ktam_window(mut parsed: crate::parser::TileSet) {
-    let mut system = parsed.into_static_ktam_cover();
+pub fn run_ktam_window(parsed: crate::parser::TileSet) {
+    let mut system = parsed.into_static_seeded_ktam();
     let mut state = QuadTreeState::<_, NullStateTracker>::create_raw(
         Array2::zeros((parsed.options.size, parsed.options.size)),
     ).unwrap();
