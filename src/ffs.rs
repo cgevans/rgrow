@@ -519,5 +519,5 @@ fn variance_over_mean2(num_success: usize, num_trials: usize) -> f64 {
     let ns = num_success as f64;
     let nt = num_trials as f64;
     let p = ns / nt;
-    (1. - p) / (nt)
+    (1. - p) / (ns)
 }
