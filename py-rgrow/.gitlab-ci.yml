@@ -13,7 +13,6 @@ maturin-build:
   artifacts:
     paths:
       - target/wheels/*.whl
-      - target/
   cache:
     paths:
       - target/

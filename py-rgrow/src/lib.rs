@@ -987,7 +987,15 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         start_size: base::NumTiles,
         size_step: base::NumTiles,
         py: Python<'py>,
-    ) -> (f64, f64, Vec<f64>, Vec<&'py PyArray2<base::Tile>>, Vec<usize>, Vec<usize>, Vec<u32>) {
+    ) -> (
+        f64,
+        f64,
+        Vec<f64>,
+        Vec<&'py PyArray2<base::Tile>>,
+        Vec<usize>,
+        Vec<usize>,
+        Vec<u32>,
+    ) {
         let fr = ffs::FFSRun::create_with_constant_variance_and_size_cutoff(
             system.inner.to_owned(),
             varpermean2,
@@ -1018,7 +1026,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             assemblies,
             fr.level_list.iter().map(|x| x.num_states).collect(),
             fr.level_list.iter().map(|x| x.num_trials).collect(),
-            fr.level_list.iter().map(|x| x.target_size).collect()
+            fr.level_list.iter().map(|x| x.target_size).collect(),
         );
 
         drop(fr);
