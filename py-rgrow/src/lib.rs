@@ -1,7 +1,7 @@
 use ndarray::Array2;
 use numpy::ToPyArray;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
-use pyo3::exceptions::ValueError;
+use pyo3::exceptions::PyValueError;
 use pyo3::types::PyType;
 use pyo3::{prelude::*, wrap_pyfunction};
 use rand::{rngs::SmallRng, SeedableRng};
@@ -17,6 +17,7 @@ use rgrow::system;
 use rgrow::system::{ChunkHandling, ChunkSize, FissionHandling};
 use rgrow::system::{System, SystemWithStateCreate};
 
+use core::f64;
 use std::fmt::Debug;
 
 /// A (somewhat rudimentary and very unstable) Python interface to Rgrow.
@@ -81,7 +82,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                     "on" => FissionHandling::KeepSeeded,
                     "keep-largest" => FissionHandling::KeepLargest,
                     "keep-weighted" => FissionHandling::KeepWeighted,
-                    _ => return Err(ValueError::py_err("Invalid fission handling option")),
+                    _ => return Err(PyValueError::new_err("Invalid fission handling option")),
                 }),
                 None => None,
             };
@@ -90,7 +91,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 Some(ch) => match ch {
                     "off" | "none" => ChunkHandling::None,
                     "detach" => ChunkHandling::Detach,
-                    _ => return Err(ValueError::py_err("Invalid chunk handling option")),
+                    _ => return Err(PyValueError::new_err("Invalid chunk handling option")),
                 },
                 None => ChunkHandling::None,
             });
@@ -98,7 +99,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             let chunk_size = match chunk_size {
                 Some(cs) => match cs {
                     "dimer" => Some(ChunkSize::Dimer),
-                    _ => return Err(ValueError::py_err("Invalid chunk size option")),
+                    _ => return Err(PyValueError::new_err("Invalid chunk size option")),
                 },
                 None => None,
             };
@@ -129,7 +130,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             let tileset = match rgrow::parser::TileSet::from_json(json_data) {
                 Ok(t) => t,
                 Err(e) => {
-                    return Err(ValueError::py_err(format!(
+                    return Err(PyValueError::new_err(format!(
                         "Couldn't parse tileset json: {:?}",
                         e
                     )))
@@ -173,7 +174,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                     "on" => FissionHandling::KeepSeeded,
                     "keep-largest" => FissionHandling::KeepLargest,
                     "keep-weighted" => FissionHandling::KeepWeighted,
-                    _ => return Err(ValueError::py_err("Invalid fission handling option")),
+                    _ => return Err(PyValueError::new_err("Invalid fission handling option")),
                 }),
                 None => None,
             };
@@ -182,7 +183,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 Some(ch) => match ch {
                     "off" | "none" => ChunkHandling::None,
                     "detach" => ChunkHandling::Detach,
-                    _ => return Err(ValueError::py_err("Invalid chunk handling option")),
+                    _ => return Err(PyValueError::new_err("Invalid chunk handling option")),
                 },
                 None => ChunkHandling::None,
             });
@@ -190,7 +191,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             let chunk_size = match chunk_size {
                 Some(cs) => match cs {
                     "dimer" => Some(ChunkSize::Dimer),
-                    _ => return Err(ValueError::py_err("Invalid chunk size option")),
+                    _ => return Err(PyValueError::new_err("Invalid chunk size option")),
                 },
                 None => None,
             };
@@ -324,7 +325,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                     "on" => FissionHandling::KeepSeeded,
                     "keep-largest" => FissionHandling::KeepLargest,
                     "keep-weighted" => FissionHandling::KeepWeighted,
-                    _ => return Err(ValueError::py_err("Invalid fission handling option")),
+                    _ => return Err(PyValueError::new_err("Invalid fission handling option")),
                 }),
                 None => None,
             };
@@ -333,7 +334,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 Some(ch) => match ch {
                     "off" | "none" => ChunkHandling::None,
                     "detach" => ChunkHandling::Detach,
-                    _ => return Err(ValueError::py_err("Invalid chunk handling option")),
+                    _ => return Err(PyValueError::new_err("Invalid chunk handling option")),
                 },
                 None => ChunkHandling::None,
             });
@@ -341,7 +342,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             let chunk_size = match chunk_size {
                 Some(cs) => match cs {
                     "dimer" => Some(ChunkSize::Dimer),
-                    _ => return Err(ValueError::py_err("Invalid chunk size option")),
+                    _ => return Err(PyValueError::new_err("Invalid chunk size option")),
                 },
                 None => None,
             };
@@ -372,7 +373,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             let tileset = match rgrow::parser::TileSet::from_json(json_data) {
                 Ok(t) => t,
                 Err(e) => {
-                    return Err(ValueError::py_err(format!(
+                    return Err(PyValueError::new_err(format!(
                         "Couldn't parse tileset json: {:?}",
                         e
                     )))
@@ -416,7 +417,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                     "on" => FissionHandling::KeepSeeded,
                     "keep-largest" => FissionHandling::KeepLargest,
                     "keep-weighted" => FissionHandling::KeepWeighted,
-                    _ => return Err(ValueError::py_err("Invalid fission handling option")),
+                    _ => return Err(PyValueError::new_err("Invalid fission handling option")),
                 }),
                 None => None,
             };
@@ -425,7 +426,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 Some(ch) => match ch {
                     "off" | "none" => ChunkHandling::None,
                     "detach" => ChunkHandling::Detach,
-                    _ => return Err(ValueError::py_err("Invalid chunk handling option")),
+                    _ => return Err(PyValueError::new_err("Invalid chunk handling option")),
                 },
                 None => ChunkHandling::None,
             });
@@ -433,7 +434,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             let chunk_size = match chunk_size {
                 Some(cs) => match cs {
                     "dimer" => Some(ChunkSize::Dimer),
-                    _ => return Err(ValueError::py_err("Invalid chunk size option")),
+                    _ => return Err(PyValueError::new_err("Invalid chunk size option")),
                 },
                 None => None,
             };
@@ -485,7 +486,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             let mut tileset = match rgrow::parser::TileSet::from_json(json_data) {
                 Ok(t) => t,
                 Err(e) => {
-                    return Err(ValueError::py_err(format!(
+                    return Err(PyValueError::new_err(format!(
                         "Couldn't parse tileset json: {:?}",
                         e
                     )))
@@ -653,14 +654,14 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible, in which case
-        /// it will raise a ValueError.
+        /// it will raise a PyValueError.
         #[text_signature = "(self, system)"]
         fn take_step(&mut self, system: &StaticKTAM) -> PyResult<()> {
             let mut rng = SmallRng::from_entropy();
             match system.inner.state_step(&mut self.inner, &mut rng, 1e100) {
                 StepOutcome::HadEventAt(_) | StepOutcome::DeadEventAt(_) => Ok(()),
-                StepOutcome::NoEventIn(_) => Err(ValueError::py_err("No event")),
-                StepOutcome::ZeroRate => Err(ValueError::py_err("Zero rate")),
+                StepOutcome::NoEventIn(_) => Err(PyValueError::new_err("No event")),
+                StepOutcome::ZeroRate => Err(PyValueError::new_err("Zero rate")),
             }
         }
 
@@ -969,10 +970,67 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         ret
     }
 
+    #[pyfunction]
+    #[text_signature = "(system, varpermean2, min_states, target_size, cutoff_prob, cutoff_number, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    /// Runs Forward Flux Sampling for StaticKTAMPeriodic, and returns a tuple of using number of tiles as a measure, and returns
+    /// (nucleation_rate, dimerization_rate, forward_probs, final configs).
+    fn ffs_run_final_p_cvar_cut<'py>(
+        system: &StaticKTAMPeriodic,
+        varpermean2: f64,
+        min_states: usize,
+        target_size: base::NumTiles,
+        cutoff_prob: f64,
+        cutoff_number: usize,
+        canvas_size: usize,
+        max_init_events: u64,
+        max_subseq_events: u64,
+        start_size: base::NumTiles,
+        size_step: base::NumTiles,
+        py: Python<'py>,
+    ) -> (f64, f64, Vec<f64>, Vec<&'py PyArray2<base::Tile>>, Vec<usize>, Vec<usize>, Vec<u32>) {
+        let fr = ffs::FFSRun::create_with_constant_variance_and_size_cutoff(
+            system.inner.to_owned(),
+            varpermean2,
+            min_states,
+            target_size,
+            cutoff_prob,
+            cutoff_number,
+            canvas_size,
+            max_init_events,
+            max_subseq_events,
+            start_size,
+            size_step,
+        );
+
+        let assemblies = fr
+            .level_list
+            .last()
+            .unwrap()
+            .state_list
+            .iter()
+            .map(|state| state.canvas.raw_array().to_pyarray(py))
+            .collect();
+
+        let ret = (
+            fr.nucleation_rate(),
+            fr.dimerization_rate,
+            fr.forward_vec().clone(),
+            assemblies,
+            fr.level_list.iter().map(|x| x.num_states).collect(),
+            fr.level_list.iter().map(|x| x.num_trials).collect(),
+            fr.level_list.iter().map(|x| x.target_size).collect()
+        );
+
+        drop(fr);
+
+        ret
+    }
+
     m.add_wrapped(wrap_pyfunction!(ffs_run))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_full))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_final))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_final_p))?;
+    m.add_wrapped(wrap_pyfunction!(ffs_run_final_p_cvar_cut))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_final_cover))?;
 
     Ok(())
