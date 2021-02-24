@@ -188,7 +188,7 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
                 "Done with target size {}: p_f {}, used {} trials for {} states.",
                 ret.level_list.last().unwrap().target_size,
                 pf,
-                next.num_trails,
+                next.num_trials,
                 next.num_states
             );
             ret.level_list.push(next);
@@ -224,7 +224,7 @@ pub struct FFSLevel<St: State, Sy: System<St>> {
     pub previous_list: Vec<usize>,
     pub p_r: f64,
     pub num_states: usize,
-    pub num_trails: usize,
+    pub num_trials: usize,
     pub target_size: NumTiles,
 }
 
@@ -289,7 +289,7 @@ impl<'a, St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSLevel
             target_size,
             system: std::marker::PhantomData::<Sy>,
             num_states: num_states,
-            num_trails: i,
+            num_trials: i,
         }
     }
 
@@ -360,7 +360,7 @@ impl<'a, St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSLevel
             target_size,
             system: std::marker::PhantomData::<Sy>,
             num_states: num_states,
-            num_trails: i,
+            num_trials: i,
         }
     }
 
@@ -431,7 +431,7 @@ impl<'a, St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSLevel
             p_r,
             target_size: next_size,
             num_states: num_states,
-            num_trails: i,
+            num_trials: i,
         }
     }
 
@@ -510,7 +510,7 @@ impl<'a, St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSLevel
             p_r,
             target_size: next_size,
             num_states: num_states,
-            num_trails: i,
+            num_trials: i,
         }
     }
 }
