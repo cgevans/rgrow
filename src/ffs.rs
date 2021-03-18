@@ -145,6 +145,7 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
         max_subseq_events: NumEvents,
         start_size: NumTiles,
         size_step: NumTiles,
+        keep_states: bool
     ) -> Self {
         let level_list = Vec::new();
 
@@ -181,7 +182,9 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
                 size_step,
                 max_subseq_events,
             );
-            ret.level_list.last_mut().unwrap().drop_states();
+            if !keep_states {
+                ret.level_list.last_mut().unwrap().drop_states();
+            }
             let pf = next.p_r;
             ret.forward_prob.push(pf);
             println!(
