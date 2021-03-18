@@ -971,7 +971,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfunction]
-    #[text_signature = "(system, varpermean2, min_states, target_size, cutoff_prob, cutoff_number, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    #[text_signature = "(system, varpermean2, min_states, target_size, cutoff_prob, cutoff_number, canvas_size, max_init_events, max_subseq_events, start_size, size_step, keep_states)"]
     /// Runs Forward Flux Sampling for StaticKTAMPeriodic, and returns a tuple of using number of tiles as a measure, and returns
     /// (nucleation_rate, dimerization_rate, forward_probs, final configs).
     fn ffs_run_final_p_cvar_cut<'py>(
@@ -986,12 +986,13 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         max_subseq_events: u64,
         start_size: base::NumTiles,
         size_step: base::NumTiles,
+        keep_states: bool,
         py: Python<'py>,
     ) -> (
         f64,
         f64,
         Vec<f64>,
-        Vec<&'py PyArray2<base::Tile>>,
+        Vec<Vec<&'py PyArray2<base::Tile>>>,
         Vec<usize>,
         Vec<usize>,
         Vec<u32>,
@@ -1008,16 +1009,30 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             max_subseq_events,
             start_size,
             size_step,
+            keep_states,
         );
 
-        let assemblies = fr
-            .level_list
-            .last()
-            .unwrap()
-            .state_list
-            .iter()
-            .map(|state| state.canvas.raw_array().to_pyarray(py))
-            .collect();
+        let assemblies = if keep_states {
+            fr.level_list
+                .iter()
+                .map(|level| {
+                    level
+                        .state_list
+                        .iter()
+                        .map(|state| state.canvas.raw_array().to_pyarray(py))
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        } else {
+            vec![fr
+                .level_list
+                .last()
+                .unwrap()
+                .state_list
+                .iter()
+                .map(|state| state.canvas.raw_array().to_pyarray(py))
+                .collect()]
+        };
 
         let ret = (
             fr.nucleation_rate(),

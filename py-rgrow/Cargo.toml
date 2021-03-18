@@ -1,6 +1,6 @@
 [package]
 name = "pyrgrow"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Constantine Evans <cevans@costinet.org>"]
 edition = "2018"
 
@@ -21,6 +21,7 @@ rand = "0.7"
 
 [dependencies.rgrow]
 git = "https://framagit.org/cge/rgrow.git"
+version = "0.3.1"
 default-features = false  # Manylinux1 doesn't support X11 such that the UI works...
 
 [dependencies.pyo3]
