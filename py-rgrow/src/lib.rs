@@ -973,7 +973,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     #[pyfunction]
     #[text_signature = "(system, varpermean2, min_states, target_size, cutoff_prob, cutoff_number, canvas_size, max_init_events, max_subseq_events, start_size, size_step, keep_states)"]
     /// Runs Forward Flux Sampling for StaticKTAMPeriodic, and returns a tuple of using number of tiles as a measure, and returns
-    /// (nucleation_rate, dimerization_rate, forward_probs, final configs).
+    /// (nucleation_rate, dimerization_rate, forward_probs, configs, num states, num trials, size, prev_list).
     fn ffs_run_final_p_cvar_cut<'py>(
         system: &StaticKTAMPeriodic,
         varpermean2: f64,
@@ -996,6 +996,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         Vec<usize>,
         Vec<usize>,
         Vec<u32>,
+        Vec<Vec<usize>>
     ) {
         let fr = ffs::FFSRun::create_with_constant_variance_and_size_cutoff(
             system.inner.to_owned(),
@@ -1042,6 +1043,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             fr.level_list.iter().map(|x| x.num_states).collect(),
             fr.level_list.iter().map(|x| x.num_trials).collect(),
             fr.level_list.iter().map(|x| x.target_size).collect(),
+            fr.level_list.iter().map(|x| x.previous_list.clone()).collect()
         );
 
         drop(fr);
