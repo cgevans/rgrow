@@ -33,6 +33,12 @@ pub struct QuadTreeState<C: CanvasSquarable, T: StateTracker> {
     pub tracker: T,
 }
 
+impl<C: CanvasSquarable, T: StateTracker> QuadTreeState<C, T> {
+    pub fn recalc_ntiles(&mut self) {
+        self.ntiles = self.calc_ntiles();
+    }
+}
+
 // Storage for event rates,
 pub trait RateStoreP {
     fn choose_point(&self, rng: &mut SmallRng) -> (Point, Rate);

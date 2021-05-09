@@ -1,6 +1,6 @@
 [package]
 name = "rgrow"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Constantine Evans <cevans@costinet.org>"]
 edition = "2018"
 
@@ -15,7 +15,7 @@ name = "rgrow-bin"
 path = "src/main.rs"
 
 [features]
-default = ["ui"]
+default = [] # ["ui"]
 ui = ["winit", "winit_input_helper", "pixels"]
 #xgrow_parse = ["nom"]
 use_rayon = ["rayon"]
@@ -26,7 +26,7 @@ rand = "0.7"
 num-format = "0.4.0"
 fnv = "1.0"
 bimap = "0.5"
-clap = "3.0.0-beta.1"
+clap = "3.0.0-beta.2"
 serde_yaml = "0.8"
 serde_json = "1"
 dashmap = "4.0.0-rc6"
