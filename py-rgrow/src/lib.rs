@@ -579,6 +579,18 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         inner: state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>,
     }
 
+    /// A simulation state for a static kTAM simulation, using a square periodic canvas.
+    ///
+    /// Parameters:
+    ///     size (int): the size of the canvas (assumed to be square).  Should be a power of 2.
+    ///     system (StaticKTAM): the system that the simulation will use.
+    #[pyclass]
+    #[derive(Clone, Debug)]
+    #[text_signature = "(size, system)"]
+    struct StateKTAMPeriodic {
+        inner: state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>,
+    }
+
     #[pymethods]
     impl StateKTAM {
         #[new]
@@ -620,6 +632,16 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             let inner = system.inner.create_we_pair(w, e, size).unwrap();
 
             Ok(Self { inner })
+        }
+
+        #[classmethod]
+        #[text_signature = "(self, canvas)"]
+        fn create_raw<'py>(_cls: &PyType, canvas: &'py PyArray2<base::Tile>, _py: Python<'py>) -> PyResult<Self> {
+            let inner = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
+                canvas.to_owned_array()
+            ).unwrap();
+
+            Ok(Self {inner})
         }
 
         #[classmethod]
@@ -723,10 +745,170 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.rates.0[level].to_pyarray(py)
         }
     }
+
+
+    #[pymethods]
+    impl StateKTAMPeriodic {
+        #[new]
+        fn new(size: usize, system: &mut StaticKTAMPeriodic) -> PyResult<Self> {
+            let mut state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
+                Array2::zeros((size, size)),
+            )
+            .unwrap();
+
+            let sl = system.inner.seed_locs();
+
+            for (p, t) in sl {
+                // FIXME: for large seeds,
+                // this could be faster by doing raw writes, then update_entire_state
+                // but we would need to distinguish sizing.
+                // Or maybe there is fancier way with a set?
+                system.inner.set_point(&mut state, p.0, t);
+            }
+
+            Ok(Self { inner: state })
+        }
+
+        /// Prints debug information.
+        fn debug(&self) -> String {
+            format!("{:?}", self.inner)
+        }
+
+        #[classmethod]
+        /// Creates a simulation state with the West-East dimer of tile numbers w, e, centered in
+        /// a canvas of size size (must be 2^L).
+        #[text_signature = "(self, system, w, e, size)"]
+        fn create_we_pair(
+            _cls: &PyType,
+            system: &mut StaticKTAMPeriodic,
+            w: base::Tile,
+            e: base::Tile,
+            size: usize,
+        ) -> PyResult<Self> {
+            let inner = system.inner.create_we_pair(w, e, size).unwrap();
+
+            Ok(Self { inner })
+        }
+
+        #[classmethod]
+        #[text_signature = "(self, system, canvas)"]
+        fn from_array<'py>(_cls: &PyType, canvas: &'py PyArray2<base::Tile>, _py: Python<'py>) -> PyResult<Self> {
+            let mut inner = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
+                canvas.to_owned_array()
+            ).unwrap();
+
+            inner.recalc_ntiles();
+
+            Ok(Self {inner})
+        }
+
+        #[classmethod]
+        #[text_signature = "(self, system, n, s, size)"]
+        /// Creates a simulation state with the North-South dimer of tile numbers n, s, centered in
+        /// a canvas of size size (must be 2^L).
+        fn create_ns_pair(
+            _cls: &PyType,
+            system: &mut StaticKTAMPeriodic,
+            n: base::Tile,
+            s: base::Tile,
+            size: usize,
+        ) -> PyResult<Self> {
+            let inner = system.inner.create_ns_pair(n, s, size).unwrap();
+
+            Ok(Self { inner })
+        }
+
+        #[text_signature = "(self, system, point_y, point_x, tile)"]
+        /// Sets the point (py, px) to a particular tile (or empty, with 0), using StaticKTAMPeriodic `system`.
+        /// Updates rates after setting.
+        fn set_point(
+            &mut self,
+            system: &mut StaticKTAMPeriodic,
+            py: usize,
+            px: usize,
+            t: base::Tile,
+        ) -> PyResult<()> {
+            system.inner.set_point(&mut self.inner, (py, px), t);
+
+            Ok(())
+        }
+
+        /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible, in which case
+        /// it will raise a PyValueError.
+        #[text_signature = "(self, system)"]
+        fn take_step(&mut self, system: &StaticKTAMPeriodic) -> PyResult<()> {
+            let mut rng = SmallRng::from_entropy();
+            match system.inner.state_step(&mut self.inner, &mut rng, 1e100) {
+                StepOutcome::HadEventAt(_) | StepOutcome::DeadEventAt(_) => Ok(()),
+                StepOutcome::NoEventIn(_) => Err(PyValueError::new_err("No event")),
+                StepOutcome::ZeroRate => Err(PyValueError::new_err("Zero rate")),
+            }
+        }
+
+        /// Provided with a StaticKTAMPeriodic system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
+        /// or until `maxevents` events have taken place during the evolution.  This is present for backward compatibility.
+        #[text_signature = "(self, system, minsize, maxsize, maxevents)"]
+        fn evolve_in_size_range(
+            &mut self,
+            system: &mut StaticKTAMPeriodic,
+            minsize: base::NumTiles,
+            maxsize: base::NumTiles,
+            maxevents: u64,
+        ) -> PyResult<()> {
+            let mut rng = SmallRng::from_entropy();
+            system.inner.evolve_in_size_range_events_max(
+                &mut self.inner,
+                minsize,
+                maxsize,
+                maxevents,
+                &mut rng,
+            );
+
+            Ok(())
+        }
+
+        /// Returns the canvas as a numpy array.  Note that this creates an array copy.
+        fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<base::Tile> {
+            self.inner.canvas.raw_array().to_pyarray(py)
+        }
+
+        /// Returns a copy of the state.
+        fn copy(&self) -> PyResult<Self> {
+            Ok(Self {
+                inner: self.inner.clone(),
+            })
+        }
+
+        /// The number of tiles in the state (stored, not calculated).
+        #[getter]
+        fn ntiles(&self) -> base::NumTiles {
+            self.inner.ntiles()
+        }
+
+        /// The current time since initiation (in seconds) of the state.
+        #[getter]
+        fn time(&self) -> f64 {
+            self.inner.time()
+        }
+
+        /// The total number of events that have taken place in the state.
+        #[getter]
+        fn events(&self) -> u64 {
+            self.inner.total_events()
+        }
+
+        #[text_signature = "(self, level_number)"]
+        /// Returns rate array for level `level_number` (0 is full, each subsequent is shape (previous/2, previous/2)
+        fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
+            self.inner.rates.0[level].to_pyarray(py)
+        }
+    }
+
     m.add_class::<StaticKTAM>()?;
     m.add_class::<StaticKTAMCover>()?;
     m.add_class::<StaticKTAMPeriodic>()?;
     m.add_class::<StateKTAM>()?;
+    m.add_class::<StateKTAMPeriodic>()?;
 
     #[pyfunction]
     #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
