@@ -1,11 +1,11 @@
-from typing import List, Tuple, Union, cast, Callable
+from typing import List, Optional, Tuple, Union, cast, Callable
 import statsmodels
 import statsmodels.stats.proportion
-from numpy import mintypecode, ndarray
+from numpy import ndarray
 import numpy as np
+import pandas as pd
 from . import rgrow as rg
 import dataclasses
-import scipy.stats  # FIXME: use statsmodels instead
 
 
 def _ffs_extract_trajectories(backlist: List[List[int]]) -> ndarray:
@@ -37,7 +37,8 @@ class FFSResult:
     aligned_configs: bool = False
 
     def align_configs(self,
-                      alignment_function: Callable[[ndarray], ndarray]) -> None:
+                      alignment_function: Callable[
+                          [ndarray], ndarray]) -> None:
         for assemblies_at_surface in self.assemblies:
             for i in range(0, len(assemblies_at_surface)):
                 assemblies_at_surface[i] = alignment_function(
@@ -69,15 +70,30 @@ class FFSResult:
         return cast(Tuple[int, int], self.assemblies[0][0].shape)
 
     @property
-    def iter_configs(self):
+    def iter_configs(self) -> None:
         pass
 
     @property
     def has_all_configs(self) -> bool:
         return len(self.assemblies) > 1
 
+    def seeds_of_trajectories(self, system: rg.StaticKTAMPeriodic) -> pd.DataFrame:
+        trajs = self.trajectory_configs
+
+        seeds = []
+        seedinfos = []
+        for trajectory in trajs:
+            seed, seedinfo = trajectory_seed(system, trajectory)
+            seeds.append(seed)
+            seedinfos.append(seedinfo)
+
+        p = pd.DataFrame(seedinfos)
+        p['config'] = seeds
+
+        return p
+
     @property
-    def tuple(self) -> Tuple[float, float, ndarray, ndarray, ndarray,
+    def tuple(self) -> Tuple[float, float, ndarray, List[ndarray], ndarray,
                              ndarray, ndarray, List[List[int]]]:
         return (self.nucleation_rate,
                 self.dimerization_rate,
@@ -88,13 +104,28 @@ class FFSResult:
                 self.assembly_size_per_surface,
                 self.previous_configs)
 
-    def __getitem__(self, idx: int) -> Union[float, ndarray, List[List[int]]]:
+    def __getitem__(self, idx: int) -> Union[float, ndarray, List[ndarray],
+                                             List[List[int]]]:
         """Fakes the old return tuple"""
         return self.tuple[idx]
 
 
-def committor(system, config, state_type=rg.StateKTAMPeriodic, ci_width=0.05,
-              ci_pct=0.95, min_trials=10):
+def trajectory_seed(system, trajectory) -> Tuple[ndarray, pd.DataFrame]:
+    """Given a system and trajectory (of configurations), find the seed
+    (committor closest to 0.5)"""
+
+    trajs = pd.DataFrame([committor_mid(system, config, ci_width=0.10) for config in trajectory],
+                         columns=[
+                         "in", "side", "c", "clow", "chigh", "succ", "trials"])
+
+    seed_idx = np.abs(trajs.loc[:, "c"] - 0.5).argmin()
+
+    return (trajectory[seed_idx], trajs.loc[seed_idx, :])
+
+
+def committor(system, config, state_type=rg.StateKTAMPeriodic, ci_width: float = 0.05,
+              ci_pct: float = 0.95, min_trials: float = 10) -> Tuple[float, float,
+                                                                     float, int, int]:
     trials = 0
     successes = 0
 
@@ -116,11 +147,15 @@ def committor(system, config, state_type=rg.StateKTAMPeriodic, ci_width=0.05,
             return (successes/trials, ci[0], ci[1], successes, trials)
 
 
-def committor_in(system, config, state_type=rg.StateKTAMPeriodic,
-                 min=0.4, max=0.6,
-                 conf_in=0.9, conf_out=0.9):
+def committor_mid(system, config, state_type=rg.StateKTAMPeriodic,
+                  min=0.4, max=0.6, ci_width=0.05, ci_pct=0.95) -> Tuple[bool,
+                                                                         Optional[bool],
+                                                                         float,
+                                                                         float, float,
+                                                                         int, int]:
     trials = 0
     successes = 0
+
     while True:
         state = state_type(config.shape[0], system)
         for y in range(0, config.shape[0]):
@@ -132,10 +167,12 @@ def committor_in(system, config, state_type=rg.StateKTAMPeriodic,
             successes += 1
         elif state.ntiles != 0:
             raise ValueError
-        cdf = scipy.stats.beta(successes + 1, trials - successes + 1).cdf
-        if cdf(0.6) - cdf(0.4) < 0.1:
-            # print(f"Finished (out) after {trials}: p = {successes/trials}")
-            return False
-        elif cdf(0.6) - cdf(0.4) > 0.9:
-            # print(f"Finished (in) after {trials}: p = {successes/trials}")
-            return (successes, trials)
+        ci = statsmodels.stats.proportion.proportion_confint(
+            successes, trials, 1-ci_pct, method='jeffreys')
+        if ci[1]-ci[0] <= ci_width and trials > 4:
+            # print(f"Finished after {trials}: p = {successes/trials} {ci}")
+            return (True, None, successes/trials, ci[0], ci[1],
+                    successes, trials)
+        elif (ci[1] < min) or (ci[0] > max):
+            return (False, ci[0] > max, successes/trials, ci[0],
+                    ci[1], successes, trials)
