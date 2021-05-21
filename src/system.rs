@@ -33,7 +33,7 @@ pub struct DimerInfo {
     pub equilibrium_conc: f64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Seed {
     None(),
     SingleTile { point: Point, tile: Tile },
@@ -291,6 +291,12 @@ struct ClonableCache(RwLock<Cache>);
 impl Clone for ClonableCache {
     fn clone(&self) -> Self {
          Self(RwLock::new(self.0.read().unwrap().clone()))
+    }
+}
+
+impl Default for ClonableCache {
+    fn default() -> Self {
+        Self(RwLock::new(Cache::with_size(10000)))
     }
 }
 
@@ -577,7 +583,7 @@ impl<S: State> StaticKTAMCover<S> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StaticKTAM<C: State> {
     pub tile_adj_concs: Array1<Rate>,
     pub energy_ns: Array2<Energy>,
@@ -586,6 +592,7 @@ pub struct StaticKTAM<C: State> {
     friends_e: Vec<FnvHashSet<Tile>>,
     friends_s: Vec<FnvHashSet<Tile>>,
     friends_w: Vec<FnvHashSet<Tile>>,
+    #[serde(skip)]
     insertcache: ClonableCache,
     seed: Seed,
     k_f: f64,
