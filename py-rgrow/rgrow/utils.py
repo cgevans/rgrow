@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from . import rgrow as rg
 import dataclasses
+import multiprocessing
+import multiprocessing.pool
 
 
 def _ffs_extract_trajectories(backlist: List[List[int]]) -> ndarray:
@@ -77,18 +79,26 @@ class FFSResult:
     def has_all_configs(self) -> bool:
         return len(self.assemblies) > 1
 
-    def seeds_of_trajectories(self, system: rg.StaticKTAMPeriodic) -> pd.DataFrame:
+    def seeds_of_trajectories(self, system: rg.StaticKTAMPeriodic,
+                              pool: Optional[multiprocessing.pool.Pool]
+                              = None, proppool=False) -> pd.DataFrame:
         trajs = self.trajectory_configs
 
-        seeds = []
-        seedinfos = []
-        for trajectory in trajs:
-            seed, seedinfo = trajectory_seed(system, trajectory)
-            seeds.append(seed)
-            seedinfos.append(seedinfo)
+        if proppool or (pool is None):
+            seeds = []
+            seedinfos = []
+            for i, trajectory in enumerate(trajs):
+                seed, seedinfo = trajectory_seed(system, trajectory, pool)
+                print(".", end=None, flush=True)
+                seeds.append(seed)
+                seedinfos.append(seedinfo)
+        else:
+            ss = pool.starmap(trajectory_seed, [
+                              (system, trajectory) for trajectory in trajs])
+            seeds, seedinfos = zip(*ss)
 
         p = pd.DataFrame(seedinfos)
-        p['config'] = seeds
+        p['config'] = list(seeds)
 
         return p
 
@@ -110,20 +120,28 @@ class FFSResult:
         return self.tuple[idx]
 
 
-def trajectory_seed(system, trajectory) -> Tuple[ndarray, pd.DataFrame]:
+def trajectory_seed(system, trajectory,
+                    pool: multiprocessing.pool.Pool = None) -> Tuple[ndarray, pd.Series]:
     """Given a system and trajectory (of configurations), find the seed
     (committor closest to 0.5)"""
 
-    trajs = pd.DataFrame([committor_mid(system, config, ci_width=0.10) for config in trajectory],
-                         columns=[
-                         "in", "side", "c", "clow", "chigh", "succ", "trials"])
+    if pool is None:
+        trajs = pd.DataFrame([committor_mid(system, config, ci_width=0.10)
+                              for config in trajectory],
+                             columns=[
+            "in", "side", "c", "clow", "chigh", "succ", "trials"])
+    else:
+        trres = pool.starmap(
+            committor_mid, [(system, config, 0.1) for config in trajectory])
+        trajs = pd.DataFrame(trres, columns=[
+            "in", "side", "c", "clow", "chigh", "succ", "trials"])
 
     seed_idx = np.abs(trajs.loc[:, "c"] - 0.5).argmin()
 
     return (trajectory[seed_idx], trajs.loc[seed_idx, :])
 
 
-def committor(system, config, state_type=rg.StateKTAMPeriodic, ci_width: float = 0.05,
+def committor(system, config, ci_width: float = 0.05, state_type=rg.StateKTAMPeriodic,
               ci_pct: float = 0.95, min_trials: float = 10) -> Tuple[float, float,
                                                                      float, int, int]:
     trials = 0
@@ -140,19 +158,19 @@ def committor(system, config, state_type=rg.StateKTAMPeriodic, ci_width: float =
             successes += 1
         elif state.ntiles != 0:
             raise ValueError
-        ci = statsmodels.stats.proportion.proportion_confint(
-            successes, trials, 1-ci_pct, method='jeffreys')
+        ci: Tuple[float, float] = statsmodels.stats.proportion.proportion_confint(
+            successes, trials, 1-ci_pct, method='jeffreys')  # type:ignore
         if ci[1]-ci[0] <= ci_width and trials > min_trials:
             # print(f"Finished after {trials}: p = {successes/trials} {ci}")
             return (successes/trials, ci[0], ci[1], successes, trials)
 
 
-def committor_mid(system, config, state_type=rg.StateKTAMPeriodic,
-                  min=0.4, max=0.6, ci_width=0.05, ci_pct=0.95) -> Tuple[bool,
-                                                                         Optional[bool],
-                                                                         float,
-                                                                         float, float,
-                                                                         int, int]:
+def committor_mid(system, config, ci_width=0.05, state_type=rg.StateKTAMPeriodic,
+                  min=0.4, max=0.6, ci_pct=0.95) -> Tuple[bool,
+                                                          Optional[bool],
+                                                          float,
+                                                          float, float,
+                                                          int, int]:
     trials = 0
     successes = 0
 
@@ -167,8 +185,8 @@ def committor_mid(system, config, state_type=rg.StateKTAMPeriodic,
             successes += 1
         elif state.ntiles != 0:
             raise ValueError
-        ci = statsmodels.stats.proportion.proportion_confint(
-            successes, trials, 1-ci_pct, method='jeffreys')
+        ci: Tuple[float, float] = statsmodels.stats.proportion.proportion_confint(
+            successes, trials, 1-ci_pct, method='jeffreys')  # type:ignore
         if ci[1]-ci[0] <= ci_width and trials > 4:
             # print(f"Finished after {trials}: p = {successes/trials} {ci}")
             return (True, None, successes/trials, ci[0], ci[1],
