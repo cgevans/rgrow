@@ -1,7 +1,8 @@
 from typing import List, Optional, Tuple, Union, cast, Callable
+from numpy.core.fromnumeric import var
 import statsmodels
 import statsmodels.stats.proportion
-from numpy import ndarray
+from numpy import isin, ndarray
 import numpy as np
 import pandas as pd
 from . import rgrow as rg
@@ -119,6 +120,11 @@ class FFSResult:
         """Fakes the old return tuple"""
         return self.tuple[idx]
 
+    def __str__(self) -> str:
+        return (f"FFSResult(nucrate={self.nucleation_rate}, " +
+                f"has_all_configs={self.has_all_configs}" +
+                ")")
+
 
 def trajectory_seed(system, trajectory,
                     pool: multiprocessing.pool.Pool = None) -> Tuple[ndarray, pd.Series]:
@@ -194,3 +200,35 @@ def committor_mid(system, config, ci_width=0.05, state_type=rg.StateKTAMPeriodic
         elif (ci[1] < min) or (ci[0] > max):
             return (False, ci[0] > max, successes/trials, ci[0],
                     ci[1], successes, trials)
+
+
+def ffs_nucleation(system,
+                   max_size=200,
+                   canvas_size=32,
+                   keep_surface_configs=False,
+                   cutoff_probability=0.99,
+                   cutoff_surfaces=4,
+                   min_configs=1_000,
+                   varpermean2=1e-4,
+                   _surface_size_step=1,
+                   _surface_init_size=3,
+                   _max_init_events=10_000,
+                   _max_subseq_events=1_000_000):
+    if isinstance(system, rg.StaticKTAMPeriodic):
+        restuple = rg.ffs_run_final_p_cvar_cut(
+            system,
+            varpermean2,
+            min_configs,
+            max_size,
+            cutoff_probability,
+            cutoff_surfaces,
+            canvas_size,
+            _max_init_events,
+            _max_subseq_events,
+            _surface_init_size,
+            _surface_size_step,
+            keep_surface_configs
+        )
+        return FFSResult(*restuple)
+    else:
+        raise TypeError(f"Can't handle system type {type(system)}.")

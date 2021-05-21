@@ -2,7 +2,7 @@ use ndarray::Array2;
 use numpy::ToPyArray;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
-use pyo3::types::{PyBytes, PyTuple, PyType};
+use pyo3::types::{PyBytes, PyType};
 use pyo3::{prelude::*, wrap_pyfunction};
 use rand::{rngs::SmallRng, SeedableRng};
 use rgrow::base;
