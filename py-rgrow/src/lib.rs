@@ -2,7 +2,7 @@ use ndarray::Array2;
 use numpy::ToPyArray;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
-use pyo3::types::{PyType, PyBytes, PyTuple};
+use pyo3::types::{PyBytes, PyTuple, PyType};
 use pyo3::{prelude::*, wrap_pyfunction};
 use rand::{rngs::SmallRng, SeedableRng};
 use rgrow::base;
@@ -22,7 +22,6 @@ use std::fmt::Debug;
 
 use bincode::{deserialize, serialize};
 use serde::{Deserialize, Serialize};
-
 
 /// A (somewhat rudimentary and very unstable) Python interface to Rgrow.
 ///
@@ -55,7 +54,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
     ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
     ///     tile_names (optional, list[str]): list of tile names (default None).
-    #[pyclass(module="rgrow")]
+    #[pyclass(module = "rgrow")]
     #[derive(Debug)]
     #[text_signature = "(tile_stoics, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, chunk_handling, chunk_size, tile_names)"]
     struct StaticKTAM {
@@ -297,13 +296,15 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
     ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
     ///     tile_names (optional, list[str]): list of tile names (default None).    
-    #[pyclass(module="rgrow")]
+    #[pyclass(module = "rgrow")]
     #[derive(Debug, Serialize, Deserialize)]
     #[text_signature = "()"]
     struct StaticKTAMPeriodic {
-        inner: Option<system::StaticKTAM<
-            state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>,
-        >>,
+        inner: Option<
+            system::StaticKTAM<
+                state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>,
+            >,
+        >,
     }
 
     #[pymethods]
@@ -386,7 +387,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                     self.inner = deserialize(s.as_bytes()).unwrap();
                     Ok(())
                 }
-                Err(e) => Err(e)
+                Err(e) => Err(e),
             }
         }
 
@@ -494,7 +495,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     /// Static KTAM with cover strands.  Currently very unstable.  Needs to be generated from json.
-    #[pyclass(module="rgrow")]
+    #[pyclass(module = "rgrow")]
     #[derive(Debug)]
     #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
     struct StaticKTAMCover {
@@ -596,7 +597,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     /// Parameters:
     ///     size (int): the size of the canvas (assumed to be square).  Should be a power of 2.
     ///     system (StaticKTAM): the system that the simulation will use.
-    #[pyclass(module="rgrow")]
+    #[pyclass(module = "rgrow")]
     #[derive(Clone, Debug)]
     #[text_signature = "(size, system)"]
     struct StateKTAM {
@@ -608,7 +609,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     /// Parameters:
     ///     size (int): the size of the canvas (assumed to be square).  Should be a power of 2.
     ///     system (StaticKTAM): the system that the simulation will use.
-    #[pyclass(module="rgrow")]
+    #[pyclass(module = "rgrow")]
     #[derive(Clone, Debug)]
     #[text_signature = "(size, system)"]
     struct StateKTAMPeriodic {
@@ -660,12 +661,17 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         #[classmethod]
         #[text_signature = "(self, canvas)"]
-        fn create_raw<'py>(_cls: &PyType, canvas: &'py PyArray2<base::Tile>, _py: Python<'py>) -> PyResult<Self> {
+        fn create_raw<'py>(
+            _cls: &PyType,
+            canvas: &'py PyArray2<base::Tile>,
+            _py: Python<'py>,
+        ) -> PyResult<Self> {
             let inner = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
-                canvas.to_owned_array()
-            ).unwrap();
+                canvas.to_owned_array(),
+            )
+            .unwrap();
 
-            Ok(Self {inner})
+            Ok(Self { inner })
         }
 
         #[classmethod]
@@ -770,7 +776,6 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
     }
 
-
     #[pymethods]
     impl StateKTAMPeriodic {
         #[new]
@@ -809,21 +814,31 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             e: base::Tile,
             size: usize,
         ) -> PyResult<Self> {
-            let inner = system.inner.as_mut().unwrap().create_we_pair(w, e, size).unwrap();
+            let inner = system
+                .inner
+                .as_mut()
+                .unwrap()
+                .create_we_pair(w, e, size)
+                .unwrap();
 
             Ok(Self { inner })
         }
 
         #[classmethod]
         #[text_signature = "(self, system, canvas)"]
-        fn from_array<'py>(_cls: &PyType, canvas: &'py PyArray2<base::Tile>, _py: Python<'py>) -> PyResult<Self> {
+        fn from_array<'py>(
+            _cls: &PyType,
+            canvas: &'py PyArray2<base::Tile>,
+            _py: Python<'py>,
+        ) -> PyResult<Self> {
             let mut inner = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
-                canvas.to_owned_array()
-            ).unwrap();
+                canvas.to_owned_array(),
+            )
+            .unwrap();
 
             inner.recalc_ntiles();
 
-            Ok(Self {inner})
+            Ok(Self { inner })
         }
 
         #[classmethod]
@@ -837,7 +852,12 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             s: base::Tile,
             size: usize,
         ) -> PyResult<Self> {
-            let inner = system.inner.as_mut().unwrap().create_ns_pair(n, s, size).unwrap();
+            let inner = system
+                .inner
+                .as_mut()
+                .unwrap()
+                .create_ns_pair(n, s, size)
+                .unwrap();
 
             Ok(Self { inner })
         }
@@ -852,7 +872,11 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             px: usize,
             t: base::Tile,
         ) -> PyResult<()> {
-            system.inner.as_mut().unwrap().set_point(&mut self.inner, (py, px), t);
+            system
+                .inner
+                .as_mut()
+                .unwrap()
+                .set_point(&mut self.inner, (py, px), t);
 
             Ok(())
         }
@@ -880,13 +904,17 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             maxevents: u64,
         ) -> PyResult<()> {
             let mut rng = SmallRng::from_entropy();
-            system.inner.as_mut().unwrap().evolve_in_size_range_events_max(
-                &mut self.inner,
-                minsize,
-                maxsize,
-                maxevents,
-                &mut rng,
-            );
+            system
+                .inner
+                .as_mut()
+                .unwrap()
+                .evolve_in_size_range_events_max(
+                    &mut self.inner,
+                    minsize,
+                    maxsize,
+                    maxevents,
+                    &mut rng,
+                );
 
             Ok(())
         }
@@ -1202,7 +1230,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         Vec<usize>,
         Vec<usize>,
         Vec<u32>,
-        Vec<Vec<usize>>
+        Vec<Vec<usize>>,
     ) {
         let fr = ffs::FFSRun::create_with_constant_variance_and_size_cutoff(
             system.inner.as_ref().unwrap().to_owned(),
@@ -1249,7 +1277,10 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             fr.level_list.iter().map(|x| x.num_states).collect(),
             fr.level_list.iter().map(|x| x.num_trials).collect(),
             fr.level_list.iter().map(|x| x.target_size).collect(),
-            fr.level_list.iter().map(|x| x.previous_list.clone()).collect()
+            fr.level_list
+                .iter()
+                .map(|x| x.previous_list.clone())
+                .collect(),
         );
 
         drop(fr);
