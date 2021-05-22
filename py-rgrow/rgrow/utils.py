@@ -37,6 +37,7 @@ class FFSResult:
     num_trials_per_surface: ndarray
     assembly_size_per_surface: ndarray
     previous_configs: List[List[int]]
+    system: Optional[rg.StaticKTAMPeriodic]
     aligned_configs: bool = False
 
     def align_configs(self,
@@ -80,10 +81,13 @@ class FFSResult:
     def has_all_configs(self) -> bool:
         return len(self.assemblies) > 1
 
-    def seeds_of_trajectories(self, system: rg.StaticKTAMPeriodic,
+    def seeds_of_trajectories(self, system: Optional[rg.StaticKTAMPeriodic] = None,
                               pool: Optional[multiprocessing.pool.Pool]
                               = None, proppool=False) -> pd.DataFrame:
         trajs = self.trajectory_configs
+
+        if system is None:
+            system = self.system
 
         if proppool or (pool is None):
             seeds = []
@@ -120,10 +124,15 @@ class FFSResult:
         """Fakes the old return tuple"""
         return self.tuple[idx]
 
-    def __str__(self) -> str:
-        return (f"FFSResult(nucrate={self.nucleation_rate}, " +
-                f"has_all_configs={self.has_all_configs}" +
+    def __repr__(self) -> str:
+        return (f"FFSResult(nucrate={self.nucleation_rate:.4g} M/s, " +
+                f"has_all_configs={self.has_all_configs}, " +
+                f"num_surfaces={len(self.assembly_size_per_surface)}, " +
+                f"num_trajectories={len(self.previous_configs[-1])}"
                 ")")
+
+    def __str__(self) -> str:
+        return repr(self)
 
 
 def trajectory_seed(system, trajectory,
@@ -229,6 +238,6 @@ def ffs_nucleation(system,
             _surface_size_step,
             keep_surface_configs
         )
-        return FFSResult(*restuple)
+        return FFSResult(*restuple, system=system)
     else:
         raise TypeError(f"Can't handle system type {type(system)}.")

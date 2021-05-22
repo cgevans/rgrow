@@ -1,6 +1,6 @@
 [package]
 name = "pyrgrow"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Constantine Evans <cevans@costinet.org>"]
 edition = "2018"
 
