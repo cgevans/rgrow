@@ -126,6 +126,10 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             Ok(Self { inner })
         }
 
+        fn new_state(&mut self, shape: (usize, usize)) -> PyResult<StateKTAM> {
+            Ok(StateKTAM { inner: self.inner.new_state(shape).unwrap() })
+        }
+
         #[classmethod]
         /// Creates a StaticKTAM instance from a JSON string.  Ignores canvas choice in JSON.
         #[text_signature = "(self, json_data)"]
@@ -641,6 +645,11 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         /// Prints debug information.
         fn debug(&self) -> String {
             format!("{:?}", self.inner)
+        }
+
+        fn insert_seed(&mut self, system: &mut StaticKTAM) -> PyResult<()> {
+            system.inner.insert_seed(&mut self.inner);
+            Ok(())
         }
 
         #[classmethod]
