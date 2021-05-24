@@ -4,6 +4,8 @@ use clap::Clap;
 
 use rgrow::{ffs, parser::TileSet, parser_xgrow};
 
+use rgrow::{state, canvas};
+
 use serde_yaml;
 use std::fs::File;
 
@@ -68,7 +70,7 @@ fn nucrate(input: String) {
         serde_yaml::from_reader(File::open(input).expect("Input file not found."))
             .expect("Input file parse erorr.");
 
-    let system = parsed.into_static_seeded_ktam();
+    let system = parsed.into_static_seeded_ktam::<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>();
 
     let ffsrun = ffs::FFSRun::create(system, 1000, 30, parsed.options.size, 1_000, 50_000, 3, 2);
 
