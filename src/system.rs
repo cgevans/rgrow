@@ -8,6 +8,9 @@ use rand::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::state::NullStateTracker;
+use crate::state::StateTracked;
+use crate::state::StateTracker;
 use crate::{base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::State, state::StateCreate};
 
 use super::base::{Energy, Glue, Point, Rate, Tile};
@@ -85,7 +88,7 @@ pub enum StepOutcome {
     ZeroRate,
 }
 
-pub trait SystemWithStateCreate<S: State + StateCreate>: System<S> {
+pub trait SystemWithStateCreate<S: State + StateCreate + StateTracked<T>, T: StateTracker>: System<S, T> {
     fn new_state(&mut self, shape: (usize, usize)) -> Result<S, GrowError> {
         let mut new_state = S::empty(shape)?;
         self.insert_seed(&mut new_state);
@@ -114,11 +117,11 @@ pub trait SystemWithStateCreate<S: State + StateCreate>: System<S> {
     }
 }
 
-impl<Sy: System<S>, S: State + StateCreate> SystemWithStateCreate<S> for Sy {
+impl<T: StateTracker, Sy: System<S, T>, S: State + StateCreate + StateTracked<T>> SystemWithStateCreate<S, T> for Sy {
 
 }
 
-pub trait System<S: State>: Debug {
+pub trait System<S: State + StateTracked<T>, T: StateTracker>: Debug {
     fn state_step(&self, mut state: &mut S, mut rng: &mut SmallRng, max_time_step: f64) -> StepOutcome {
         let time_step = -f64::ln(rng.gen()) / state.total_rate();
         if time_step > max_time_step {
@@ -177,6 +180,7 @@ pub trait System<S: State>: Debug {
     }
 
     fn perform_event(&self, state: &mut S, event: &Event) {
+        state.record_event(&event);
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::SingleTileAttach(point, tile) | Event::SingleTileChange(point, tile) => {
@@ -331,7 +335,7 @@ enum PossibleChoice {
     Event(Event)
 }
 
-impl<S: State> System<S> for StaticKTAMCover<S> {
+impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for StaticKTAMCover<S> {
     fn update_after_event(&self, mut state: &mut S, event: &Event) {
         match event {
             Event::None => { panic!("Being asked to update after a dead event.") }
@@ -979,9 +983,10 @@ impl<C: State> StaticKTAM<C> {
     }
 }
 
-impl<C> System<C> for StaticKTAM<C>
+impl<C, T> System<C, T> for StaticKTAM<C>
 where
-    C: State,
+    C: State + StateTracked<T>,
+    T: StateTracker
 {
     fn event_rate_at_point(&self, canvas: &C, point: PointSafeHere) -> Rate {
         let p = if canvas.inbounds(point.0) {
@@ -1151,7 +1156,7 @@ where
                             FissionHandling::NoFission => Event::None,
                             FissionHandling::JustDetach => Event::MultiTileDetach(now_empty),
                             FissionHandling::KeepSeeded => {
-                                let sl = System::<C>::seed_locs(self);
+                                let sl = System::<C, T>::seed_locs(self);
                                 Event::MultiTileDetach(g.choose_deletions_seed_unattached(sl))
                             }
                             FissionHandling::KeepLargest => {

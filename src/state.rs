@@ -249,7 +249,7 @@ where
 {
     fn set_tracker(&mut self, tracker: T) -> &mut Self;
     fn tracker(&mut self) -> &T;
-    fn record_event(&mut self, event: system::Event) -> &mut Self;
+    fn record_event(&mut self, event: &system::Event) -> &mut Self;
 }
 
 impl<C, T> StateTracked<T> for QuadTreeState<C, T>
@@ -266,7 +266,7 @@ where
         &self.tracker
     }
 
-    fn record_event(&mut self, event: system::Event) -> &mut Self {
+    fn record_event(&mut self, event: &system::Event) -> &mut Self {
         self.tracker.record_single_event(event);
         self
     }
@@ -274,7 +274,7 @@ where
 pub trait StateTracker: Clone + Debug {
     fn default(canvas: &dyn Canvas) -> Self;
 
-    fn record_single_event(&mut self, event: system::Event) -> &mut Self;
+    fn record_single_event(&mut self, event: &system::Event) -> &mut Self;
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -285,7 +285,7 @@ impl StateTracker for NullStateTracker {
         Self
     }
 
-    fn record_single_event(&mut self, _event: system::Event) -> &mut Self {
+    fn record_single_event(&mut self, _event: &system::Event) -> &mut Self {
         self
     }
 }
@@ -302,7 +302,7 @@ impl StateTracker for OrderTracker {
         OrderTracker { order: 0, arr: Array2::<NumEvents>::zeros((canvas.nrows(), canvas.ncols())) }
     }
 
-    fn record_single_event(&mut self, event: system::Event) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event) -> &mut Self {
         match event {
             system::Event::None => { self }
             system::Event::SingleTileAttach(p, t) => { self.arr[p.0] = self.order; self.order+=1; self }

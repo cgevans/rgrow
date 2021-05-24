@@ -1,3 +1,5 @@
+use crate::state::{NullStateTracker, StateTracked};
+
 use super::*;
 //use ndarray::prelude::*;
 //use ndarray::Zip;
@@ -21,14 +23,14 @@ use system::{Orientation, System};
 
 const MAX_SAMPLES: usize = 100000;
 
-pub struct FFSRun<St: State, Sy: System<St>> {
+pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> {
     pub system: Sy,
     pub level_list: Vec<FFSLevel<St, Sy>>,
     pub dimerization_rate: f64,
     pub forward_prob: Vec<f64>,
 }
 
-impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, Sy> {
+impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> FFSRun<St, Sy> {
     pub fn create(
         system: Sy,
         num_states: usize,
@@ -221,7 +223,7 @@ impl<St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSRun<St, S
     }
 }
 
-pub struct FFSLevel<St: State, Sy: System<St>> {
+pub struct FFSLevel<St: State+ StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> {
     pub system: std::marker::PhantomData<Sy>,
     pub state_list: Vec<St>,
     pub previous_list: Vec<usize>,
@@ -231,7 +233,7 @@ pub struct FFSLevel<St: State, Sy: System<St>> {
     pub target_size: NumTiles,
 }
 
-impl<'a, St: State + StateCreate + DangerousStateClone, Sy: System<St>> FFSLevel<St, Sy> {
+impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> FFSLevel<St, Sy> {
     pub fn drop_states(&mut self) -> &Self {
         self.state_list.drain(..);
         self
