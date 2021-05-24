@@ -289,3 +289,46 @@ impl StateTracker for NullStateTracker {
         self
     }
 }
+
+
+#[derive(Clone, Debug)]
+pub struct OrderTracker {
+    pub order: u64,
+    pub arr: Array2<NumEvents>
+}
+
+impl StateTracker for OrderTracker {
+    fn default(canvas: &dyn Canvas) -> Self {
+        OrderTracker { order: 0, arr: Array2::<NumEvents>::zeros((canvas.nrows(), canvas.ncols())) }
+    }
+
+    fn record_single_event(&mut self, event: system::Event) -> &mut Self {
+        match event {
+            system::Event::None => { self }
+            system::Event::SingleTileAttach(p, t) => { self.arr[p.0] = self.order; self.order+=1; self }
+            system::Event::SingleTileDetach(p) => { self.arr[p.0] = 0; self }
+            system::Event::SingleTileChange(p, t) => { self.arr[p.0] = self.order; self.order+=1; self }
+            system::Event::MultiTileChange(vec) => {
+                for (p, t) in vec {
+                    self.arr[p.0] = self.order; 
+                }
+                self.order+=1;
+                self
+            }
+            system::Event::MultiTileAttach(vec) => {
+                for (p, t) in vec {
+                    self.arr[p.0] = self.order; 
+                }
+                self.order+=1;
+                self
+            }
+            system::Event::MultiTileDetach(vec) => {
+                for p in vec {
+                    self.arr[p.0] = 0; 
+                }
+                self
+            }
+
+        }
+    }
+}
