@@ -34,6 +34,102 @@ use serde::{Deserialize, Serialize};
 /// - StateKTAM, which stores the state of a single assembly.
 #[pymodule]
 fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
+    #[pyclass(module = "rgrow.rgrow")]
+    #[derive(Debug)]
+    #[text_signature = "(tile_stoics, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, chunk_handling, chunk_size, tile_names)"]
+    pub struct StaticKTAMOrder {
+        inner: system::StaticKTAM<state::QuadTreeState<canvas::CanvasSquare, state::OrderTracker>>,
+    }
+
+    #[pymethods]
+    impl StaticKTAMOrder {
+        #[new]
+        fn new(
+            tile_concs: PyReadonlyArray1<f64>,
+            tile_edges: PyReadonlyArray2<base::Tile>,
+            glue_strengths: PyReadonlyArray1<base::Energy>,
+            gse: base::Energy,
+            gmc: base::Energy,
+            alpha: Option<f64>,
+            k_f: Option<f64>,
+            fission: Option<&str>,
+            chunk_handling: Option<&str>,
+            chunk_size: Option<&str>,
+            tile_names: Option<Vec<String>>,
+        ) -> PyResult<Self> {
+            let fission_handling = match fission {
+                Some(fs) => Some(match fs {
+                    "off" => FissionHandling::NoFission,
+                    "just-detach" => FissionHandling::JustDetach,
+                    "on" => FissionHandling::KeepSeeded,
+                    "keep-largest" => FissionHandling::KeepLargest,
+                    "keep-weighted" => FissionHandling::KeepWeighted,
+                    _ => return Err(PyValueError::new_err("Invalid fission handling option")),
+                }),
+                None => None,
+            };
+
+            let chunk_handling = Some(match chunk_handling {
+                Some(ch) => match ch {
+                    "off" | "none" => ChunkHandling::None,
+                    "detach" => ChunkHandling::Detach,
+                    _ => return Err(PyValueError::new_err("Invalid chunk handling option")),
+                },
+                None => ChunkHandling::None,
+            });
+
+            let chunk_size = match chunk_size {
+                Some(cs) => match cs {
+                    "dimer" => Some(ChunkSize::Dimer),
+                    _ => return Err(PyValueError::new_err("Invalid chunk size option")),
+                },
+                None => None,
+            };
+
+            let inner = system::StaticKTAM::from_ktam(
+                tile_concs.to_owned_array(),
+                tile_edges.to_owned_array(),
+                glue_strengths.to_owned_array(),
+                gse,
+                gmc,
+                alpha,
+                k_f,
+                Some(system::Seed::None()),
+                fission_handling,
+                chunk_handling,
+                chunk_size,
+                tile_names,
+                None,
+            );
+
+            Ok(Self { inner })
+        }
+
+        fn new_state(&mut self, shape: (usize, usize)) -> PyResult<StateKTAMOrder> {
+            Ok(StateKTAMOrder {
+                inner: self.inner.new_state(shape).unwrap(),
+            })
+        }
+
+        #[classmethod]
+        /// Creates a StaticKTAM instance from a JSON string.  Ignores canvas choice in JSON.
+        #[text_signature = "(self, json_data)"]
+        fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
+            let tileset = match rgrow::parser::TileSet::from_json(json_data) {
+                Ok(t) => t,
+                Err(e) => {
+                    return Err(PyValueError::new_err(format!(
+                        "Couldn't parse tileset json: {:?}",
+                        e
+                    )))
+                }
+            };
+            Ok(Self {
+                inner: tileset.into_static_seeded_ktam(),
+            })
+        }
+    }
+
     /// Static (no changes to concentrations, bond strengths, parameters, etc) kTAM system.
     /// Currently implements fission, and dimer chunk detachment.
     ///
@@ -127,7 +223,9 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         fn new_state(&mut self, shape: (usize, usize)) -> PyResult<StateKTAM> {
-            Ok(StateKTAM { inner: self.inner.new_state(shape).unwrap() })
+            Ok(StateKTAM {
+                inner: self.inner.new_state(shape).unwrap(),
+            })
         }
 
         #[classmethod]
@@ -409,7 +507,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 }
             };
             Ok(Self {
-                inner: Some(tileset.into_static_seeded_ktam_p()),
+                inner: Some(tileset.into_static_seeded_ktam()),
             })
         }
 
@@ -620,6 +718,13 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         inner: state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>,
     }
 
+    #[pyclass(module = "rgrow")]
+    #[derive(Clone, Debug)]
+    #[text_signature = "(size, system)"]
+    struct StateKTAMOrder {
+        inner: state::QuadTreeState<canvas::CanvasSquare, state::OrderTracker>,
+    }
+
     #[pymethods]
     impl StateKTAM {
         #[new]
@@ -751,6 +856,173 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         /// Returns the canvas as a numpy array.  Note that this creates an array copy.
         fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<base::Tile> {
             self.inner.canvas.raw_array().to_pyarray(py)
+        }
+
+        /// Returns a copy of the state.
+        fn copy(&self) -> PyResult<Self> {
+            Ok(Self {
+                inner: self.inner.clone(),
+            })
+        }
+
+        /// The number of tiles in the state (stored, not calculated).
+        #[getter]
+        fn ntiles(&self) -> base::NumTiles {
+            self.inner.ntiles()
+        }
+
+        /// The current time since initiation (in seconds) of the state.
+        #[getter]
+        fn time(&self) -> f64 {
+            self.inner.time()
+        }
+
+        /// The total number of events that have taken place in the state.
+        #[getter]
+        fn events(&self) -> u64 {
+            self.inner.total_events()
+        }
+
+        #[text_signature = "(self, level_number)"]
+        /// Returns rate array for level `level_number` (0 is full, each subsequent is shape (previous/2, previous/2)
+        fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
+            self.inner.rates.0[level].to_pyarray(py)
+        }
+    }
+
+    #[pymethods]
+    impl StateKTAMOrder {
+        #[new]
+        fn new(size: usize, system: &mut StaticKTAMOrder) -> PyResult<Self> {
+            let mut state = state::QuadTreeState::<_, state::OrderTracker>::create_raw(
+                Array2::zeros((size, size)),
+            )
+            .unwrap();
+
+            let sl = system.inner.seed_locs();
+
+            for (p, t) in sl {
+                // FIXME: for large seeds,
+                // this could be faster by doing raw writes, then update_entire_state
+                // but we would need to distinguish sizing.
+                // Or maybe there is fancier way with a set?
+                system.inner.set_point(&mut state, p.0, t);
+            }
+
+            Ok(Self { inner: state })
+        }
+
+        /// Prints debug information.
+        fn debug(&self) -> String {
+            format!("{:?}", self.inner)
+        }
+
+        fn insert_seed(&mut self, system: &mut StaticKTAMOrder) -> PyResult<()> {
+            system.inner.insert_seed(&mut self.inner);
+            Ok(())
+        }
+        #[classmethod]
+        /// Creates a simulation state with the West-East dimer of tile numbers w, e, centered in
+        /// a canvas of size size (must be 2^L).
+        #[text_signature = "(self, system, w, e, size)"]
+        fn create_we_pair(
+            _cls: &PyType,
+            system: &mut StaticKTAMOrder,
+            w: base::Tile,
+            e: base::Tile,
+            size: usize,
+        ) -> PyResult<Self> {
+            let inner = system.inner.create_we_pair(w, e, size).unwrap();
+
+            Ok(Self { inner })
+        }
+
+        #[classmethod]
+        #[text_signature = "(self, canvas)"]
+        fn create_raw<'py>(
+            _cls: &PyType,
+            canvas: &'py PyArray2<base::Tile>,
+            _py: Python<'py>,
+        ) -> PyResult<Self> {
+            let inner =
+                state::QuadTreeState::<_, state::OrderTracker>::create_raw(canvas.to_owned_array())
+                    .unwrap();
+
+            Ok(Self { inner })
+        }
+
+        #[classmethod]
+        #[text_signature = "(self, system, n, s, size)"]
+        /// Creates a simulation state with the North-South dimer of tile numbers n, s, centered in
+        /// a canvas of size size (must be 2^L).
+        fn create_ns_pair(
+            _cls: &PyType,
+            system: &mut StaticKTAMOrder,
+            n: base::Tile,
+            s: base::Tile,
+            size: usize,
+        ) -> PyResult<Self> {
+            let inner = system.inner.create_ns_pair(n, s, size).unwrap();
+
+            Ok(Self { inner })
+        }
+
+        #[text_signature = "(self, system, point_y, point_x, tile)"]
+        /// Sets the point (py, px) to a particular tile (or empty, with 0), using StaticKTAM `system`.
+        /// Updates rates after setting.
+        fn set_point(
+            &mut self,
+            system: &mut StaticKTAMOrder,
+            py: usize,
+            px: usize,
+            t: base::Tile,
+        ) -> PyResult<()> {
+            system.inner.set_point(&mut self.inner, (py, px), t);
+
+            Ok(())
+        }
+
+        /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible, in which case
+        /// it will raise a PyValueError.
+        #[text_signature = "(self, system)"]
+        fn take_step(&mut self, system: &StaticKTAMOrder) -> PyResult<()> {
+            let mut rng = SmallRng::from_entropy();
+            match system.inner.state_step(&mut self.inner, &mut rng, 1e100) {
+                StepOutcome::HadEventAt(_) | StepOutcome::DeadEventAt(_) => Ok(()),
+                StepOutcome::NoEventIn(_) => Err(PyValueError::new_err("No event")),
+                StepOutcome::ZeroRate => Err(PyValueError::new_err("Zero rate")),
+            }
+        }
+
+        /// Provided with a StaticKTAM system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
+        /// or until `maxevents` events have taken place during the evolution.  This is present for backward compatibility.
+        #[text_signature = "(self, system, minsize, maxsize, maxevents)"]
+        fn evolve_in_size_range(
+            &mut self,
+            system: &mut StaticKTAMOrder,
+            minsize: base::NumTiles,
+            maxsize: base::NumTiles,
+            maxevents: u64,
+        ) -> PyResult<()> {
+            let mut rng = SmallRng::from_entropy();
+            system.inner.evolve_in_size_range_events_max(
+                &mut self.inner,
+                minsize,
+                maxsize,
+                maxevents,
+                &mut rng,
+            );
+
+            Ok(())
+        }
+
+        /// Returns the canvas as a numpy array.  Note that this creates an array copy.
+        fn to_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<base::Tile> {
+            self.inner.canvas.raw_array().to_pyarray(py)
+        }
+
+        fn order_array<'py>(&self, py: Python<'py>) -> &'py PyArray2<base::NumEvents> {
+            self.inner.tracker.arr.to_pyarray(py)
         }
 
         /// Returns a copy of the state.
@@ -966,9 +1238,11 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     m.add_class::<StaticKTAM>()?;
+    m.add_class::<StaticKTAMOrder>()?;
     m.add_class::<StaticKTAMCover>()?;
     m.add_class::<StaticKTAMPeriodic>()?;
     m.add_class::<StateKTAM>()?;
+    m.add_class::<StateKTAMOrder>()?;
     m.add_class::<StateKTAMPeriodic>()?;
 
     #[pyfunction]
