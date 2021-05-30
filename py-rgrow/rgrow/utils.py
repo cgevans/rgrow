@@ -83,7 +83,8 @@ class FFSResult:
 
     def seeds_of_trajectories(self, system: Optional[rg.StaticKTAMPeriodic] = None,
                               pool: Optional[multiprocessing.pool.Pool]
-                              = None, proppool=False) -> pd.DataFrame:
+                              = None, proppool=False, ci_width=0.1,
+                              min=0.4, max=0.6, ci_pct=0.95,) -> pd.DataFrame:
         trajs = self.trajectory_configs
 
         if system is None:
@@ -93,13 +94,15 @@ class FFSResult:
             seeds = []
             seedinfos = []
             for i, trajectory in enumerate(trajs):
-                seed, seedinfo = trajectory_seed(system, trajectory, pool)
+                seed, seedinfo = trajectory_seed(system, trajectory, ci_width,
+                                                 min, max, ci_pct, pool)
                 print(".", end=None, flush=True)
                 seeds.append(seed)
                 seedinfos.append(seedinfo)
         else:
             ss = pool.starmap(trajectory_seed, [
-                              (system, trajectory) for trajectory in trajs])
+                              (system, trajectory, ci_width,
+                               min, max, ci_pct) for trajectory in trajs])
             seeds, seedinfos = zip(*ss)
 
         p = pd.DataFrame(seedinfos)
@@ -136,7 +139,9 @@ class FFSResult:
 
 
 def trajectory_seed(system, trajectory,
-                    pool: multiprocessing.pool.Pool = None) -> Tuple[ndarray, pd.Series]:
+                    ci_width=0.1,
+                    min=0.4, max=0.6, ci_pct=0.95,
+                    pool: multiprocessing.pool.Pool = None,) -> Tuple[ndarray, pd.Series]:
     """Given a system and trajectory (of configurations), find the seed
     (committor closest to 0.5)"""
 
@@ -147,7 +152,7 @@ def trajectory_seed(system, trajectory,
             "in", "side", "c", "clow", "chigh", "succ", "trials"])
     else:
         trres = pool.starmap(
-            committor_mid, [(system, config, 0.1) for config in trajectory])
+            committor_mid, [(system, config, ci_width, min, max, ci_pct) for config in trajectory])
         trajs = pd.DataFrame(trres, columns=[
             "in", "side", "c", "clow", "chigh", "succ", "trials"])
 
@@ -180,12 +185,13 @@ def committor(system, config, ci_width: float = 0.05, state_type=rg.StateKTAMPer
             return (successes/trials, ci[0], ci[1], successes, trials)
 
 
-def committor_mid(system, config, ci_width=0.05, state_type=rg.StateKTAMPeriodic,
-                  min=0.4, max=0.6, ci_pct=0.95) -> Tuple[bool,
-                                                          Optional[bool],
-                                                          float,
-                                                          float, float,
-                                                          int, int]:
+def committor_mid(system, config, ci_width=0.05,
+                  min=0.4, max=0.6, ci_pct=0.95,
+                  state_type=rg.StateKTAMPeriodic) -> Tuple[bool,
+                                                            Optional[bool],
+                                                            float,
+                                                            float, float,
+                                                            int, int]:
     trials = 0
     successes = 0
 
