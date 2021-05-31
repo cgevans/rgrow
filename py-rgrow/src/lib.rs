@@ -316,8 +316,23 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[getter]
-        fn tile_rates<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
+        fn tile_adj_rates<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
             self.inner.tile_adj_concs.to_pyarray(py)
+        }
+
+        #[getter]
+        fn alpha(&self) -> f64 {
+            return self.inner.alpha
+        }
+
+        #[getter]
+        fn g_mc(&self) -> Option<f64> {
+            return self.inner.g_mc
+        }
+
+        #[getter]
+        fn g_se(&self) -> Option<f64> {
+            return self.inner.g_se
         }
 
         /// Debug info for model.
