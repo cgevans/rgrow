@@ -235,6 +235,10 @@ pub trait TileBondInfo {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4];
     fn tile_name(&self, tile_number: Tile) -> &str;
     fn bond_name(&self, bond_number: usize) -> &str;
+
+    fn tile_colors(&self) -> Vec<[u8; 4]>;
+    fn tile_names(&self) -> Vec<String>;
+    fn bond_names(&self) -> Vec<String>;
 }
 
 
@@ -628,6 +632,18 @@ impl<C: State> TileBondInfo for StaticKTAMCover<C> {
     fn bond_name(&self, _bond_number: usize) -> &str {
         todo!()
     }
+
+    fn tile_colors(&self) -> Vec<[u8; 4]> {
+        self.inner.tile_colors()
+    }
+
+    fn tile_names(&self) -> Vec<String> {
+        self.inner.tile_names()
+    }
+
+    fn bond_names(&self) -> Vec<String> {
+        todo!()
+    }
 }
 
 impl<C: State> TileBondInfo for StaticKTAM<C> {
@@ -640,6 +656,18 @@ impl<C: State> TileBondInfo for StaticKTAM<C> {
     }
 
     fn bond_name(&self, _bond_number: usize) -> &str {
+        todo!()
+    }
+
+    fn tile_colors(&self) -> Vec<[u8; 4]> {
+        self.tile_colors.clone()
+    }
+
+    fn tile_names(&self) -> Vec<String> {
+        self.tile_names.clone()
+    }
+
+    fn bond_names(&self) -> Vec<String> {
         todo!()
     }
 }
