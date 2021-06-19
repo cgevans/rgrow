@@ -9,7 +9,7 @@ use rgrow::base;
 use rgrow::canvas;
 use rgrow::canvas::Canvas;
 use rgrow::ffs;
-use rgrow::system::StepOutcome;
+use rgrow::system::{StepOutcome, TileBondInfo};
 
 use rgrow::state;
 use rgrow::state::{StateCreate, StateStatus};
@@ -335,6 +335,16 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.g_se
         }
 
+        #[getter]
+        fn tile_names(&self) -> Vec<String> {
+            self.inner.tile_names()
+        }
+
+        #[getter]
+        fn tile_colors(&self) -> Vec<[u8; 4]> {
+            self.inner.tile_colors()
+        }
+
         /// Debug info for model.
         fn debug(&self) -> String {
             format!("{:?}", self.inner)
@@ -615,6 +625,16 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.as_ref().unwrap().g_se
         }
 
+        // #[getter]
+        // fn tile_names(&self) -> Vec<String> {
+        //     self.inner.tile_names()
+        // }
+
+        // #[getter]
+        // fn tile_colors(&self) -> Vec<[u8; 4]> {
+        //     self.inner.tile_colors()
+        // }
+
 
         #[getter]
         fn energy_ns<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
@@ -705,6 +725,16 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         fn calc_mismatches(&self, state: &StateKTAM) -> u32 {
             self.inner.calc_mismatches(&state.inner)
+        }
+
+        #[getter]
+        fn tile_names(&self) -> Vec<String> {
+            self.inner.tile_names()
+        }
+
+        #[getter]
+        fn tile_colors(&self) -> Vec<[u8; 4]> {
+            self.inner.tile_colors()
         }
 
         fn evolve_in_size_range_events_max(
@@ -1519,7 +1549,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfunction]
-    #[text_signature = "(system, varpermean2, min_states, target_size, cutoff_prob, cutoff_number, canvas_size, max_init_events, max_subseq_events, start_size, size_step, keep_states)"]
+    #[text_signature = "(system, varpermean2, min_states, target_size, cutoff_prob, cutoff_number, min_cutoff_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step, keep_states)"]
     /// Runs Forward Flux Sampling for StaticKTAMPeriodic, and returns a tuple of using number of tiles as a measure, and returns
     /// (nucleation_rate, dimerization_rate, forward_probs, configs, num states, num trials, size, prev_list).
     fn ffs_run_final_p_cvar_cut<'py>(
@@ -1529,6 +1559,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         target_size: base::NumTiles,
         cutoff_prob: f64,
         cutoff_number: usize,
+        min_cutoff_size: base::NumTiles,
         canvas_size: usize,
         max_init_events: u64,
         max_subseq_events: u64,
@@ -1553,6 +1584,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             target_size,
             cutoff_prob,
             cutoff_number,
+            min_cutoff_size,
             canvas_size,
             max_init_events,
             max_subseq_events,
