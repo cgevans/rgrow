@@ -142,6 +142,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
         target_size: NumTiles,
         cutoff_prob: f64,
         cutoff_number: usize,
+        min_cutoff_size: NumTiles,
         canvas_size: CanvasLength,
         max_init_events: NumEvents,
         max_subseq_events: NumEvents,
@@ -172,12 +173,17 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
             start_size,
         );
         ret.forward_prob.push(first_level.p_r);
+
+        let mut current_size = first_level.target_size;
+
         ret.level_list.push(first_level);
 
         let mut above_cutoff: usize = 0;
 
-        while ret.level_list.last().unwrap().target_size < target_size {
-            let next = ret.level_list.last().unwrap().next_level_cvar(
+        while current_size < target_size {
+            let last = ret.level_list.last_mut().unwrap();
+
+            let next = last.next_level_cvar(
                 &mut ret.system,
                 varpermean2,
                 min_states,
@@ -185,21 +191,22 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
                 max_subseq_events,
             );
             if !keep_states {
-                ret.level_list.last_mut().unwrap().drop_states();
+                last.drop_states();
             }
             let pf = next.p_r;
             ret.forward_prob.push(pf);
             println!(
                 "Done with target size {}: p_f {}, used {} trials for {} states.",
-                ret.level_list.last().unwrap().target_size,
+                last.target_size,
                 pf,
                 next.num_trials,
                 next.num_states
             );
+            current_size = next.target_size;
             ret.level_list.push(next);
             if pf > cutoff_prob {
                 above_cutoff += 1;
-                if above_cutoff > cutoff_number {
+                if (above_cutoff > cutoff_number) & (current_size >= min_cutoff_size) {
                     break
                 }
             } else {
