@@ -16,7 +16,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 numpy = "^0.13"
-ndarray = {version = "^0.14", features = ["serde"]}
+ndarray = {version = "^0.15", features = ["serde"]}
 rand = "^0.7"
 serde = "^1"
 bincode = "^1"
