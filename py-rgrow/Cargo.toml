@@ -23,7 +23,7 @@ bincode = "^1"
 
 [dependencies.rgrow]
 git = "https://framagit.org/cge/rgrow.git"
-version = "^0.6.0-dev.5"
+version = "^0.6.0-dev.6"
 default-features = false  # Manylinux1 doesn't support X11 such that the UI works...
 
 [dependencies.pyo3]
