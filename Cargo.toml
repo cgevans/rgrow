@@ -1,6 +1,6 @@
 [package]
 name = "rgrow"
-version = "0.6.0-dev.6"
+version = "0.6.0-dev.7"
 authors = ["Constantine Evans <const@costinet.org>"]
 edition = "2018"
 
@@ -21,7 +21,7 @@ ui = ["winit", "winit_input_helper", "pixels"]
 use_rayon = ["rayon"]
 
 [dependencies]
-ndarray = {version = "0.14", features = ["serde"]}
+ndarray = {version = "0.15", features = ["serde"]}
 rand = "0.7"
 num-format = "0.4.0"
 fnv = "1.0"
