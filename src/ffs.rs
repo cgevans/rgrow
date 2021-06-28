@@ -6,6 +6,7 @@ use super::*;
 use base::{CanvasLength, NumEvents, NumTiles, Rate};
 
 use ndarray::Array2;
+use rand::Rng;
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
 use rand::{prelude::SmallRng, SeedableRng};
 #[cfg(feature = "rayon")]
@@ -164,7 +165,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
             forward_prob: Vec::new(),
         };
 
-        let first_level = FFSLevel::nmers_from_dimers_cvar(
+        let (first_level, dimer_level) = FFSLevel::nmers_from_dimers_cvar(
             &mut ret.system,
             varpermean2,
             min_states,
@@ -172,10 +173,13 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
             max_init_events,
             start_size,
         );
+
+
         ret.forward_prob.push(first_level.p_r);
 
         let mut current_size = first_level.target_size;
 
+        ret.level_list.push(dimer_level);
         ret.level_list.push(first_level);
 
         let mut above_cutoff: usize = 0;
@@ -454,14 +458,16 @@ impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTr
         canvas_size: CanvasLength,
         max_events: u64,
         next_size: NumTiles,
-    ) -> Self {
+    ) -> (Self, Self) {
         let mut rng = SmallRng::from_entropy();
 
         let dimers = system.calc_dimers();
 
-        let mut state_list = Vec::new();
-        let mut previous_list = Vec::new();
+        let mut state_list = Vec::with_capacity(min_samples);
+        let mut previous_list = Vec::with_capacity(min_samples);
         let mut i = 0usize;
+
+        let mut dimer_state_list = Vec::with_capacity(min_samples);
 
         let weights: Vec<_> = dimers.iter().map(|d| d.formation_rate).collect();
         let chooser = WeightedIndex::new(&weights).unwrap();
@@ -469,6 +475,10 @@ impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTr
         let mid = canvas_size / 2;
 
         let mut num_states = 0usize;
+
+        let mut tile_list = Vec::with_capacity(min_samples);
+
+
 
         while state_list.len() < MAX_SAMPLES {
             let mut state = St::create_raw(Array2::zeros((canvas_size, canvas_size))).unwrap();
@@ -494,9 +504,37 @@ impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTr
                 i += 1;
 
                 if state.ntiles() == next_size {
+
+
+                    // Create (retrospectively) a dimer state
+                    let mut dimer_state = St::create_raw(Array2::zeros((canvas_size, canvas_size))).unwrap();
+                    match dimer.orientation {
+                        Orientation::NS => {
+                            system.set_point(&mut dimer_state, (mid, mid), dimer.t1);
+                            system.set_point(&mut dimer_state, (mid + 1, mid), dimer.t2);
+                        }
+                        Orientation::WE => {
+                            system.set_point(&mut dimer_state, (mid, mid), dimer.t1);
+                            system.set_point(&mut dimer_state, (mid, mid + 1), dimer.t2);
+                        }
+                    };
+
                     state_list.push(state);
-                    previous_list.push(i_old_state);
+
+                    dimer_state_list.push(dimer_state);
+
+                    if rng.gen::<bool>() {
+                        tile_list.push(dimer.t1 as usize);
+                    } else {
+                        tile_list.push(dimer.t2 as usize);
+                    }
+
+                    previous_list.push(num_states);
+
+
                     num_states += 1;
+
+
                     break;
                 } else {
                     if state.ntiles() != 0 {
@@ -515,7 +553,7 @@ impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTr
 
         let p_r = (num_states as f64) / (i as f64);
 
-        Self {
+        (Self {
             system: std::marker::PhantomData::<Sy>,
             state_list,
             previous_list,
@@ -523,7 +561,17 @@ impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTr
             target_size: next_size,
             num_states: num_states,
             num_trials: i,
+        },
+        Self {
+            system: std::marker::PhantomData::<Sy>,
+            state_list: dimer_state_list,
+            previous_list: tile_list,
+            p_r: 1.0,
+            target_size: 2,
+            num_states: num_states,
+            num_trials: num_states
         }
+    )
     }
 }
 
@@ -533,3 +581,5 @@ fn variance_over_mean2(num_success: usize, num_trials: usize) -> f64 {
     let p = ns / nt;
     (1. - p) / (ns)
 }
+
+

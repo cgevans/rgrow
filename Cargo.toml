@@ -1,6 +1,6 @@
 [package]
 name = "rgrow"
-version = "0.6.0-dev.7"
+version = "0.6.0-dev.8"
 authors = ["Constantine Evans <const@costinet.org>"]
 edition = "2018"
 
