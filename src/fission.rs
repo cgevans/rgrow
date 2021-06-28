@@ -1,10 +1,7 @@
 use crate::state::State;
-use crate::{
-    canvas::PointSafeAdjs,
-    system::{StaticKTAM},
-};
+use crate::{canvas::PointSafeAdjs, system::StaticKTAM};
 
-use super::base::{Tile};
+use super::base::Tile;
 use fnv::FnvHashMap;
 use rand::{distributions::weighted::WeightedIndex, distributions::Distribution};
 use std::collections::VecDeque;

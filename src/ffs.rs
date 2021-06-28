@@ -31,7 +31,11 @@ pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St, Nul
     pub forward_prob: Vec<f64>,
 }
 
-impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> FFSRun<St, Sy> {
+impl<
+        St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
+        Sy: System<St, NullStateTracker>,
+    > FFSRun<St, Sy>
+{
     pub fn create(
         system: Sy,
         num_states: usize,
@@ -149,7 +153,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
         max_subseq_events: NumEvents,
         start_size: NumTiles,
         size_step: NumTiles,
-        keep_states: bool
+        keep_states: bool,
     ) -> Self {
         let level_list = Vec::new();
 
@@ -173,7 +177,6 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
             max_init_events,
             start_size,
         );
-
 
         ret.forward_prob.push(first_level.p_r);
 
@@ -201,17 +204,14 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
             ret.forward_prob.push(pf);
             println!(
                 "Done with target size {}: p_f {}, used {} trials for {} states.",
-                last.target_size,
-                pf,
-                next.num_trials,
-                next.num_states
+                last.target_size, pf, next.num_trials, next.num_states
             );
             current_size = next.target_size;
             ret.level_list.push(next);
             if pf > cutoff_prob {
                 above_cutoff += 1;
                 if (above_cutoff > cutoff_number) & (current_size >= min_cutoff_size) {
-                    break
+                    break;
                 }
             } else {
                 above_cutoff = 0;
@@ -234,7 +234,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
     }
 }
 
-pub struct FFSLevel<St: State+ StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> {
+pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> {
     pub system: std::marker::PhantomData<Sy>,
     pub state_list: Vec<St>,
     pub previous_list: Vec<usize>,
@@ -244,7 +244,12 @@ pub struct FFSLevel<St: State+ StateTracked<NullStateTracker>, Sy: System<St, Nu
     pub target_size: NumTiles,
 }
 
-impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> FFSLevel<St, Sy> {
+impl<
+        'a,
+        St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
+        Sy: System<St, NullStateTracker>,
+    > FFSLevel<St, Sy>
+{
     pub fn drop_states(&mut self) -> &Self {
         self.state_list.drain(..);
         self
@@ -478,8 +483,6 @@ impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTr
 
         let mut tile_list = Vec::with_capacity(min_samples);
 
-
-
         while state_list.len() < MAX_SAMPLES {
             let mut state = St::create_raw(Array2::zeros((canvas_size, canvas_size))).unwrap();
 
@@ -504,10 +507,9 @@ impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTr
                 i += 1;
 
                 if state.ntiles() == next_size {
-
-
                     // Create (retrospectively) a dimer state
-                    let mut dimer_state = St::create_raw(Array2::zeros((canvas_size, canvas_size))).unwrap();
+                    let mut dimer_state =
+                        St::create_raw(Array2::zeros((canvas_size, canvas_size))).unwrap();
                     match dimer.orientation {
                         Orientation::NS => {
                             system.set_point(&mut dimer_state, (mid, mid), dimer.t1);
@@ -531,9 +533,7 @@ impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTr
 
                     previous_list.push(num_states);
 
-
                     num_states += 1;
-
 
                     break;
                 } else {
@@ -553,25 +553,26 @@ impl<'a, St: State + StateCreate + DangerousStateClone+ StateTracked<NullStateTr
 
         let p_r = (num_states as f64) / (i as f64);
 
-        (Self {
-            system: std::marker::PhantomData::<Sy>,
-            state_list,
-            previous_list,
-            p_r,
-            target_size: next_size,
-            num_states: num_states,
-            num_trials: i,
-        },
-        Self {
-            system: std::marker::PhantomData::<Sy>,
-            state_list: dimer_state_list,
-            previous_list: tile_list,
-            p_r: 1.0,
-            target_size: 2,
-            num_states: num_states,
-            num_trials: num_states
-        }
-    )
+        (
+            Self {
+                system: std::marker::PhantomData::<Sy>,
+                state_list,
+                previous_list,
+                p_r,
+                target_size: next_size,
+                num_states: num_states,
+                num_trials: i,
+            },
+            Self {
+                system: std::marker::PhantomData::<Sy>,
+                state_list: dimer_state_list,
+                previous_list: tile_list,
+                p_r: 1.0,
+                target_size: 2,
+                num_states: num_states,
+                num_trials: num_states,
+            },
+        )
     }
 }
 
@@ -581,5 +582,3 @@ fn variance_over_mean2(num_success: usize, num_trials: usize) -> f64 {
     let p = ns / nt;
     (1. - p) / (ns)
 }
-
-

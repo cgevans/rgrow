@@ -1,4 +1,4 @@
-use phf::{phf_map};
+use phf::phf_map;
 
 pub(crate) static COLORS: phf::Map<&'static str, [u8; 4]> = phf_map! {
     "snow" => [255, 250, 250, 0xff],

@@ -11,10 +11,13 @@ use serde::{Deserialize, Serialize};
 use crate::state::NullStateTracker;
 use crate::state::StateTracked;
 use crate::state::StateTracker;
-use crate::{base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::State, state::StateCreate};
+use crate::{
+    base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::State,
+    state::StateCreate,
+};
 
 use super::base::{Energy, Glue, Point, Rate, Tile};
-use crate::canvas::{PointSafeAdjs};
+use crate::canvas::PointSafeAdjs;
 
 use super::fission;
 
@@ -88,14 +91,15 @@ pub enum StepOutcome {
     ZeroRate,
 }
 
-pub trait SystemWithStateCreate<S: State + StateCreate + StateTracked<T>, T: StateTracker>: System<S, T> {
+pub trait SystemWithStateCreate<S: State + StateCreate + StateTracked<T>, T: StateTracker>:
+    System<S, T>
+{
     fn new_state(&mut self, shape: (usize, usize)) -> Result<S, GrowError> {
         let mut new_state = S::empty(shape)?;
         self.insert_seed(&mut new_state);
         Ok(new_state)
     }
 
-    
     fn create_we_pair(&mut self, w: Tile, e: Tile, size: usize) -> Result<S, GrowError> {
         assert!(size > 8);
         let mut ret = S::empty((size, size))?;
@@ -117,12 +121,18 @@ pub trait SystemWithStateCreate<S: State + StateCreate + StateTracked<T>, T: Sta
     }
 }
 
-impl<T: StateTracker, Sy: System<S, T>, S: State + StateCreate + StateTracked<T>> SystemWithStateCreate<S, T> for Sy {
-
+impl<T: StateTracker, Sy: System<S, T>, S: State + StateCreate + StateTracked<T>>
+    SystemWithStateCreate<S, T> for Sy
+{
 }
 
 pub trait System<S: State + StateTracked<T>, T: StateTracker>: Debug {
-    fn state_step(&self, mut state: &mut S, mut rng: &mut SmallRng, max_time_step: f64) -> StepOutcome {
+    fn state_step(
+        &self,
+        mut state: &mut S,
+        mut rng: &mut SmallRng,
+        max_time_step: f64,
+    ) -> StepOutcome {
         let time_step = -f64::ln(rng.gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
@@ -146,16 +156,24 @@ pub trait System<S: State + StateTracked<T>, T: StateTracker>: Debug {
         minsize: NumTiles,
         maxsize: NumTiles,
         maxevents: NumEvents,
-        rng: &mut SmallRng
+        rng: &mut SmallRng,
     ) {
         let mut events: NumEvents = 0;
 
         while (events < maxevents) & (state.ntiles() < maxsize) & (state.ntiles() > minsize) {
             match self.state_step(state, rng, 1e100) {
-                StepOutcome::HadEventAt(_) => { events += 1; }
-                StepOutcome::NoEventIn(_) => { println!("Timeout {:?}", state); }
-                StepOutcome::DeadEventAt(_) => { println!("Dead"); }
-                StepOutcome::ZeroRate => {panic!()}
+                StepOutcome::HadEventAt(_) => {
+                    events += 1;
+                }
+                StepOutcome::NoEventIn(_) => {
+                    println!("Timeout {:?}", state);
+                }
+                StepOutcome::DeadEventAt(_) => {
+                    println!("Dead");
+                }
+                StepOutcome::ZeroRate => {
+                    panic!()
+                }
             }
         }
     }
@@ -170,7 +188,6 @@ pub trait System<S: State + StateTracked<T>, T: StateTracker>: Debug {
         let event = Event::SingleTileAttach(point, tile);
 
         self.update_after_event(state, &event);
-
     }
 
     fn insert_seed(&mut self, state: &mut S) {
@@ -225,7 +242,10 @@ pub trait System<S: State + StateTracked<T>, T: StateTracker>: Debug {
     }
 
     fn update_points(&self, state: &mut S, points: &[PointSafeHere]) {
-        let rates = points.iter().map(|p| self.event_rate_at_point(state, *p)).collect::<Vec<_>>();
+        let rates = points
+            .iter()
+            .map(|p| self.event_rate_at_point(state, *p))
+            .collect::<Vec<_>>();
 
         state.update_multiple(&points, &rates);
     }
@@ -240,7 +260,6 @@ pub trait TileBondInfo {
     fn tile_names(&self) -> Vec<String>;
     fn bond_names(&self) -> Vec<String>;
 }
-
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum FissionHandling {
@@ -298,7 +317,7 @@ struct ClonableCache(RwLock<Cache>);
 
 impl Clone for ClonableCache {
     fn clone(&self) -> Self {
-         Self(RwLock::new(self.0.read().unwrap().clone()))
+        Self(RwLock::new(self.0.read().unwrap().clone()))
     }
 }
 
@@ -312,18 +331,18 @@ impl Default for ClonableCache {
 pub(crate) enum CoverType {
     NonCover,
     Cover,
-    Composite
-} 
+    Composite,
+}
 #[derive(Debug, Clone)]
 pub(crate) struct CoverAttach {
     pub(crate) like_tile: Tile,
-    pub(crate) new_tile: Tile
+    pub(crate) new_tile: Tile,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct CompositeDetach {
     pub(crate) like_tile: Tile,
-    pub(crate) new_tile: Tile
+    pub(crate) new_tile: Tile,
 }
 
 #[derive(Debug, Clone)]
@@ -331,51 +350,59 @@ pub struct StaticKTAMCover<S: State> {
     pub inner: StaticKTAM<S>,
     pub(crate) tile_is_cover: Vec<CoverType>,
     pub(crate) cover_attach_info: Vec<Vec<CoverAttach>>,
-    pub(crate) composite_detach_info: Vec<Vec<CompositeDetach>>
+    pub(crate) composite_detach_info: Vec<Vec<CompositeDetach>>,
 }
 
 enum PossibleChoice {
     Remainder(Rate),
-    Event(Event)
+    Event(Event),
 }
 
 impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for StaticKTAMCover<S> {
     fn update_after_event(&self, mut state: &mut S, event: &Event) {
         match event {
-            Event::None => { panic!("Being asked to update after a dead event.") }
-            Event::SingleTileAttach(p, _) | 
-            Event::SingleTileDetach(p) |
-            Event::SingleTileChange(p, _) => {
-                match self.inner.chunk_size {
-                    ChunkSize::Single => {
-                        let points = [state.move_sa_n(*p),
+            Event::None => {
+                panic!("Being asked to update after a dead event.")
+            }
+            Event::SingleTileAttach(p, _)
+            | Event::SingleTileDetach(p)
+            | Event::SingleTileChange(p, _) => match self.inner.chunk_size {
+                ChunkSize::Single => {
+                    let points = [
+                        state.move_sa_n(*p),
                         state.move_sa_w(*p),
                         PointSafeHere(p.0),
                         state.move_sa_e(*p),
-                        state.move_sa_s(*p)];
-                        self.update_points(&mut state, &points);
-                    }
-                    ChunkSize::Dimer => {
-                        let mut points = Vec::with_capacity(10);
-                        points.extend_from_slice(&[state.move_sa_n(*p),
+                        state.move_sa_s(*p),
+                    ];
+                    self.update_points(&mut state, &points);
+                }
+                ChunkSize::Dimer => {
+                    let mut points = Vec::with_capacity(10);
+                    points.extend_from_slice(&[
+                        state.move_sa_n(*p),
                         state.move_sa_w(*p),
                         PointSafeHere(p.0),
                         state.move_sa_e(*p),
                         state.move_sa_s(*p),
                         state.move_sa_nw(*p),
                         state.move_sa_ne(*p),
-                        state.move_sa_sw(*p)]);
-                        
-                        let w = state.move_sa_w(*p);
-                        let n = state.move_sa_n(*p);
+                        state.move_sa_sw(*p),
+                    ]);
 
-                        if state.inbounds(w.0) { points.push(PointSafeHere(state.move_sh_w(w))); }
-                        if state.inbounds(n.0) { points.push(PointSafeHere(state.move_sh_n(n))); }
+                    let w = state.move_sa_w(*p);
+                    let n = state.move_sa_n(*p);
 
-                        self.update_points(&mut state, &points);
+                    if state.inbounds(w.0) {
+                        points.push(PointSafeHere(state.move_sh_w(w)));
                     }
+                    if state.inbounds(n.0) {
+                        points.push(PointSafeHere(state.move_sh_n(n)));
+                    }
+
+                    self.update_points(&mut state, &points);
                 }
-            }
+            },
             Event::MultiTileDetach(v) => {
                 let mut points = Vec::new();
                 for p in v {
@@ -385,8 +412,7 @@ impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for 
                 points.dedup();
                 self.update_points(&mut state, &points);
             }
-            Event::MultiTileAttach(v) |
-            Event::MultiTileChange(v) => {
+            Event::MultiTileAttach(v) | Event::MultiTileChange(v) => {
                 let mut points = Vec::new();
                 for (p, _) in v {
                     points.extend(self.inner.points_to_update_around(state, p));
@@ -398,26 +424,22 @@ impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for 
         }
     }
 
-
     fn event_rate_at_point(&self, state: &S, p: PointSafeHere) -> Rate {
         let t = state.v_sh(p) as usize;
 
         if !state.inbounds(p.0) {
-            return 0.
+            return 0.;
         }
-        
+
         let sp = PointSafeAdjs(p.0);
 
         match self.tile_is_cover[t] {
-            CoverType::NonCover => {
-                self.inner.event_rate_at_point(state, p)
-            }
+            CoverType::NonCover => self.inner.event_rate_at_point(state, p),
             CoverType::Cover => {
-                self.inner.event_rate_at_point(state, p) + self.cover_to_composite_rate(state, sp, t)
+                self.inner.event_rate_at_point(state, p)
+                    + self.cover_to_composite_rate(state, sp, t)
             }
-            CoverType::Composite => {
-                self.composite_to_cover_rate(state, sp, t)
-            }
+            CoverType::Composite => self.composite_to_cover_rate(state, sp, t),
         }
     }
 
@@ -425,21 +447,17 @@ impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for 
         let t = state.v_sa(p) as usize;
 
         match self.tile_is_cover[t] {
-            CoverType::NonCover => {
-                self.inner.choose_event_at_point(state, p, acc)
-            }
-            CoverType::Cover => {
-                match self.choose_cover_to_composite(state, p, t, acc) {
-                    PossibleChoice::Remainder(acc) => {self.inner.choose_event_at_point(state, p, acc)}
-                    PossibleChoice::Event(e) => {e}
+            CoverType::NonCover => self.inner.choose_event_at_point(state, p, acc),
+            CoverType::Cover => match self.choose_cover_to_composite(state, p, t, acc) {
+                PossibleChoice::Remainder(acc) => self.inner.choose_event_at_point(state, p, acc),
+                PossibleChoice::Event(e) => e,
+            },
+            CoverType::Composite => match self.choose_composite_to_cover(state, p, t, acc) {
+                PossibleChoice::Remainder(_) => {
+                    panic!("Ran out of rate for composite.")
                 }
-            }
-            CoverType::Composite => {
-                match self.choose_composite_to_cover(state, p, t, acc) {
-                    PossibleChoice::Remainder(_) => {panic!("Ran out of rate for composite.")}
-                    PossibleChoice::Event(e) => {e}
-                }
-            }
+                PossibleChoice::Event(e) => e,
+            },
         }
     }
 
@@ -455,7 +473,12 @@ impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for 
         self.inner.calc_mismatch_locations(state)
     }
 
-    fn state_step(&self, mut state: &mut S, mut rng: &mut SmallRng, max_time_step: f64) -> StepOutcome {
+    fn state_step(
+        &self,
+        mut state: &mut S,
+        mut rng: &mut SmallRng,
+        max_time_step: f64,
+    ) -> StepOutcome {
         let time_step = -f64::ln(rng.gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
@@ -479,16 +502,24 @@ impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for 
         minsize: NumTiles,
         maxsize: NumTiles,
         maxevents: NumEvents,
-        rng: &mut SmallRng
+        rng: &mut SmallRng,
     ) {
         let mut events: NumEvents = 0;
 
         while (events < maxevents) & (state.ntiles() < maxsize) & (state.ntiles() > minsize) {
             match self.state_step(state, rng, 1e100) {
-                StepOutcome::HadEventAt(_) => { events += 1; }
-                StepOutcome::NoEventIn(_) => { println!("Timeout {:?}", state); }
-                StepOutcome::DeadEventAt(_) => { println!("Dead"); }
-                StepOutcome::ZeroRate => {panic!()}
+                StepOutcome::HadEventAt(_) => {
+                    events += 1;
+                }
+                StepOutcome::NoEventIn(_) => {
+                    println!("Timeout {:?}", state);
+                }
+                StepOutcome::DeadEventAt(_) => {
+                    println!("Dead");
+                }
+                StepOutcome::ZeroRate => {
+                    panic!()
+                }
             }
         }
     }
@@ -503,7 +534,6 @@ impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for 
         let event = Event::SingleTileAttach(point, tile);
 
         self.update_after_event(state, &event);
-
     }
 
     fn perform_event(&self, state: &mut S, event: &Event) {
@@ -534,7 +564,10 @@ impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for 
     }
 
     fn update_points(&self, state: &mut S, points: &[PointSafeHere]) {
-        let rates = points.iter().map(|p| self.event_rate_at_point(state, *p)).collect::<Vec<_>>();
+        let rates = points
+            .iter()
+            .map(|p| self.event_rate_at_point(state, *p))
+            .collect::<Vec<_>>();
 
         state.update_multiple(&points, &rates);
     }
@@ -546,44 +579,75 @@ impl<S: State> StaticKTAMCover<S> {
 
         let mut total_rate = 0.;
         for c in cc {
-            if self.inner.bond_strength_of_tile_at_point(state, p, c.like_tile) > 0. {
-                total_rate += self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile as usize];
+            if self
+                .inner
+                .bond_strength_of_tile_at_point(state, p, c.like_tile)
+                > 0.
+            {
+                total_rate +=
+                    self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile as usize];
             }
         }
 
         total_rate
     }
-    fn choose_cover_to_composite(&self, state: &S, p: PointSafeAdjs, t: usize, mut acc: Rate) -> PossibleChoice {
+    fn choose_cover_to_composite(
+        &self,
+        state: &S,
+        p: PointSafeAdjs,
+        t: usize,
+        mut acc: Rate,
+    ) -> PossibleChoice {
         let cc = &self.cover_attach_info[t as usize];
 
         for c in cc {
-            if self.inner.bond_strength_of_tile_at_point(state, p, c.like_tile) > 0. {
+            if self
+                .inner
+                .bond_strength_of_tile_at_point(state, p, c.like_tile)
+                > 0.
+            {
                 acc -= self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile as usize];
                 if acc <= 0. {
-                    return PossibleChoice::Event(Event::SingleTileChange(p, c.new_tile))
+                    return PossibleChoice::Event(Event::SingleTileChange(p, c.new_tile));
                 }
             }
         }
 
         PossibleChoice::Remainder(acc)
-    } 
+    }
     fn composite_to_cover_rate(&self, state: &S, p: PointSafeAdjs, t: usize) -> Rate {
         let cc = &self.composite_detach_info[t as usize];
 
         let mut total_rate = 0.;
         for c in cc {
-            total_rate += self.inner.k_f_hat() * f64::exp(-self.inner.bond_strength_of_tile_at_point(state, p, c.like_tile));
+            total_rate += self.inner.k_f_hat()
+                * f64::exp(
+                    -self
+                        .inner
+                        .bond_strength_of_tile_at_point(state, p, c.like_tile),
+                );
         }
 
         total_rate
     }
-    fn choose_composite_to_cover(&self, state: &S, p: PointSafeAdjs, t: usize, mut acc: Rate) -> PossibleChoice {
+    fn choose_composite_to_cover(
+        &self,
+        state: &S,
+        p: PointSafeAdjs,
+        t: usize,
+        mut acc: Rate,
+    ) -> PossibleChoice {
         let cc = &self.composite_detach_info[t as usize];
 
         for c in cc {
-            acc -= self.inner.k_f_hat() * f64::exp(-self.inner.bond_strength_of_tile_at_point(state, p, c.like_tile));
+            acc -= self.inner.k_f_hat()
+                * f64::exp(
+                    -self
+                        .inner
+                        .bond_strength_of_tile_at_point(state, p, c.like_tile),
+                );
             if acc <= 0. {
-                return PossibleChoice::Event(Event::SingleTileChange(p, c.new_tile))
+                return PossibleChoice::Event(Event::SingleTileChange(p, c.new_tile));
             }
         }
 
@@ -615,10 +679,7 @@ pub struct StaticKTAM<C: State> {
     _canvas: PhantomData<*const C>,
 }
 
-
-
 unsafe impl<C: State> Send for StaticKTAM<C> {}
-
 
 impl<C: State> TileBondInfo for StaticKTAMCover<C> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
@@ -673,8 +734,6 @@ impl<C: State> TileBondInfo for StaticKTAM<C> {
 }
 
 // // // BEGIN KTAM // // //
-
-
 
 impl<C: State> StaticKTAM<C> {
     pub fn from_ktam(
@@ -758,42 +817,48 @@ impl<C: State> StaticKTAM<C> {
             chunk_size: chunk_size.unwrap_or(ChunkSize::Single),
             _canvas: PhantomData,
         };
-
-
     }
 
     fn points_to_update_around(&self, state: &C, p: &PointSafeAdjs) -> Vec<PointSafeHere> {
         match self.chunk_size {
             ChunkSize::Single => {
                 let mut points = Vec::with_capacity(5);
-                points.extend_from_slice(&[state.move_sa_n(*p),
-                state.move_sa_w(*p),
-                PointSafeHere(p.0),
-                state.move_sa_e(*p),
-                state.move_sa_s(*p)]);
+                points.extend_from_slice(&[
+                    state.move_sa_n(*p),
+                    state.move_sa_w(*p),
+                    PointSafeHere(p.0),
+                    state.move_sa_e(*p),
+                    state.move_sa_s(*p),
+                ]);
                 points
             }
             ChunkSize::Dimer => {
                 let mut points = Vec::with_capacity(10);
-                points.extend_from_slice(&[state.move_sa_n(*p),
-                state.move_sa_w(*p),
-                PointSafeHere(p.0),
-                state.move_sa_e(*p),
-                state.move_sa_s(*p),
-                state.move_sa_nw(*p),
-                state.move_sa_ne(*p),
-                state.move_sa_sw(*p)]);
-                
+                points.extend_from_slice(&[
+                    state.move_sa_n(*p),
+                    state.move_sa_w(*p),
+                    PointSafeHere(p.0),
+                    state.move_sa_e(*p),
+                    state.move_sa_s(*p),
+                    state.move_sa_nw(*p),
+                    state.move_sa_ne(*p),
+                    state.move_sa_sw(*p),
+                ]);
+
                 let w = state.move_sa_w(*p);
                 let n = state.move_sa_n(*p);
 
-                if state.inbounds(w.0) { points.push(PointSafeHere(state.move_sh_w(w))); }
-                if state.inbounds(n.0) { points.push(PointSafeHere(state.move_sh_n(n))); }
+                if state.inbounds(w.0) {
+                    points.push(PointSafeHere(state.move_sh_w(w)));
+                }
+                if state.inbounds(n.0) {
+                    points.push(PointSafeHere(state.move_sh_n(n)));
+                }
                 points
             }
         }
     }
-    
+
     pub fn tile_concs(&self) -> Array1<f64> {
         self.tile_adj_concs.to_owned() * f64::exp(self.alpha)
     }
@@ -899,11 +964,12 @@ impl<C: State> StaticKTAM<C> {
             0.0
         } else {
             let t2 = unsafe { canvas.uv_p(p2) };
-             {
-                self.k_f_hat() * Rate::exp(
-                    -ts - self.bond_strength_of_tile_at_point(canvas, PointSafeAdjs(p2), t2) // FIXME
+            {
+                self.k_f_hat()
+                    * Rate::exp(
+                        -ts - self.bond_strength_of_tile_at_point(canvas, PointSafeAdjs(p2), t2) // FIXME
                         + 2. * self.energy_ns[(t as usize, t2 as usize)],
-                )
+                    )
             }
         }
     }
@@ -915,11 +981,12 @@ impl<C: State> StaticKTAM<C> {
             0.0
         } else {
             let t2 = unsafe { canvas.uv_p(p2) };
-             {
-                self.k_f_hat() * Rate::exp(
-                    -ts - self.bond_strength_of_tile_at_point(canvas, PointSafeAdjs(p2), t2) // FIXME
+            {
+                self.k_f_hat()
+                    * Rate::exp(
+                        -ts - self.bond_strength_of_tile_at_point(canvas, PointSafeAdjs(p2), t2) // FIXME
                         + 2. * self.energy_we[(t as usize, t2 as usize)],
-                )
+                    )
             }
         }
     }
@@ -928,7 +995,7 @@ impl<C: State> StaticKTAM<C> {
         match self.chunk_size {
             ChunkSize::Single => 0.0,
             ChunkSize::Dimer => {
-                let ts =  { self.bond_strength_of_tile_at_point(canvas, PointSafeAdjs(p), t) }; // FIXME
+                let ts = { self.bond_strength_of_tile_at_point(canvas, PointSafeAdjs(p), t) }; // FIXME
                 self.dimer_s_detach_rate(canvas, p, t, ts)
                     + self.dimer_e_detach_rate(canvas, p, t, ts)
             }
@@ -944,14 +1011,13 @@ impl<C: State> StaticKTAM<C> {
         now_empty: &mut Vec<PointSafeAdjs>,
         possible_starts: &mut Vec<PointSafeAdjs>,
     ) {
-
         match self.chunk_size {
             ChunkSize::Single => panic!(),
             ChunkSize::Dimer => {
-                let ts =  { self.bond_strength_of_tile_at_point(canvas, p, tile as u32) };
+                let ts = { self.bond_strength_of_tile_at_point(canvas, p, tile as u32) };
                 *acc -= self.dimer_s_detach_rate(canvas, p.0, tile as u32, ts);
                 if *acc <= 0. {
-                    let p2 = PointSafeAdjs(canvas.move_sa_s(p).0); 
+                    let p2 = PointSafeAdjs(canvas.move_sa_s(p).0);
                     let t2 = { canvas.v_sa(p2) } as usize;
                     now_empty.push(p);
                     now_empty.push(p2);
@@ -980,27 +1046,27 @@ impl<C: State> StaticKTAM<C> {
                 *acc -= self.dimer_e_detach_rate(canvas, p.0, tile as u32, ts);
                 if *acc <= 0. {
                     let p2 = PointSafeAdjs(canvas.move_sa_e(p).0);
-                    let t2 =  { canvas.v_sa(p2) } as usize;
+                    let t2 = { canvas.v_sa(p2) } as usize;
                     now_empty.push(p);
                     now_empty.push(p2);
                     // West tile adjacents
-                    if self.energy_we[( { canvas.v_sa_w(p) } as usize, tile)] > 0. {
+                    if self.energy_we[({ canvas.v_sa_w(p) } as usize, tile)] > 0. {
                         possible_starts.push(PointSafeAdjs(canvas.move_sa_w(p).0))
                     };
-                    if self.energy_ns[( { canvas.v_sa_n(p) } as usize, tile)] > 0. {
+                    if self.energy_ns[({ canvas.v_sa_n(p) } as usize, tile)] > 0. {
                         possible_starts.push(PointSafeAdjs(canvas.move_sa_n(p).0))
                     };
-                    if self.energy_ns[(tile,  { canvas.v_sa_s(p) } as usize)] > 0. {
+                    if self.energy_ns[(tile, { canvas.v_sa_s(p) } as usize)] > 0. {
                         possible_starts.push(PointSafeAdjs(canvas.move_sa_s(p).0))
                     };
                     // East tile adjacents
-                    if self.energy_we[(t2,  { canvas.v_sa_e(p2) } as usize)] > 0. {
+                    if self.energy_we[(t2, { canvas.v_sa_e(p2) } as usize)] > 0. {
                         possible_starts.push(PointSafeAdjs(canvas.move_sa_e(p2).0))
                     };
-                    if self.energy_ns[( { canvas.v_sa_n(p2) } as usize, t2)] > 0. {
+                    if self.energy_ns[({ canvas.v_sa_n(p2) } as usize, t2)] > 0. {
                         possible_starts.push(PointSafeAdjs(canvas.move_sa_n(p2).0))
                     };
-                    if self.energy_ns[(t2,  { canvas.v_sa_s(p2) } as usize)] > 0. {
+                    if self.energy_ns[(t2, { canvas.v_sa_s(p2) } as usize)] > 0. {
                         possible_starts.push(PointSafeAdjs(canvas.move_sa_s(p2).0))
                     };
                     return ();
@@ -1014,40 +1080,42 @@ impl<C: State> StaticKTAM<C> {
 impl<C, T> System<C, T> for StaticKTAM<C>
 where
     C: State + StateTracked<T>,
-    T: StateTracker
+    T: StateTracker,
 {
     fn event_rate_at_point(&self, canvas: &C, point: PointSafeHere) -> Rate {
         let p = if canvas.inbounds(point.0) {
             PointSafeAdjs(point.0)
         } else {
-            return 0.
+            return 0.;
         };
 
         // Bound is previously checked.
-        let tile =  { canvas.v_sa(p) };
+        let tile = { canvas.v_sa(p) };
 
         if tile != 0 {
             // Deletion
 
             // Check seed
-            if self.is_seed(p.0) { // FIXME
+            if self.is_seed(p.0) {
+                // FIXME
                 return 0.0;
             }
 
             // Bound is previously checked
-            let bound_energy =  { self.bond_strength_of_tile_at_point(canvas, p, tile) };
+            let bound_energy = { self.bond_strength_of_tile_at_point(canvas, p, tile) };
 
             match self.chunk_handling {
                 ChunkHandling::None => self.k_f_hat() * Rate::exp(-bound_energy),
                 ChunkHandling::Detach | ChunkHandling::Equilibrium => {
-                    self.k_f_hat() * Rate::exp(-bound_energy) + self.chunk_detach_rate(canvas, p.0, tile) // FIXME
+                    self.k_f_hat() * Rate::exp(-bound_energy)
+                        + self.chunk_detach_rate(canvas, p.0, tile) // FIXME
                 }
             }
         } else {
-            let tw =  { canvas.v_sa_w(p) };
-            let te =  { canvas.v_sa_e(p) };
-            let ts =  { canvas.v_sa_s(p) };
-            let tn =  { canvas.v_sa_n(p) };
+            let tw = { canvas.v_sa_w(p) };
+            let te = { canvas.v_sa_e(p) };
+            let ts = { canvas.v_sa_s(p) };
+            let tn = { canvas.v_sa_n(p) };
 
             // Short circuit if no adjacent tiles.
             if (tn == 0) & (tw == 0) & (te == 0) & (ts == 0) {
@@ -1083,7 +1151,8 @@ where
                         acc += self.tile_adj_concs[t as usize];
                     }
 
-                    self.insertcache.0
+                    self.insertcache
+                        .0
                         .write()
                         .unwrap()
                         .cache_set((tn, te, ts, tw), acc);
@@ -1108,22 +1177,24 @@ where
     }
 
     fn choose_event_at_point(&self, canvas: &C, p: PointSafeAdjs, mut acc: Rate) -> Event {
-        let tile =  { canvas.v_sa(p) as usize };
+        let tile = { canvas.v_sa(p) as usize };
 
-        let tn =  { canvas.v_sa_n(p) as usize };
-        let tw =  { canvas.v_sa_w(p) as usize };
-        let te =  { canvas.v_sa_e(p) as usize };
-        let ts =  { canvas.v_sa_s(p) as usize };
+        let tn = { canvas.v_sa_n(p) as usize };
+        let tw = { canvas.v_sa_w(p) as usize };
+        let te = { canvas.v_sa_e(p) as usize };
+        let ts = { canvas.v_sa_s(p) as usize };
 
         if tile != 0 {
-            acc -=  {
-                self.k_f_hat() * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile as u32))
+            acc -= {
+                self.k_f_hat()
+                    * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile as u32))
             };
 
             let mut possible_starts = Vec::new();
             let mut now_empty = Vec::new();
 
-            if acc <= 0. {  // FIXME
+            if acc <= 0. {
+                // FIXME
                 if self.energy_ns[(tn, tile)] > 0. {
                     possible_starts.push(PointSafeAdjs(canvas.move_sa_n(p).0))
                 };
@@ -1136,7 +1207,7 @@ where
                 if self.energy_we[(tile, te)] > 0. {
                     possible_starts.push(PointSafeAdjs(canvas.move_sa_e(p).0))
                 };
- 
+
                 now_empty.push(p);
 
                 match self.determine_fission(canvas, &possible_starts, &now_empty) {
@@ -1263,7 +1334,8 @@ where
 
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
             if *e != 0. {
-                let biconc = f64::exp(2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
+                let biconc =
+                    f64::exp(2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
@@ -1276,7 +1348,8 @@ where
 
         for ((t1, t2), e) in self.energy_we.indexed_iter() {
             if *e != 0. {
-                let biconc = f64::exp(2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
+                let biconc =
+                    f64::exp(2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
@@ -1292,40 +1365,48 @@ where
 
     fn update_after_event(&self, mut state: &mut C, event: &Event) {
         match event {
-            Event::None => { panic!("Being asked to update after a dead event.") }
-            Event::SingleTileAttach(p, _) | 
-            Event::SingleTileDetach(p) |
-            Event::SingleTileChange(p, _) => {
-                match self.chunk_size {
-                    ChunkSize::Single => {
-                        let points = [state.move_sa_n(*p),
+            Event::None => {
+                panic!("Being asked to update after a dead event.")
+            }
+            Event::SingleTileAttach(p, _)
+            | Event::SingleTileDetach(p)
+            | Event::SingleTileChange(p, _) => match self.chunk_size {
+                ChunkSize::Single => {
+                    let points = [
+                        state.move_sa_n(*p),
                         state.move_sa_w(*p),
                         PointSafeHere(p.0),
                         state.move_sa_e(*p),
-                        state.move_sa_s(*p)];
-                        self.update_points(&mut state, &points);
-                    }
-                    ChunkSize::Dimer => {
-                        let mut points = Vec::with_capacity(10);
-                        points.extend_from_slice(&[state.move_sa_n(*p),
+                        state.move_sa_s(*p),
+                    ];
+                    self.update_points(&mut state, &points);
+                }
+                ChunkSize::Dimer => {
+                    let mut points = Vec::with_capacity(10);
+                    points.extend_from_slice(&[
+                        state.move_sa_n(*p),
                         state.move_sa_w(*p),
                         PointSafeHere(p.0),
                         state.move_sa_e(*p),
                         state.move_sa_s(*p),
                         state.move_sa_nw(*p),
                         state.move_sa_ne(*p),
-                        state.move_sa_sw(*p)]);
-                        
-                        let w = state.move_sa_w(*p);
-                        let n = state.move_sa_n(*p);
+                        state.move_sa_sw(*p),
+                    ]);
 
-                        if state.inbounds(w.0) { points.push(PointSafeHere(state.move_sh_w(w))); }
-                        if state.inbounds(n.0) { points.push(PointSafeHere(state.move_sh_n(n))); }
+                    let w = state.move_sa_w(*p);
+                    let n = state.move_sa_n(*p);
 
-                        self.update_points(&mut state, &points);
+                    if state.inbounds(w.0) {
+                        points.push(PointSafeHere(state.move_sh_w(w)));
                     }
+                    if state.inbounds(n.0) {
+                        points.push(PointSafeHere(state.move_sh_n(n)));
+                    }
+
+                    self.update_points(&mut state, &points);
                 }
-            }
+            },
             Event::MultiTileDetach(v) => {
                 let mut points = Vec::new();
                 for p in v {
@@ -1335,8 +1416,7 @@ where
                 points.dedup();
                 self.update_points(&mut state, &points);
             }
-            Event::MultiTileAttach(v) |
-            Event::MultiTileChange(v) => {
+            Event::MultiTileAttach(v) | Event::MultiTileChange(v) => {
                 let mut points = Vec::new();
                 for (p, _) in v {
                     points.extend(self.points_to_update_around(state, p));
@@ -1352,13 +1432,13 @@ where
         let threshold = 0.1;
         let mut arr = Array2::zeros(state.raw_array().raw_dim());
 
-        for y in 1..(arr.nrows()-1) {
-            for x in 1..(arr.ncols()-1) {
-                let p = PointSafeAdjs((y,x));
+        for y in 1..(arr.nrows() - 1) {
+            for x in 1..(arr.ncols() - 1) {
+                let p = PointSafeAdjs((y, x));
                 let t = state.v_sa(p) as usize;
 
                 if t == 0 {
-                    arr[(y,x)] = 0;
+                    arr[(y, x)] = 0;
                     continue;
                 }
 
@@ -1367,12 +1447,12 @@ where
                 let ts = state.v_sa_s(p) as usize;
                 let tw = state.v_sa_w(p) as usize;
 
-                let nm = ((tn != 0) & (self.energy_ns[(tn,t)] < threshold)) as usize;
-                let ne = ((te != 0) & (self.energy_we[(t,te)] < threshold)) as usize;
-                let ns = ((ts != 0) & (self.energy_ns[(t,ts)] < threshold)) as usize;
-                let nw = ((tw != 0) & (self.energy_we[(tw,t)] < threshold)) as usize;
+                let nm = ((tn != 0) & (self.energy_ns[(tn, t)] < threshold)) as usize;
+                let ne = ((te != 0) & (self.energy_we[(t, te)] < threshold)) as usize;
+                let ns = ((ts != 0) & (self.energy_ns[(t, ts)] < threshold)) as usize;
+                let nw = ((tw != 0) & (self.energy_we[(tw, t)] < threshold)) as usize;
 
-                arr[(y,x)] = nm + ne + ns + nw;
+                arr[(y, x)] = nm + ne + ns + nw;
             }
         }
 

@@ -1,17 +1,17 @@
+#![feature(stmt_expr_attributes)]
 extern crate ndarray;
 
 use clap::Clap;
 
 use rgrow::{ffs, parser::TileSet, parser_xgrow};
 
-use rgrow::{state, canvas};
+use rgrow::{canvas, state};
 
 use serde_yaml;
 use std::fs::File;
 
-#[cfg(feature="ui")]
+#[cfg(feature = "ui")]
 use rgrow::ui::run_ktam_window;
-
 
 #[derive(Clap)]
 #[clap(version = "0.1.0", author = "Constantine Evans <cevans@costinet.org")]
@@ -26,9 +26,9 @@ enum SubCommand {
     //RunSubs(EO),
     //Parse(PO),
     //RunAtam(PO),
-    Run(PO),
+    //Run(PO),
     NucRate(PO),
-    RunXgrow(PO),
+    //RunXgrow(PO),
     //FissionTest(EO)
 }
 
@@ -44,22 +44,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts = Opts::parse();
 
     match opts.subcmd {
-        SubCommand::Run(po) => {
-            #[cfg(feature="ui")] {
-                let file = match File::open(po.input) {
-                    Ok(f) => {f}
-                    Err(e) => {return Err(Box::new(rgrow::parser::ParserError::Io { source: e }))}
-                };
-                let parsed: TileSet = serde_yaml::from_reader(file)?;
-                run_ktam_window(parsed)
-            }
-        },
+        // SubCommand::Run(po) =>
+        // #[cfg(feature = "ui")]
+        // {
+        //     let file = match File::open(po.input) {
+        //         Ok(f) => f,
+        //         Err(e) => return Err(Box::new(rgrow::parser::ParserError::Io { source: e })),
+        //     };
+        //     let parsed: TileSet = serde_yaml::from_reader(file)?;
+        //     run_ktam_window(parsed)
+        // }
         SubCommand::NucRate(po) => nucrate(po.input),
-        SubCommand::RunXgrow(po) =>  {#[cfg(feature="ui")]
-         {
-            let parsed = parser_xgrow::parse_xgrow(po.input)?;
-            run_ktam_window(parsed)
-        }}
+        // SubCommand::RunXgrow(po) =>
+        // #[cfg(feature = "ui")]
+        // {
+        //     let parsed = parser_xgrow::parse_xgrow(po.input)?;
+        //     run_ktam_window(parsed)
+        // }
     };
 
     Ok(())
@@ -77,7 +78,6 @@ fn nucrate(input: String) {
     println!("Nuc rate: {:e}", ffsrun.nucleation_rate());
     println!("Forwards: {:?}", ffsrun.forward_vec());
 }
-
 
 // fn run_example() {
 //     let gs = arr1(&[0.0, 2.0, 1.0, 1.0]);
@@ -235,5 +235,3 @@ fn nucrate(input: String) {
 
 //     println!("{} tiles, {} events, {} secs, {} ev/sec", nt, ev, el, evps);
 // }
-
-

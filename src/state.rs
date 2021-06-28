@@ -1,9 +1,14 @@
 use super::base::*;
+use crate::canvas::{Canvas, CanvasCreate, CanvasSquarable};
+use crate::{
+    canvas::PointSafeAdjs,
+    canvas::PointSafeHere,
+    ratestore::{CreateSizedRateStore, QuadTreeArray, RateStore},
+    system,
+};
 use ndarray::prelude::*;
 use rand::prelude::SmallRng;
-use std::{fmt::Debug};
-use crate::{canvas::PointSafeAdjs, canvas::PointSafeHere, ratestore::{RateStore, QuadTreeArray, CreateSizedRateStore}, system};
-use crate::canvas::{Canvas, CanvasSquarable, CanvasCreate};
+use std::fmt::Debug;
 
 pub trait State: RateStoreP + Canvas + StateStatus {
     fn panicinfo(&self) -> String;
@@ -43,14 +48,18 @@ impl<C: CanvasSquarable, T: StateTracker> QuadTreeState<C, T> {
 pub trait RateStoreP {
     fn choose_point(&self, rng: &mut SmallRng) -> (Point, Rate);
     fn update_point(&mut self, point: PointSafeHere, new_rate: Rate);
-    fn update_multiple(&mut self, points: &[PointSafeHere], rates: &[Rate]); 
+    fn update_multiple(&mut self, points: &[PointSafeHere], rates: &[Rate]);
     fn total_rate(&self) -> Rate;
 }
 impl<C: CanvasSquarable, T: StateTracker> State for QuadTreeState<C, T> {
     fn panicinfo(&self) -> String {
-        
-            format!("{:?} {:?} {}={}", self.rates, self.canvas.raw_array(), self.ntiles(), self.calc_ntiles())
-        
+        format!(
+            "{:?} {:?} {}={}",
+            self.rates,
+            self.canvas.raw_array(),
+            self.ntiles(),
+            self.calc_ntiles()
+        )
     }
 }
 
@@ -74,8 +83,7 @@ impl<C: CanvasSquarable, T: StateTracker> RateStoreP for QuadTreeState<C, T> {
     }
 }
 
-impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T>
-{
+impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
         self.canvas.uv_pr(p)
     }
@@ -114,25 +122,26 @@ impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T>
 
     fn nrows(&self) -> usize {
         self.canvas.raw_array().nrows()
-    }    
-    
+    }
+
     fn ncols(&self) -> usize {
         self.canvas.raw_array().ncols()
     }
 
     fn set_sa(&mut self, p: &PointSafeAdjs, t: &Tile) {
-
         let r = unsafe { self.uvm_p(p.0) };
 
         let old_tile = *r;
-        
+
         *r = *t;
 
-        if (old_tile == 0) & (*t > 0) { self.ntiles += 1 }
-        if (old_tile > 0) & (*t == 0) { self.ntiles -= 1 }
-
+        if (old_tile == 0) & (*t > 0) {
+            self.ntiles += 1
+        }
+        if (old_tile > 0) & (*t == 0) {
+            self.ntiles -= 1
+        }
     }
-
 }
 
 impl<C, T> StateCreate for QuadTreeState<C, T>
@@ -159,8 +168,7 @@ where
     }
 }
 
-impl<C: Canvas + CanvasSquarable, T: StateTracker> StateStatus for QuadTreeState<C, T>
-{
+impl<C: Canvas + CanvasSquarable, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     #[inline(always)]
     fn ntiles(&self) -> NumTiles {
         self.ntiles
@@ -181,8 +189,8 @@ impl<C: Canvas + CanvasSquarable, T: StateTracker> StateStatus for QuadTreeState
 }
 
 pub trait DangerousStateClone {
-    fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self ;
-    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self ;
+    fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self;
+    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self;
 }
 
 impl<C: Canvas + CanvasSquarable, T: StateTracker> DangerousStateClone for QuadTreeState<C, T> {
@@ -195,11 +203,10 @@ impl<C: Canvas + CanvasSquarable, T: StateTracker> DangerousStateClone for QuadT
     ///
     /// If on debug, conditions should be checked (TODO)
     fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self {
-        let max_level = self.rates.0.len()-1; // FIXME: should not go into RateStore
+        let max_level = self.rates.0.len() - 1; // FIXME: should not go into RateStore
 
         self.copy_level_quad(source, max_level, (0, 0));
 
-        
         // General housekeeping
         self.ntiles = source.ntiles;
         self.total_events = source.total_events;
@@ -214,7 +221,8 @@ impl<C: Canvas + CanvasSquarable, T: StateTracker> DangerousStateClone for QuadT
         self
     }
 
-    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self { // FIXME: should not go into ratestore
+    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self {
+        // FIXME: should not go into ratestore
         let (y, x) = point;
 
         if level > 0 {
@@ -290,45 +298,57 @@ impl StateTracker for NullStateTracker {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct OrderTracker {
     pub order: u64,
-    pub arr: Array2<NumEvents>
+    pub arr: Array2<NumEvents>,
 }
 
 impl StateTracker for OrderTracker {
     fn default(canvas: &dyn Canvas) -> Self {
-        OrderTracker { order: 0, arr: Array2::<NumEvents>::zeros((canvas.nrows(), canvas.ncols())) }
+        OrderTracker {
+            order: 0,
+            arr: Array2::<NumEvents>::zeros((canvas.nrows(), canvas.ncols())),
+        }
     }
 
     fn record_single_event(&mut self, event: &system::Event) -> &mut Self {
         match event {
-            system::Event::None => { self }
-            system::Event::SingleTileAttach(p, t) => { self.arr[p.0] = self.order; self.order+=1; self }
-            system::Event::SingleTileDetach(p) => { self.arr[p.0] = 0; self }
-            system::Event::SingleTileChange(p, t) => { self.arr[p.0] = self.order; self.order+=1; self }
+            system::Event::None => self,
+            system::Event::SingleTileAttach(p, t) => {
+                self.arr[p.0] = self.order;
+                self.order += 1;
+                self
+            }
+            system::Event::SingleTileDetach(p) => {
+                self.arr[p.0] = 0;
+                self
+            }
+            system::Event::SingleTileChange(p, t) => {
+                self.arr[p.0] = self.order;
+                self.order += 1;
+                self
+            }
             system::Event::MultiTileChange(vec) => {
                 for (p, t) in vec {
-                    self.arr[p.0] = self.order; 
+                    self.arr[p.0] = self.order;
                 }
-                self.order+=1;
+                self.order += 1;
                 self
             }
             system::Event::MultiTileAttach(vec) => {
                 for (p, t) in vec {
-                    self.arr[p.0] = self.order; 
+                    self.arr[p.0] = self.order;
                 }
-                self.order+=1;
+                self.order += 1;
                 self
             }
             system::Event::MultiTileDetach(vec) => {
                 for p in vec {
-                    self.arr[p.0] = 0; 
+                    self.arr[p.0] = 0;
                 }
                 self
             }
-
         }
     }
 }

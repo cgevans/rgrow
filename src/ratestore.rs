@@ -1,5 +1,5 @@
 use ndarray::Array2;
-use rand::{Rng, prelude::SmallRng};
+use rand::{prelude::SmallRng, Rng};
 
 use crate::base::{Point, Rate};
 
@@ -7,7 +7,7 @@ use crate::base::{Point, Rate};
 pub trait RateStore {
     fn choose_point(&self, rng: &mut SmallRng) -> (Point, Rate);
     fn update_point(&mut self, point: Point, new_rate: Rate);
-    fn update_multiple(&mut self, points: &[Point], rates: &[Rate]); 
+    fn update_multiple(&mut self, points: &[Point], rates: &[Rate]);
     fn total_rate(&self) -> Rate;
 }
 
@@ -20,9 +20,7 @@ pub trait CreateSizedRateStore {
 pub struct QuadTreeArray<R>(pub Vec<Array2<R>>, pub R);
 
 impl<R> QuadTreeArray<R> {
-    pub fn rebuild(&mut self) {
-        
-    } 
+    pub fn rebuild(&mut self) {}
 }
 
 impl CreateSizedRateStore for QuadTreeArray<Rate> {
@@ -90,12 +88,11 @@ impl RateStore for QuadTreeArray<Rate> {
         r_prev[point] = new_rate;
 
         for r_next in rtiter {
-            point = (point.0/2, point.1/2);
+            point = (point.0 / 2, point.1 / 2);
             qt_update_level(r_next, r_prev, point);
             r_prev = r_next;
         }
         self.1 = r_prev.sum();
-
     }
 
     #[inline(always)]
@@ -116,7 +113,7 @@ impl RateStore for QuadTreeArray<Rate> {
         for r_next in rtiter {
             for p in todo.iter_mut() {
                 qt_update_level(r_next, r_prev, *p);
-                *p = (p.0/2, p.1/2);
+                *p = (p.0 / 2, p.1 / 2);
             }
             todo.sort_unstable();
             todo.dedup();
@@ -129,7 +126,6 @@ impl RateStore for QuadTreeArray<Rate> {
     fn total_rate(&self) -> Rate {
         self.1
     }
-
 }
 
 #[inline(always)]

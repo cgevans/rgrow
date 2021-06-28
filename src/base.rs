@@ -11,7 +11,7 @@ pub type CanvasLength = usize;
 #[derive(thiserror::Error, Debug)]
 pub enum GrowError {
     #[error("can't create canvas from array of size ({0}, {1})")]
-    WrongCanvasSize(usize, usize)
+    WrongCanvasSize(usize, usize),
 }
 
 pub type GrowResult<T> = Result<T, GrowError>;

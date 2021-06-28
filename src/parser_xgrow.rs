@@ -8,18 +8,19 @@ use super::parser::GlueIdent;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
+    character::complete::multispace1,
     character::complete::{digit1, not_line_ending, space0},
-    character::complete::{multispace1},
+    combinator::all_consuming,
     combinator::{map, map_res, opt},
     error::ParseError,
-    multi::{many1},
+    multi::many1,
     number::complete::recognize_float,
     sequence::{delimited, preceded, tuple},
     IResult,
-combinator::all_consuming};
+};
 
-use std::{fs::File, error::Error};
 use std::io::prelude::*;
+use std::{error::Error, fs::File};
 
 fn std_delim<'a, P, O, E: ParseError<&'a str>>(
     parser: P,
@@ -151,7 +152,7 @@ fn parse(input: &str) -> IResult<&str, parser::TileSet> {
             tiles,
             bonds,
             options,
-            cover_strands: None
+            cover_strands: None,
         },
     ))
 
@@ -199,8 +200,11 @@ fn arg_seed(input: &str) -> IResult<&str, XgrowArgs> {
         tag("seed="),
         map(
             tuple((take_u32, tag(","), take_u32, tag(","), take_u32)),
-            |(x, _, y, _, t)| XgrowArgs::Seed(parser::ParsedSeed::Single(y as usize, x as usize, t)))
-        )(input)
+            |(x, _, y, _, t)| {
+                XgrowArgs::Seed(parser::ParsedSeed::Single(y as usize, x as usize, t))
+            },
+        ),
+    )(input)
 }
 
 fn unhandled_option(input: &str) -> IResult<&str, XgrowArgs> {
@@ -250,7 +254,7 @@ fn xgrow_args(input: &str) -> IResult<&str, parser::Args> {
     }
 
     if let parser::ParsedSeed::None() = args.seed {
-        args.seed = parser::ParsedSeed::Single(args.size-2, args.size-2, 1);
+        args.seed = parser::ParsedSeed::Single(args.size - 2, args.size - 2, 1);
     }
 
     args.fission = FissionHandling::NoFission;
@@ -258,7 +262,7 @@ fn xgrow_args(input: &str) -> IResult<&str, parser::Args> {
     Ok((i2, args))
 }
 
-pub fn parse_xgrow(file: String) -> Result<parser::TileSet, Box <dyn Error>> {
+pub fn parse_xgrow(file: String) -> Result<parser::TileSet, Box<dyn Error>> {
     let mut f = File::open(file)?;
 
     let mut tilestring = String::new();
