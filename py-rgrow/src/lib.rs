@@ -635,7 +635,6 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         //     self.inner.tile_colors()
         // }
 
-
         #[getter]
         fn energy_ns<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
             self.inner.as_ref().unwrap().energy_ns.to_pyarray(py)
