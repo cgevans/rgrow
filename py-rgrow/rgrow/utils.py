@@ -17,9 +17,9 @@ def _ffs_extract_trajectories(backlist: List[List[int]]) -> ndarray:
 
     backarray = list(np.array(x) for x in backlist)
 
-    trajs = np.full((ntraj, nsurf), -1, dtype=int)
+    trajs = np.full((ntraj, nsurf), -1, dtype=np.int16)
 
-    trajs[:, -1] = np.arange(0, ntraj, dtype=int)
+    trajs[:, -1] = np.arange(0, ntraj, dtype=np.int16)
 
     for j in range(nsurf-2, -1, -1):
         trajs[:, j] = backarray[j+1][trajs[:, j+1]]
@@ -39,6 +39,8 @@ class FFSResult:
     previous_configs: List[List[int]]
     system: Optional[rg.StaticKTAMPeriodic]
     aligned_configs: bool = False
+    _saved_trajectory_configs: Optional[ndarray] = None
+    _saved_trajectory_indices: Optional[ndarray] = None
 
     def align_configs(self,
                       alignment_function: Callable[
@@ -51,15 +53,26 @@ class FFSResult:
 
     @property
     def trajectory_indices(self) -> ndarray:
-        return _ffs_extract_trajectories(self.previous_configs)
+        if self._saved_trajectory_indices is not None:
+            return self._saved_trajectory_indices
+        else:
+            return _ffs_extract_trajectories(self.previous_configs)
+
+    def save_trajectories_and_delete_assemblies(self):
+        self._saved_trajectory_configs = self.trajectory_configs
+        self._saved_trajectory_indices = self.trajectory_indices
+        self.assemblies = []
 
     @property
     def trajectory_configs(self) -> ndarray:
+        if self._saved_trajectory_configs is not None:
+            return self._saved_trajectory_configs
         assert self.has_all_configs
 
         traj_indices = self.trajectory_indices
 
-        tc = np.ndarray(traj_indices.shape + self.canvas_shape, int)
+        # FIXME: might be too small...
+        tc = np.ndarray(traj_indices.shape + self.canvas_shape, np.int16)
 
         for traj_idx in range(0, len(traj_indices)):
             for surf_idx in range(0, len(traj_indices[0])):
