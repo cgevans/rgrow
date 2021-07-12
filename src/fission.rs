@@ -1,5 +1,5 @@
 use crate::state::State;
-use crate::{canvas::PointSafeAdjs, system::StaticKTAM};
+use crate::{canvas::PointSafe2, system::StaticKTAM};
 
 use super::base::Tile;
 use fnv::FnvHashMap;
@@ -52,15 +52,15 @@ type GroupNum = usize;
 #[derive(Debug)]
 pub struct GroupInfo {
     /// Contains mappings of point -> (unmerged) group number.
-    pub map: FnvHashMap<PointSafeAdjs, GroupNum>,
+    pub map: FnvHashMap<PointSafe2, GroupNum>,
     /// Contains mappings of unmerged group number to merged group number.
     groupmerges: Vec<GroupNum>,
     /// Contains lists of points in each (unmerged) group number.
-    pointlist: Vec<Vec<PointSafeAdjs>>,
+    pointlist: Vec<Vec<PointSafe2>>,
 }
 
 impl GroupInfo {
-    fn new(start_points: &Vec<&PointSafeAdjs>, now_empty: &[PointSafeAdjs]) -> Self {
+    fn new(start_points: &Vec<&PointSafe2>, now_empty: &[PointSafe2]) -> Self {
         let groupmerges = (0usize..=start_points.len()).collect();
 
         let mut map = FnvHashMap::default();
@@ -90,7 +90,7 @@ impl GroupInfo {
     /// If point2 is not in a group, add point2 to point1's group, then
     /// return false (further movement into point2 needed).
     /// Point1 must be in a group, and debug checks to make sure it isn't in zero.
-    fn merge_or_add(&mut self, point1: &PointSafeAdjs, point2: &PointSafeAdjs) -> bool {
+    fn merge_or_add(&mut self, point1: &PointSafe2, point2: &PointSafe2) -> bool {
         let g1 = self.groupmerges[*self.map.get(point1).unwrap()];
 
         assert!(g1 != 0);
@@ -119,7 +119,7 @@ impl GroupInfo {
         }
     }
 
-    pub fn choose_deletions_size_weighted(&self) -> Vec<PointSafeAdjs> {
+    pub fn choose_deletions_size_weighted(&self) -> Vec<PointSafe2> {
         let mpl = self.merged_pointlist();
         let mut rng = rand::thread_rng();
 
@@ -142,7 +142,7 @@ impl GroupInfo {
         deletions
     }
 
-    pub fn choose_deletions_keep_largest_group(&self) -> Vec<PointSafeAdjs> {
+    pub fn choose_deletions_keep_largest_group(&self) -> Vec<PointSafe2> {
         let mut mpl = self.merged_pointlist();
 
         let mut deletions = Vec::new();
@@ -163,8 +163,8 @@ impl GroupInfo {
 
     pub fn choose_deletions_seed_unattached(
         &self,
-        seeds: Vec<(PointSafeAdjs, Tile)>,
-    ) -> Vec<PointSafeAdjs> {
+        seeds: Vec<(PointSafe2, Tile)>,
+    ) -> Vec<PointSafe2> {
         let mut deletions = Vec::new();
 
         let seed_points = seeds.iter().map(|x| x.0).collect::<Vec<_>>();
@@ -190,8 +190,8 @@ impl GroupInfo {
         deletions
     }
 
-    pub fn merged_pointlist(&self) -> Vec<Vec<PointSafeAdjs>> {
-        let mut mergedpointhash = FnvHashMap::<usize, Vec<PointSafeAdjs>>::default();
+    pub fn merged_pointlist(&self) -> Vec<Vec<PointSafe2>> {
+        let mut mergedpointhash = FnvHashMap::<usize, Vec<PointSafe2>>::default();
         for (pointvec, i) in self.pointlist.iter().zip(&self.groupmerges) {
             // Exclude deletion group
             if *i == 0 {
@@ -227,21 +227,21 @@ impl<C: State> StaticKTAM<C> {
     pub fn determine_fission(
         &self,
         canvas: &C,
-        possible_start_points: &[PointSafeAdjs],
-        now_empty: &[PointSafeAdjs],
+        possible_start_points: &[PointSafe2],
+        now_empty: &[PointSafe2],
     ) -> FissionResult {
         // Optimizations for a single empty site.
         if now_empty.len() == 1 {
             let p = now_empty[0];
 
-            let tn = canvas.v_sa_n(p) as usize;
-            let tw = canvas.v_sa_w(p) as usize;
-            let te = canvas.v_sa_e(p) as usize;
-            let ts = canvas.v_sa_s(p) as usize;
-            let tnw = canvas.v_sa_nw(p) as usize;
-            let tne = canvas.v_sa_ne(p) as usize;
-            let tsw = canvas.v_sa_sw(p) as usize;
-            let tse = canvas.v_sa_se(p) as usize;
+            let tn = canvas.tile_to_n(p) as usize;
+            let tw = canvas.tile_to_w(p) as usize;
+            let te = canvas.tile_to_e(p) as usize;
+            let ts = canvas.tile_to_s(p) as usize;
+            let tnw = canvas.tile_to_nw(p) as usize;
+            let tne = canvas.tile_to_ne(p) as usize;
+            let tsw = canvas.tile_to_sw(p) as usize;
+            let tse = canvas.tile_to_se(p) as usize;
 
             let ri: u8 = (((tn != 0) as u8) << 7)
                 + ((((self.energy_we[(tn, tne)] != 0.) & (self.energy_ns[(tne, te)] != 0.)) as u8)
@@ -269,7 +269,7 @@ impl<C: State> StaticKTAM<C> {
 
         let start_points = (*possible_start_points)
             .iter()
-            .filter(|x| canvas.v_sa(**x) != 0)
+            .filter(|x| canvas.tile_at_point(**x) != 0)
             .collect();
 
         let mut groupinfo = GroupInfo::new(&start_points, now_empty);
@@ -283,7 +283,7 @@ impl<C: State> StaticKTAM<C> {
 
         //println!("Start queue {:?}", queue);
         while let Some(p) = queue.pop_front() {
-            let t = canvas.v_sa(p) as usize;
+            let t = canvas.tile_at_point(p) as usize;
             let pn = canvas.move_sa_n(p);
             let tn = canvas.v_sh(pn) as usize;
             let pw = canvas.move_sa_w(p);
@@ -294,7 +294,7 @@ impl<C: State> StaticKTAM<C> {
             let ts = canvas.v_sh(ps) as usize;
 
             if (unsafe { *self.energy_ns.uget((tn, t)) } != 0.) {
-                let pn = PointSafeAdjs(pn.0); // FIXME
+                let pn = PointSafe2(pn.0); // FIXME
                 match groupinfo.merge_or_add(&p, &pn) {
                     true => {}
                     false => {
@@ -304,7 +304,7 @@ impl<C: State> StaticKTAM<C> {
             }
 
             if (unsafe { *self.energy_we.uget((t, te)) } != 0.) {
-                let pe = PointSafeAdjs(pe.0); // FIXME
+                let pe = PointSafe2(pe.0); // FIXME
                 match groupinfo.merge_or_add(&p, &pe) {
                     true => {}
                     false => {
@@ -314,7 +314,7 @@ impl<C: State> StaticKTAM<C> {
             }
 
             if (unsafe { *self.energy_ns.uget((t, ts)) } != 0.) {
-                let ps = PointSafeAdjs(ps.0); // FIXME
+                let ps = PointSafe2(ps.0); // FIXME
                 match groupinfo.merge_or_add(&p, &ps) {
                     true => {}
                     false => {
@@ -324,7 +324,7 @@ impl<C: State> StaticKTAM<C> {
             }
 
             if (unsafe { *self.energy_we.uget((tw, t)) } != 0.) {
-                let pw = PointSafeAdjs(pw.0); // FIXME
+                let pw = PointSafe2(pw.0); // FIXME
                 match groupinfo.merge_or_add(&p, &pw) {
                     true => {}
                     false => {

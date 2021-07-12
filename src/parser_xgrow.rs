@@ -201,7 +201,9 @@ fn arg_seed(input: &str) -> IResult<&str, XgrowArgs> {
         map(
             tuple((take_u32, tag(","), take_u32, tag(","), take_u32)),
             |(x, _, y, _, t)| {
-                XgrowArgs::Seed(parser::ParsedSeed::Single(y as usize, x as usize, t))
+                XgrowArgs::Seed(parser::ParsedSeed::Single(
+                    y as usize, x as usize, t as usize,
+                ))
             },
         ),
     )(input)

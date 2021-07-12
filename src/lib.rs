@@ -23,3 +23,5 @@ pub mod system;
 pub mod ratestore;
 
 pub mod simulation;
+
+pub mod newsystem;

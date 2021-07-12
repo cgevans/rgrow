@@ -328,23 +328,23 @@ impl TileSet {
                 extratiles.push(cs[i].make_composite(&cs[j]));
 
                 cover_attach_info[coverbegin + i].push(system::CoverAttach {
-                    like_tile: (coverbegin + i) as u32,
-                    new_tile: comp as u32,
+                    like_tile: (coverbegin + i),
+                    new_tile: comp,
                 });
                 cover_attach_info[coverbegin + j].push(system::CoverAttach {
-                    like_tile: (coverbegin + j) as u32,
-                    new_tile: comp as u32,
+                    like_tile: (coverbegin + j),
+                    new_tile: comp,
                 });
 
                 tile_is_cover.push(system::CoverType::Composite);
                 composite_detach_info.push(vec![
                     system::CompositeDetach {
-                        like_tile: (coverbegin + i) as u32,
-                        new_tile: (coverbegin + j) as u32,
+                        like_tile: (coverbegin + i),
+                        new_tile: (coverbegin + j),
                     },
                     system::CompositeDetach {
-                        like_tile: (coverbegin + j) as u32,
-                        new_tile: (coverbegin + i) as u32,
+                        like_tile: (coverbegin + j),
+                        new_tile: (coverbegin + i),
                     },
                 ]);
 

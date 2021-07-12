@@ -6,7 +6,7 @@ pub trait CanvasCreate: Sized + Canvas {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
-pub struct PointSafeAdjs(pub Point);
+pub struct PointSafe2(pub Point);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
 pub struct PointSafeHere(pub Point);
@@ -27,30 +27,42 @@ pub trait Canvas: std::fmt::Debug {
     fn nrows(&self) -> usize;
     fn ncols(&self) -> usize;
 
-    fn move_sa_n(&self, p: PointSafeAdjs) -> PointSafeHere {
+    fn move_sa_n(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_n(p.0))
     }
-    fn move_sa_e(&self, p: PointSafeAdjs) -> PointSafeHere {
+    fn move_sa_e(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_e(p.0))
     }
-    fn move_sa_s(&self, p: PointSafeAdjs) -> PointSafeHere {
+    fn move_sa_s(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_s(p.0))
     }
-    fn move_sa_w(&self, p: PointSafeAdjs) -> PointSafeHere {
+    fn move_sa_w(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_w(p.0))
     }
 
-    fn move_sa_nw(&self, p: PointSafeAdjs) -> PointSafeHere {
-        PointSafeHere(self.u_move_point_nw(p.0))
+    fn move_sa_nn(&self, p: PointSafe2) -> PointSafeHere {
+        PointSafeHere(self.u_move_point_nn(p.0))
     }
-    fn move_sa_ne(&self, p: PointSafeAdjs) -> PointSafeHere {
+    fn move_sa_ne(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_ne(p.0))
     }
-    fn move_sa_se(&self, p: PointSafeAdjs) -> PointSafeHere {
+    fn move_sa_ee(&self, p: PointSafe2) -> PointSafeHere {
+        PointSafeHere(self.u_move_point_ee(p.0))
+    }
+    fn move_sa_se(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_se(p.0))
     }
-    fn move_sa_sw(&self, p: PointSafeAdjs) -> PointSafeHere {
+    fn move_sa_ss(&self, p: PointSafe2) -> PointSafeHere {
+        PointSafeHere(self.u_move_point_ss(p.0))
+    }
+    fn move_sa_sw(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_sw(p.0))
+    }
+    fn move_sa_ww(&self, p: PointSafe2) -> PointSafeHere {
+        PointSafeHere(self.u_move_point_ww(p.0))
+    }
+    fn move_sa_nw(&self, p: PointSafe2) -> PointSafeHere {
+        PointSafeHere(self.u_move_point_nw(p.0))
     }
 
     fn move_sh_n(&self, p: PointSafeHere) -> Point {
@@ -66,7 +78,7 @@ pub trait Canvas: std::fmt::Debug {
         self.u_move_point_w(p.0)
     }
 
-    fn set_sa(&mut self, p: &PointSafeAdjs, t: &Tile) {
+    fn set_sa(&mut self, p: &PointSafe2, t: &Tile) {
         unsafe { *self.uvm_p(p.0) = *t };
     }
 
@@ -90,7 +102,27 @@ pub trait Canvas: std::fmt::Debug {
         self.u_move_point_n(self.u_move_point_w(p))
     }
 
-    fn v_sa(&self, p: PointSafeAdjs) -> Tile {
+    #[inline(always)]
+    fn u_move_point_nn(&self, p: Point) -> Point {
+        self.u_move_point_n(self.u_move_point_n(p))
+    }
+
+    #[inline(always)]
+    fn u_move_point_ee(&self, p: Point) -> Point {
+        self.u_move_point_e(self.u_move_point_e(p))
+    }
+
+    #[inline(always)]
+    fn u_move_point_ss(&self, p: Point) -> Point {
+        self.u_move_point_s(self.u_move_point_s(p))
+    }
+
+    #[inline(always)]
+    fn u_move_point_ww(&self, p: Point) -> Point {
+        self.u_move_point_w(self.u_move_point_w(p))
+    }
+
+    fn tile_at_point(&self, p: PointSafe2) -> Tile {
         unsafe { self.uv_p(p.0) }
     }
 
@@ -98,36 +130,52 @@ pub trait Canvas: std::fmt::Debug {
         unsafe { self.uv_p(p.0) }
     }
 
-    fn v_sa_n(&self, p: PointSafeAdjs) -> Tile {
+    fn tile_to_n(&self, p: PointSafe2) -> Tile {
         self.v_sh(self.move_sa_n(p))
     }
 
-    fn v_sa_e(&self, p: PointSafeAdjs) -> Tile {
+    fn tile_to_e(&self, p: PointSafe2) -> Tile {
         self.v_sh(self.move_sa_e(p))
     }
 
-    fn v_sa_s(&self, p: PointSafeAdjs) -> Tile {
+    fn tile_to_s(&self, p: PointSafe2) -> Tile {
         self.v_sh(self.move_sa_s(p))
     }
 
-    fn v_sa_w(&self, p: PointSafeAdjs) -> Tile {
+    fn tile_to_w(&self, p: PointSafe2) -> Tile {
         self.v_sh(self.move_sa_w(p))
     }
 
-    fn v_sa_nw(&self, p: PointSafeAdjs) -> Tile {
-        self.v_sh(self.move_sa_nw(p))
+    fn tile_to_nn(&self, p: PointSafe2) -> Tile {
+        self.v_sh(self.move_sa_nn(p))
     }
 
-    fn v_sa_ne(&self, p: PointSafeAdjs) -> Tile {
+    fn tile_to_ne(&self, p: PointSafe2) -> Tile {
         self.v_sh(self.move_sa_ne(p))
     }
 
-    fn v_sa_se(&self, p: PointSafeAdjs) -> Tile {
+    fn tile_to_ee(&self, p: PointSafe2) -> Tile {
+        self.v_sh(self.move_sa_ee(p))
+    }
+
+    fn tile_to_se(&self, p: PointSafe2) -> Tile {
         self.v_sh(self.move_sa_se(p))
     }
 
-    fn v_sa_sw(&self, p: PointSafeAdjs) -> Tile {
+    fn tile_to_ss(&self, p: PointSafe2) -> Tile {
+        self.v_sh(self.move_sa_ss(p))
+    }
+
+    fn tile_to_sw(&self, p: PointSafe2) -> Tile {
         self.v_sh(self.move_sa_sw(p))
+    }
+
+    fn tile_to_ww(&self, p: PointSafe2) -> Tile {
+        self.v_sh(self.move_sa_ww(p))
+    }
+
+    fn tile_to_nw(&self, p: PointSafe2) -> Tile {
+        self.v_sh(self.move_sa_nw(p))
     }
 
     #[inline(always)]

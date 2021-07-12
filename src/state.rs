@@ -1,7 +1,7 @@
 use super::base::*;
 use crate::canvas::{Canvas, CanvasCreate, CanvasSquarable};
 use crate::{
-    canvas::PointSafeAdjs,
+    canvas::PointSafe2,
     canvas::PointSafeHere,
     ratestore::{CreateSizedRateStore, QuadTreeArray, RateStore},
     system,
@@ -128,7 +128,7 @@ impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
         self.canvas.raw_array().ncols()
     }
 
-    fn set_sa(&mut self, p: &PointSafeAdjs, t: &Tile) {
+    fn set_sa(&mut self, p: &PointSafe2, t: &Tile) {
         let r = unsafe { self.uvm_p(p.0) };
 
         let old_tile = *r;
@@ -315,35 +315,35 @@ impl StateTracker for OrderTracker {
     fn record_single_event(&mut self, event: &system::Event) -> &mut Self {
         match event {
             system::Event::None => self,
-            system::Event::SingleTileAttach(p, t) => {
+            system::Event::MonomerAttachment(p, t) => {
                 self.arr[p.0] = self.order;
                 self.order += 1;
                 self
             }
-            system::Event::SingleTileDetach(p) => {
+            system::Event::MonomerDetachment(p) => {
                 self.arr[p.0] = 0;
                 self
             }
-            system::Event::SingleTileChange(p, t) => {
+            system::Event::MonomerChange(p, t) => {
                 self.arr[p.0] = self.order;
                 self.order += 1;
                 self
             }
-            system::Event::MultiTileChange(vec) => {
+            system::Event::PolymerChange(vec) => {
                 for (p, t) in vec {
                     self.arr[p.0] = self.order;
                 }
                 self.order += 1;
                 self
             }
-            system::Event::MultiTileAttach(vec) => {
+            system::Event::PolymerAttachment(vec) => {
                 for (p, t) in vec {
                     self.arr[p.0] = self.order;
                 }
                 self.order += 1;
                 self
             }
-            system::Event::MultiTileDetach(vec) => {
+            system::Event::PolymerDetachment(vec) => {
                 for p in vec {
                     self.arr[p.0] = 0;
                 }
