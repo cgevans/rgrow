@@ -200,7 +200,8 @@ def committor(system, config, ci_width: float = 0.05, state_type=rg.StateKTAMPer
 
 def committor_mid(system, config, ci_width=0.05,
                   min=0.4, max=0.6, ci_pct=0.95,
-                  state_type=rg.StateKTAMPeriodic) -> Tuple[bool,
+                  state_type=rg.StateKTAMPeriodic,
+                  max_events=10_000_000) -> Tuple[bool,
                                                             Optional[bool],
                                                             float,
                                                             float, float,
@@ -213,7 +214,7 @@ def committor_mid(system, config, ci_width=0.05,
         for y in range(0, config.shape[0]):
             for x in range(0, config.shape[1]):
                 state.set_point(system, y, x, config[y, x])
-        state.evolve_in_size_range(system, 0, 300, 1_000_000)
+        state.evolve_in_size_range(system, 0, 300, max_events)
         trials += 1
         if state.ntiles >= 300:
             successes += 1
