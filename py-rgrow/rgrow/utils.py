@@ -97,7 +97,7 @@ class FFSResult:
     def seeds_of_trajectories(self, system: Optional[rg.StaticKTAMPeriodic] = None,
                               pool: Optional[multiprocessing.pool.Pool]
                               = None, proppool=False, ci_width=0.1,
-                              min=0.4, max=0.6, ci_pct=0.95,) -> pd.DataFrame:
+                              min=0.4, max=0.6, ci_pct=0.95, max_events=10_000_000) -> pd.DataFrame:
         trajs = self.trajectory_configs
 
         if system is None:
@@ -108,14 +108,14 @@ class FFSResult:
             seedinfos = []
             for i, trajectory in enumerate(trajs):
                 seed, seedinfo = trajectory_seed(system, trajectory, ci_width,
-                                                 min, max, ci_pct, pool)
+                                                 min, max, ci_pct, max_events, pool)
                 print(".", end=None, flush=True)
                 seeds.append(seed)
                 seedinfos.append(seedinfo)
         else:
             ss = pool.starmap(trajectory_seed, [
                               (system, trajectory, ci_width,
-                               min, max, ci_pct) for trajectory in trajs])
+                               min, max, ci_pct, max_events) for trajectory in trajs])
             seeds, seedinfos = zip(*ss)
 
         p = pd.DataFrame(seedinfos)
@@ -153,7 +153,7 @@ class FFSResult:
 
 def trajectory_seed(system, trajectory,
                     ci_width=0.1,
-                    min=0.4, max=0.6, ci_pct=0.95,
+                    min=0.4, max=0.6, ci_pct=0.95, max_events=10_000_000,
                     pool: multiprocessing.pool.Pool = None,) -> Tuple[ndarray, pd.Series]:
     """Given a system and trajectory (of configurations), find the seed
     (committor closest to 0.5)"""
@@ -165,7 +165,7 @@ def trajectory_seed(system, trajectory,
             "in", "side", "c", "clow", "chigh", "succ", "trials"])
     else:
         trres = pool.starmap(
-            committor_mid, [(system, config, ci_width, min, max, ci_pct) for config in trajectory])
+            committor_mid, [(system, config, ci_width, min, max, ci_pct, rg.StaticKTAMPeriodic, max_events) for config in trajectory])
         trajs = pd.DataFrame(trres, columns=[
             "in", "side", "c", "clow", "chigh", "succ", "trials"])
 
