@@ -33,6 +33,9 @@ pub trait Canvas: std::fmt::Debug {
     fn move_sa_e(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_e(p.0))
     }
+    fn u_move_sa_e(&self, p: PointSafe2) -> PointSafe2 {
+        PointSafe2(self.u_move_point_e(p.0))
+    }
     fn move_sa_s(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_s(p.0))
     }

@@ -1,4 +1,5 @@
 use crate::{
+    base::Point,
     canvas::{Canvas, PointSafe2, PointSafeHere},
     state::{State, StateTracked, StateTracker},
     system::{DimerInfo, Event, System, TileBondInfo},
@@ -341,9 +342,129 @@ impl<S: State + StateTracked<T>, T: StateTracker> System<S, T> for NewKTAM<S> {
                     event
                 }
                 (false, acc, _) => {
-                    panic!();
+                    panic!(
+                        "Rate: {:?}, {:?}, {:?}, {:?}",
+                        acc,
+                        p,
+                        state,
+                        state.raw_array()
+                    );
                 }
             },
+        }
+    }
+
+    fn set_point(&mut self, state: &mut S, point: Point, tile: Tile) {
+        assert!(state.inbounds(point));
+
+        let point = PointSafe2(point);
+        let oldt = state.tile_at_point(point);
+
+        match self.tile_shape(oldt) {
+            // Fixme: somewhat unsafe
+            TileShape::Single => (),
+            TileShape::DupleToRight(dt) => {
+                debug_assert_eq!(dt, state.tile_to_e(point));
+                state.set_sa(&PointSafe2(state.move_sa_e(point).0), &0usize)
+            }
+            TileShape::DupleToBottom(dt) => {
+                debug_assert_eq!(dt, state.tile_to_s(point));
+                state.set_sa(&PointSafe2(state.move_sa_s(point).0), &0usize)
+            }
+            TileShape::DupleToLeft(dt) => {
+                debug_assert_eq!(dt, state.tile_to_w(point));
+                state.set_sa(&PointSafe2(state.move_sa_w(point).0), &0usize)
+            }
+            TileShape::DupleToTop(dt) => {
+                debug_assert_eq!(dt, state.tile_to_n(point));
+                state.set_sa(&PointSafe2(state.move_sa_n(point).0), &0usize)
+            }
+        }
+
+        state.set_sa(&point, &tile);
+
+        match self.tile_shape(tile) {
+            TileShape::Single => (),
+            TileShape::DupleToRight(dt) => {
+                debug_assert_eq!(state.tile_to_e(point), 0);
+                state.set_sa(&PointSafe2(state.move_sa_e(point).0), &dt);
+            }
+            TileShape::DupleToBottom(dt) => {
+                debug_assert_eq!(state.tile_to_s(point), 0);
+                state.set_sa(&PointSafe2(state.move_sa_s(point).0), &dt);
+            }
+            TileShape::DupleToLeft(dt) => {
+                debug_assert_eq!(state.tile_to_w(point), 0);
+                state.set_sa(&PointSafe2(state.move_sa_w(point).0), &dt);
+            }
+            TileShape::DupleToTop(dt) => {
+                debug_assert_eq!(state.tile_to_n(point), 0);
+                state.set_sa(&PointSafe2(state.move_sa_n(point).0), &dt);
+            }
+        }
+
+        let event = Event::MonomerAttachment(point, tile);
+
+        self.update_after_event(state, &event);
+    }
+
+    fn perform_event(&self, state: &mut S, event: &Event) {
+        match event {
+            Event::None => panic!("Being asked to perform null event."),
+            Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
+                state.set_sa(point, tile);
+                match self.tile_shape(*tile) {
+                    TileShape::Single => (),
+                    TileShape::DupleToRight(dt) => {
+                        debug_assert_eq!(state.tile_to_e(*point), 0);
+                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &dt);
+                    }
+                    TileShape::DupleToBottom(dt) => {
+                        debug_assert_eq!(state.tile_to_s(*point), 0);
+                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &dt);
+                    }
+                    TileShape::DupleToLeft(dt) => {
+                        debug_assert_eq!(state.tile_to_w(*point), 0);
+                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &dt);
+                    }
+                    TileShape::DupleToTop(dt) => {
+                        debug_assert_eq!(state.tile_to_n(*point), 0);
+                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &dt);
+                    }
+                }
+            }
+            Event::MonomerDetachment(point) => {
+                match self.tile_shape(state.tile_at_point(*point)) {
+                    TileShape::Single => (),
+                    TileShape::DupleToRight(dt) => {
+                        debug_assert_eq!(state.tile_to_e(*point), dt);
+                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &0usize);
+                    }
+                    TileShape::DupleToBottom(dt) => {
+                        debug_assert_eq!(state.tile_to_s(*point), dt);
+                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &0usize);
+                    }
+                    TileShape::DupleToLeft(dt) => {
+                        debug_assert_eq!(state.tile_to_w(*point), dt);
+                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &0usize);
+                    }
+                    TileShape::DupleToTop(dt) => {
+                        debug_assert_eq!(state.tile_to_n(*point), dt);
+                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &0usize);
+                    }
+                }
+                state.set_sa(point, &0usize);
+            }
+            Event::PolymerAttachment(changelist) | Event::PolymerChange(changelist) => {
+                for (point, tile) in changelist {
+                    state.set_sa(point, tile);
+                }
+            }
+            Event::PolymerDetachment(changelist) => {
+                for point in changelist {
+                    state.set_sa(point, &0usize);
+                }
+            }
         }
     }
 
@@ -455,10 +576,14 @@ impl<S: Canvas> NewKTAM<S> {
         if (self.double_to_right.sum() > 0) || (self.double_to_bottom.sum() > 0) {
             self.has_duples = true;
             for (t1, t2) in self.double_to_right.indexed_iter() {
-                self.double_to_left[*t2] = t1;
+                if (t1 > 0) & (t2 > &0) {
+                    self.double_to_left[*t2] = t1;
+                }
             }
             for (t1, t2) in self.double_to_bottom.indexed_iter() {
-                self.double_to_top[*t2] = t1;
+                if (t1 > 0) & (t2 > &0) {
+                    self.double_to_top[*t2] = t1;
+                }
             }
         } else {
             self.has_duples = false;
@@ -472,7 +597,7 @@ impl<S: Canvas> NewKTAM<S> {
         self.friends_ee.drain(..);
         self.friends_se.drain(..);
         self.friends_ss.drain(..);
-        self.friends_se.drain(..);
+        self.friends_sw.drain(..);
         for _ in 0..ntiles {
             self.friends_n.push(FnvHashSet::default());
             self.friends_e.push(FnvHashSet::default());
@@ -482,40 +607,69 @@ impl<S: Canvas> NewKTAM<S> {
             self.friends_ee.push(FnvHashSet::default());
             self.friends_se.push(FnvHashSet::default());
             self.friends_ss.push(FnvHashSet::default());
-            self.friends_se.push(FnvHashSet::default());
+            self.friends_sw.push(FnvHashSet::default());
         }
         for t1 in 0..ntiles {
             for t2 in 0..ntiles {
-                if self.energy_ns[(t1, t2)] != Energy(0.) {
-                    self.friends_s[t1].insert(t2);
-                    self.friends_n[t2].insert(t1);
-                }
-                if self.energy_we[(t1, t2)] != Energy(0.) {
-                    self.friends_e[t1].insert(t2);
-                    self.friends_w[t2].insert(t1);
-                }
                 match self.tile_shape(t1) {
-                    TileShape::Single => (),
+                    TileShape::Single => {
+                        if self.energy_ns[(t2, t1)] != Energy(0.) {
+                            self.friends_n[t2].insert(t1);
+                        }
+                        if self.energy_we[(t2, t1)] != Energy(0.) {
+                            self.friends_w[t2].insert(t1);
+                        }
+                        if self.energy_ns[(t1, t2)] != Energy(0.) {
+                            self.friends_s[t2].insert(t1);
+                        }
+                        if self.energy_we[(t1, t2)] != Energy(0.) {
+                            self.friends_e[t2].insert(t1);
+                        }
+                    }
                     TileShape::DupleToRight(td) => {
                         if self.energy_ns[(t2, td)] != Energy(0.) {
-                            self.friends_ne[td].insert(t2);
+                            self.friends_ne[t2].insert(t1);
                         }
                         if self.energy_ns[(td, t2)] != Energy(0.) {
-                            self.friends_ne[td].insert(t2);
+                            self.friends_se[t2].insert(t1);
                         }
                         if self.energy_we[(td, t2)] != Energy(0.) {
-                            self.friends_ee[td].insert(t2);
+                            self.friends_ee[t2].insert(t1);
+                        }
+                        if self.energy_ns[(t2, t1)] != Energy(0.) {
+                            self.friends_n[t2].insert(t1);
+                        }
+                        if self.energy_we[(t2, t1)] != Energy(0.) {
+                            self.friends_w[t2].insert(t1);
+                        }
+                        if self.energy_ns[(t1, t2)] != Energy(0.) {
+                            self.friends_s[t2].insert(t1);
+                        }
+                        if self.energy_we[(t1, t2)] != Energy(0.) {
+                            self.friends_e[t2].insert(t1);
                         }
                     }
                     TileShape::DupleToBottom(td) => {
                         if self.energy_we[(t2, td)] != Energy(0.) {
-                            self.friends_sw[td].insert(t2);
+                            self.friends_sw[t2].insert(t1);
                         }
                         if self.energy_we[(td, t2)] != Energy(0.) {
-                            self.friends_se[td].insert(t2);
+                            self.friends_se[t2].insert(t1);
                         }
                         if self.energy_ns[(td, t2)] != Energy(0.) {
-                            self.friends_ss[td].insert(t2);
+                            self.friends_ss[t2].insert(t1);
+                        }
+                        if self.energy_ns[(t2, t1)] != Energy(0.) {
+                            self.friends_n[t2].insert(t1);
+                        }
+                        if self.energy_we[(t2, t1)] != Energy(0.) {
+                            self.friends_w[t2].insert(t1);
+                        }
+                        if self.energy_ns[(t1, t2)] != Energy(0.) {
+                            self.friends_s[t2].insert(t1);
+                        }
+                        if self.energy_we[(t1, t2)] != Energy(0.) {
+                            self.friends_e[t2].insert(t1);
                         }
                     }
                     TileShape::DupleToLeft(_) => (),
@@ -606,21 +760,64 @@ impl<S: Canvas> NewKTAM<S> {
         let mut friends = FnvHashSet::<Tile>::default();
 
         if tn.nonzero() {
-            friends.extend(&self.friends_s[tn]);
+            friends.extend(&self.friends_n[tn]);
         }
         if te.nonzero() {
-            friends.extend(&self.friends_w[te]);
+            friends.extend(&self.friends_e[te]);
         }
         if ts.nonzero() {
-            friends.extend(&self.friends_n[ts]);
+            friends.extend(&self.friends_s[ts]);
         }
         if tw.nonzero() {
-            friends.extend(&self.friends_e[tw]);
+            friends.extend(&self.friends_w[tw]);
+        }
+
+        if self.has_duples {
+            let tss = state.tile_to_ss(p);
+            let tne = state.tile_to_ne(p);
+            let tee = state.tile_to_ee(p);
+            let tse = state.tile_to_se(p);
+
+            if tss.nonzero() {
+                friends.extend(&self.friends_ss[tss])
+            }
+            if tne.nonzero() {
+                friends.extend(&self.friends_ne[tne])
+            }
+            if tee.nonzero() {
+                friends.extend(&self.friends_ee[tee])
+            }
+            if tse.nonzero() {
+                friends.extend(&self.friends_se[tse])
+            }
         }
 
         for t in friends.drain() {
             acc -= self.kf * self.tile_concs[t];
             if !just_calc & (acc <= Rate(0.)) {
+                match self.tile_shape(t) {
+                    TileShape::Single => (),
+                    TileShape::DupleToRight(dt) => {
+                        if state.tile_to_e(p) != 0 {
+                            return (true, acc, Event::None);
+                        }
+                    }
+                    TileShape::DupleToBottom(dt) => {
+                        if state.tile_to_s(p) != 0 {
+                            return (true, acc, Event::None);
+                        }
+                    }
+                    TileShape::DupleToLeft(dt) => {
+                        if state.tile_to_w(p) != 0 {
+                            return (true, acc, Event::None);
+                        }
+                    }
+                    TileShape::DupleToTop(dt) => {
+                        if state.tile_to_n(p) != 0 {
+                            return (true, acc, Event::None);
+                        }
+                    }
+                }
                 return (true, acc, Event::MonomerAttachment(p, t));
             }
         }
