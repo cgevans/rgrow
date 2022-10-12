@@ -43,11 +43,7 @@ pub trait StateEvolve<C: Canvas, S: System<C>>: StateStatus + StateStep<C, S> {
         self
     }
 
-    fn evolve_steps(
-        &mut self,
-        system: &S,
-        events: NumEvents
-    ) -> Result<&mut Self, StateError> {
+    fn evolve_steps(&mut self, system: &S, events: NumEvents) -> Result<&mut Self, StateError> {
         for _ in 0..events {
             self.take_step(system)?;
             // FIXME: there is a problem here if "dead" events are the *only* events possible.
@@ -63,15 +59,12 @@ pub trait StateStep<C: Canvas, S: System<C>>: StateUpdateSingle<C, S> + StateSta
     }
 }
 
-
 pub trait StateStep<C: Canvas, S: System<C>>: StateUpdateSingle<C, S> + StateStatus {
     fn take_step(&mut self, system: &S) -> Result<&Self, StateError> {
         let (p, acc) = self.choose_event_point()?;
         Ok(self.do_single_event_at_location(system, p, acc))
     }
 }
-
-
 
 pub trait StateUpdateSingle<C: Canvas, S: System<C>> {
     fn choose_event_point(&self) -> Result<(Point, Rate), StateError>;
@@ -118,7 +111,6 @@ pub trait StateCreate<C: Canvas, S: System<C>>:
     }
 }
 
-
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
     #[error("the canvas is empty")]
@@ -128,7 +120,6 @@ pub enum StateError {
     #[error("an unknown error occured")]
     Unknown,
 }
-
 
 impl<C: CanvasSquarable, S, T> StateUpdateSingle<C, S> for QuadTreeState<C, S, T>
 where
@@ -146,10 +137,9 @@ where
                 Err(StateError::EmptyCanvas)
             } else if self.total_rate() == 0. {
                 Err(StateError::ZeroRate)
-            } else if self.canvas.inbounds((0,0)) {
+            } else if self.canvas.inbounds((0, 0)) {
                 Ok(((y, x), threshold))
-            }
-            else {
+            } else {
                 Err(StateError::Unknown)
             }
         } else {
@@ -263,7 +253,7 @@ where
         let size = self.canvas.square_size();
         for y in 0..size {
             for x in 0..size {
-                if self.canvas.inbounds((y,x)) {
+                if self.canvas.inbounds((y, x)) {
                     self.update_rates_single(system, (y, x));
                 }
             }
@@ -327,33 +317,34 @@ where
     }
 }
 
-
-
 impl<C: CanvasSquarable, S, T> QuadTreeState<C, S, T>
 where
     S: System<C>,
     T: StateTracker + Clone,
 {
     fn update_rates_ps(&mut self, system: &S, p: Point) -> &mut Self {
-
-        let points =  &[
+        let points = &[
             self.canvas.u_move_point_w(p),
             p,
             self.canvas.u_move_point_e(p),
             self.canvas.u_move_point_n(p),
             self.canvas.u_move_point_s(p),
         ];
-        
-        let rates = points.into_iter().map(|x| system.event_rate_at_point(&self.canvas, *x)).collect::<Vec<_>>();
+
+        let rates = points
+            .into_iter()
+            .map(|x| system.event_rate_at_point(&self.canvas, *x))
+            .collect::<Vec<_>>();
 
         self.rates.update_multiple(points, &rates);
-        
+
         self
     }
 
     #[allow(dead_code)]
     fn update_rates_single(&mut self, system: &S, mut p: Point) -> &mut Self {
-        self.rates.update_point(p, system.event_rate_at_point(&self.canvas, p));
+        self.rates
+            .update_point(p, system.event_rate_at_point(&self.canvas, p));
         self
     }
 
@@ -366,11 +357,10 @@ where
     ///
     /// If on debug, conditions should be checked (TODO)
     pub fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self {
-        let max_level = self.rates.0.len()-1; // FIXME: should not go into RateStore
+        let max_level = self.rates.0.len() - 1; // FIXME: should not go into RateStore
 
         self.copy_level_quad(source, max_level, (0, 0));
 
-        
         // General housekeeping
         self.ntiles = source.ntiles;
         self.total_events = source.total_events;
@@ -384,7 +374,8 @@ where
     }
 
     #[inline(never)]
-    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self { // FIXME: should not go into ratestore
+    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self {
+        // FIXME: should not go into ratestore
         let (y, x) = point;
 
         if level > 0 {
@@ -413,7 +404,6 @@ where
         self
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub struct TileSubsetTracker {
@@ -489,8 +479,6 @@ impl TileSubsetTracker {
 //     }
 // }
 
-
-
 impl StaticATAM {
     pub fn new(
         tile_concs: Array1<f64>,
@@ -524,9 +512,6 @@ impl StaticATAM {
         };
     }
 }
-
-
-
 
 impl<C> System<C> for StaticATAM
 where
@@ -636,4 +621,3 @@ where
         todo!()
     }
 }
-

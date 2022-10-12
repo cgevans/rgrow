@@ -1,11 +1,12 @@
 use super::base::{GrowError, GrowResult, NumTiles, Point, Tile};
 use ndarray::prelude::*;
+use serde::{Deserialize, Serialize};
 
 pub trait CanvasCreate: Sized + Canvas {
     fn from_array(canvas: Array2<Tile>) -> GrowResult<Self>;
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct PointSafe2(pub Point);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]

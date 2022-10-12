@@ -7,52 +7,69 @@ use crate::{
 use fnv::{FnvHashMap, FnvHashSet};
 use ndarray::prelude::*;
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 use std::{
     marker::PhantomData,
     ops::{Add, AddAssign, Mul, Neg, SubAssign},
 };
 /// A concentration, in nM.  Note that this means u_0 is not 1.
-#[derive(PartialEq, Debug, Clone, Copy)]
-pub struct Conc(f64);
+// #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
+// pub struct Conc(f64);
 
-impl Add for Conc {
-    type Output = Self;
+// impl Add for Conc {
+//     type Output = Self;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
+//     fn add(self, rhs: Self) -> Self::Output {
+//         Self(self.0 + rhs.0)
+//     }
+// }
 
-impl Zero for Conc {
-    fn zero() -> Self {
-        Self(0.)
-    }
+// impl Zero for Conc {
+//     fn zero() -> Self {
+//         Self(0.)
+//     }
 
-    fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-}
+//     fn is_zero(&self) -> bool {
+//         self.0.is_zero()
+//     }
+// }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
-pub struct Glue(usize);
+// impl Into<f64> for Conc {
+//     fn into(self) -> f64 {
+//         self.0
+//     }
+// }
 
-impl Add for Glue {
-    type Output = Glue;
+// impl From<f64> for Conc {
+//     fn from(x: f64) -> Self {
+//         Conc(x)
+//     }
+// }
 
-    fn add(self, rhs: Self) -> Self::Output {
-        todo!()
-    }
-}
+type Conc = f64;
 
-impl Zero for Glue {
-    fn zero() -> Self {
-        Self(0)
-    }
+// #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
+// pub struct Glue(usize);
 
-    fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-}
+// impl Add for Glue {
+//     type Output = Glue;
+
+//     fn add(self, rhs: Self) -> Self::Output {
+//         todo!()
+//     }
+// }
+
+// impl Zero for Glue {
+//     fn zero() -> Self {
+//         Self(0)
+//     }
+
+//     fn is_zero(&self) -> bool {
+//         self.0.is_zero()
+//     }
+// }
+
+type Glue = usize;
 
 //#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
 type Tile = usize;
@@ -75,127 +92,133 @@ impl NonZero for Tile {
 //     }
 // }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Strength(f64);
+// #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+// pub struct Strength(f64);
 
-impl Add for Strength {
-    type Output = Self;
+// impl Add for Strength {
+//     type Output = Self;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
+//     fn add(self, rhs: Self) -> Self::Output {
+//         Self(self.0 + rhs.0)
+//     }
+// }
 
-impl Zero for Strength {
-    fn zero() -> Self {
-        Self(0.)
-    }
+// impl Zero for Strength {
+//     fn zero() -> Self {
+//         Self(0.)
+//     }
 
-    fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-}
+//     fn is_zero(&self) -> bool {
+//         self.0.is_zero()
+//     }
+// }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+type Strength = f64;
 
-pub struct RatePerConc(f64);
+// #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 
-impl Mul<Conc> for RatePerConc {
-    type Output = Rate;
+// pub struct RatePerConc(f64);
 
-    fn mul(self, rhs: Conc) -> Self::Output {
-        Rate(self.0 * rhs.0)
-    }
-}
+// impl Mul<Conc> for RatePerConc {
+//     type Output = Rate;
+
+//     fn mul(self, rhs: Conc) -> Self::Output {
+//         Rate(self.0 * rhs.0)
+//     }
+// }
+
+type RatePerConc = f64;
 
 /// Unitless energy.
-#[derive(PartialEq, Debug, Clone, Copy)]
+// #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 
-pub struct Energy(f64);
+// pub struct Energy(f64);
 
-impl Add for Energy {
-    type Output = Self;
+// impl Add for Energy {
+//     type Output = Self;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        Energy(self.0 + rhs.0)
-    }
-}
+//     fn add(self, rhs: Self) -> Self::Output {
+//         Energy(self.0 + rhs.0)
+//     }
+// }
 
-impl Into<f64> for Energy {
-    fn into(self) -> f64 {
-        self.0
-    }
-}
+// impl Into<f64> for Energy {
+//     fn into(self) -> f64 {
+//         self.0
+//     }
+// }
 
-impl From<f64> for Energy {
-    fn from(x: f64) -> Self {
-        Energy(x)
-    }
-}
+// impl From<f64> for Energy {
+//     fn from(x: f64) -> Self {
+//         Energy(x)
+//     }
+// }
 
-impl AddAssign for Energy {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0
-    }
-}
+// impl AddAssign for Energy {
+//     fn add_assign(&mut self, rhs: Self) {
+//         self.0 += rhs.0
+//     }
+// }
 
-impl Zero for Energy {
-    fn zero() -> Self {
-        Self(0.)
-    }
+// impl Zero for Energy {
+//     fn zero() -> Self {
+//         Self(0.)
+//     }
 
-    fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-}
+//     fn is_zero(&self) -> bool {
+//         self.0.is_zero()
+//     }
+// }
 
-impl Neg for Energy {
-    type Output = Self;
+// impl Neg for Energy {
+//     type Output = Self;
 
-    fn neg(self) -> Self::Output {
-        Energy(-self.0)
-    }
-}
+//     fn neg(self) -> Self::Output {
+//         Energy(-self.0)
+//     }
+// }
 
-impl Mul<Strength> for Energy {
-    type Output = Energy;
+// impl Mul<Strength> for Energy {
+//     type Output = Energy;
 
-    fn mul(self, rhs: Strength) -> Self::Output {
-        Energy(self.0 * rhs.0)
-    }
-}
+//     fn mul(self, rhs: Strength) -> Self::Output {
+//         Energy(self.0 * rhs.0)
+//     }
+// }
 
-impl Energy {
-    fn exp_times_u0(self) -> Conc {
-        Conc(1e9 * self.0.exp())
-    }
+type Energy = f64;
+
+fn energy_exp_times_u0(x: f64) -> Conc {
+    (1e9 * x.exp())
 }
 
 /// Rate in Hz
-#[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
-pub struct Rate(f64);
+// #[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
+// pub struct Rate(f64);
 
-impl AddAssign for Rate {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0
-    }
-}
+// impl AddAssign for Rate {
+//     fn add_assign(&mut self, rhs: Self) {
+//         self.0 += rhs.0
+//     }
+// }
 
-impl Add for Rate {
-    type Output = Rate;
+// impl Add for Rate {
+//     type Output = Rate;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        Rate(self.0 + rhs.0)
-    }
-}
+//     fn add(self, rhs: Self) -> Self::Output {
+//         Rate(self.0 + rhs.0)
+//     }
+// }
 
-impl SubAssign for Rate {
-    fn sub_assign(&mut self, rhs: Self) {
-        self.0 -= rhs.0
-    }
-}
+// impl SubAssign for Rate {
+//     fn sub_assign(&mut self, rhs: Self) {
+//         self.0 -= rhs.0
+//     }
+// }
 
-#[derive(Clone, Debug)]
+type Rate = f64;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Seed {
     None(),
     SingleTile { point: PointSafe2, tile: Tile },
@@ -235,7 +258,7 @@ enum TileShape {
 //     MonomerDetachment(PointSafe2)
 // }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewKTAM<C: Canvas> {
     /// Tile names, as strings.  Only used for reference.
     pub tile_names: Vec<String>,
@@ -251,7 +274,6 @@ pub struct NewKTAM<C: Canvas> {
     pub glue_links: Array2<Strength>,
     pub g_se: Energy,
     pub alpha: Energy,
-    pub g_mc: Energy,
     pub kf: RatePerConc,
     pub double_to_right: Array1<Tile>,
     pub double_to_bottom: Array1<Tile>,
@@ -323,15 +345,15 @@ impl<S: State + StateTracked<T>, T: StateTracker> System<S, T> for NewKTAM<S> {
         let p = PointSafe2(p.0);
         let t = state.tile_at_point(p);
         if t.nonzero() {
-            self.monomer_detachment_rate_at_point(state, p).0
+            self.monomer_detachment_rate_at_point(state, p)
         } else {
-            self.total_monomer_attachment_rate_at_point(state, p).0
+            self.total_monomer_attachment_rate_at_point(state, p)
         }
     }
 
     fn choose_event_at_point(&self, state: &S, p: PointSafe2, acc: crate::base::Rate) -> Event {
         println!("{:?}", acc);
-        match self.choose_detachment_at_point(state, p, Rate(acc)) {
+        match self.choose_detachment_at_point(state, p, (acc)) {
             (true, _, event) => {
                 println!("{:?} {:?}", acc, event);
                 event
@@ -530,10 +552,9 @@ impl<S: Canvas> NewKTAM<S> {
             tile_edges: Array2::zeros((ntiles + 1, 4)),
             glue_strengths: Array1::zeros(nglues + 1),
             glue_links: Array2::zeros((nglues + 1, nglues + 1)),
-            g_se: Energy(9.),
-            alpha: Energy(0.),
-            g_mc: Energy(18.),
-            kf: RatePerConc(1e-3),
+            g_se: (9.),
+            alpha: (0.),
+            kf: (1e-3),
             double_to_right: Array1::zeros(ntiles + 1),
             double_to_bottom: Array1::zeros(ntiles + 1),
             seed: Seed::None(),
@@ -562,13 +583,13 @@ impl<S: Canvas> NewKTAM<S> {
             for t2 in 0..ntiles {
                 let t1r = self.tile_edges.row(t1);
                 let t2r = self.tile_edges.row(t2);
-                self.energy_ns[(t1, t2)] = self.g_se * self.glue_links[(t1r[2].0, t2r[0].0)];
+                self.energy_ns[(t1, t2)] = self.g_se * self.glue_links[(t1r[2], t2r[0])];
                 if t1r[2] == t2r[0] {
-                    self.energy_ns[(t1, t2)] = self.g_se * self.glue_strengths[t1r[2].0]
+                    self.energy_ns[(t1, t2)] = self.g_se * self.glue_strengths[t1r[2]]
                 }
-                self.energy_we[(t1, t2)] = self.g_se * self.glue_links[(t1r[1].0, t2r[3].0)];
+                self.energy_we[(t1, t2)] = self.g_se * self.glue_links[(t1r[1], t2r[3])];
                 if t1r[1] == t2r[3] {
-                    self.energy_we[(t1, t2)] = self.g_se * self.glue_strengths[t1r[1].0]
+                    self.energy_we[(t1, t2)] = self.g_se * self.glue_strengths[t1r[1]]
                 }
             }
         }
@@ -613,62 +634,62 @@ impl<S: Canvas> NewKTAM<S> {
             for t2 in 0..ntiles {
                 match self.tile_shape(t1) {
                     TileShape::Single => {
-                        if self.energy_ns[(t2, t1)] != Energy(0.) {
+                        if self.energy_ns[(t2, t1)] != 0. {
                             self.friends_n[t2].insert(t1);
                         }
-                        if self.energy_we[(t2, t1)] != Energy(0.) {
+                        if self.energy_we[(t2, t1)] != 0. {
                             self.friends_w[t2].insert(t1);
                         }
-                        if self.energy_ns[(t1, t2)] != Energy(0.) {
+                        if self.energy_ns[(t1, t2)] != 0. {
                             self.friends_s[t2].insert(t1);
                         }
-                        if self.energy_we[(t1, t2)] != Energy(0.) {
+                        if self.energy_we[(t1, t2)] != 0. {
                             self.friends_e[t2].insert(t1);
                         }
                     }
                     TileShape::DupleToRight(td) => {
-                        if self.energy_ns[(t2, td)] != Energy(0.) {
+                        if self.energy_ns[(t2, td)] != 0. {
                             self.friends_ne[t2].insert(t1);
                         }
-                        if self.energy_ns[(td, t2)] != Energy(0.) {
+                        if self.energy_ns[(td, t2)] != 0. {
                             self.friends_se[t2].insert(t1);
                         }
-                        if self.energy_we[(td, t2)] != Energy(0.) {
+                        if self.energy_we[(td, t2)] != 0. {
                             self.friends_ee[t2].insert(t1);
                         }
-                        if self.energy_ns[(t2, t1)] != Energy(0.) {
+                        if self.energy_ns[(t2, t1)] != 0. {
                             self.friends_n[t2].insert(t1);
                         }
-                        if self.energy_we[(t2, t1)] != Energy(0.) {
+                        if self.energy_we[(t2, t1)] != 0. {
                             self.friends_w[t2].insert(t1);
                         }
-                        if self.energy_ns[(t1, t2)] != Energy(0.) {
+                        if self.energy_ns[(t1, t2)] != 0. {
                             self.friends_s[t2].insert(t1);
                         }
-                        if self.energy_we[(t1, t2)] != Energy(0.) {
+                        if self.energy_we[(t1, t2)] != 0. {
                             self.friends_e[t2].insert(t1);
                         }
                     }
                     TileShape::DupleToBottom(td) => {
-                        if self.energy_we[(t2, td)] != Energy(0.) {
+                        if self.energy_we[(t2, td)] != 0. {
                             self.friends_sw[t2].insert(t1);
                         }
-                        if self.energy_we[(td, t2)] != Energy(0.) {
+                        if self.energy_we[(td, t2)] != 0. {
                             self.friends_se[t2].insert(t1);
                         }
-                        if self.energy_ns[(td, t2)] != Energy(0.) {
+                        if self.energy_ns[(td, t2)] != 0. {
                             self.friends_ss[t2].insert(t1);
                         }
-                        if self.energy_ns[(t2, t1)] != Energy(0.) {
+                        if self.energy_ns[(t2, t1)] != 0. {
                             self.friends_n[t2].insert(t1);
                         }
-                        if self.energy_we[(t2, t1)] != Energy(0.) {
+                        if self.energy_we[(t2, t1)] != 0. {
                             self.friends_w[t2].insert(t1);
                         }
-                        if self.energy_ns[(t1, t2)] != Energy(0.) {
+                        if self.energy_ns[(t1, t2)] != 0. {
                             self.friends_s[t2].insert(t1);
                         }
-                        if self.energy_we[(t1, t2)] != Energy(0.) {
+                        if self.energy_we[(t1, t2)] != 0. {
                             self.friends_e[t2].insert(t1);
                         }
                     }
@@ -693,17 +714,18 @@ impl<S: Canvas> NewKTAM<S> {
     pub fn monomer_detachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
         // If the point is a seed, then there is no detachment rate.
         if self.is_seed(p) {
-            return Rate(0.);
+            return 0.;
         }
 
         let t = state.tile_at_point(p);
         if t == 0 {
-            return Rate(0.);
+            return 0.;
         }
         if (self.has_duples) && ((self.double_to_left[t] > 0) || (self.double_to_top[t] > 0)) {
-            return Rate(0.);
+            return 0.;
         }
-        self.kf * (-self.bond_energy_of_tile_type_at_point(state, p, t) + self.alpha).exp_times_u0()
+        self.kf
+            * energy_exp_times_u0(-self.bond_energy_of_tile_type_at_point(state, p, t) + self.alpha)
     }
 
     pub fn choose_detachment_at_point(
@@ -713,7 +735,7 @@ impl<S: Canvas> NewKTAM<S> {
         mut acc: Rate,
     ) -> (bool, Rate, Event) {
         acc -= self.monomer_detachment_rate_at_point(state, p);
-        if acc <= Rate(0.) {
+        if acc <= 0. {
             (true, acc, Event::MonomerDetachment(p))
         } else {
             (false, acc, Event::None)
@@ -721,8 +743,8 @@ impl<S: Canvas> NewKTAM<S> {
     }
 
     pub fn total_monomer_attachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
-        match self._find_monomer_attachment_possibilities_at_point(state, p, Rate(0.), true) {
-            (false, acc, _) => Rate(-acc.0),
+        match self._find_monomer_attachment_possibilities_at_point(state, p, (0.), true) {
+            (false, acc, _) => (-acc),
             _ => panic!(),
         }
     }
@@ -794,7 +816,7 @@ impl<S: Canvas> NewKTAM<S> {
 
         for t in friends.drain() {
             acc -= self.kf * self.tile_concs[t];
-            if !just_calc & (acc <= Rate(0.)) {
+            if !just_calc & (acc <= (0.)) {
                 match self.tile_shape(t) {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {

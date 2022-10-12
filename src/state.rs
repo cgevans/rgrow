@@ -315,7 +315,7 @@ impl StateTracker for OrderTracker {
     fn record_single_event(&mut self, event: &system::Event) -> &mut Self {
         match event {
             system::Event::None => self,
-            system::Event::MonomerAttachment(p, t) => {
+            system::Event::MonomerAttachment(p, _t) => {
                 self.arr[p.0] = self.order;
                 self.order += 1;
                 self
@@ -324,20 +324,20 @@ impl StateTracker for OrderTracker {
                 self.arr[p.0] = 0;
                 self
             }
-            system::Event::MonomerChange(p, t) => {
+            system::Event::MonomerChange(p, _t) => {
                 self.arr[p.0] = self.order;
                 self.order += 1;
                 self
             }
             system::Event::PolymerChange(vec) => {
-                for (p, t) in vec {
+                for (p, _t) in vec {
                     self.arr[p.0] = self.order;
                 }
                 self.order += 1;
                 self
             }
             system::Event::PolymerAttachment(vec) => {
-                for (p, t) in vec {
+                for (p, _t) in vec {
                     self.arr[p.0] = self.order;
                 }
                 self.order += 1;
