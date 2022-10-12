@@ -815,31 +815,34 @@ impl<S: Canvas> NewKTAM<S> {
         }
 
         for t in friends.drain() {
-            acc -= self.kf * self.tile_concs[t];
-            if !just_calc & (acc <= (0.)) {
-                match self.tile_shape(t) {
-                    TileShape::Single => (),
-                    TileShape::DupleToRight(dt) => {
-                        if state.tile_to_e(p) != 0 {
-                            return (true, acc, Event::None);
-                        }
-                    }
-                    TileShape::DupleToBottom(dt) => {
-                        if state.tile_to_s(p) != 0 {
-                            return (true, acc, Event::None);
-                        }
-                    }
-                    TileShape::DupleToLeft(dt) => {
-                        if state.tile_to_w(p) != 0 {
-                            return (true, acc, Event::None);
-                        }
-                    }
-                    TileShape::DupleToTop(dt) => {
-                        if state.tile_to_n(p) != 0 {
-                            return (true, acc, Event::None);
-                        }
+            // FIXME: this is likely rather slow, but it's better than giving very confusing rates (many
+            // possible double-tile attachements at a point that aren't actually possible, because they are
+            // blocked).
+            match self.tile_shape(t) {
+                TileShape::Single => (),
+                TileShape::DupleToRight(dt) => {
+                    if state.tile_to_e(p) != 0 {
+                        continue;
                     }
                 }
+                TileShape::DupleToBottom(dt) => {
+                    if state.tile_to_s(p) != 0 {
+                        continue;
+                    }
+                }
+                TileShape::DupleToLeft(dt) => {
+                    if state.tile_to_w(p) != 0 {
+                        continue;
+                    }
+                }
+                TileShape::DupleToTop(dt) => {
+                    if state.tile_to_n(p) != 0 {
+                        continue;
+                    }
+                }
+            }
+            acc -= self.kf * self.tile_concs[t];
+            if !just_calc & (acc <= (0.)) {
                 return (true, acc, Event::MonomerAttachment(p, t));
             }
         }
