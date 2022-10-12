@@ -1,15 +1,17 @@
-use ndarray::Array2;
+extern crate rgrow;
+
+use ndarray::{Array1, Array2};
 use numpy::ToPyArray;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyBytes, PyType};
 use pyo3::{prelude::*, wrap_pyfunction};
 use rand::{rngs::SmallRng, SeedableRng};
-use rgrow::base;
 use rgrow::canvas;
 use rgrow::canvas::Canvas;
 use rgrow::ffs;
 use rgrow::system::{StepOutcome, TileBondInfo};
+use rgrow::{base, newsystem};
 
 use rgrow::state;
 use rgrow::state::{StateCreate, StateStatus};
@@ -33,10 +35,10 @@ use serde::{Deserialize, Serialize};
 /// - StaticKTAM (and the StaticKTAMPeriodic variant), which specify the kinetic model to use and its parameters.
 /// - StateKTAM, which stores the state of a single assembly.
 #[pymodule]
-fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
+#[pyo3(name = "rgrow")]
+fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     #[pyclass(module = "rgrow.rgrow")]
     #[derive(Debug)]
-    #[text_signature = "(tile_stoics, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, chunk_handling, chunk_size, tile_names)"]
     pub struct StaticKTAMOrder {
         inner: system::StaticKTAM<state::QuadTreeState<canvas::CanvasSquare, state::OrderTracker>>,
     }
@@ -46,7 +48,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         #[new]
         fn new(
             tile_concs: PyReadonlyArray1<f64>,
-            tile_edges: PyReadonlyArray2<base::Tile>,
+            tile_edges: PyReadonlyArray2<base::Glue>,
             glue_strengths: PyReadonlyArray1<base::Energy>,
             gse: base::Energy,
             gmc: base::Energy,
@@ -113,7 +115,6 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         #[classmethod]
         /// Creates a StaticKTAM instance from a JSON string.  Ignores canvas choice in JSON.
-        #[text_signature = "(self, json_data)"]
         fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
             let tileset = match rgrow::parser::TileSet::from_json(json_data) {
                 Ok(t) => t,
@@ -152,7 +153,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     ///     tile_names (optional, list[str]): list of tile names (default None).
     #[pyclass(module = "rgrow")]
     #[derive(Debug)]
-    #[text_signature = "(tile_stoics, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, chunk_handling, chunk_size, tile_names)"]
+    // #[text_signature = "(tile_stoics, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, chunk_handling, chunk_size, tile_names)"]
     struct StaticKTAM {
         inner:
             system::StaticKTAM<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>,
@@ -163,7 +164,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         #[new]
         fn new(
             tile_concs: PyReadonlyArray1<f64>,
-            tile_edges: PyReadonlyArray2<base::Tile>,
+            tile_edges: PyReadonlyArray2<base::Glue>,
             glue_strengths: PyReadonlyArray1<base::Energy>,
             gse: base::Energy,
             gmc: base::Energy,
@@ -230,7 +231,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         #[classmethod]
         /// Creates a StaticKTAM instance from a JSON string.  Ignores canvas choice in JSON.
-        #[text_signature = "(self, json_data)"]
+        // #[text_signature = "(self, json_data)"]
         fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
             let tileset = match rgrow::parser::TileSet::from_json(json_data) {
                 Ok(t) => t,
@@ -259,7 +260,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         ///     fission (optional): one of "off", "just-detach", "on", "keep-largest", "keep-weighted" (default "off").
         ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
         ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
-        #[text_signature = "(tile_adj_rates, energy_ns, energy_we, k_f, alpha, fission)"]
+        // #[text_signature = "(tile_adj_rates, energy_ns, energy_we, k_f, alpha, fission)"]
         #[classmethod]
         fn from_raw(
             _cls: &PyType,
@@ -384,7 +385,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         ///     minsize (int)
         ///     maxsize (int)
         ///     maxevents (int)
-        #[text_signature = "(self, state, minsize, maxsize, maxevents)"]
+        // #[text_signature = "(self, state, minsize, maxsize, maxevents)"]
         fn evolve_in_size_range_events_max(
             &mut self,
             state: &mut StateKTAM,
@@ -425,7 +426,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     ///     tile_names (optional, list[str]): list of tile names (default None).    
     #[pyclass(module = "rgrow")]
     #[derive(Debug, Serialize, Deserialize)]
-    #[text_signature = "()"]
+    // #[text_signature = "()"]
     struct StaticKTAMPeriodic {
         inner: Option<
             system::StaticKTAM<
@@ -445,7 +446,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         fn from_params(
             _cls: &PyType,
             tile_concs: PyReadonlyArray1<f64>,
-            tile_edges: PyReadonlyArray2<base::Tile>,
+            tile_edges: PyReadonlyArray2<base::Glue>,
             glue_strengths: PyReadonlyArray1<base::Energy>,
             gse: base::Energy,
             gmc: base::Energy,
@@ -520,7 +521,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         #[classmethod]
         /// Creates a StaticKTAMPeriodic instance from a JSON string.  Ignores canvas choice in JSON.
-        #[text_signature = "(self, json_data)"]
+        // #[text_signature = "(self, json_data)"]
         fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
             let tileset = match rgrow::parser::TileSet::from_json(json_data) {
                 Ok(t) => t,
@@ -549,7 +550,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         ///     fission (optional): one of "off", "just-detach", "on", "keep-largest", "keep-weighted" (default "off").
         ///     chunk_handling (optional, str): one of "off"/"none" or "detach" (default "off")
         ///     chunk_size (optional, str): currently, must be "dimer" if chunk_handling is set to "detach".  Can also be set to "off"/"none" (the default).
-        #[text_signature = "(tile_rates, energy_ns, energy_we, k_f, alpha, fission, chunk_handling, chunk_size)"]
+        // #[text_signature = "(tile_rates, energy_ns, energy_we, k_f, alpha, fission, chunk_handling, chunk_size)"]
         #[classmethod]
         fn from_raw(
             _cls: &PyType,
@@ -649,7 +650,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     /// Static KTAM with cover strands.  Currently very unstable.  Needs to be generated from json.
     #[pyclass(module = "rgrow")]
     #[derive(Debug)]
-    #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
+    // #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
     struct StaticKTAMCover {
         inner: system::StaticKTAMCover<
             state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>,
@@ -761,7 +762,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     ///     system (StaticKTAM): the system that the simulation will use.
     #[pyclass(module = "rgrow")]
     #[derive(Clone, Debug)]
-    #[text_signature = "(size, system)"]
+    // #[text_signature = "(size, system)"]
     struct StateKTAM {
         inner: state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>,
     }
@@ -773,14 +774,14 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     ///     system (StaticKTAM): the system that the simulation will use.
     #[pyclass(module = "rgrow")]
     #[derive(Clone, Debug)]
-    #[text_signature = "(size, system)"]
+    // #[text_signature = "(size, system)"]
     struct StateKTAMPeriodic {
         inner: state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>,
     }
 
     #[pyclass(module = "rgrow")]
     #[derive(Clone, Debug)]
-    #[text_signature = "(size, system)"]
+    // #[text_signature = "(size, system)"]
     struct StateKTAMOrder {
         inner: state::QuadTreeState<canvas::CanvasSquare, state::OrderTracker>,
     }
@@ -820,7 +821,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         #[classmethod]
         /// Creates a simulation state with the West-East dimer of tile numbers w, e, centered in
         /// a canvas of size size (must be 2^L).
-        #[text_signature = "(self, system, w, e, size)"]
+        // #[text_signature = "(self, system, w, e, size)"]
         fn create_we_pair(
             _cls: &PyType,
             system: &mut StaticKTAM,
@@ -834,7 +835,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[classmethod]
-        #[text_signature = "(self, canvas)"]
+        // #[text_signature = "(self, canvas)"]
         fn create_raw<'py>(
             _cls: &PyType,
             canvas: &'py PyArray2<base::Tile>,
@@ -849,7 +850,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[classmethod]
-        #[text_signature = "(self, system, n, s, size)"]
+        // #[text_signature = "(self, system, n, s, size)"]
         /// Creates a simulation state with the North-South dimer of tile numbers n, s, centered in
         /// a canvas of size size (must be 2^L).
         fn create_ns_pair(
@@ -864,7 +865,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             Ok(Self { inner })
         }
 
-        #[text_signature = "(self, system, point_y, point_x, tile)"]
+        // #[text_signature = "(self, system, point_y, point_x, tile)"]
         /// Sets the point (py, px) to a particular tile (or empty, with 0), using StaticKTAM `system`.
         /// Updates rates after setting.
         fn set_point(
@@ -881,7 +882,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible, in which case
         /// it will raise a PyValueError.
-        #[text_signature = "(self, system)"]
+        // #[text_signature = "(self, system)"]
         fn take_step(&mut self, system: &StaticKTAM) -> PyResult<()> {
             let mut rng = SmallRng::from_entropy();
             match system.inner.state_step(&mut self.inner, &mut rng, 1e100) {
@@ -893,7 +894,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         /// Provided with a StaticKTAM system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
         /// or until `maxevents` events have taken place during the evolution.  This is present for backward compatibility.
-        #[text_signature = "(self, system, minsize, maxsize, maxevents)"]
+        // #[text_signature = "(self, system, minsize, maxsize, maxevents)"]
         fn evolve_in_size_range(
             &mut self,
             system: &mut StaticKTAM,
@@ -943,7 +944,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.total_events()
         }
 
-        #[text_signature = "(self, level_number)"]
+        // #[text_signature = "(self, level_number)"]
         /// Returns rate array for level `level_number` (0 is full, each subsequent is shape (previous/2, previous/2)
         fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
             self.inner.rates.0[level].to_pyarray(py)
@@ -984,7 +985,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         #[classmethod]
         /// Creates a simulation state with the West-East dimer of tile numbers w, e, centered in
         /// a canvas of size size (must be 2^L).
-        #[text_signature = "(self, system, w, e, size)"]
+        // #[text_signature = "(self, system, w, e, size)"]
         fn create_we_pair(
             _cls: &PyType,
             system: &mut StaticKTAMOrder,
@@ -998,7 +999,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[classmethod]
-        #[text_signature = "(self, canvas)"]
+        // #[text_signature = "(self, canvas)"]
         fn create_raw<'py>(
             _cls: &PyType,
             canvas: &'py PyArray2<base::Tile>,
@@ -1012,7 +1013,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[classmethod]
-        #[text_signature = "(self, system, n, s, size)"]
+        // #[text_signature = "(self, system, n, s, size)"]
         /// Creates a simulation state with the North-South dimer of tile numbers n, s, centered in
         /// a canvas of size size (must be 2^L).
         fn create_ns_pair(
@@ -1027,7 +1028,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             Ok(Self { inner })
         }
 
-        #[text_signature = "(self, system, point_y, point_x, tile)"]
+        // #[text_signature = "(self, system, point_y, point_x, tile)"]
         /// Sets the point (py, px) to a particular tile (or empty, with 0), using StaticKTAM `system`.
         /// Updates rates after setting.
         fn set_point(
@@ -1044,7 +1045,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible, in which case
         /// it will raise a PyValueError.
-        #[text_signature = "(self, system)"]
+        // #[text_signature = "(self, system)"]
         fn take_step(&mut self, system: &StaticKTAMOrder) -> PyResult<()> {
             let mut rng = SmallRng::from_entropy();
             match system.inner.state_step(&mut self.inner, &mut rng, 1e100) {
@@ -1056,7 +1057,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         /// Provided with a StaticKTAM system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
         /// or until `maxevents` events have taken place during the evolution.  This is present for backward compatibility.
-        #[text_signature = "(self, system, minsize, maxsize, maxevents)"]
+        // #[text_signature = "(self, system, minsize, maxsize, maxevents)"]
         fn evolve_in_size_range(
             &mut self,
             system: &mut StaticKTAMOrder,
@@ -1110,7 +1111,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.total_events()
         }
 
-        #[text_signature = "(self, level_number)"]
+        // #[text_signature = "(self, level_number)"]
         /// Returns rate array for level `level_number` (0 is full, each subsequent is shape (previous/2, previous/2)
         fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
             self.inner.rates.0[level].to_pyarray(py)
@@ -1147,7 +1148,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         #[classmethod]
         /// Creates a simulation state with the West-East dimer of tile numbers w, e, centered in
         /// a canvas of size size (must be 2^L).
-        #[text_signature = "(self, system, w, e, size)"]
+        // #[text_signature = "(self, system, w, e, size)"]
         fn create_we_pair(
             _cls: &PyType,
             system: &mut StaticKTAMPeriodic,
@@ -1166,7 +1167,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[classmethod]
-        #[text_signature = "(self, system, canvas)"]
+        // #[text_signature = "(self, system, canvas)"]
         fn from_array<'py>(
             _cls: &PyType,
             canvas: &'py PyArray2<base::Tile>,
@@ -1183,7 +1184,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[classmethod]
-        #[text_signature = "(self, system, n, s, size)"]
+        // #[text_signature = "(self, system, n, s, size)"]
         /// Creates a simulation state with the North-South dimer of tile numbers n, s, centered in
         /// a canvas of size size (must be 2^L).
         fn create_ns_pair(
@@ -1203,7 +1204,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             Ok(Self { inner })
         }
 
-        #[text_signature = "(self, system, point_y, point_x, tile)"]
+        // #[text_signature = "(self, system, point_y, point_x, tile)"]
         /// Sets the point (py, px) to a particular tile (or empty, with 0), using StaticKTAMPeriodic `system`.
         /// Updates rates after setting.
         fn set_point(
@@ -1236,7 +1237,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         /// Provided with a StaticKTAMPeriodic system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
         /// or until `maxevents` events have taken place during the evolution.  This is present for backward compatibility.
-        #[text_signature = "(self, system, minsize, maxsize, maxevents)"]
+        // #[text_signature = "(self, system, minsize, maxsize, maxevents)"]
         fn evolve_in_size_range(
             &mut self,
             system: &mut StaticKTAMPeriodic,
@@ -1290,10 +1291,168 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.total_events()
         }
 
-        #[text_signature = "(self, level_number)"]
+        // #[text_signature = "(self, level_number)"]
         /// Returns rate array for level `level_number` (0 is full, each subsequent is shape (previous/2, previous/2)
         fn rates<'py>(&self, level: usize, py: Python<'py>) -> &'py PyArray2<f64> {
             self.inner.rates.0[level].to_pyarray(py)
+        }
+    }
+
+    #[pyclass(module = "rgrow")]
+    #[derive(Debug, Serialize, Deserialize)]
+    struct NewKTAMPeriodic {
+        inner: newsystem::NewKTAM<
+            state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>,
+        >,
+    }
+
+    #[pymethods]
+    impl NewKTAMPeriodic {
+        #[new]
+        fn new(ntiles: usize, nglues: usize) -> Self {
+            Self {
+                inner: (newsystem::NewKTAM::new_sized(ntiles, nglues)),
+            }
+        }
+
+        #[getter]
+        fn get_tile_names(&self) -> Vec<String> {
+            self.inner.tile_names.clone()
+        }
+
+        #[setter]
+        fn set_tile_names(&mut self, names: Vec<String>) {
+            self.inner.tile_names = names;
+        }
+
+        #[getter]
+        fn get_tile_concs<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
+            self.inner.tile_concs.to_pyarray(py)
+        }
+
+        #[setter]
+        fn set_tile_concs<'py>(&mut self, concs: &'py PyArray1<f64>) {
+            concs
+                .to_owned_array()
+                .mapv(|x| x.into())
+                .move_into(&mut self.inner.tile_concs);
+            self.inner.update_system();
+        }
+
+        #[getter]
+        fn get_tile_edges<'py>(&self, py: Python<'py>) -> &'py PyArray2<usize> {
+            self.inner.tile_edges.to_pyarray(py)
+        }
+
+        #[setter]
+        fn set_tile_edges<'py>(&mut self, edges: &'py PyArray2<usize>) {
+            edges
+                .to_owned_array()
+                .mapv(|x| x.into())
+                .move_into(&mut self.inner.tile_edges);
+            self.inner.update_system();
+        }
+
+        #[getter]
+        fn get_glue_strengths<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
+            self.inner.glue_strengths.to_pyarray(py)
+        }
+
+        #[setter]
+        fn set_glue_strengths<'py>(&mut self, strengths: &'py PyArray1<f64>) -> PyResult<()> {
+            if strengths.shape() == self.inner.glue_strengths.shape() {
+                strengths
+                    .to_owned_array()
+                    .mapv(|x| x.into())
+                    .move_into(&mut self.inner.glue_strengths);
+                self.inner.update_system();
+                Ok(())
+            } else
+            {
+                Err(PyValueError::new_err(
+                    "Must specify same number of glue strengths as glues",
+                ))
+            }
+        }
+
+        #[getter]
+        fn get_alpha(&self) -> f64 {
+            self.inner.alpha.into()
+        }
+
+        #[setter]
+        fn set_alpha(&mut self, alpha: f64) {
+            self.inner.alpha = alpha.into();
+            self.inner.update_system();
+        }
+
+        #[getter]
+        fn get_g_se(&self) -> f64 {
+            self.inner.g_se.into()
+        }
+
+        #[getter]
+        fn get_g_mc(&self) -> f64 {
+            // Return average of tile concs excluding first and zeros.
+            let mut sum = 0.0;
+            let mut count = 0;
+            for i in 1..self.inner.tile_concs.len() {
+                if self.inner.tile_concs[i] > 0.0 {
+                    sum += self.inner.tile_concs[i];
+                    count += 1;
+                }
+            }
+            let mean_conc = sum / count as f64;
+            -(mean_conc / 1.0e9).ln() + self.inner.alpha
+        }
+
+        #[setter]
+        fn set_g_se(&mut self, g_se: f64) {
+            self.inner.g_se = g_se.into();
+            self.inner.update_system();
+        }
+
+        fn set_point(&mut self, state: &mut StateKTAMPeriodic, x: usize, y: usize, t: base::Tile) {
+            self.inner.set_point(&mut state.inner, (x, y), t);
+        }
+
+        fn set_duples(&mut self, hduples: Vec<(usize, usize)>, vduples: Vec<(usize, usize)>) {
+            // Reset double_to_right and double_to_bottom to zeros
+            self.inner.double_to_right.fill(0);
+            self.inner.double_to_bottom.fill(0);
+
+            // For each hduple, set the first index to the second value
+            for (i, j) in hduples {
+                self.inner.double_to_right[i] = j;
+            }
+
+            // For each vduples, set the first index to the second value
+            for (i, j) in vduples {
+                self.inner.double_to_bottom[i] = j;
+            }
+
+            self.inner.update_system();
+        }
+
+        fn evolve_in_size_range_events_max(
+            &mut self,
+            state: &mut StateKTAMPeriodic,
+            minsize: u32,
+            maxsize: u32,
+            maxevents: u64,
+        ) {
+            let mut rng = SmallRng::from_entropy();
+            self.inner.evolve_in_size_range_events_max(
+                &mut state.inner,
+                minsize,
+                maxsize,
+                maxevents,
+                &mut rng,
+            );
+        }
+
+        fn __repr__(&self) -> String {
+            format!("{:?}", self.inner)
         }
     }
 
@@ -1304,9 +1463,10 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     m.add_class::<StateKTAM>()?;
     m.add_class::<StateKTAMOrder>()?;
     m.add_class::<StateKTAMPeriodic>()?;
+    m.add_class::<NewKTAMPeriodic>()?;
 
     #[pyfunction]
-    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    // #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
     /// Runs Forward Flux Sampling on a StaticKTAM system using number of tiles as a measure, and returns
     /// a tuple of (nucleation_rate, dimerization_rate, forward_probs).
     fn ffs_run(
@@ -1342,7 +1502,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfunction]
-    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    // #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
     /// Runs Forward Flux Sampling, and returns a tuple of using number of tiles as a measure, and returns
     /// (nucleation_rate, dimerization_rate, forward_probs, final configs, configs for each level).
     /// Note that this consumes a *large* amount of memory, and other functions that do not return every level's configurations may be better
@@ -1407,7 +1567,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfunction]
-    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    // #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
     /// Runs Forward Flux Sampling, and returns a tuple of using number of tiles as a measure, and returns
     /// (nucleation_rate, dimerization_rate, forward_probs, final configs, configs for each level).
     fn ffs_run_final<'py>(
@@ -1454,7 +1614,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfunction]
-    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    // #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
     /// Runs Forward Flux Sampling for StaticKTAMCover, and returns a tuple of using number of tiles as a measure, and returns
     /// (nucleation_rate, dimerization_rate, forward_probs, final configs).
     fn ffs_run_final_cover<'py>(
@@ -1501,7 +1661,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfunction]
-    #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    // #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
     /// Runs Forward Flux Sampling for StaticKTAMPeriodic, and returns a tuple of using number of tiles as a measure, and returns
     /// (nucleation_rate, dimerization_rate, forward_probs, final configs).
     fn ffs_run_final_p<'py>(
@@ -1548,7 +1708,7 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfunction]
-    #[text_signature = "(system, varpermean2, min_states, target_size, cutoff_prob, cutoff_number, min_cutoff_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step, keep_states)"]
+    // #[text_signature = "(system, varpermean2, min_states, target_size, cutoff_prob, cutoff_number, min_cutoff_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step, keep_states)"]
     /// Runs Forward Flux Sampling for StaticKTAMPeriodic, and returns a tuple of using number of tiles as a measure, and returns
     /// (nucleation_rate, dimerization_rate, forward_probs, configs, num states, num trials, size, prev_list).
     fn ffs_run_final_p_cvar_cut<'py>(
@@ -1576,21 +1736,25 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         Vec<u32>,
         Vec<Vec<usize>>,
     ) {
-        let fr = ffs::FFSRun::create_with_constant_variance_and_size_cutoff(
-            system.inner.as_ref().unwrap().to_owned(),
-            varpermean2,
-            min_states,
-            target_size,
-            cutoff_prob,
-            cutoff_number,
-            min_cutoff_size,
-            canvas_size,
-            max_init_events,
-            max_subseq_events,
-            start_size,
-            size_step,
-            keep_states,
-        );
+        let syscopy = system.inner.as_ref().unwrap().to_owned();
+
+        let fr = py.allow_threads(|| {
+            ffs::FFSRun::create_with_constant_variance_and_size_cutoff(
+                syscopy,
+                varpermean2,
+                min_states,
+                target_size,
+                cutoff_prob,
+                cutoff_number,
+                min_cutoff_size,
+                canvas_size,
+                max_init_events,
+                max_subseq_events,
+                start_size,
+                size_step,
+                keep_states,
+            )
+        });
 
         let assemblies = if keep_states {
             fr.level_list
