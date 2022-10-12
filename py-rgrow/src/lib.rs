@@ -1,6 +1,6 @@
 extern crate rgrow;
 
-use ndarray::{Array1, Array2};
+use ndarray::{Array2};
 use numpy::ToPyArray;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
