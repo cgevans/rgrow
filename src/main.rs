@@ -1,7 +1,7 @@
 #![feature(stmt_expr_attributes)]
 extern crate ndarray;
 
-use clap::Clap;
+use clap::Parser;
 
 use rgrow::{ffs, parser::TileSet, parser_xgrow};
 
@@ -13,14 +13,14 @@ use std::fs::File;
 #[cfg(feature = "ui")]
 use rgrow::ui::run_ktam_window;
 
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(version = "0.1.0", author = "Constantine Evans <cevans@costinet.org")]
 struct Opts {
     #[clap(subcommand)]
     subcmd: SubCommand,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 enum SubCommand {
     //Run(EO),
     //RunSubs(EO),
@@ -32,10 +32,10 @@ enum SubCommand {
     //FissionTest(EO)
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct EO {}
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct PO {
     input: String,
 }

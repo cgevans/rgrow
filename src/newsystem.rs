@@ -2,7 +2,7 @@ use crate::{
     base::Point,
     canvas::{Canvas, PointSafe2, PointSafeHere},
     state::{State, StateTracked, StateTracker},
-    system::{DimerInfo, Event, System, TileBondInfo},
+    system::{DimerInfo, Event, Orientation, System, TileBondInfo},
 };
 use fnv::{FnvHashMap, FnvHashSet};
 use ndarray::prelude::*;
@@ -83,6 +83,8 @@ impl NonZero for Tile {
         self > 0
     }
 }
+
+const FAKE_EVENT_RATE: f64 = 1e-20;
 
 // impl Index<Tile> for ArrayBase<OwnedRepr<Tile>, Dim<[usize; 1]>> {
 //     type Output = Tile;
@@ -352,15 +354,15 @@ impl<S: State + StateTracked<T>, T: StateTracker> System<S, T> for NewKTAM<S> {
     }
 
     fn choose_event_at_point(&self, state: &S, p: PointSafe2, acc: crate::base::Rate) -> Event {
-        println!("{:?}", acc);
+        // println!("{:?}", acc);
         match self.choose_detachment_at_point(state, p, (acc)) {
             (true, _, event) => {
-                println!("{:?} {:?}", acc, event);
+                // println!("{:?} {:?}", acc, event);
                 event
             }
             (false, acc, _) => match self.choose_attachment_at_point(state, p, acc) {
                 (true, _, event) => {
-                    println!("{:?} {:?}", acc, event);
+                    // println!("{:?} {:?}", acc, event);
                     event
                 }
                 (false, acc, _) => {
@@ -508,7 +510,39 @@ impl<S: State + StateTracked<T>, T: StateTracker> System<S, T> for NewKTAM<S> {
     }
 
     fn calc_dimers(&self) -> Vec<DimerInfo> {
-        todo!();
+        // It is (reasonably) safe for us to use the same code that we used in the old StaticKTAM, despite duples being
+        // here, because our EW/NS energies include the right/bottom tiles.  However, (FIXME), we need to think about
+        // how this might actually double-count / double some rates: if, eg, a single tile can attach in two places to
+        // a double tile, are we double-counting the rates?  Note also that this relies on
+        let mut dvec = Vec::new();
+
+        for ((t1, t2), e) in self.energy_ns.indexed_iter() {
+            if *e != 0. {
+                let biconc = self.tile_concs[t1] * self.tile_concs[t2];
+                dvec.push(DimerInfo {
+                    t1: t1 as Tile,
+                    t2: t2 as Tile,
+                    orientation: Orientation::NS,
+                    formation_rate: self.kf * biconc / 1e9, // FIXME: 1e9 because we're using nM for concs
+                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
+                });
+            }
+        }
+
+        for ((t1, t2), e) in self.energy_we.indexed_iter() {
+            if *e != 0. {
+                let biconc = f64::exp(2. * self.alpha) * self.tile_concs[t1] * self.tile_concs[t2];
+                dvec.push(DimerInfo {
+                    t1: t1 as Tile,
+                    t2: t2 as Tile,
+                    orientation: Orientation::WE,
+                    formation_rate: self.kf * biconc / 1e9, // FIXME: 1e9 because we're using nM for concs
+                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
+                });
+            }
+        }
+
+        dvec
     }
 
     fn calc_mismatch_locations(&self, state: &S) -> Array2<usize> {
@@ -713,8 +747,10 @@ impl<S: Canvas> NewKTAM<S> {
 
     pub fn monomer_detachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
         // If the point is a seed, then there is no detachment rate.
+        // ODD HACK: we set a very low detachment rate for seeds and duple bottom/right, to allow
+        // rate-based copying.  We ignore these below.
         if self.is_seed(p) {
-            return 0.;
+            return FAKE_EVENT_RATE;
         }
 
         let t = state.tile_at_point(p);
@@ -722,7 +758,7 @@ impl<S: Canvas> NewKTAM<S> {
             return 0.;
         }
         if (self.has_duples) && ((self.double_to_left[t] > 0) || (self.double_to_top[t] > 0)) {
-            return 0.;
+            return FAKE_EVENT_RATE;
         }
         self.kf
             * energy_exp_times_u0(-self.bond_energy_of_tile_type_at_point(state, p, t) + self.alpha)
@@ -736,7 +772,16 @@ impl<S: Canvas> NewKTAM<S> {
     ) -> (bool, Rate, Event) {
         acc -= self.monomer_detachment_rate_at_point(state, p);
         if acc <= 0. {
-            (true, acc, Event::MonomerDetachment(p))
+            // FIXME: may slow things down
+            if self.is_seed(p)
+                || ((self.has_duples)
+                    && ((self.double_to_left[state.tile_at_point(p)] > 0)
+                        || (self.double_to_top[state.tile_at_point(p)] > 0)))
+            {
+                (true, acc, Event::None)
+            } else {
+                (true, acc, Event::MonomerDetachment(p))
+            }
         } else {
             (false, acc, Event::None)
         }

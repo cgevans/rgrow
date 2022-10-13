@@ -77,10 +77,10 @@ impl<
                     size_step,
                     max_subseq_events,
                 ));
-            println!(
-                "Done with target size {}.",
-                ret.level_list.last().unwrap().target_size
-            );
+            // println!(
+            //     "Done with target size {}.",
+            //     ret.level_list.last().unwrap().target_size
+            // );
         }
 
         ret.forward_prob
@@ -287,7 +287,8 @@ impl<
                 i += 1;
             }
 
-            if state.ntiles() == target_size {
+            if state.ntiles() >= target_size {
+                // duple hack >=
                 state_list.push(state);
                 previous_list.push(i_old_state);
             } else {
@@ -353,7 +354,8 @@ impl<
                 i += 1;
             }
 
-            if state.ntiles() == target_size {
+            if state.ntiles() >= target_size {
+                // >= hack for duples
                 state_list.push(state);
                 previous_list.push(i_old_state);
             } else {
@@ -506,7 +508,8 @@ impl<
                 );
                 i += 1;
 
-                if state.ntiles() == next_size {
+                if state.ntiles() >= next_size {
+                    // FIXME: >= for duples is a hack.  Should count properly
                     // Create (retrospectively) a dimer state
                     let mut dimer_state =
                         St::create_raw(Array2::zeros((canvas_size, canvas_size))).unwrap();
