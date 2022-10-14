@@ -131,10 +131,10 @@ impl<
             );
             ret.forward_prob.push(next.p_r);
             ret.level_list.push(next);
-            println!(
-                "Done with target size {}.",
-                ret.level_list.last().unwrap().target_size
-            );
+            // println!(
+            //     "Done with target size {}.",
+            //     ret.level_list.last().unwrap().target_size
+            // );
         }
 
         ret
@@ -202,10 +202,10 @@ impl<
             }
             let pf = next.p_r;
             ret.forward_prob.push(pf);
-            println!(
-                "Done with target size {}: p_f {}, used {} trials for {} states.",
-                last.target_size, pf, next.num_trials, next.num_states
-            );
+            // println!(
+            //     "Done with target size {}: p_f {}, used {} trials for {} states.",
+            //     last.target_size, pf, next.num_trials, next.num_states
+            // );
             current_size = next.target_size;
             ret.level_list.push(next);
             if pf > cutoff_prob {

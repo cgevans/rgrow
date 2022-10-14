@@ -1,7 +1,7 @@
 //! A parser for the original Xgrow tileset files.  Note that this tries to fit Xgrow's behavior closely, so parsing is occasionally weird
 //! (eg, *no* whitespace is needed to separate things)
 
-use crate::system::FissionHandling;
+use crate::{base::Glue, system::FissionHandling};
 
 use super::parser;
 use super::parser::GlueIdent;
@@ -43,7 +43,7 @@ fn rsc<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (), E> {
 
 fn glue(input: &str) -> IResult<&str, parser::GlueIdent> {
     fn glue_num(input: &str) -> IResult<&str, parser::GlueIdent> {
-        let (input, n) = map_res(digit1, |n: &str| n.parse::<u32>())(input)?;
+        let (input, n) = map_res(digit1, |n: &str| n.parse::<Glue>())(input)?;
         Ok((input, GlueIdent::Num(n)))
     }
 
@@ -134,7 +134,7 @@ fn parse(input: &str) -> IResult<&str, parser::TileSet> {
             .iter()
             .enumerate()
             .map(|(i, s)| parser::Bond {
-                name: parser::GlueIdent::Num((i + 1) as u32),
+                name: parser::GlueIdent::Num((i + 1) as Glue),
                 strength: *s,
             })
             .collect(),
@@ -227,6 +227,7 @@ fn xgrow_args(input: &str) -> IResult<&str, parser::Args> {
     );
 
     let mut i2 = input;
+    let mut size: usize = 32;
 
     while let Ok((input, x)) = std_delim(alt(parsers))(i2) {
         match x {
@@ -234,7 +235,8 @@ fn xgrow_args(input: &str) -> IResult<&str, parser::Args> {
                 args.block = n;
             }
             XgrowArgs::Size(n) => {
-                args.size = n;
+                size = n;
+                args.size = crate::parser::Size::Single(n);
             }
             XgrowArgs::Gse(x) => {
                 args.gse = x;
@@ -256,7 +258,7 @@ fn xgrow_args(input: &str) -> IResult<&str, parser::Args> {
     }
 
     if let parser::ParsedSeed::None() = args.seed {
-        args.seed = parser::ParsedSeed::Single(args.size - 2, args.size - 2, 1);
+        args.seed = parser::ParsedSeed::Single(size - 2, size - 2, 1);
     }
 
     args.fission = FissionHandling::NoFission;

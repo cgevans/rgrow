@@ -17,6 +17,7 @@ pub mod base;
 pub mod canvas;
 pub mod ffs;
 pub mod fission;
+pub mod newfission;
 pub mod state;
 pub mod system;
 

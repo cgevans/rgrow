@@ -10,18 +10,21 @@ use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
 
+use crate::canvas::CanvasPeriodic;
 use crate::{
     canvas::Canvas, state::NullStateTracker, state::QuadTreeState, state::State, system::System,
     system::TileBondInfo,
 };
 
-use crate::state::StateCreate;
+use crate::state::{StateCreate, StateTracked, StateTracker};
 
-trait Draw<S: State> {
+trait Draw<S: State, T: StateTracker> {
     fn draw(&self, state: &S, frame: &mut [u8], scaled: usize);
 }
 
-impl<S: State, Sy: System<S> + TileBondInfo> Draw<S> for Sy {
+impl<T: StateTracker, S: State + StateTracked<T>, Sy: System<S, T> + TileBondInfo> Draw<S, T>
+    for Sy
+{
     fn draw(&self, state: &S, frame: &mut [u8], scaled: usize) {
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
             let x = i % (state.nrows() * scaled);
@@ -41,10 +44,24 @@ impl<S: State, Sy: System<S> + TileBondInfo> Draw<S> for Sy {
 }
 
 pub fn run_ktam_window(parsed: crate::parser::TileSet) {
-    let mut system = parsed.into_static_seeded_ktam();
-    let mut state = QuadTreeState::<_, NullStateTracker>::create_raw(Array2::zeros((
-        parsed.options.size,
-        parsed.options.size,
+    let mut system = parsed.into_newktam();
+
+    let size1: usize;
+    let size2: usize;
+
+    match parsed.options.size {
+        crate::parser::Size::Single(x) => {
+            size1 = x;
+            size2 = x;
+        }
+        crate::parser::Size::Pair((x, y)) => {
+            size1 = x;
+            size2 = y;
+        }
+    }
+
+    let mut state = QuadTreeState::<CanvasPeriodic, NullStateTracker>::create_raw(Array2::zeros((
+        size1, size2,
     )))
     .unwrap();
 

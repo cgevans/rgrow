@@ -26,9 +26,9 @@ enum SubCommand {
     //RunSubs(EO),
     //Parse(PO),
     //RunAtam(PO),
-    //Run(PO),
+    Run(PO),
     NucRate(PO),
-    //RunXgrow(PO),
+    RunXgrow(PO),
     //FissionTest(EO)
 }
 
@@ -44,23 +44,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts = Opts::parse();
 
     match opts.subcmd {
-        // SubCommand::Run(po) =>
-        // #[cfg(feature = "ui")]
-        // {
-        //     let file = match File::open(po.input) {
-        //         Ok(f) => f,
-        //         Err(e) => return Err(Box::new(rgrow::parser::ParserError::Io { source: e })),
-        //     };
-        //     let parsed: TileSet = serde_yaml::from_reader(file)?;
-        //     run_ktam_window(parsed)
-        // }
+        SubCommand::Run(po) =>
+        #[cfg(feature = "ui")]
+        {
+            let file = match File::open(po.input) {
+                Ok(f) => f,
+                Err(e) => return Err(Box::new(rgrow::parser::ParserError::Io { source: e })),
+            };
+            let parsed: TileSet = serde_yaml::from_reader(file)?;
+            run_ktam_window(parsed)
+        }
         SubCommand::NucRate(po) => nucrate(po.input),
-        // SubCommand::RunXgrow(po) =>
-        // #[cfg(feature = "ui")]
-        // {
-        //     let parsed = parser_xgrow::parse_xgrow(po.input)?;
-        //     run_ktam_window(parsed)
-        // }
+        SubCommand::RunXgrow(po) =>
+        #[cfg(feature = "ui")]
+        {
+            let parsed = parser_xgrow::parse_xgrow(po.input)?;
+            run_ktam_window(parsed)
+        }
     };
 
     Ok(())
@@ -71,9 +71,15 @@ fn nucrate(input: String) {
         serde_yaml::from_reader(File::open(input).expect("Input file not found."))
             .expect("Input file parse erorr.");
 
-    let system = parsed.into_static_seeded_ktam::<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>();
+    let system = parsed
+        .into_newktam::<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>();
 
-    let ffsrun = ffs::FFSRun::create(system, 1000, 30, parsed.options.size, 1_000, 50_000, 3, 2);
+    let size = match parsed.options.size {
+        rgrow::parser::Size::Single(x) => x,
+        rgrow::parser::Size::Pair((x, y)) => x.max(y),
+    };
+
+    let ffsrun = ffs::FFSRun::create(system, 1000, 30, size, 1_000, 50_000, 3, 2);
 
     println!("Nuc rate: {:e}", ffsrun.nucleation_rate());
     println!("Forwards: {:?}", ffsrun.forward_vec());

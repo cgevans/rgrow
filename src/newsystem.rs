@@ -1,78 +1,26 @@
 use crate::{
     base::Point,
     canvas::{Canvas, PointSafe2, PointSafeHere},
+    newfission,
     state::{State, StateTracked, StateTracker},
-    system::{DimerInfo, Event, Orientation, System, TileBondInfo},
+    system::{
+        ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
+        TileBondInfo,
+    },
 };
 use fnv::{FnvHashMap, FnvHashSet};
 use ndarray::prelude::*;
-use num_traits::Zero;
+use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
-use std::{
-    marker::PhantomData,
-    ops::{Add, AddAssign, Mul, Neg, SubAssign},
-};
-/// A concentration, in nM.  Note that this means u_0 is not 1.
-// #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
-// pub struct Conc(f64);
-
-// impl Add for Conc {
-//     type Output = Self;
-
-//     fn add(self, rhs: Self) -> Self::Output {
-//         Self(self.0 + rhs.0)
-//     }
-// }
-
-// impl Zero for Conc {
-//     fn zero() -> Self {
-//         Self(0.)
-//     }
-
-//     fn is_zero(&self) -> bool {
-//         self.0.is_zero()
-//     }
-// }
-
-// impl Into<f64> for Conc {
-//     fn into(self) -> f64 {
-//         self.0
-//     }
-// }
-
-// impl From<f64> for Conc {
-//     fn from(x: f64) -> Self {
-//         Conc(x)
-//     }
-// }
+use std::marker::PhantomData;
 
 type Conc = f64;
-
-// #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
-// pub struct Glue(usize);
-
-// impl Add for Glue {
-//     type Output = Glue;
-
-//     fn add(self, rhs: Self) -> Self::Output {
-//         todo!()
-//     }
-// }
-
-// impl Zero for Glue {
-//     fn zero() -> Self {
-//         Self(0)
-//     }
-
-//     fn is_zero(&self) -> bool {
-//         self.0.is_zero()
-//     }
-// }
-
 type Glue = usize;
-
-//#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
 type Tile = usize;
+type Strength = f64;
+type RatePerConc = f64;
+type Energy = f64;
+type Rate = f64;
 
 trait NonZero {
     fn nonzero(self) -> bool;
@@ -86,139 +34,9 @@ impl NonZero for Tile {
 
 const FAKE_EVENT_RATE: f64 = 1e-20;
 
-// impl Index<Tile> for ArrayBase<OwnedRepr<Tile>, Dim<[usize; 1]>> {
-//     type Output = Tile;
-
-//     fn index(&self, index: Tile) -> &Self::Output {
-//         &self[index.0]
-//     }
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-// pub struct Strength(f64);
-
-// impl Add for Strength {
-//     type Output = Self;
-
-//     fn add(self, rhs: Self) -> Self::Output {
-//         Self(self.0 + rhs.0)
-//     }
-// }
-
-// impl Zero for Strength {
-//     fn zero() -> Self {
-//         Self(0.)
-//     }
-
-//     fn is_zero(&self) -> bool {
-//         self.0.is_zero()
-//     }
-// }
-
-type Strength = f64;
-
-// #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
-
-// pub struct RatePerConc(f64);
-
-// impl Mul<Conc> for RatePerConc {
-//     type Output = Rate;
-
-//     fn mul(self, rhs: Conc) -> Self::Output {
-//         Rate(self.0 * rhs.0)
-//     }
-// }
-
-type RatePerConc = f64;
-
-/// Unitless energy.
-// #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
-
-// pub struct Energy(f64);
-
-// impl Add for Energy {
-//     type Output = Self;
-
-//     fn add(self, rhs: Self) -> Self::Output {
-//         Energy(self.0 + rhs.0)
-//     }
-// }
-
-// impl Into<f64> for Energy {
-//     fn into(self) -> f64 {
-//         self.0
-//     }
-// }
-
-// impl From<f64> for Energy {
-//     fn from(x: f64) -> Self {
-//         Energy(x)
-//     }
-// }
-
-// impl AddAssign for Energy {
-//     fn add_assign(&mut self, rhs: Self) {
-//         self.0 += rhs.0
-//     }
-// }
-
-// impl Zero for Energy {
-//     fn zero() -> Self {
-//         Self(0.)
-//     }
-
-//     fn is_zero(&self) -> bool {
-//         self.0.is_zero()
-//     }
-// }
-
-// impl Neg for Energy {
-//     type Output = Self;
-
-//     fn neg(self) -> Self::Output {
-//         Energy(-self.0)
-//     }
-// }
-
-// impl Mul<Strength> for Energy {
-//     type Output = Energy;
-
-//     fn mul(self, rhs: Strength) -> Self::Output {
-//         Energy(self.0 * rhs.0)
-//     }
-// }
-
-type Energy = f64;
-
 fn energy_exp_times_u0(x: f64) -> Conc {
-    (1e9 * x.exp())
+    1.0e9 * x.exp()
 }
-
-/// Rate in Hz
-// #[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
-// pub struct Rate(f64);
-
-// impl AddAssign for Rate {
-//     fn add_assign(&mut self, rhs: Self) {
-//         self.0 += rhs.0
-//     }
-// }
-
-// impl Add for Rate {
-//     type Output = Rate;
-
-//     fn add(self, rhs: Self) -> Self::Output {
-//         Rate(self.0 + rhs.0)
-//     }
-// }
-
-// impl SubAssign for Rate {
-//     fn sub_assign(&mut self, rhs: Self) {
-//         self.0 -= rhs.0
-//     }
-// }
-
-type Rate = f64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Seed {
@@ -234,31 +52,6 @@ enum TileShape {
     DupleToLeft(Tile),
     DupleToTop(Tile),
 }
-
-// pub trait State {
-//     fn tile_at_point(&self, p: Point) -> Tile;
-//     fn tile_to_n(&self, p: Point) -> Tile;
-//     fn tile_to_e(&self, p: Point) -> Tile;
-//     fn tile_to_s(&self, p: Point) -> Tile;
-//     fn tile_to_w(&self, p: Point) -> Tile;
-//     fn tile_to_nn(&self, p: Point) -> Tile;
-//     fn tile_to_ne(&self, p: Point) -> Tile;
-//     fn tile_to_ee(&self, p: Point) -> Tile;
-//     fn tile_to_se(&self, p: Point) -> Tile;
-//     fn tile_to_ss(&self, p: Point) -> Tile;
-//     fn tile_to_sw(&self, p: Point) -> Tile;
-//     fn tile_to_ww(&self, p: Point) -> Tile;
-//     fn tile_to_nw(&self, p: Point) -> Tile;
-// }
-
-// pub enum Event {
-//     /// A function was asked for an event within some rate accumulator, but the function passed
-//     /// on (the rate accumulutor wasn't used up), and so it is passing back the remainder.
-//     Passed(Rate),
-//     None,
-//     MonomerAttachment(PointSafe2, Tile),
-//     MonomerDetachment(PointSafe2)
-// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewKTAM<C: Canvas> {
@@ -280,9 +73,12 @@ pub struct NewKTAM<C: Canvas> {
     pub double_to_right: Array1<Tile>,
     pub double_to_bottom: Array1<Tile>,
     pub seed: Seed,
+    pub tile_colors: Vec<[u8; 4]>,
+    pub fission_handling: FissionHandling,
+
     // End of public stuff, now moving to calculated stuff.
-    energy_ns: Array2<Energy>,
-    energy_we: Array2<Energy>,
+    pub(crate) energy_ns: Array2<Energy>,
+    pub(crate) energy_we: Array2<Energy>,
 
     /// Each "friends" hashset gives the potential tile attachments
     /// at point P if tile T is in that direction.  Eg, friends_e[T]
@@ -334,8 +130,16 @@ impl<S: State + StateTracked<T>, T: StateTracker> System<S, T> for NewKTAM<S> {
 
                 self.update_points(state, &points);
             }
+            Event::PolymerDetachment(v) => {
+                let mut points = Vec::new();
+                for p in v {
+                    points.extend(self.points_to_update_around(state, &p));
+                }
+                points.sort_unstable();
+                points.dedup();
+                self.update_points(state, &points);
+            }
             Event::PolymerAttachment(_) => todo!(),
-            Event::PolymerDetachment(_) => todo!(),
             Event::PolymerChange(_) => todo!(),
         }
     }
@@ -355,7 +159,7 @@ impl<S: State + StateTracked<T>, T: StateTracker> System<S, T> for NewKTAM<S> {
 
     fn choose_event_at_point(&self, state: &S, p: PointSafe2, acc: crate::base::Rate) -> Event {
         // println!("{:?}", acc);
-        match self.choose_detachment_at_point(state, p, (acc)) {
+        match self.choose_detachment_at_point(state, p, acc) {
             (true, _, event) => {
                 // println!("{:?} {:?}", acc, event);
                 event
@@ -493,20 +297,7 @@ impl<S: State + StateTracked<T>, T: StateTracker> System<S, T> for NewKTAM<S> {
     }
 
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)> {
-        let mut v = Vec::new();
-
-        match &self.seed {
-            Seed::None() => {}
-            Seed::SingleTile { point, tile } => {
-                v.push((*point, *tile)); // FIXME
-            }
-            Seed::MultiTile(f) => {
-                for (p, t) in f.into_iter() {
-                    v.push((*p, *t));
-                }
-            }
-        };
-        v
+        self._seed_locs()
     }
 
     fn calc_dimers(&self) -> Vec<DimerInfo> {
@@ -545,15 +336,14 @@ impl<S: State + StateTracked<T>, T: StateTracker> System<S, T> for NewKTAM<S> {
         dvec
     }
 
-    fn calc_mismatch_locations(&self, state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations(&self, _state: &S) -> Array2<usize> {
         todo!()
     }
 }
 
 impl<C: State> TileBondInfo for NewKTAM<C> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        todo!();
-        //self.tile_colors[tile_number as usize]
+        self.tile_colors[tile_number as usize]
     }
 
     fn tile_name(&self, tile_number: Tile) -> &str {
@@ -565,8 +355,7 @@ impl<C: State> TileBondInfo for NewKTAM<C> {
     }
 
     fn tile_colors(&self) -> Vec<[u8; 4]> {
-        todo!();
-        //self.tile_colors.clone()
+        self.tile_colors.clone()
     }
 
     fn tile_names(&self) -> Vec<String> {
@@ -592,6 +381,8 @@ impl<S: Canvas> NewKTAM<S> {
             double_to_right: Array1::zeros(ntiles + 1),
             double_to_bottom: Array1::zeros(ntiles + 1),
             seed: Seed::None(),
+            tile_colors: Vec::new(),
+            fission_handling: FissionHandling::NoFission,
             energy_ns: Array2::zeros((ntiles + 1, ntiles + 1)),
             energy_we: Array2::zeros((ntiles + 1, ntiles + 1)),
             friends_n: Vec::new(),
@@ -608,6 +399,83 @@ impl<S: Canvas> NewKTAM<S> {
             double_to_top: Array1::zeros(ntiles + 1),
             _canvas: PhantomData,
         }
+    }
+
+    pub fn set_duples(&mut self, hduples: Vec<(usize, usize)>, vduples: Vec<(usize, usize)>) {
+        // Reset double_to_right and double_to_bottom to zeros
+        self.double_to_right.fill(0);
+        self.double_to_bottom.fill(0);
+
+        // For each hduple, set the first index to the second value
+        for (i, j) in hduples {
+            self.double_to_right[i] = j;
+        }
+
+        // For each vduples, set the first index to the second value
+        for (i, j) in vduples {
+            self.double_to_bottom[i] = j;
+        }
+
+        self.update_system();
+    }
+
+    pub fn from_ktam(
+        mut tile_stoics: Array1<f64>,
+        tile_edges: Array2<Glue>,
+        glue_strengths: Array1<f64>,
+        g_se: f64,
+        g_mc: f64,
+        alpha: Option<f64>,
+        _k_f: Option<f64>,
+        seed: Option<Seed>,
+        fission_handling: Option<FissionHandling>,
+        _chunk_handling: Option<ChunkHandling>,
+        _chunk_size: Option<ChunkSize>,
+        tile_names: Option<Vec<String>>,
+        tile_colors: Option<Vec<[u8; 4]>>,
+    ) -> Self {
+        let ntiles = tile_stoics.len() as Tile;
+
+        tile_stoics.map_inplace(|x| *x *= 1.0e9 * (-g_mc + alpha.unwrap_or(0.)).exp());
+
+        let mut ktam = NewKTAM::new_sized(
+            tile_stoics.len() as Tile - 1,
+            glue_strengths.len() as usize - 1,
+        );
+
+        ktam.tile_concs = tile_stoics;
+        ktam.tile_edges = tile_edges;
+        ktam.glue_strengths = glue_strengths;
+        ktam.g_se = g_se;
+        ktam.alpha = alpha.unwrap_or(ktam.alpha);
+        ktam.seed = seed.unwrap_or(ktam.seed);
+        //ktam.tile_colors = tile_colors.unwrap_or(ktam.tile_colors);
+        ktam.tile_names = tile_names.unwrap_or(ktam.tile_names);
+
+        ktam.tile_colors = match tile_colors {
+            Some(tc) => tc,
+            None => {
+                let mut rng = rand::thread_rng();
+                let ug = rand::distributions::Uniform::new(100u8, 254);
+                (0..ntiles)
+                    .into_iter()
+                    .map(|_x| {
+                        [
+                            ug.sample(&mut rng),
+                            ug.sample(&mut rng),
+                            ug.sample(&mut rng),
+                            0xffu8,
+                        ]
+                    })
+                    .collect()
+            }
+        };
+
+        ktam.fission_handling = fission_handling.unwrap_or(ktam.fission_handling);
+
+        ktam.update_system();
+
+        ktam
     }
 
     pub fn update_system(&mut self) {
@@ -633,11 +501,13 @@ impl<S: Canvas> NewKTAM<S> {
             for (t1, t2) in self.double_to_right.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
                     self.double_to_left[*t2] = t1;
+                    self.energy_we[(t1, *t2)] = 0.0;
                 }
             }
             for (t1, t2) in self.double_to_bottom.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
                     self.double_to_top[*t2] = t1;
+                    self.energy_ns[(t1, *t2)] = 0.0;
                 }
             }
         } else {
@@ -764,6 +634,23 @@ impl<S: Canvas> NewKTAM<S> {
             * energy_exp_times_u0(-self.bond_energy_of_tile_type_at_point(state, p, t) + self.alpha)
     }
 
+    fn _seed_locs(&self) -> Vec<(PointSafe2, Tile)> {
+        let mut v = Vec::new();
+
+        match &self.seed {
+            Seed::None() => {}
+            Seed::SingleTile { point, tile } => {
+                v.push((*point, *tile)); // FIXME
+            }
+            Seed::MultiTile(f) => {
+                for (p, t) in f.into_iter() {
+                    v.push((*p, *t));
+                }
+            }
+        };
+        v
+    }
+
     pub fn choose_detachment_at_point(
         &self,
         state: &S,
@@ -780,7 +667,62 @@ impl<S: Canvas> NewKTAM<S> {
             {
                 (true, acc, Event::None)
             } else {
-                (true, acc, Event::MonomerDetachment(p))
+                let mut possible_starts = Vec::new();
+                let mut now_empty = Vec::new();
+                let tile = { state.tile_at_point(p) as usize };
+
+                let tn = { state.tile_to_n(p) as usize };
+                let tw = { state.tile_to_w(p) as usize };
+                let te = { state.tile_to_e(p) as usize };
+                let ts = { state.tile_to_s(p) as usize };
+                // FIXME
+                if self.energy_ns[(tn, tile)] > 0. {
+                    possible_starts.push(PointSafe2(state.move_sa_n(p).0))
+                };
+                if self.energy_we[(tw, tile)] > 0. {
+                    possible_starts.push(PointSafe2(state.move_sa_w(p).0))
+                };
+                if self.energy_ns[(tile, ts)] > 0. {
+                    possible_starts.push(PointSafe2(state.move_sa_s(p).0))
+                };
+                if self.energy_we[(tile, te)] > 0. {
+                    possible_starts.push(PointSafe2(state.move_sa_e(p).0))
+                };
+
+                now_empty.push(p);
+
+                match self.determine_fission(state, &possible_starts, &now_empty) {
+                    newfission::FissionResult::NoFission => {
+                        (true, acc, Event::MonomerDetachment(p))
+                    }
+                    newfission::FissionResult::FissionGroups(g) => {
+                        //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
+                        match self.fission_handling {
+                            FissionHandling::NoFission => (true, acc, Event::None),
+                            FissionHandling::JustDetach => (true, acc, Event::MonomerDetachment(p)),
+                            FissionHandling::KeepSeeded => {
+                                let sl = self._seed_locs();
+                                (
+                                    true,
+                                    acc,
+                                    Event::PolymerDetachment(
+                                        g.choose_deletions_seed_unattached(sl),
+                                    ),
+                                )
+                            }
+                            FissionHandling::KeepLargest => (
+                                true,
+                                acc,
+                                Event::PolymerDetachment(g.choose_deletions_keep_largest_group()),
+                            ),
+                            FissionHandling::KeepWeighted => (
+                                true,
+                                acc,
+                                Event::PolymerDetachment(g.choose_deletions_size_weighted()),
+                            ),
+                        }
+                    }
+                }
             }
         } else {
             (false, acc, Event::None)
@@ -788,8 +730,8 @@ impl<S: Canvas> NewKTAM<S> {
     }
 
     pub fn total_monomer_attachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
-        match self._find_monomer_attachment_possibilities_at_point(state, p, (0.), true) {
-            (false, acc, _) => (-acc),
+        match self._find_monomer_attachment_possibilities_at_point(state, p, 0., true) {
+            (false, acc, _) => -acc,
             _ => panic!(),
         }
     }
@@ -865,22 +807,22 @@ impl<S: Canvas> NewKTAM<S> {
             // blocked).
             match self.tile_shape(t) {
                 TileShape::Single => (),
-                TileShape::DupleToRight(dt) => {
+                TileShape::DupleToRight(_) => {
                     if state.tile_to_e(p) != 0 {
                         continue;
                     }
                 }
-                TileShape::DupleToBottom(dt) => {
+                TileShape::DupleToBottom(_) => {
                     if state.tile_to_s(p) != 0 {
                         continue;
                     }
                 }
-                TileShape::DupleToLeft(dt) => {
+                TileShape::DupleToLeft(_) => {
                     if state.tile_to_w(p) != 0 {
                         continue;
                     }
                 }
-                TileShape::DupleToTop(dt) => {
+                TileShape::DupleToTop(_) => {
                     if state.tile_to_n(p) != 0 {
                         continue;
                     }
@@ -963,5 +905,45 @@ impl<S: Canvas> NewKTAM<S> {
             return TileShape::DupleToTop(dt);
         }
         return TileShape::Single;
+    }
+
+    fn points_to_update_around(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
+        // match self.chunk_size {
+        // ChunkSize::Single => {
+        let mut points = Vec::with_capacity(5);
+        points.extend_from_slice(&[
+            state.move_sa_n(*p),
+            state.move_sa_w(*p),
+            PointSafeHere(p.0),
+            state.move_sa_e(*p),
+            state.move_sa_s(*p),
+        ]);
+        points
+        //     }
+        //     ChunkSize::Dimer => {
+        //         let mut points = Vec::with_capacity(10);
+        //         points.extend_from_slice(&[
+        //             state.move_sa_n(*p),
+        //             state.move_sa_w(*p),
+        //             PointSafeHere(p.0),
+        //             state.move_sa_e(*p),
+        //             state.move_sa_s(*p),
+        //             state.move_sa_nw(*p),
+        //             state.move_sa_ne(*p),
+        //             state.move_sa_sw(*p),
+        //         ]);
+
+        //         let w = state.move_sa_w(*p);
+        //         let n = state.move_sa_n(*p);
+
+        //         if state.inbounds(w.0) {
+        //             points.push(PointSafeHere(state.move_sh_w(w)));
+        //         }
+        //         if state.inbounds(n.0) {
+        //             points.push(PointSafeHere(state.move_sh_n(n)));
+        //         }
+        //         points
+        //     }
+        // }
     }
 }

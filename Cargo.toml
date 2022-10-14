@@ -15,7 +15,7 @@ name = "rgrow-bin"
 path = "src/main.rs"
 
 [features]
-default = [] # ["ui"]
+default = ["ui"]
 ui = ["winit", "winit_input_helper", "pixels"]
 #xgrow_parse = ["nom"]
 use_rayon = ["rayon"]
