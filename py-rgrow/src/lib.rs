@@ -1,14 +1,14 @@
 extern crate rgrow;
 
-use ndarray::{Array2};
+use ndarray::Array2;
 use numpy::ToPyArray;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyBytes, PyType};
 use pyo3::{prelude::*, wrap_pyfunction};
 use rand::{rngs::SmallRng, SeedableRng};
-use rgrow::canvas;
 use rgrow::canvas::Canvas;
+use rgrow::canvas::{self, PointSafe2};
 use rgrow::ffs;
 use rgrow::system::{StepOutcome, TileBondInfo};
 use rgrow::{base, newsystem};
@@ -20,10 +20,17 @@ use rgrow::system::{ChunkHandling, ChunkSize, FissionHandling};
 use rgrow::system::{System, SystemWithStateCreate};
 
 use core::f64;
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 use bincode::{deserialize, serialize};
 use serde::{Deserialize, Serialize};
+
+#[derive(FromPyObject)]
+pub enum ParsedSeed {
+    Single(usize, usize, base::Tile),
+    Multi(Vec<(usize, usize, base::Tile)>),
+}
 
 /// A (somewhat rudimentary and very unstable) Python interface to Rgrow.
 ///
@@ -647,113 +654,113 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
     }
 
-    /// Static KTAM with cover strands.  Currently very unstable.  Needs to be generated from json.
-    #[pyclass(module = "rgrow")]
-    #[derive(Debug)]
-    // #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
-    struct StaticKTAMCover {
-        inner: system::StaticKTAMCover<
-            state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>,
-        >,
-    }
+    // /// Static KTAM with cover strands.  Currently very unstable.  Needs to be generated from json.
+    // #[pyclass(module = "rgrow")]
+    // #[derive(Debug)]
+    // // #[text_signature = "(tile_concs, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, tile_names)"]
+    // struct StaticKTAMCover {
+    //     inner: system::StaticKTAMCover<
+    //         state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>,
+    //     >,
+    // }
 
-    #[pymethods]
-    impl StaticKTAMCover {
-        #[classmethod]
-        fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
-            let mut tileset = match rgrow::parser::TileSet::from_json(json_data) {
-                Ok(t) => t,
-                Err(e) => {
-                    return Err(PyValueError::new_err(format!(
-                        "Couldn't parse tileset json: {:?}",
-                        e
-                    )))
-                }
-            };
-            Ok(Self {
-                inner: tileset.into_static_ktam_cover(),
-            })
-        }
+    // #[pymethods]
+    // impl StaticKTAMCover {
+    //     #[classmethod]
+    //     fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
+    //         let mut tileset = match rgrow::parser::TileSet::from_json(json_data) {
+    //             Ok(t) => t,
+    //             Err(e) => {
+    //                 return Err(PyValueError::new_err(format!(
+    //                     "Couldn't parse tileset json: {:?}",
+    //                     e
+    //                 )))
+    //             }
+    //         };
+    //         Ok(Self {
+    //             inner: tileset.into_static_ktam_cover(),
+    //         })
+    //     }
 
-        fn debug(&self) -> String {
-            format!("{:?}", self.inner)
-        }
+    //     fn debug(&self) -> String {
+    //         format!("{:?}", self.inner)
+    //     }
 
-        fn new_state(&mut self, size: usize) -> PyResult<StateKTAM> {
-            let mut state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
-                Array2::zeros((size, size)),
-            )
-            .unwrap();
+    //     fn new_state(&mut self, size: usize) -> PyResult<StateKTAM> {
+    //         let mut state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
+    //             Array2::zeros((size, size)),
+    //         )
+    //         .unwrap();
 
-            let sl = self.inner.seed_locs();
+    //         let sl = self.inner.seed_locs();
 
-            for (p, t) in sl {
-                // FIXME: for large seeds,
-                // this could be faster by doing raw writes, then update_entire_state
-                // but we would need to distinguish sizing.
-                // Or maybe there is fancier way with a set?
-                self.inner.set_point(&mut state, p.0, t);
-            }
+    //         for (p, t) in sl {
+    //             // FIXME: for large seeds,
+    //             // this could be faster by doing raw writes, then update_entire_state
+    //             // but we would need to distinguish sizing.
+    //             // Or maybe there is fancier way with a set?
+    //             self.inner.set_point(&mut state, p.0, t);
+    //         }
 
-            Ok(StateKTAM { inner: state })
-        }
+    //         Ok(StateKTAM { inner: state })
+    //     }
 
-        #[getter]
-        fn tile_rates<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
-            self.inner.inner.tile_adj_concs.to_pyarray(py)
-        }
+    //     #[getter]
+    //     fn tile_rates<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
+    //         self.inner.inner.tile_adj_concs.to_pyarray(py)
+    //     }
 
-        #[getter]
-        fn energy_ns<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
-            self.inner.inner.energy_ns.to_pyarray(py)
-        }
+    //     #[getter]
+    //     fn energy_ns<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
+    //         self.inner.inner.energy_ns.to_pyarray(py)
+    //     }
 
-        #[getter]
-        fn energy_we<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
-            self.inner.inner.energy_we.to_pyarray(py)
-        }
+    //     #[getter]
+    //     fn energy_we<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
+    //         self.inner.inner.energy_we.to_pyarray(py)
+    //     }
 
-        fn calc_mismatch_locations<'py>(
-            &self,
-            state: &StateKTAM,
-            py: Python<'py>,
-        ) -> &'py PyArray2<usize> {
-            self.inner
-                .calc_mismatch_locations(&state.inner)
-                .to_pyarray(py)
-        }
+    //     fn calc_mismatch_locations<'py>(
+    //         &self,
+    //         state: &StateKTAM,
+    //         py: Python<'py>,
+    //     ) -> &'py PyArray2<usize> {
+    //         self.inner
+    //             .calc_mismatch_locations(&state.inner)
+    //             .to_pyarray(py)
+    //     }
 
-        fn calc_mismatches(&self, state: &StateKTAM) -> u32 {
-            self.inner.calc_mismatches(&state.inner)
-        }
+    //     fn calc_mismatches(&self, state: &StateKTAM) -> u32 {
+    //         self.inner.calc_mismatches(&state.inner)
+    //     }
 
-        #[getter]
-        fn tile_names(&self) -> Vec<String> {
-            self.inner.tile_names()
-        }
+    //     #[getter]
+    //     fn tile_names(&self) -> Vec<String> {
+    //         self.inner.tile_names()
+    //     }
 
-        #[getter]
-        fn tile_colors(&self) -> Vec<[u8; 4]> {
-            self.inner.tile_colors()
-        }
+    //     #[getter]
+    //     fn tile_colors(&self) -> Vec<[u8; 4]> {
+    //         self.inner.tile_colors()
+    //     }
 
-        fn evolve_in_size_range_events_max(
-            &mut self,
-            state: &mut StateKTAM,
-            minsize: u32,
-            maxsize: u32,
-            maxevents: u64,
-        ) {
-            let mut rng = SmallRng::from_entropy();
-            self.inner.evolve_in_size_range_events_max(
-                &mut state.inner,
-                minsize,
-                maxsize,
-                maxevents,
-                &mut rng,
-            );
-        }
-    }
+    //     fn evolve_in_size_range_events_max(
+    //         &mut self,
+    //         state: &mut StateKTAM,
+    //         minsize: u32,
+    //         maxsize: u32,
+    //         maxevents: u64,
+    //     ) {
+    //         let mut rng = SmallRng::from_entropy();
+    //         self.inner.evolve_in_size_range_events_max(
+    //             &mut state.inner,
+    //             minsize,
+    //             maxsize,
+    //             maxevents,
+    //             &mut rng,
+    //         );
+    //     }
+    // }
 
     /// A simulation state for a static kTAM simulation, using a square canvas.
     ///
@@ -1367,8 +1374,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                     .move_into(&mut self.inner.glue_strengths);
                 self.inner.update_system();
                 Ok(())
-            } else
-            {
+            } else {
                 Err(PyValueError::new_err(
                     "Must specify same number of glue strengths as glues",
                 ))
@@ -1417,21 +1423,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         fn set_duples(&mut self, hduples: Vec<(usize, usize)>, vduples: Vec<(usize, usize)>) {
-            // Reset double_to_right and double_to_bottom to zeros
-            self.inner.double_to_right.fill(0);
-            self.inner.double_to_bottom.fill(0);
-
-            // For each hduple, set the first index to the second value
-            for (i, j) in hduples {
-                self.inner.double_to_right[i] = j;
-            }
-
-            // For each vduples, set the first index to the second value
-            for (i, j) in vduples {
-                self.inner.double_to_bottom[i] = j;
-            }
-
-            self.inner.update_system();
+            self.inner.set_duples(hduples, vduples)
         }
 
         fn evolve_in_size_range_events_max(
@@ -1451,6 +1443,58 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             );
         }
 
+        fn set_fission(&mut self, fission: &str) {
+            self.inner.fission_handling = match fission {
+                "just-detach" | "surface" => system::FissionHandling::JustDetach,
+                "on" | "keep-seeded" => system::FissionHandling::KeepSeeded,
+                "keep-largest" => system::FissionHandling::KeepLargest,
+                "keep-weighted" => system::FissionHandling::KeepWeighted,
+                "off" | "no-fission" => system::FissionHandling::NoFission,
+                _ => panic!("Invalid fission handling"),
+            }
+        }
+
+        fn get_fission(&self) -> String {
+            match self.inner.fission_handling {
+                system::FissionHandling::JustDetach => "just-detach".to_string(),
+                system::FissionHandling::KeepSeeded => "keep-seeded".to_string(),
+                system::FissionHandling::KeepLargest => "keep-largest".to_string(),
+                system::FissionHandling::KeepWeighted => "keep-weighted".to_string(),
+                system::FissionHandling::NoFission => "no-fission".to_string(),
+            }
+        }
+
+        fn set_seed(&mut self, seed: Option<ParsedSeed>) {
+            match seed {
+                Some(ParsedSeed::Single(y, x, v)) => rgrow::newsystem::Seed::SingleTile {
+                    point: PointSafe2((y, x)),
+                    tile: v,
+                },
+                None => rgrow::newsystem::Seed::None(),
+                Some(ParsedSeed::Multi(vec)) => {
+                    let mut hm = HashMap::default();
+                    hm.extend(vec.iter().map(|(y, x, v)| (PointSafe2((*y, *x)), *v)));
+                    rgrow::newsystem::Seed::MultiTile(hm)
+                }
+            };
+        }
+
+        fn get_seed(&self, py: Python<'_>) -> PyObject {
+            match &self.inner.seed {
+                rgrow::newsystem::Seed::SingleTile { point, tile } => {
+                    (point.0 .0, point.0 .1, *tile).to_object(py)
+                }
+                rgrow::newsystem::Seed::None() => None::<bool>.to_object(py),
+                rgrow::newsystem::Seed::MultiTile(hm) => {
+                    let mut vec = Vec::new();
+                    for (point, tile) in hm {
+                        vec.push((point.0 .0, point.0 .1, *tile));
+                    }
+                    vec.to_object(py)
+                }
+            }
+        }
+
         fn __repr__(&self) -> String {
             format!("{:?}", self.inner)
         }
@@ -1458,7 +1502,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<StaticKTAM>()?;
     m.add_class::<StaticKTAMOrder>()?;
-    m.add_class::<StaticKTAMCover>()?;
+    // m.add_class::<StaticKTAMCover>()?;
     m.add_class::<StaticKTAMPeriodic>()?;
     m.add_class::<StateKTAM>()?;
     m.add_class::<StateKTAMOrder>()?;
@@ -1613,52 +1657,52 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         ret
     }
 
-    #[pyfunction]
-    // #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
-    /// Runs Forward Flux Sampling for StaticKTAMCover, and returns a tuple of using number of tiles as a measure, and returns
-    /// (nucleation_rate, dimerization_rate, forward_probs, final configs).
-    fn ffs_run_final_cover<'py>(
-        system: &StaticKTAMCover,
-        num_states: usize,
-        target_size: base::NumTiles,
-        canvas_size: usize,
-        max_init_events: u64,
-        max_subseq_events: u64,
-        start_size: base::NumTiles,
-        size_step: base::NumTiles,
-        py: Python<'py>,
-    ) -> (f64, f64, Vec<f64>, Vec<&'py PyArray2<base::Tile>>) {
-        let fr = ffs::FFSRun::create_without_history(
-            system.inner.to_owned(),
-            num_states,
-            target_size,
-            canvas_size,
-            max_init_events,
-            max_subseq_events,
-            start_size,
-            size_step,
-        );
+    // #[pyfunction]
+    // // #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
+    // /// Runs Forward Flux Sampling for StaticKTAMCover, and returns a tuple of using number of tiles as a measure, and returns
+    // /// (nucleation_rate, dimerization_rate, forward_probs, final configs).
+    // fn ffs_run_final_cover<'py>(
+    //     system: &StaticKTAMCover,
+    //     num_states: usize,
+    //     target_size: base::NumTiles,
+    //     canvas_size: usize,
+    //     max_init_events: u64,
+    //     max_subseq_events: u64,
+    //     start_size: base::NumTiles,
+    //     size_step: base::NumTiles,
+    //     py: Python<'py>,
+    // ) -> (f64, f64, Vec<f64>, Vec<&'py PyArray2<base::Tile>>) {
+    //     let fr = ffs::FFSRun::create_without_history(
+    //         system.inner.to_owned(),
+    //         num_states,
+    //         target_size,
+    //         canvas_size,
+    //         max_init_events,
+    //         max_subseq_events,
+    //         start_size,
+    //         size_step,
+    //     );
 
-        let assemblies = fr
-            .level_list
-            .last()
-            .unwrap()
-            .state_list
-            .iter()
-            .map(|state| state.canvas.raw_array().to_pyarray(py))
-            .collect();
+    //     let assemblies = fr
+    //         .level_list
+    //         .last()
+    //         .unwrap()
+    //         .state_list
+    //         .iter()
+    //         .map(|state| state.canvas.raw_array().to_pyarray(py))
+    //         .collect();
 
-        let ret = (
-            fr.nucleation_rate(),
-            fr.dimerization_rate,
-            fr.forward_vec().clone(),
-            assemblies,
-        );
+    //     let ret = (
+    //         fr.nucleation_rate(),
+    //         fr.dimerization_rate,
+    //         fr.forward_vec().clone(),
+    //         assemblies,
+    //     );
 
-        drop(fr);
+    //     drop(fr);
 
-        ret
-    }
+    //     ret
+    // }
 
     #[pyfunction]
     // #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
@@ -1797,12 +1841,103 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         ret
     }
 
+    #[pyfunction]
+    // #[text_signature = "(system, varpermean2, min_states, target_size, cutoff_prob, cutoff_number, min_cutoff_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step, keep_states)"]
+    /// Runs Forward Flux Sampling for StaticKTAMPeriodic, and returns a tuple of using number of tiles as a measure, and returns
+    /// (nucleation_rate, dimerization_rate, forward_probs, configs, num states, num trials, size, prev_list).
+    fn ffs_run_final_p_cvar_cut_new<'py>(
+        system: &NewKTAMPeriodic,
+        varpermean2: f64,
+        min_states: usize,
+        target_size: base::NumTiles,
+        cutoff_prob: f64,
+        cutoff_number: usize,
+        min_cutoff_size: base::NumTiles,
+        canvas_size: usize,
+        max_init_events: u64,
+        max_subseq_events: u64,
+        start_size: base::NumTiles,
+        size_step: base::NumTiles,
+        keep_states: bool,
+        py: Python<'py>,
+    ) -> (
+        f64,
+        f64,
+        Vec<f64>,
+        Vec<Vec<&'py PyArray2<base::Tile>>>,
+        Vec<usize>,
+        Vec<usize>,
+        Vec<u32>,
+        Vec<Vec<usize>>,
+    ) {
+        let syscopy = system.inner.to_owned();
+
+        let fr = py.allow_threads(|| {
+            ffs::FFSRun::create_with_constant_variance_and_size_cutoff(
+                syscopy,
+                varpermean2,
+                min_states,
+                target_size,
+                cutoff_prob,
+                cutoff_number,
+                min_cutoff_size,
+                canvas_size,
+                max_init_events,
+                max_subseq_events,
+                start_size,
+                size_step,
+                keep_states,
+            )
+        });
+
+        let assemblies = if keep_states {
+            fr.level_list
+                .iter()
+                .map(|level| {
+                    level
+                        .state_list
+                        .iter()
+                        .map(|state| state.canvas.raw_array().to_pyarray(py))
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        } else {
+            vec![fr
+                .level_list
+                .last()
+                .unwrap()
+                .state_list
+                .iter()
+                .map(|state| state.canvas.raw_array().to_pyarray(py))
+                .collect()]
+        };
+
+        let ret = (
+            fr.nucleation_rate(),
+            fr.dimerization_rate,
+            fr.forward_vec().clone(),
+            assemblies,
+            fr.level_list.iter().map(|x| x.num_states).collect(),
+            fr.level_list.iter().map(|x| x.num_trials).collect(),
+            fr.level_list.iter().map(|x| x.target_size).collect(),
+            fr.level_list
+                .iter()
+                .map(|x| x.previous_list.clone())
+                .collect(),
+        );
+
+        drop(fr);
+
+        ret
+    }
+
     m.add_wrapped(wrap_pyfunction!(ffs_run))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_full))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_final))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_final_p))?;
     m.add_wrapped(wrap_pyfunction!(ffs_run_final_p_cvar_cut))?;
-    m.add_wrapped(wrap_pyfunction!(ffs_run_final_cover))?;
+    m.add_wrapped(wrap_pyfunction!(ffs_run_final_p_cvar_cut_new))?;
+    // m.add_wrapped(wrap_pyfunction!(ffs_run_final_cover))?;
 
     Ok(())
 }

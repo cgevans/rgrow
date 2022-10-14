@@ -5,7 +5,7 @@ import statsmodels.stats.proportion
 from numpy import isin, ndarray
 import numpy as np
 import pandas as pd
-from . import rgrow as rg
+import rgrow.rgrow as rg
 import dataclasses
 import multiprocessing
 import multiprocessing.pool
@@ -72,7 +72,7 @@ class FFSResult:
         traj_indices = self.trajectory_indices
 
         # FIXME: might be too small...
-        tc = np.ndarray(traj_indices.shape + self.canvas_shape, np.int16)
+        tc = np.array(traj_indices.shape + self.canvas_shape, np.int16)
 
         for traj_idx in range(0, len(traj_indices)):
             for surf_idx in range(0, len(traj_indices[0])):
@@ -246,6 +246,23 @@ def ffs_nucleation(system,
                    _max_subseq_events=1_000_000):
     if isinstance(system, rg.StaticKTAMPeriodic):
         restuple = rg.ffs_run_final_p_cvar_cut(
+            system,
+            varpermean2,
+            min_configs,
+            max_size,
+            cutoff_probability,
+            cutoff_surfaces,
+            min_cutoff_size,
+            canvas_size,
+            _max_init_events,
+            _max_subseq_events,
+            _surface_init_size,
+            _surface_size_step,
+            keep_surface_configs
+        )
+        return FFSResult(*restuple, system=system)
+    elif isinstance(system, rg.NewKTAMPeriodic):
+        restuple = rg.ffs_run_final_p_cvar_cut_new(
             system,
             varpermean2,
             min_configs,
