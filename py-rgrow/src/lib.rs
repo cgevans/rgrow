@@ -230,7 +230,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             Ok(Self { inner })
         }
 
-        fn new_state(&mut self, shape: (usize, usize)) -> PyResult<StateKTAM> {
+        fn new_state(&self, shape: (usize, usize)) -> PyResult<StateKTAM> {
             Ok(StateKTAM {
                 inner: self.inner.new_state(shape).unwrap(),
             })
@@ -796,21 +796,11 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     #[pymethods]
     impl StateKTAM {
         #[new]
-        fn new(size: usize, system: &mut StaticKTAM) -> PyResult<Self> {
+        fn new(size: usize) -> PyResult<Self> {
             let mut state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
                 Array2::zeros((size, size)),
             )
             .unwrap();
-
-            let sl = system.inner.seed_locs();
-
-            for (p, t) in sl {
-                // FIXME: for large seeds,
-                // this could be faster by doing raw writes, then update_entire_state
-                // but we would need to distinguish sizing.
-                // Or maybe there is fancier way with a set?
-                system.inner.set_point(&mut state, p.0, t);
-            }
 
             Ok(Self { inner: state })
         }
@@ -818,11 +808,6 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         /// Prints debug information.
         fn debug(&self) -> String {
             format!("{:?}", self.inner)
-        }
-
-        fn insert_seed(&mut self, system: &mut StaticKTAM) -> PyResult<()> {
-            system.inner.insert_seed(&mut self.inner);
-            Ok(())
         }
 
         #[classmethod]
@@ -1128,21 +1113,11 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     #[pymethods]
     impl StateKTAMPeriodic {
         #[new]
-        fn new(size: usize, system: &mut StaticKTAMPeriodic) -> PyResult<Self> {
+        fn new(size: usize) -> PyResult<Self> {
             let mut state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
                 Array2::zeros((size, size)),
             )
             .unwrap();
-
-            let sl = system.inner.as_ref().unwrap().seed_locs();
-
-            for (p, t) in sl {
-                // FIXME: for large seeds,
-                // this could be faster by doing raw writes, then update_entire_state
-                // but we would need to distinguish sizing.
-                // Or maybe there is fancier way with a set?
-                system.inner.as_mut().unwrap().set_point(&mut state, p.0, t);
-            }
 
             Ok(Self { inner: state })
         }
@@ -1322,6 +1297,12 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             }
         }
 
+        fn new_state(&self, size: usize) -> PyResult<StateKTAMPeriodic> {
+            let mut state = StateKTAMPeriodic::new(size)?;
+            self.inner.setup_state(&mut state.inner);
+            Ok(state)
+        }
+
         #[getter]
         fn get_tile_names(&self) -> Vec<String> {
             self.inner.tile_names.clone()
@@ -1426,6 +1407,11 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.set_duples(hduples, vduples)
         }
 
+        fn evolve(&self, state: &mut StateKTAMPeriodic, for_events: Option<u64>, for_time: Option<f64>, min_size: Option<u32>, max_size: Option<u32>, py: Python<'_>) {
+            let mut rng = SmallRng::from_entropy();
+            py.allow_threads(|| self.inner.evolve(&mut state.inner, &mut rng, for_events, for_time, min_size, max_size));
+        }
+
         fn evolve_in_size_range_events_max(
             &mut self,
             state: &mut StateKTAMPeriodic,
@@ -1443,6 +1429,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             );
         }
 
+        #[setter]
         fn set_fission(&mut self, fission: &str) {
             self.inner.fission_handling = match fission {
                 "just-detach" | "surface" => system::FissionHandling::JustDetach,
@@ -1454,6 +1441,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             }
         }
 
+        #[getter]
         fn get_fission(&self) -> String {
             match self.inner.fission_handling {
                 system::FissionHandling::JustDetach => "just-detach".to_string(),
@@ -1464,8 +1452,9 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             }
         }
 
+        #[setter]
         fn set_seed(&mut self, seed: Option<ParsedSeed>) {
-            match seed {
+            let ns = match seed {
                 Some(ParsedSeed::Single(y, x, v)) => rgrow::newsystem::Seed::SingleTile {
                     point: PointSafe2((y, x)),
                     tile: v,
@@ -1477,8 +1466,10 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                     rgrow::newsystem::Seed::MultiTile(hm)
                 }
             };
+            self.inner.seed = ns;
         }
 
+        #[getter]
         fn get_seed(&self, py: Python<'_>) -> PyObject {
             match &self.inner.seed {
                 rgrow::newsystem::Seed::SingleTile { point, tile } => {
