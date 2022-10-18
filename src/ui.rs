@@ -22,9 +22,7 @@ trait Draw<S: State, T: StateTracker> {
     fn draw(&self, state: &S, frame: &mut [u8], scaled: usize);
 }
 
-impl<T: StateTracker, S: State + StateTracked<T>, Sy: System<S, T> + TileBondInfo> Draw<S, T>
-    for Sy
-{
+impl<T: StateTracker, S: State + StateTracked<T>, Sy: System<S> + TileBondInfo> Draw<S, T> for Sy {
     fn draw(&self, state: &S, frame: &mut [u8], scaled: usize) {
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
             let x = i % (state.nrows() * scaled);

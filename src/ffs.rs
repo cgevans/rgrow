@@ -24,7 +24,7 @@ use system::{Orientation, System};
 
 const MAX_SAMPLES: usize = 100000;
 
-pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> {
+pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St>> {
     pub system: Sy,
     pub level_list: Vec<FFSLevel<St, Sy>>,
     pub dimerization_rate: f64,
@@ -33,7 +33,7 @@ pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St, Nul
 
 impl<
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: System<St, NullStateTracker>,
+        Sy: System<St>,
     > FFSRun<St, Sy>
 {
     pub fn create(
@@ -234,7 +234,7 @@ impl<
     }
 }
 
-pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> {
+pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System<St>> {
     pub system: std::marker::PhantomData<Sy>,
     pub state_list: Vec<St>,
     pub previous_list: Vec<usize>,
@@ -247,7 +247,7 @@ pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System<St, N
 impl<
         'a,
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: System<St, NullStateTracker>,
+        Sy: System<St>,
     > FFSLevel<St, Sy>
 {
     pub fn drop_states(&mut self) -> &Self {
@@ -340,7 +340,9 @@ impl<
             let mut i_old_state: usize = 0;
 
             while state.ntiles() == 0 {
-                assert!(state.total_rate() == 0.);
+                if state.total_rate() != 0. {
+                    panic!("Total rate is not zero! {:?}", state);
+                };
                 i_old_state = chooser.sample(&mut rng);
 
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);

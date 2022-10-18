@@ -1,8 +1,8 @@
 use crate::{
     base::Point,
-    canvas::{Canvas, PointSafe2, PointSafeHere},
+    canvas::{Canvas, CanvasPeriodic, CanvasSquarable, PointSafe2, PointSafeHere},
     newfission,
-    state::{State, StateTracked, StateTracker},
+    state::{NullStateTracker, QuadTreeState, State, StateTracked, StateTracker},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         TileBondInfo,
@@ -100,12 +100,13 @@ pub struct NewKTAM<C: Canvas> {
 
     /// We need to store the type of canvas we're using so we know
     /// how to move around.
-    _canvas: PhantomData<*const C>,
+    _canvas: PhantomData<C>,
 }
 
 unsafe impl<C: State> Send for NewKTAM<C> {}
+unsafe impl<C: Canvas + CanvasSquarable, T: StateTracker> Send for QuadTreeState<C, T> {}
 
-impl<S: State + StateTracked<T>, T: StateTracker> System<S, T> for NewKTAM<S> {
+impl<S: State> System<S> for NewKTAM<S> {
     fn update_after_event(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => todo!(),
@@ -182,7 +183,7 @@ impl<S: State + StateTracked<T>, T: StateTracker> System<S, T> for NewKTAM<S> {
         }
     }
 
-    fn set_point(&mut self, state: &mut S, point: Point, tile: Tile) {
+    fn set_point(&self, state: &mut S, point: Point, tile: Tile) {
         assert!(state.inbounds(point));
 
         let point = PointSafe2(point);
@@ -367,7 +368,7 @@ impl<C: State> TileBondInfo for NewKTAM<C> {
     }
 }
 
-impl<S: Canvas> NewKTAM<S> {
+impl<S: State> NewKTAM<S> {
     pub fn new_sized(ntiles: Tile, nglues: usize) -> Self {
         NewKTAM {
             tile_names: Vec::new(),
@@ -754,6 +755,12 @@ impl<S: Canvas> NewKTAM<S> {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
+    pub fn setup_state(&self, state: &mut S) {
+        for (p, t) in self.seed_locs() {
+            self.set_point(state, p.0, t);
+        }
+    }
+
     fn _find_monomer_attachment_possibilities_at_point(
         &self,
         state: &S,
@@ -910,13 +917,21 @@ impl<S: Canvas> NewKTAM<S> {
     fn points_to_update_around(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
         // match self.chunk_size {
         // ChunkSize::Single => {
-        let mut points = Vec::with_capacity(5);
+        let mut points = Vec::with_capacity(13);
         points.extend_from_slice(&[
             state.move_sa_n(*p),
             state.move_sa_w(*p),
             PointSafeHere(p.0),
             state.move_sa_e(*p),
             state.move_sa_s(*p),
+            state.move_sa_nn(*p),
+            state.move_sa_ne(*p),
+            state.move_sa_ee(*p),
+            state.move_sa_se(*p),
+            state.move_sa_ss(*p),
+            state.move_sa_sw(*p),
+            state.move_sa_ww(*p),
+            state.move_sa_nw(*p),
         ]);
         points
         //     }

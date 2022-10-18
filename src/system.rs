@@ -84,6 +84,7 @@ pub enum ChunkSize {
     Dimer,
 }
 
+#[derive(Debug)]
 pub enum StepOutcome {
     HadEventAt(f64),
     NoEventIn(f64),
@@ -91,10 +92,8 @@ pub enum StepOutcome {
     ZeroRate,
 }
 
-pub trait SystemWithStateCreate<S: State + StateCreate + StateTracked<T>, T: StateTracker>:
-    System<S, T>
-{
-    fn new_state(&mut self, shape: (usize, usize)) -> Result<S, GrowError> {
+pub trait SystemWithStateCreate<S: State + StateCreate>: System<S> {
+    fn new_state(&self, shape: (usize, usize)) -> Result<S, GrowError> {
         let mut new_state = S::empty(shape)?;
         self.insert_seed(&mut new_state);
         Ok(new_state)
@@ -121,12 +120,9 @@ pub trait SystemWithStateCreate<S: State + StateCreate + StateTracked<T>, T: Sta
     }
 }
 
-impl<T: StateTracker, Sy: System<S, T>, S: State + StateCreate + StateTracked<T>>
-    SystemWithStateCreate<S, T> for Sy
-{
-}
+impl<Sy: System<S>, S: State + StateCreate> SystemWithStateCreate<S> for Sy {}
 
-pub trait System<S: State + StateTracked<T>, T: StateTracker>: Debug {
+pub trait System<S: State>: Debug {
     fn state_step(
         &self,
         mut state: &mut S,
@@ -148,6 +144,51 @@ pub trait System<S: State + StateTracked<T>, T: StateTracker>: Debug {
         self.update_after_event(&mut state, &event);
         state.add_time(time_step);
         StepOutcome::HadEventAt(time_step)
+    }
+
+    fn evolve(
+        &self,
+        state: &mut S,
+        rng: &mut SmallRng,
+        for_events: Option<NumEvents>,
+        for_time: Option<f64>,
+        min_size: Option<NumTiles>,
+        max_size: Option<NumTiles>,
+    ) {
+        let mut events = 0;
+        let mut time = 0.0;
+        let mut rtime = match for_time {
+            Some(t) => t,
+            None => f64::INFINITY,
+        };
+
+        while (for_events.is_none() || events < for_events.unwrap())
+            && (for_time.is_none() || time < for_time.unwrap())
+            && (min_size.is_none() || state.ntiles() > min_size.unwrap())
+            && (max_size.is_none() || state.ntiles() < max_size.unwrap())
+        {
+            let mut out = self.state_step(state, rng, rtime);
+            match out {
+                StepOutcome::HadEventAt(t) => {
+                    events += 1;
+                    time += t;
+                    rtime -= t;
+                }
+                StepOutcome::NoEventIn(t) => {
+                    time += t;
+                    rtime -= t;
+                    break;
+                }
+                StepOutcome::DeadEventAt(t) => {
+                    time += t;
+                    rtime -= t;
+                }
+                StepOutcome::ZeroRate => {
+                    println!("Zero rate");
+                    break;
+                }
+            }
+        }
     }
 
     fn evolve_in_size_range_events_max(
@@ -178,7 +219,7 @@ pub trait System<S: State + StateTracked<T>, T: StateTracker>: Debug {
         }
     }
 
-    fn set_point(&mut self, state: &mut S, point: Point, tile: Tile) {
+    fn set_point(&self, state: &mut S, point: Point, tile: Tile) {
         assert!(state.inbounds(point));
 
         let point = PointSafe2(point);
@@ -190,14 +231,14 @@ pub trait System<S: State + StateTracked<T>, T: StateTracker>: Debug {
         self.update_after_event(state, &event);
     }
 
-    fn insert_seed(&mut self, state: &mut S) {
+    fn insert_seed(&self, state: &mut S) {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t);
         }
     }
 
     fn perform_event(&self, state: &mut S, event: &Event) {
-        state.record_event(&event);
+        //state.record_event(&event);
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
@@ -358,7 +399,7 @@ enum PossibleChoice {
     Event(Event),
 }
 
-impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for StaticKTAMCover<S> {
+impl<S: State> System<S> for StaticKTAMCover<S> {
     fn update_after_event(&self, mut state: &mut S, event: &Event) {
         match event {
             Event::None => {
@@ -525,7 +566,7 @@ impl<S: State + StateTracked<NullStateTracker>> System<S, NullStateTracker> for 
         }
     }
 
-    fn set_point(&mut self, state: &mut S, point: Point, tile: Tile) {
+    fn set_point(&self, state: &mut S, point: Point, tile: Tile) {
         assert!(state.inbounds(point));
 
         let point = PointSafe2(point);
@@ -1078,12 +1119,11 @@ impl<C: State> StaticKTAM<C> {
     }
 }
 
-impl<C, T> System<C, T> for StaticKTAM<C>
+impl<S> System<S> for StaticKTAM<S>
 where
-    C: State + StateTracked<T>,
-    T: StateTracker,
+    S: State,
 {
-    fn event_rate_at_point(&self, canvas: &C, point: PointSafeHere) -> Rate {
+    fn event_rate_at_point(&self, canvas: &S, point: PointSafeHere) -> Rate {
         let p = if canvas.inbounds(point.0) {
             PointSafe2(point.0)
         } else {
@@ -1177,7 +1217,7 @@ where
         }
     }
 
-    fn choose_event_at_point(&self, canvas: &C, p: PointSafe2, mut acc: Rate) -> Event {
+    fn choose_event_at_point(&self, canvas: &S, p: PointSafe2, mut acc: Rate) -> Event {
         let tile = { canvas.tile_at_point(p) as usize };
 
         let tn = { canvas.tile_to_n(p) as usize };
@@ -1255,7 +1295,7 @@ where
                             FissionHandling::NoFission => Event::None,
                             FissionHandling::JustDetach => Event::PolymerDetachment(now_empty),
                             FissionHandling::KeepSeeded => {
-                                let sl = System::<C, T>::seed_locs(self);
+                                let sl = System::<S>::seed_locs(self);
                                 Event::PolymerDetachment(g.choose_deletions_seed_unattached(sl))
                             }
                             FissionHandling::KeepLargest => {
@@ -1363,7 +1403,7 @@ where
         dvec
     }
 
-    fn update_after_event(&self, mut state: &mut C, event: &Event) {
+    fn update_after_event(&self, mut state: &mut S, event: &Event) {
         match event {
             Event::None => {
                 panic!("Being asked to update after a dead event.")
@@ -1428,7 +1468,7 @@ where
         }
     }
 
-    fn calc_mismatch_locations(&self, state: &C) -> Array2<usize> {
+    fn calc_mismatch_locations(&self, state: &S) -> Array2<usize> {
         let threshold = 0.1;
         let mut arr = Array2::zeros(state.raw_array().raw_dim());
 

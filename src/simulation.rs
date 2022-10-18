@@ -36,13 +36,13 @@ trait Simulation: CanvasArray {
     fn evolve(&mut self, bounds: EvolveBounds) -> EvolveOutcome;
 }
 
-struct RefSim<'a, St: State + StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> {
+struct RefSim<'a, St: State + StateTracked<NullStateTracker>, Sy: System<St>> {
     system: &'a Sy,
     state: St,
     rng: SmallRng,
 }
 
-impl<'a, St: State + StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> CanvasArray
+impl<'a, St: State + StateTracked<NullStateTracker>, Sy: System<St>> CanvasArray
     for RefSim<'a, St, Sy>
 {
     fn as_array(&self) -> ArrayView2<Tile> {
@@ -50,7 +50,7 @@ impl<'a, St: State + StateTracked<NullStateTracker>, Sy: System<St, NullStateTra
     }
 }
 
-impl<'a, St: State + StateTracked<NullStateTracker>, Sy: System<St, NullStateTracker>> Simulation
+impl<'a, St: State + StateTracked<NullStateTracker>, Sy: System<St>> Simulation
     for RefSim<'a, St, Sy>
 {
     fn take_step(&mut self, max_time: f64) -> StepOutcome {
