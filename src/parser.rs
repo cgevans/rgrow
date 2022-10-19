@@ -1,5 +1,6 @@
-use crate::canvas::PointSafe2;
+use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
 use crate::newsystem::{NewKTAM, Seed};
+use crate::state::{NullStateTracker, QuadTreeState};
 use crate::system::StaticKTAM;
 
 use super::base::{CanvasLength, Glue};
@@ -9,8 +10,11 @@ use base::{NumEvents, NumTiles};
 use bimap::BiMap;
 use ndarray::prelude::*;
 use rand::prelude::Distribution;
+use rand::rngs::SmallRng;
+use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use serde_json;
+use simulation::{Sim, Simulation};
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 use system::{ChunkHandling, ChunkSize};
@@ -195,6 +199,7 @@ fn tilepairlist_default() -> Vec<(TileIdent, TileIdent)> {
 pub enum CanvasType {
     Square,
     Periodic,
+    // Tube
 }
 
 fn canvas_type_default() -> CanvasType {
@@ -482,6 +487,135 @@ impl TileSet {
         )
     }
 
+    pub fn into_sim(&self) -> Box<dyn Sim> {
+        let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
+
+        let tile_edges = self.tile_edge_process(&gluemap);
+        let mut tile_concs = self.tile_stoics();
+        tile_concs *= f64::exp(-self.options.gmc + self.options.alpha);
+
+        let mut glue_strength_vec = Vec::<f64>::new();
+
+        let mut i: base::Glue = 0;
+        for (j, v) in gluestrengthmap {
+            assert!(j == i);
+            glue_strength_vec.push(v);
+            i += 1;
+        }
+
+        let seed = match &self.options.seed {
+            ParsedSeed::Single(y, x, v) => Seed::SingleTile {
+                point: PointSafe2((*y, *x)),
+                tile: *v,
+            },
+            ParsedSeed::None() => Seed::None(),
+            ParsedSeed::Multi(vec) => {
+                let mut hm = HashMap::default();
+                hm.extend(vec.iter().map(|(y, x, v)| (PointSafe2((*y, *x)), *v)));
+                Seed::MultiTile(hm)
+            }
+        };
+
+        let tile_names = self.tile_names();
+
+        fn tpmap(tile_names: &Vec<String>, tp: &TileIdent) -> usize {
+            match tp {
+                TileIdent::Name(x) => tile_names.iter().position(|y| *y == *x).unwrap(),
+                TileIdent::Num(x) => *x,
+            }
+        }
+
+        let hdoubles: Vec<(usize, usize)> = self
+            .options
+            .hdoubletiles
+            .iter()
+            .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
+            .collect();
+
+        let vdoubles: Vec<(usize, usize)> = self
+            .options
+            .vdoubletiles
+            .iter()
+            .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
+            .collect();
+
+        match self.options.canvas_type {
+            CanvasType::Square => {
+                let mut newkt: NewKTAM<QuadTreeState<CanvasSquare, NullStateTracker>> =
+                    NewKTAM::from_ktam(
+                        self.tile_stoics(),
+                        tile_edges,
+                        Array1::from(glue_strength_vec),
+                        self.options.gse,
+                        self.options.gmc,
+                        Some(self.options.alpha),
+                        self.options.kf,
+                        Some(seed),
+                        Some(self.options.fission),
+                        self.options.chunk_handling,
+                        self.options.chunk_size,
+                        Some(tile_names),
+                        Some(self.tile_colors()),
+                    );
+
+                newkt.set_duples(hdoubles, vdoubles);
+
+                Box::new(Simulation {
+                    system: newkt,
+                    states: Vec::new(),
+                    rng: SmallRng::from_entropy(),
+                })
+            }
+            CanvasType::Periodic => {
+                let mut newkt: NewKTAM<QuadTreeState<CanvasPeriodic, NullStateTracker>> =
+                    NewKTAM::from_ktam(
+                        self.tile_stoics(),
+                        tile_edges,
+                        Array1::from(glue_strength_vec),
+                        self.options.gse,
+                        self.options.gmc,
+                        Some(self.options.alpha),
+                        self.options.kf,
+                        Some(seed),
+                        Some(self.options.fission),
+                        self.options.chunk_handling,
+                        self.options.chunk_size,
+                        Some(tile_names),
+                        Some(self.tile_colors()),
+                    );
+
+                newkt.set_duples(hdoubles, vdoubles);
+
+                Box::new(Simulation {
+                    system: newkt,
+                    states: Vec::new(),
+                    rng: SmallRng::from_entropy(),
+                })
+            }
+            // CanvasType::Tube => {
+            //     let mut newkt: NewKTAM<QuadTreeState<CanvasTube, NullStateTracker>> = NewKTAM::from_ktam(
+            //         self.tile_stoics(),
+            //         tile_edges,
+            //         Array1::from(glue_strength_vec),
+            //         self.options.gse,
+            //         self.options.gmc,
+            //         Some(self.options.alpha),
+            //         self.options.kf,
+            //         Some(seed),
+            //         Some(self.options.fission),
+            //         self.options.chunk_handling,
+            //         self.options.chunk_size,
+            //         Some(tile_names),
+            //         Some(self.tile_colors()),
+            //     );
+
+            //     newkt.set_duples(hdoubles, vdoubles);
+
+            //     Box::new(Simulation { system: newkt, states: Vec::new(), rng: SmallRng::from_entropy() })
+            // },
+        }
+    }
+
     pub fn into_newktam<St: state::State>(&self) -> NewKTAM<St> {
         let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
 
@@ -676,7 +810,6 @@ impl TileSet {
         let ug = rand::distributions::Uniform::new(100u8, 254);
 
         for tile in &self.tiles {
-            println!("{:?}", tile);
             tc.push(match &tile.color {
                 Some(tc) => *super::colors::COLORS.get(tc.as_str()).unwrap(),
                 None => [

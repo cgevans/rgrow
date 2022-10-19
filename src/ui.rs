@@ -1,7 +1,5 @@
 use std::convert::TryInto;
 
-use ndarray::Array2;
-use rand::SeedableRng;
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 
@@ -10,39 +8,10 @@ use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
 
-use crate::canvas::CanvasPeriodic;
-use crate::{
-    canvas::Canvas, state::NullStateTracker, state::QuadTreeState, state::State, system::System,
-    system::TileBondInfo,
-};
-
-use crate::state::{StateCreate, StateTracked, StateTracker};
-
-trait Draw<S: State, T: StateTracker> {
-    fn draw(&self, state: &S, frame: &mut [u8], scaled: usize);
-}
-
-impl<T: StateTracker, S: State + StateTracked<T>, Sy: System<S> + TileBondInfo> Draw<S, T> for Sy {
-    fn draw(&self, state: &S, frame: &mut [u8], scaled: usize) {
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let x = i % (state.nrows() * scaled);
-            let y = i / (state.ncols() * scaled);
-
-            let tv = unsafe { state.uv_p((y / scaled, x / scaled)) };
-
-            pixel.copy_from_slice(
-                &(if tv > 0 {
-                    self.tile_color(tv)
-                } else {
-                    [0, 0, 0, 0x00]
-                }),
-            );
-        }
-    }
-}
+use crate::simulation::EvolveBounds;
 
 pub fn run_ktam_window(parsed: crate::parser::TileSet) {
-    let mut system = parsed.into_newktam();
+    let mut sim = parsed.into_sim();
 
     let size1: usize;
     let size2: usize;
@@ -58,22 +27,11 @@ pub fn run_ktam_window(parsed: crate::parser::TileSet) {
         }
     }
 
-    let mut state = QuadTreeState::<CanvasPeriodic, NullStateTracker>::create_raw(Array2::zeros((
-        size1, size2,
-    )))
-    .unwrap();
-
-    for (p, t) in system.seed_locs() {
-        // FIXME: for large seeds,
-        // this could be faster by doing raw writes, then update_entire_state
-        // but we would need to distinguish sizing.
-        // Or maybe there is fancier way with a set?
-        system.set_point(&mut state, p.0, t);
-    }
+    let state_i = sim.add_state((size1, size2)).unwrap();
 
     let scaled = parsed.options.block;
 
-    let mut rng = rand::rngs::SmallRng::from_entropy();
+    let state = sim.state_ref(state_i);
 
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
@@ -101,6 +59,13 @@ pub fn run_ktam_window(parsed: crate::parser::TileSet) {
         .unwrap()
     };
 
+    let bounds = EvolveBounds {
+        events: Some(parsed.options.update_rate),
+        time: Some(1e20),
+        size_min: Some(0),
+        size_max: None,
+    };
+
     event_loop.run(move |event, _, control_flow| {
         if let Event::RedrawRequested(_) = event {
             pixels.render().unwrap();
@@ -120,15 +85,13 @@ pub fn run_ktam_window(parsed: crate::parser::TileSet) {
             // Update internal state and request a redraw
         }
 
-        for _ in 0..parsed.options.update_rate {
-            system.state_step(&mut state, &mut rng, 1e20);
-        }
+        sim.evolve(state_i, bounds);
         // match parsed.options.smax {
         //     Some(smax) => {if state.ntiles() > smax {break}}
         //     None => {}
         // };
 
-        system.draw(&state, pixels.get_frame(), scaled);
+        sim.draw(state_i, pixels.get_frame(), scaled);
         window.request_redraw();
     });
 }

@@ -280,7 +280,7 @@ impl Canvas for CanvasSquare {
 
     #[inline(always)]
     fn inbounds(&self, p: Point) -> bool {
-        return (p.0 >= 1) & (p.1 >= 1) & (p.0 < self.size - 1) & (p.1 < self.size - 1);
+        return (p.0 >= 2) & (p.1 >= 2) & (p.0 < self.size - 2) & (p.1 < self.size - 2);
     }
 
     #[inline(always)]

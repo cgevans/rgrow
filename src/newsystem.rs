@@ -1,8 +1,8 @@
 use crate::{
     base::Point,
-    canvas::{Canvas, CanvasPeriodic, CanvasSquarable, PointSafe2, PointSafeHere},
+    canvas::{Canvas, CanvasSquarable, PointSafe2, PointSafeHere},
     newfission,
-    state::{NullStateTracker, QuadTreeState, State, StateTracked, StateTracker},
+    state::{QuadTreeState, State, StateTracker},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         TileBondInfo,
