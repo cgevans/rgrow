@@ -121,11 +121,11 @@ impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
     }
 
     fn nrows(&self) -> usize {
-        self.canvas.raw_array().nrows()
+        self.canvas.nrows()
     }
 
     fn ncols(&self) -> usize {
-        self.canvas.raw_array().ncols()
+        self.canvas.ncols()
     }
 
     fn set_sa(&mut self, p: &PointSafe2, t: &Tile) {

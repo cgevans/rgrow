@@ -199,7 +199,7 @@ fn tilepairlist_default() -> Vec<(TileIdent, TileIdent)> {
 pub enum CanvasType {
     Square,
     Periodic,
-    // Tube
+    Tube,
 }
 
 fn canvas_type_default() -> CanvasType {
@@ -592,27 +592,32 @@ impl TileSet {
                     rng: SmallRng::from_entropy(),
                 })
             }
-            // CanvasType::Tube => {
-            //     let mut newkt: NewKTAM<QuadTreeState<CanvasTube, NullStateTracker>> = NewKTAM::from_ktam(
-            //         self.tile_stoics(),
-            //         tile_edges,
-            //         Array1::from(glue_strength_vec),
-            //         self.options.gse,
-            //         self.options.gmc,
-            //         Some(self.options.alpha),
-            //         self.options.kf,
-            //         Some(seed),
-            //         Some(self.options.fission),
-            //         self.options.chunk_handling,
-            //         self.options.chunk_size,
-            //         Some(tile_names),
-            //         Some(self.tile_colors()),
-            //     );
+            CanvasType::Tube => {
+                let mut newkt: NewKTAM<QuadTreeState<CanvasTube, NullStateTracker>> =
+                    NewKTAM::from_ktam(
+                        self.tile_stoics(),
+                        tile_edges,
+                        Array1::from(glue_strength_vec),
+                        self.options.gse,
+                        self.options.gmc,
+                        Some(self.options.alpha),
+                        self.options.kf,
+                        Some(seed),
+                        Some(self.options.fission),
+                        self.options.chunk_handling,
+                        self.options.chunk_size,
+                        Some(tile_names),
+                        Some(self.tile_colors()),
+                    );
 
-            //     newkt.set_duples(hdoubles, vdoubles);
+                newkt.set_duples(hdoubles, vdoubles);
 
-            //     Box::new(Simulation { system: newkt, states: Vec::new(), rng: SmallRng::from_entropy() })
-            // },
+                Box::new(Simulation {
+                    system: newkt,
+                    states: Vec::new(),
+                    rng: SmallRng::from_entropy(),
+                })
+            }
         }
     }
 

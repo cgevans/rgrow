@@ -3,6 +3,7 @@
 use rand::prelude::SmallRng;
 
 use crate::base::{GrowError, NumEvents, NumTiles};
+use crate::canvas::PointSafe2;
 use crate::state::{State, StateCreate};
 use crate::system::{StepOutcome, System};
 use crate::system::{SystemWithStateCreate, TileBondInfo};
@@ -55,11 +56,31 @@ impl<Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo, St: State + Stat
     }
     fn draw(&self, state_index: usize, frame: &mut [u8], scaled: usize) {
         let state = &self.states[state_index];
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let x = i % (state.nrows() * scaled);
-            let y = i / (state.ncols() * scaled);
+        let mut scy = scaled;
+        let mut scx = scaled;
+        let mut x = 0;
+        let mut y = 0;
+        for (pixel) in frame.chunks_exact_mut(4) {
+            //println!("{} {}", x/scaled, y/scaled);
 
-            let tv = unsafe { state.uv_p((y / scaled, x / scaled)) };
+            let tv = unsafe { state.tile_at_point(PointSafe2((x, y))) };
+
+            scy -= 1;
+            if scy == 0 {
+                scy = scaled;
+                y += 1;
+                if y == state.ncols() {
+                    y = 0;
+                    scx -= 1;
+                    if scx == 0 {
+                        scx = scaled;
+                        x += 1;
+                        if x == state.nrows() {
+                            break;
+                        }
+                    }
+                }
+            }
 
             pixel.copy_from_slice(
                 &(if tv > 0 {

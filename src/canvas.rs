@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 
 pub trait CanvasCreate: Sized + Canvas {
     fn from_array(canvas: Array2<Tile>) -> GrowResult<Self>;
+    fn new_sized(shape: (usize, usize)) -> GrowResult<Self> {
+        Self::from_array(Array2::zeros(shape))
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug, Serialize, Deserialize)]
@@ -243,44 +246,37 @@ pub trait CanvasSquarable: Canvas {
 
 #[derive(Clone, Debug)]
 pub struct CanvasSquare {
-    canvas: Array2<Tile>,
-    size: usize,
+    values: Array2<Tile>,
 }
 
 impl CanvasSquarable for CanvasSquare {
     #[inline(always)]
     fn square_size(&self) -> usize {
-        return self.size;
+        let largest = self.values.nrows().max(self.values.ncols());
+        2usize.pow(f64::log2(largest as f64).ceil() as u32)
     }
 }
 
 impl CanvasCreate for CanvasSquare {
     fn from_array(canvas: Array2<Tile>) -> GrowResult<Self> {
-        let size = canvas.nrows();
-        if canvas.nrows() != canvas.ncols() {
-            Err(GrowError::WrongCanvasSize(size, canvas.ncols()))
-        } else if (size & (size - 1)) != 0 {
-            Err(GrowError::WrongCanvasSize(size, canvas.ncols()))
-        } else {
-            Ok(Self { canvas, size })
-        }
+        Ok(Self { values: canvas })
     }
 }
 
 impl Canvas for CanvasSquare {
     #[inline(always)]
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
-        self.canvas.uget(p)
+        self.values.uget(p)
     }
 
     #[inline(always)]
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {
-        self.canvas.uget_mut(p)
+        self.values.uget_mut(p)
     }
 
     #[inline(always)]
     fn inbounds(&self, p: Point) -> bool {
-        return (p.0 >= 2) & (p.1 >= 2) & (p.0 < self.size - 2) & (p.1 < self.size - 2);
+        return (p.0 >= 2) & (p.1 >= 2) & (p.0 < self.nrows() - 2) & (p.1 < self.ncols() - 2);
     }
 
     #[inline(always)]
@@ -325,20 +321,20 @@ impl Canvas for CanvasSquare {
 
     #[inline(always)]
     fn calc_ntiles(&self) -> NumTiles {
-        self.canvas
+        self.values
             .fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 }))
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {
-        self.canvas.view()
+        self.values.view()
     }
 
     fn nrows(&self) -> usize {
-        self.canvas.nrows()
+        self.values.nrows()
     }
 
     fn ncols(&self) -> usize {
-        self.canvas.ncols()
+        self.values.ncols()
     }
 }
 
@@ -420,34 +416,68 @@ pub struct CanvasTube {
     values: Array2<Tile>,
 }
 
+impl CanvasCreate for CanvasTube {
+    fn from_array(values: Array2<Tile>) -> GrowResult<Self> {
+        let width = values.nrows();
+        if width % 2 != 0 {
+            Err(GrowError::WrongCanvasSize(width, values.ncols()))
+        } else {
+            Ok(Self { values })
+        }
+    }
+}
+
+impl CanvasSquarable for CanvasTube {
+    fn square_size(&self) -> usize {
+        let largest = self.values.nrows().max(self.values.ncols());
+        2usize.pow(f64::log2(largest as f64).ceil() as u32)
+    }
+}
+
 impl Canvas for CanvasTube {
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
-        self.values.uget((p.1 - p.0, p.0))
+        self.values.uget(p)
     }
 
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {
-        self.values.uget_mut((p.1 - p.0, p.0))
+        self.values.uget_mut(p)
     }
 
     fn u_move_point_n(&self, p: Point) -> Point {
-        (p.0 - 1, p.1)
+        if p.0 == 0 {
+            (self.nrows() - 1, p.1 - (self.nrows() / 2))
+        } else {
+            (p.0 - 1, p.1)
+        }
     }
 
     fn u_move_point_e(&self, p: Point) -> Point {
-        (p.0 - 1, p.1 + 1)
+        if p.0 == 0 {
+            (self.nrows() - 1, p.1 - (self.nrows() / 2) + 1)
+        } else {
+            (p.0 - 1, p.1 + 1)
+        }
     }
 
     fn u_move_point_s(&self, p: Point) -> Point {
-        (p.0 + 1, p.1)
+        if p.0 == self.nrows() - 1 {
+            (0, p.1 + (self.nrows() / 2))
+        } else {
+            (p.0 + 1, p.1)
+        }
     }
 
     fn u_move_point_w(&self, p: Point) -> Point {
-        (p.0 + 1, p.1 - 1)
+        if p.0 == self.nrows() - 1 {
+            (0, p.1 + (self.nrows() / 2) - 1)
+        } else {
+            (p.0 + 1, p.1 - 1)
+        }
     }
 
     fn inbounds(&self, p: Point) -> bool {
-        let (ys, xs) = self.values.dim();
-        (p.1 < xs) & (p.0 - p.1 < ys) & (p.0 - p.1 > xs)
+        let (xs, ys) = self.values.dim();
+        (p.0 < xs) & (p.1 < ys - 2 - (self.nrows() / 2)) & (p.1 >= 2 + (self.nrows() / 2))
     }
 
     fn calc_ntiles(&self) -> NumTiles {
