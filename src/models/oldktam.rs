@@ -10,7 +10,7 @@ use crate::{
     base::{Energy, Glue, GrowError, Point, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     parser::{FromTileSet, ParsedSeed, SimFromTileSet, Size, TileSet},
-    simulation::Sim,
+    simulation::Simulation,
     state::{State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
@@ -862,14 +862,14 @@ where
 }
 
 impl<St: State + StateCreate + 'static> SimFromTileSet for OldKTAM<St> {
-    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Sim>, GrowError> {
+    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError> {
         let sys = Self::from_tileset(tileset);
         let size = match tileset.options.size {
             Size::Single(x) => (x, x),
             Size::Pair((x, y)) => (x, y),
         };
         let state = sys.new_state(size)?;
-        let sim = crate::simulation::Simulation {
+        let sim = crate::simulation::ConcreteSimulation {
             system: sys,
             states: vec![state],
             rng: SmallRng::from_entropy(),

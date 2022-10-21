@@ -1,4 +1,4 @@
-use super::ktam::NewKTAM;
+use super::ktam::KTAM;
 use crate::base::Tile;
 use crate::canvas::Canvas;
 use crate::canvas::PointSafe2;
@@ -223,7 +223,7 @@ pub enum FissionResult {
     FissionGroups(GroupInfo),
 }
 
-impl<S: Canvas> NewKTAM<S> {
+impl<S: Canvas> KTAM<S> {
     pub fn determine_fission(
         &self,
         canvas: &S,

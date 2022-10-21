@@ -88,7 +88,7 @@ pub fn run_window(parsed: crate::parser::TileSet) -> Result<(), GrowError> {
             // Update internal state and request a redraw
             window.request_redraw();
         }
-        sim.evolve(state_i, bounds);
+        sim.evolve(state_i, bounds).unwrap();
         // match parsed.options.smax {
         //     Some(smax) => {if state.ntiles() > smax {break}}
         //     None => {}

@@ -4,7 +4,7 @@ extern crate ndarray;
 use clap::Parser;
 
 use rgrow::base::GrowError;
-use rgrow::models::ktam::NewKTAM;
+use rgrow::models::ktam::KTAM;
 use rgrow::{ffs, parser::TileSet, parser_xgrow};
 
 use rgrow::{canvas, state};
@@ -78,7 +78,10 @@ fn nucrate(input: String) -> Result<(), GrowError> {
         serde_yaml::from_reader(File::open(input).expect("Input file not found."))
             .expect("Input file parse erorr.");
 
-    let system = NewKTAM::<state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>>::from_tileset(&parsed);
+    let system =
+        KTAM::<state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>>::from_tileset(
+            &parsed,
+        );
 
     let size = match parsed.options.size {
         rgrow::parser::Size::Single(x) => x,

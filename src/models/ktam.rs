@@ -1,10 +1,10 @@
 use super::ktam_fission::*;
 use crate::{
     base::{GrowError, Point},
-    canvas::{Canvas, CanvasSquarable, PointSafe2, PointSafeHere},
+    canvas::{Canvas, PointSafe2, PointSafeHere},
     parser::{FromTileSet, ParsedSeed, SimFromTileSet, Size, TileIdent, TileSet},
-    simulation::Sim,
-    state::{self, QuadTreeState, State, StateCreate, StateTracker},
+    simulation::Simulation,
+    state::{self, State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemWithStateCreate, TileBondInfo,
@@ -56,7 +56,7 @@ enum TileShape {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NewKTAM<C: Canvas> {
+pub struct KTAM<C: Canvas> {
     /// Tile names, as strings.  Only used for reference.
     pub tile_names: Vec<String>,
     /// Tile concentrations, actual (not modified by alpha/Gse/etc) in nM.
@@ -105,10 +105,9 @@ pub struct NewKTAM<C: Canvas> {
     _canvas: PhantomData<C>,
 }
 
-unsafe impl<C: State> Send for NewKTAM<C> {}
-unsafe impl<C: Canvas + CanvasSquarable, T: StateTracker> Send for QuadTreeState<C, T> {}
+unsafe impl<C: State> Send for KTAM<C> {}
 
-impl<S: State> System<S> for NewKTAM<S> {
+impl<S: State> System<S> for KTAM<S> {
     fn update_after_event(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => todo!(),
@@ -344,7 +343,7 @@ impl<S: State> System<S> for NewKTAM<S> {
     }
 }
 
-impl<C: State> TileBondInfo for NewKTAM<C> {
+impl<C: State> TileBondInfo for KTAM<C> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
         self.tile_colors[tile_number as usize]
     }
@@ -370,9 +369,9 @@ impl<C: State> TileBondInfo for NewKTAM<C> {
     }
 }
 
-impl<S: State> NewKTAM<S> {
+impl<S: State> KTAM<S> {
     pub fn new_sized(ntiles: Tile, nglues: usize) -> Self {
-        NewKTAM {
+        KTAM {
             tile_names: Vec::new(),
             tile_concs: Array1::zeros(ntiles + 1),
             tile_edges: Array2::zeros((ntiles + 1, 4)),
@@ -441,7 +440,7 @@ impl<S: State> NewKTAM<S> {
 
         tile_stoics.map_inplace(|x| *x *= 1.0e9 * (-g_mc + alpha.unwrap_or(0.)).exp());
 
-        let mut ktam = NewKTAM::new_sized(
+        let mut ktam = KTAM::new_sized(
             tile_stoics.len() as Tile - 1,
             glue_strengths.len() as usize - 1,
         );
@@ -963,15 +962,15 @@ impl<S: State> NewKTAM<S> {
     }
 }
 
-impl<St: State + StateCreate + 'static> SimFromTileSet for NewKTAM<St> {
-    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Sim>, GrowError> {
+impl<St: State + StateCreate + 'static> SimFromTileSet for KTAM<St> {
+    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError> {
         let sys = Self::from_tileset(tileset);
         let size = match tileset.options.size {
             Size::Single(x) => (x, x),
             Size::Pair((x, y)) => (x, y),
         };
         let state = sys.new_state(size)?;
-        let sim = crate::simulation::Simulation {
+        let sim = crate::simulation::ConcreteSimulation {
             system: sys,
             states: vec![state],
             rng: SmallRng::from_entropy(),
@@ -980,7 +979,7 @@ impl<St: State + StateCreate + 'static> SimFromTileSet for NewKTAM<St> {
     }
 }
 
-impl<St: state::State + state::StateCreate> FromTileSet for NewKTAM<St> {
+impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
     fn from_tileset(tileset: &TileSet) -> Self {
         let (gluemap, gluestrengthmap) = tileset.number_glues().unwrap();
 
@@ -1033,7 +1032,7 @@ impl<St: state::State + state::StateCreate> FromTileSet for NewKTAM<St> {
             .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
             .collect();
 
-        let mut newkt = NewKTAM::from_ktam(
+        let mut newkt = KTAM::from_ktam(
             tileset.tile_stoics(),
             tile_edges,
             Array1::from(glue_strength_vec),

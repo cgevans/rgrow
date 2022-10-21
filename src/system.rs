@@ -32,6 +32,16 @@ pub enum StepOutcome {
     ZeroRate,
 }
 
+#[derive(Debug, Clone)]
+pub enum EvolveOutcome {
+    ReachedEventsMax,
+    ReachedTimeMax,
+    ReachWallTimeMax,
+    ReachedSizeMin,
+    ReachedSizeMax,
+    ReachedZeroRate,
+}
+
 #[derive(Clone, Debug)]
 pub enum Orientation {
     NS,
@@ -127,7 +137,7 @@ pub trait System<S: State>: Debug {
         min_size: Option<NumTiles>,
         max_size: Option<NumTiles>,
         for_wall_time: Option<Duration>,
-    ) {
+    ) -> Result<EvolveOutcome, GrowError> {
         let mut events = 0;
         let mut rtime = match for_time {
             Some(t) => t,
@@ -140,30 +150,30 @@ pub trait System<S: State>: Debug {
             None => None,
         };
 
-        while (for_events.is_none() || events < for_events.unwrap())
-            && (min_size.is_none() || state.ntiles() > min_size.unwrap())
-            && (max_size.is_none() || state.ntiles() < max_size.unwrap())
-            && (match for_wall_time {
-                Some(t) => start_time.unwrap().elapsed() < t,
-                None => true,
-            })
-        {
+        loop {
+            if min_size.is_some_and(|ms| state.ntiles() <= *ms) {
+                return Ok(EvolveOutcome::ReachedSizeMin);
+            } else if max_size.is_some_and(|ms| state.ntiles() >= *ms) {
+                return Ok(EvolveOutcome::ReachedSizeMax);
+            } else if rtime <= 0. {
+                return Ok(EvolveOutcome::ReachedTimeMax);
+            } else if for_wall_time.is_some_and(|t| start_time.unwrap().elapsed() >= *t) {
+                return Ok(EvolveOutcome::ReachWallTimeMax);
+            } else if for_events.is_some_and(|e| events >= *e) {
+                return Ok(EvolveOutcome::ReachedEventsMax);
+            }
             let out = self.state_step(state, rng, rtime);
             match out {
                 StepOutcome::HadEventAt(t) => {
                     events += 1;
                     rtime -= t;
                 }
-                StepOutcome::NoEventIn(t) => {
-                    rtime -= t;
-                    break;
-                }
+                StepOutcome::NoEventIn(_) => return Ok(EvolveOutcome::ReachedTimeMax),
                 StepOutcome::DeadEventAt(t) => {
                     rtime -= t;
                 }
                 StepOutcome::ZeroRate => {
-                    println!("Zero rate");
-                    break;
+                    return Ok(EvolveOutcome::ReachedZeroRate);
                 }
             }
         }

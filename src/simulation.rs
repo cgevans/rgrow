@@ -6,7 +6,7 @@ use rand::prelude::SmallRng;
 
 use crate::base::{GrowError, NumEvents, NumTiles};
 use crate::state::{State, StateCreate};
-use crate::system::{StepOutcome, System};
+use crate::system::{EvolveOutcome, System};
 use crate::system::{SystemWithStateCreate, TileBondInfo};
 
 #[derive(Debug, Copy, Clone)]
@@ -17,32 +17,31 @@ pub struct EvolveBounds {
     pub size_max: Option<NumTiles>,
     pub wall_time: Option<Duration>,
 }
-
-pub enum EvolveOutcome {
-    Events,
-    Time,
-    SizeMin,
-    SizeMax,
-    NoStep(StepOutcome),
-}
-
-pub(crate) struct Simulation<Sy: System<St>, St: State> {
+pub(crate) struct ConcreteSimulation<Sy: System<St>, St: State> {
     pub system: Sy,
     pub states: Vec<St>,
     pub rng: SmallRng,
 }
 
-pub trait Sim {
-    fn evolve(&mut self, state_index: usize, bounds: EvolveBounds) -> EvolveOutcome;
+pub trait Simulation {
+    fn evolve(
+        &mut self,
+        state_index: usize,
+        bounds: EvolveBounds,
+    ) -> Result<EvolveOutcome, GrowError>;
     fn state_ref(&self, state_index: usize) -> &dyn State;
     fn add_state(&mut self, shape: (usize, usize)) -> Result<usize, GrowError>;
     fn draw(&self, state_index: usize, frame: &mut [u8], scaled: usize);
 }
 
-impl<Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo, St: State + StateCreate> Sim
-    for Simulation<Sy, St>
+impl<Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo, St: State + StateCreate> Simulation
+    for ConcreteSimulation<Sy, St>
 {
-    fn evolve(&mut self, state_index: usize, bounds: EvolveBounds) -> EvolveOutcome {
+    fn evolve(
+        &mut self,
+        state_index: usize,
+        bounds: EvolveBounds,
+    ) -> Result<EvolveOutcome, GrowError> {
         self.system.evolve(
             &mut self.states[state_index],
             &mut self.rng,
@@ -51,8 +50,7 @@ impl<Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo, St: State + Stat
             bounds.size_min,
             bounds.size_max,
             bounds.wall_time,
-        );
-        EvolveOutcome::Events
+        )
     }
     fn state_ref(&self, state_index: usize) -> &dyn State {
         &self.states[state_index]

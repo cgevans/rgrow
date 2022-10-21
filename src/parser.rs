@@ -1,6 +1,6 @@
 use crate::base::GrowError;
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube};
-use crate::models::ktam::NewKTAM;
+use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
 
@@ -13,7 +13,7 @@ use ndarray::prelude::*;
 use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use simulation::Sim;
+use simulation::Simulation;
 use std::collections::BTreeMap;
 use std::io;
 use system::{ChunkHandling, ChunkSize};
@@ -278,7 +278,7 @@ pub trait FromTileSet {
 }
 
 pub trait SimFromTileSet {
-    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Sim>, GrowError>;
+    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError>;
 }
 
 impl TileSet {
@@ -290,19 +290,17 @@ impl TileSet {
         serde_yaml::from_str(data).unwrap_or(Err(()))
     }
 
-    pub fn into_sim(&self) -> Result<Box<dyn Sim>, GrowError> {
+    pub fn into_sim(&self) -> Result<Box<dyn Simulation>, GrowError> {
         match self.options.model {
             Model::KTAM => match self.options.canvas_type {
                 CanvasType::Square => {
-                    NewKTAM::<QuadTreeState<CanvasSquare, NullStateTracker>>::sim_from_tileset(self)
+                    KTAM::<QuadTreeState<CanvasSquare, NullStateTracker>>::sim_from_tileset(self)
                 }
                 CanvasType::Periodic => {
-                    NewKTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::sim_from_tileset(
-                        self,
-                    )
+                    KTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::sim_from_tileset(self)
                 }
                 CanvasType::Tube => {
-                    NewKTAM::<QuadTreeState<CanvasTube, NullStateTracker>>::sim_from_tileset(self)
+                    KTAM::<QuadTreeState<CanvasTube, NullStateTracker>>::sim_from_tileset(self)
                 }
             },
             Model::ATAM => todo!(),
