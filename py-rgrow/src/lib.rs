@@ -7,11 +7,15 @@ use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyBytes, PyType};
 use pyo3::{prelude::*, wrap_pyfunction};
 use rand::{rngs::SmallRng, SeedableRng};
+use rgrow::base;
 use rgrow::canvas::Canvas;
 use rgrow::canvas::{self, PointSafe2};
-use rgrow::ffs;
+use rgrow::ffs::{self, FFSResult};
 use rgrow::system::{StepOutcome, TileBondInfo};
-use rgrow::{base, newsystem};
+use rgrow::tileset::FromTileSet;
+
+use rgrow::models::ktam;
+use rgrow::models::oldktam;
 
 use rgrow::state;
 use rgrow::state::{StateCreate, StateStatus};
@@ -22,6 +26,7 @@ use rgrow::system::{System, SystemWithStateCreate};
 use core::f64;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::time::Duration;
 
 use bincode::{deserialize, serialize};
 use serde::{Deserialize, Serialize};
@@ -39,7 +44,7 @@ pub enum ParsedSeed {
 ///
 /// The most important classes are:
 ///
-/// - StaticKTAM (and the StaticKTAMPeriodic variant), which specify the kinetic model to use and its parameters.
+/// - OldKTAM (and the StaticKTAMPeriodic variant), which specify the kinetic model to use and its parameters.
 /// - StateKTAM, which stores the state of a single assembly.
 #[pymodule]
 #[pyo3(name = "rgrow")]
@@ -47,7 +52,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     #[pyclass(module = "rgrow.rgrow")]
     #[derive(Debug)]
     pub struct StaticKTAMOrder {
-        inner: system::StaticKTAM<state::QuadTreeState<canvas::CanvasSquare, state::OrderTracker>>,
+        inner: oldktam::OldKTAM<state::QuadTreeState<canvas::CanvasSquare, state::OrderTracker>>,
     }
 
     #[pymethods]
@@ -95,7 +100,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 None => None,
             };
 
-            let inner = system::StaticKTAM::from_ktam(
+            let inner = oldktam::OldKTAM::from_ktam(
                 tile_concs.to_owned_array(),
                 tile_edges.to_owned_array(),
                 glue_strengths.to_owned_array(),
@@ -103,7 +108,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 gmc,
                 alpha,
                 k_f,
-                Some(system::Seed::None()),
+                Some(oldktam::Seed::None()),
                 fission_handling,
                 chunk_handling,
                 chunk_size,
@@ -121,9 +126,9 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[classmethod]
-        /// Creates a StaticKTAM instance from a JSON string.  Ignores canvas choice in JSON.
+        /// Creates a OldKTAM instance from a JSON string.  Ignores canvas choice in JSON.
         fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
-            let tileset = match rgrow::parser::TileSet::from_json(json_data) {
+            let tileset = match rgrow::tileset::TileSet::from_json(json_data) {
                 Ok(t) => t,
                 Err(e) => {
                     return Err(PyValueError::new_err(format!(
@@ -133,7 +138,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 }
             };
             Ok(Self {
-                inner: tileset.into_static_seeded_ktam(),
+                inner: oldktam::OldKTAM::from_tileset(&tileset),
             })
         }
     }
@@ -161,13 +166,13 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     #[pyclass(module = "rgrow")]
     #[derive(Debug)]
     // #[text_signature = "(tile_stoics, tile_edges, glue_strengths, gse, gmc, alpha, k_f, fission, chunk_handling, chunk_size, tile_names)"]
-    struct StaticKTAM {
+    struct OldKTAM {
         inner:
-            system::StaticKTAM<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>,
+            oldktam::OldKTAM<state::QuadTreeState<canvas::CanvasSquare, state::NullStateTracker>>,
     }
 
     #[pymethods]
-    impl StaticKTAM {
+    impl OldKTAM {
         #[new]
         fn new(
             tile_concs: PyReadonlyArray1<f64>,
@@ -211,7 +216,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 None => None,
             };
 
-            let inner = system::StaticKTAM::from_ktam(
+            let inner = oldktam::OldKTAM::from_ktam(
                 tile_concs.to_owned_array(),
                 tile_edges.to_owned_array(),
                 glue_strengths.to_owned_array(),
@@ -219,7 +224,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 gmc,
                 alpha,
                 k_f,
-                Some(system::Seed::None()),
+                Some(oldktam::Seed::None()),
                 fission_handling,
                 chunk_handling,
                 chunk_size,
@@ -237,10 +242,10 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         #[classmethod]
-        /// Creates a StaticKTAM instance from a JSON string.  Ignores canvas choice in JSON.
+        /// Creates a OldKTAM instance from a JSON string.  Ignores canvas choice in JSON.
         // #[text_signature = "(self, json_data)"]
         fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
-            let tileset = match rgrow::parser::TileSet::from_json(json_data) {
+            let tileset = match rgrow::tileset::TileSet::from_json(json_data) {
                 Ok(t) => t,
                 Err(e) => {
                     return Err(PyValueError::new_err(format!(
@@ -250,11 +255,11 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 }
             };
             Ok(Self {
-                inner: tileset.into_static_seeded_ktam(),
+                inner: oldktam::OldKTAM::from_tileset(&tileset),
             })
         }
 
-        /// Generates a StaticKTAM instance from "raw" inputs, similar to what the model uses internally.
+        /// Generates a OldKTAM instance from "raw" inputs, similar to what the model uses internally.
         ///
         /// Parameters:
         ///     tile_adj_rates (float array, shape N): the "adjusted unitless attachment rate" for each tile (N-1 tiles, 0 is empty).  This corresponds to
@@ -310,7 +315,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             };
 
             Ok(Self {
-                inner: system::StaticKTAM::from_raw(
+                inner: oldktam::OldKTAM::from_raw(
                     tile_adj_rates.to_owned_array(),
                     energy_ns.to_owned_array(),
                     energy_we.to_owned_array(),
@@ -382,7 +387,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.calc_mismatches(&state.inner)
         }
 
-        /// StaticKTAM.evolve_in_size_range_events_max(self, state, minsize, maxsize, maxevents)
+        /// OldKTAM.evolve_in_size_range_events_max(self, state, minsize, maxsize, maxevents)
         ///
         /// A System-centric evolve method.  Evolves the provided state until it has either <= minsize or >= maxsize tiles, or
         /// the evolution has performed maxevents steps.
@@ -436,9 +441,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     // #[text_signature = "()"]
     struct StaticKTAMPeriodic {
         inner: Option<
-            system::StaticKTAM<
-                state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>,
-            >,
+            oldktam::OldKTAM<state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>>,
         >,
     }
 
@@ -493,7 +496,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 None => None,
             };
 
-            let inner = Some(system::StaticKTAM::from_ktam(
+            let inner = Some(oldktam::OldKTAM::from_ktam(
                 tile_concs.to_owned_array(),
                 tile_edges.to_owned_array(),
                 glue_strengths.to_owned_array(),
@@ -501,7 +504,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 gmc,
                 alpha,
                 k_f,
-                Some(system::Seed::None()),
+                Some(oldktam::Seed::None()),
                 fission_handling,
                 chunk_handling,
                 chunk_size,
@@ -530,7 +533,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         /// Creates a StaticKTAMPeriodic instance from a JSON string.  Ignores canvas choice in JSON.
         // #[text_signature = "(self, json_data)"]
         fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
-            let tileset = match rgrow::parser::TileSet::from_json(json_data) {
+            let tileset = match rgrow::tileset::TileSet::from_json(json_data) {
                 Ok(t) => t,
                 Err(e) => {
                     return Err(PyValueError::new_err(format!(
@@ -540,7 +543,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 }
             };
             Ok(Self {
-                inner: Some(tileset.into_static_seeded_ktam()),
+                inner: Some(oldktam::OldKTAM::from_tileset(&tileset)),
             })
         }
 
@@ -600,7 +603,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             };
 
             Ok(Self {
-                inner: Some(system::StaticKTAM::from_raw(
+                inner: Some(oldktam::OldKTAM::from_raw(
                     tile_rates.to_owned_array(),
                     energy_ns.to_owned_array(),
                     energy_we.to_owned_array(),
@@ -766,7 +769,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     ///
     /// Parameters:
     ///     size (int): the size of the canvas (assumed to be square).  Should be a power of 2.
-    ///     system (StaticKTAM): the system that the simulation will use.
+    ///     system (OldKTAM): the system that the simulation will use.
     #[pyclass(module = "rgrow")]
     #[derive(Clone, Debug)]
     // #[text_signature = "(size, system)"]
@@ -778,7 +781,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     ///
     /// Parameters:
     ///     size (int): the size of the canvas (assumed to be square).  Should be a power of 2.
-    ///     system (StaticKTAM): the system that the simulation will use.
+    ///     system (OldKTAM): the system that the simulation will use.
     #[pyclass(module = "rgrow")]
     #[derive(Clone, Debug)]
     // #[text_signature = "(size, system)"]
@@ -797,7 +800,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     impl StateKTAM {
         #[new]
         fn new(size: usize) -> PyResult<Self> {
-            let mut state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
+            let state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
                 Array2::zeros((size, size)),
             )
             .unwrap();
@@ -816,7 +819,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         // #[text_signature = "(self, system, w, e, size)"]
         fn create_we_pair(
             _cls: &PyType,
-            system: &mut StaticKTAM,
+            system: &mut OldKTAM,
             w: base::Tile,
             e: base::Tile,
             size: usize,
@@ -847,7 +850,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         /// a canvas of size size (must be 2^L).
         fn create_ns_pair(
             _cls: &PyType,
-            system: &mut StaticKTAM,
+            system: &mut OldKTAM,
             n: base::Tile,
             s: base::Tile,
             size: usize,
@@ -858,11 +861,11 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         // #[text_signature = "(self, system, point_y, point_x, tile)"]
-        /// Sets the point (py, px) to a particular tile (or empty, with 0), using StaticKTAM `system`.
+        /// Sets the point (py, px) to a particular tile (or empty, with 0), using OldKTAM `system`.
         /// Updates rates after setting.
         fn set_point(
             &mut self,
-            system: &mut StaticKTAM,
+            system: &mut OldKTAM,
             py: usize,
             px: usize,
             t: base::Tile,
@@ -875,7 +878,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         /// Tries to take a single step.  May fail if the canvas is empty, or there is no step possible, in which case
         /// it will raise a PyValueError.
         // #[text_signature = "(self, system)"]
-        fn take_step(&mut self, system: &StaticKTAM) -> PyResult<()> {
+        fn take_step(&mut self, system: &OldKTAM) -> PyResult<()> {
             let mut rng = SmallRng::from_entropy();
             match system.inner.state_step(&mut self.inner, &mut rng, 1e100) {
                 StepOutcome::HadEventAt(_) | StepOutcome::DeadEventAt(_) => Ok(()),
@@ -884,12 +887,12 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             }
         }
 
-        /// Provided with a StaticKTAM system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
+        /// Provided with a OldKTAM system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
         /// or until `maxevents` events have taken place during the evolution.  This is present for backward compatibility.
         // #[text_signature = "(self, system, minsize, maxsize, maxevents)"]
         fn evolve_in_size_range(
             &mut self,
-            system: &mut StaticKTAM,
+            system: &mut OldKTAM,
             minsize: base::NumTiles,
             maxsize: base::NumTiles,
             maxevents: u64,
@@ -1021,7 +1024,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
 
         // #[text_signature = "(self, system, point_y, point_x, tile)"]
-        /// Sets the point (py, px) to a particular tile (or empty, with 0), using StaticKTAM `system`.
+        /// Sets the point (py, px) to a particular tile (or empty, with 0), using OldKTAM `system`.
         /// Updates rates after setting.
         fn set_point(
             &mut self,
@@ -1047,7 +1050,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             }
         }
 
-        /// Provided with a StaticKTAM system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
+        /// Provided with a OldKTAM system, evolve the state until it reaches `minsize` or `maxsize` number of tiles,
         /// or until `maxevents` events have taken place during the evolution.  This is present for backward compatibility.
         // #[text_signature = "(self, system, minsize, maxsize, maxevents)"]
         fn evolve_in_size_range(
@@ -1114,7 +1117,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     impl StateKTAMPeriodic {
         #[new]
         fn new(size: usize) -> PyResult<Self> {
-            let mut state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
+            let state = state::QuadTreeState::<_, state::NullStateTracker>::create_raw(
                 Array2::zeros((size, size)),
             )
             .unwrap();
@@ -1283,9 +1286,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     #[pyclass(module = "rgrow")]
     #[derive(Debug, Serialize, Deserialize)]
     struct NewKTAMPeriodic {
-        inner: newsystem::NewKTAM<
-            state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>,
-        >,
+        inner: ktam::KTAM<state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>>,
     }
 
     #[pymethods]
@@ -1293,7 +1294,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         #[new]
         fn new(ntiles: usize, nglues: usize) -> Self {
             Self {
-                inner: (newsystem::NewKTAM::new_sized(ntiles, nglues)),
+                inner: (ktam::KTAM::new_sized(ntiles, nglues)),
             }
         }
 
@@ -1407,9 +1408,28 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
             self.inner.set_duples(hduples, vduples)
         }
 
-        fn evolve(&self, state: &mut StateKTAMPeriodic, for_events: Option<u64>, for_time: Option<f64>, min_size: Option<u32>, max_size: Option<u32>, py: Python<'_>) {
+        fn evolve(
+            &self,
+            state: &mut StateKTAMPeriodic,
+            for_events: Option<u64>,
+            for_time: Option<f64>,
+            min_size: Option<u32>,
+            max_size: Option<u32>,
+            max_wall_time: Option<f64>,
+            py: Python<'_>,
+        ) {
             let mut rng = SmallRng::from_entropy();
-            py.allow_threads(|| self.inner.evolve(&mut state.inner, &mut rng, for_events, for_time, min_size, max_size));
+            py.allow_threads(|| {
+                self.inner.evolve(
+                    &mut state.inner,
+                    &mut rng,
+                    for_events,
+                    for_time,
+                    min_size,
+                    max_size,
+                    match max_wall_time { Some(secs) => Some(Duration::from_secs_f64(secs)), None => None }
+                ).unwrap();
+            });
         }
 
         fn evolve_in_size_range_events_max(
@@ -1455,15 +1475,15 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         #[setter]
         fn set_seed(&mut self, seed: Option<ParsedSeed>) {
             let ns = match seed {
-                Some(ParsedSeed::Single(y, x, v)) => rgrow::newsystem::Seed::SingleTile {
+                Some(ParsedSeed::Single(y, x, v)) => ktam::Seed::SingleTile {
                     point: PointSafe2((y, x)),
                     tile: v,
                 },
-                None => rgrow::newsystem::Seed::None(),
+                None => ktam::Seed::None(),
                 Some(ParsedSeed::Multi(vec)) => {
                     let mut hm = HashMap::default();
                     hm.extend(vec.iter().map(|(y, x, v)| (PointSafe2((*y, *x)), *v)));
-                    rgrow::newsystem::Seed::MultiTile(hm)
+                    ktam::Seed::MultiTile(hm)
                 }
             };
             self.inner.seed = ns;
@@ -1472,11 +1492,11 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         #[getter]
         fn get_seed(&self, py: Python<'_>) -> PyObject {
             match &self.inner.seed {
-                rgrow::newsystem::Seed::SingleTile { point, tile } => {
+                ktam::Seed::SingleTile { point, tile } => {
                     (point.0 .0, point.0 .1, *tile).to_object(py)
                 }
-                rgrow::newsystem::Seed::None() => None::<bool>.to_object(py),
-                rgrow::newsystem::Seed::MultiTile(hm) => {
+                ktam::Seed::None() => None::<bool>.to_object(py),
+                ktam::Seed::MultiTile(hm) => {
                     let mut vec = Vec::new();
                     for (point, tile) in hm {
                         vec.push((point.0 .0, point.0 .1, *tile));
@@ -1491,7 +1511,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         }
     }
 
-    m.add_class::<StaticKTAM>()?;
+    m.add_class::<OldKTAM>()?;
     m.add_class::<StaticKTAMOrder>()?;
     // m.add_class::<StaticKTAMCover>()?;
     m.add_class::<StaticKTAMPeriodic>()?;
@@ -1502,10 +1522,10 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
     #[pyfunction]
     // #[text_signature = "(system, num_states, target_size, canvas_size, max_init_events, max_subseq_events, start_size, size_step)"]
-    /// Runs Forward Flux Sampling on a StaticKTAM system using number of tiles as a measure, and returns
+    /// Runs Forward Flux Sampling on a OldKTAM system using number of tiles as a measure, and returns
     /// a tuple of (nucleation_rate, dimerization_rate, forward_probs).
     fn ffs_run(
-        system: &StaticKTAM,
+        system: &OldKTAM,
         num_states: usize,
         target_size: base::NumTiles,
         canvas_size: usize,
@@ -1543,7 +1563,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     /// Note that this consumes a *large* amount of memory, and other functions that do not return every level's configurations may be better
     /// if you don't need all of this information.
     fn ffs_run_full<'py>(
-        system: &StaticKTAM,
+        system: &OldKTAM,
         num_states: usize,
         target_size: base::NumTiles,
         canvas_size: usize,
@@ -1606,7 +1626,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     /// Runs Forward Flux Sampling, and returns a tuple of using number of tiles as a measure, and returns
     /// (nucleation_rate, dimerization_rate, forward_probs, final configs, configs for each level).
     fn ffs_run_final<'py>(
-        system: &StaticKTAM,
+        system: &OldKTAM,
         num_states: usize,
         target_size: base::NumTiles,
         canvas_size: usize,
@@ -1754,7 +1774,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         cutoff_prob: f64,
         cutoff_number: usize,
         min_cutoff_size: base::NumTiles,
-        canvas_size: usize,
+        canvas_size: (usize, usize),
         max_init_events: u64,
         max_subseq_events: u64,
         start_size: base::NumTiles,
@@ -1844,7 +1864,7 @@ fn pyrgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
         cutoff_prob: f64,
         cutoff_number: usize,
         min_cutoff_size: base::NumTiles,
-        canvas_size: usize,
+        canvas_size: (usize, usize),
         max_init_events: u64,
         max_subseq_events: u64,
         start_size: base::NumTiles,
