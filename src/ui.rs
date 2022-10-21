@@ -12,18 +12,18 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use crate::base::GrowError;
 use crate::simulation::EvolveBounds;
 
-pub fn run_window(parsed: crate::parser::TileSet) -> Result<(), GrowError> {
+pub fn run_window(parsed: crate::tileset::TileSet) -> Result<(), GrowError> {
     let mut sim = parsed.into_sim()?;
 
     let size1: usize;
     let size2: usize;
 
     match parsed.options.size {
-        crate::parser::Size::Single(x) => {
+        crate::tileset::Size::Single(x) => {
             size1 = x;
             size2 = x;
         }
-        crate::parser::Size::Pair((x, y)) => {
+        crate::tileset::Size::Pair((x, y)) => {
             size1 = x;
             size2 = y;
         }

@@ -1,13 +1,9 @@
-use super::ktam_fission::*;
 use crate::{
     base::{GrowError, Point},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     simulation::Simulation,
     state::{self, State, StateCreate},
-    system::{
-        ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        SystemWithDimers, SystemWithStateCreate, TileBondInfo,
-    },
+    system::{Event, System, SystemWithStateCreate, TileBondInfo},
     tileset::{FromTileSet, ParsedSeed, SimFromTileSet, Size, TileIdent, TileSet},
 };
 use fnv::{FnvHashMap, FnvHashSet};
@@ -20,7 +16,6 @@ type Conc = f64;
 type Glue = usize;
 type Tile = usize;
 type Strength = f64;
-type RatePerConc = f64;
 type Energy = f64;
 type Rate = f64;
 
@@ -32,12 +27,6 @@ impl NonZero for Tile {
     fn nonzero(self) -> bool {
         self > 0
     }
-}
-
-const FAKE_EVENT_RATE: f64 = 1e-20;
-
-fn energy_exp_times_u0(x: f64) -> Conc {
-    1.0e9 * x.exp()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -56,27 +45,24 @@ enum TileShape {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KTAM<C: Canvas> {
+pub struct ATAM<C: Canvas> {
     /// Tile names, as strings.  Only used for reference.
     pub tile_names: Vec<String>,
     /// Tile concentrations, actual (not modified by alpha/Gse/etc) in nM.
-    pub tile_concs: Array1<Conc>,
+    pub tile_stoics: Array1<Conc>,
     /// Glues (by number) on tile edges.
     pub tile_edges: Array2<Glue>,
+    pub threshold: f64,
     /// Strengths of self-binding glues (eg, glue 1 binding to glue 1),
     /// in abstract strength.
     pub glue_strengths: Array1<Strength>,
     /// Strengths of links between different glues (eg, glue 1 binding to
     /// glue 2).  Should be symmetric.  Will be added with glue_strengths.
     pub glue_links: Array2<Strength>,
-    pub g_se: Energy,
-    pub alpha: Energy,
-    pub kf: RatePerConc,
     pub double_to_right: Array1<Tile>,
     pub double_to_bottom: Array1<Tile>,
     pub seed: Seed,
     pub tile_colors: Vec<[u8; 4]>,
-    pub fission_handling: FissionHandling,
 
     // End of public stuff, now moving to calculated stuff.
     pub(crate) energy_ns: Array2<Energy>,
@@ -105,9 +91,7 @@ pub struct KTAM<C: Canvas> {
     _canvas: PhantomData<C>,
 }
 
-unsafe impl<C: State> Send for KTAM<C> {}
-
-impl<S: State> System<S> for KTAM<S> {
+impl<S: State> System<S> for ATAM<S> {
     fn update_after_event(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => todo!(),
@@ -153,34 +137,27 @@ impl<S: State> System<S> for KTAM<S> {
         let p = PointSafe2(p.0);
         let t = state.tile_at_point(p);
         if t.nonzero() {
-            self.monomer_detachment_rate_at_point(state, p)
+            0.
         } else {
             self.total_monomer_attachment_rate_at_point(state, p)
         }
     }
 
     fn choose_event_at_point(&self, state: &S, p: PointSafe2, acc: crate::base::Rate) -> Event {
-        // println!("{:?}", acc);
-        match self.choose_detachment_at_point(state, p, acc) {
+        match self.choose_attachment_at_point(state, p, acc) {
             (true, _, event) => {
                 // println!("{:?} {:?}", acc, event);
                 event
             }
-            (false, acc, _) => match self.choose_attachment_at_point(state, p, acc) {
-                (true, _, event) => {
-                    // println!("{:?} {:?}", acc, event);
-                    event
-                }
-                (false, acc, _) => {
-                    panic!(
-                        "Rate: {:?}, {:?}, {:?}, {:?}",
-                        acc,
-                        p,
-                        state,
-                        state.raw_array()
-                    );
-                }
-            },
+            (false, acc, _) => {
+                panic!(
+                    "Rate: {:?}, {:?}, {:?}, {:?}",
+                    acc,
+                    p,
+                    state,
+                    state.raw_array()
+                );
+            }
         }
     }
 
@@ -299,7 +276,20 @@ impl<S: State> System<S> for KTAM<S> {
     }
 
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)> {
-        self._seed_locs()
+        let mut v = Vec::new();
+
+        match &self.seed {
+            Seed::None() => {}
+            Seed::SingleTile { point, tile } => {
+                v.push((*point, *tile)); // FIXME
+            }
+            Seed::MultiTile(f) => {
+                for (p, t) in f.into_iter() {
+                    v.push((*p, *t));
+                }
+            }
+        };
+        v
     }
 
     fn calc_mismatch_locations(&self, _state: &S) -> Array2<usize> {
@@ -307,86 +297,247 @@ impl<S: State> System<S> for KTAM<S> {
     }
 }
 
-impl<St: State> SystemWithDimers<St> for KTAM<St> {
-    fn calc_dimers(&self) -> Vec<DimerInfo> {
-        // It is (reasonably) safe for us to use the same code that we used in the old StaticKTAM, despite duples being
-        // here, because our EW/NS energies include the right/bottom tiles.  However, (FIXME), we need to think about
-        // how this might actually double-count / double some rates: if, eg, a single tile can attach in two places to
-        // a double tile, are we double-counting the rates?  Note also that this relies on
-        let mut dvec = Vec::new();
+impl<S: State> ATAM<S> {
+    fn get_energy_ns(&self, tn: Tile, ts: Tile) -> Energy {
+        self.energy_ns[(tn, ts)]
+    }
 
-        for ((t1, t2), e) in self.energy_ns.indexed_iter() {
-            if *e != 0. {
-                let biconc = self.tile_concs[t1] * self.tile_concs[t2];
-                dvec.push(DimerInfo {
-                    t1: t1 as Tile,
-                    t2: t2 as Tile,
-                    orientation: Orientation::NS,
-                    formation_rate: self.kf * biconc / 1e9, // FIXME: 1e9 because we're using nM for concs
-                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
-                });
+    fn get_energy_we(&self, tw: Tile, te: Tile) -> Energy {
+        self.energy_we[(tw, te)]
+    }
+
+    fn tile_shape(&self, t: Tile) -> TileShape {
+        let dr = self.double_to_right[t];
+        if dr.nonzero() {
+            return TileShape::DupleToRight(dr);
+        }
+        let db = self.double_to_bottom[t];
+        if db.nonzero() {
+            return TileShape::DupleToBottom(db);
+        }
+        let dl = self.double_to_left[t];
+        if dl.nonzero() {
+            return TileShape::DupleToLeft(dl);
+        }
+        let dt = self.double_to_top[t];
+        if dt.nonzero() {
+            return TileShape::DupleToTop(dt);
+        }
+        return TileShape::Single;
+    }
+
+    pub fn total_monomer_attachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
+        match self._find_monomer_attachment_possibilities_at_point(state, p, 0., true) {
+            (false, acc, _) => -acc,
+            _ => panic!(),
+        }
+    }
+
+    pub fn choose_attachment_at_point(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        acc: Rate,
+    ) -> (bool, Rate, Event) {
+        self.choose_monomer_attachment_at_point(state, p, acc)
+    }
+
+    pub fn choose_monomer_attachment_at_point(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        acc: Rate,
+    ) -> (bool, Rate, Event) {
+        self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
+    }
+
+    fn _find_monomer_attachment_possibilities_at_point(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        mut acc: Rate,
+        just_calc: bool,
+    ) -> (bool, Rate, Event) {
+        let tn = state.tile_to_n(p);
+        let tw = state.tile_to_w(p);
+        let te = state.tile_to_e(p);
+        let ts = state.tile_to_s(p);
+
+        let mut friends = FnvHashSet::<Tile>::default();
+
+        if tn.nonzero() {
+            friends.extend(&self.friends_n[tn]);
+        }
+        if te.nonzero() {
+            friends.extend(&self.friends_e[te]);
+        }
+        if ts.nonzero() {
+            friends.extend(&self.friends_s[ts]);
+        }
+        if tw.nonzero() {
+            friends.extend(&self.friends_w[tw]);
+        }
+
+        if self.has_duples {
+            let tss = state.tile_to_ss(p);
+            let tne = state.tile_to_ne(p);
+            let tee = state.tile_to_ee(p);
+            let tse = state.tile_to_se(p);
+
+            if tss.nonzero() {
+                friends.extend(&self.friends_ss[tss])
+            }
+            if tne.nonzero() {
+                friends.extend(&self.friends_ne[tne])
+            }
+            if tee.nonzero() {
+                friends.extend(&self.friends_ee[tee])
+            }
+            if tse.nonzero() {
+                friends.extend(&self.friends_se[tse])
             }
         }
 
-        for ((t1, t2), e) in self.energy_we.indexed_iter() {
-            if *e != 0. {
-                let biconc = f64::exp(2. * self.alpha) * self.tile_concs[t1] * self.tile_concs[t2];
-                dvec.push(DimerInfo {
-                    t1: t1 as Tile,
-                    t2: t2 as Tile,
-                    orientation: Orientation::WE,
-                    formation_rate: self.kf * biconc / 1e9, // FIXME: 1e9 because we're using nM for concs
-                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
-                });
+        for t in friends.drain() {
+            // FIXME: this is likely rather slow, but it's better than giving very confusing rates (many
+            // possible double-tile attachements at a point that aren't actually possible, because they are
+            // blocked).
+            match self.tile_shape(t) {
+                TileShape::Single => (),
+                TileShape::DupleToRight(_) => {
+                    if state.tile_to_e(p) != 0 {
+                        continue;
+                    }
+                }
+                TileShape::DupleToBottom(_) => {
+                    if state.tile_to_s(p) != 0 {
+                        continue;
+                    }
+                }
+                TileShape::DupleToLeft(_) => {
+                    if state.tile_to_w(p) != 0 {
+                        continue;
+                    }
+                }
+                TileShape::DupleToTop(_) => {
+                    if state.tile_to_n(p) != 0 {
+                        continue;
+                    }
+                }
+            }
+            if self.bond_energy_of_tile_type_at_point(state, p, t) < self.threshold {
+                continue;
+            }
+            acc -= self.tile_stoics[t];
+            if !just_calc & (acc <= (0.)) {
+                return (true, acc, Event::MonomerAttachment(p, t));
             }
         }
-
-        dvec
-    }
-}
-
-impl<C: State> TileBondInfo for KTAM<C> {
-    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.tile_colors[tile_number as usize]
+        return (false, acc, Event::None);
     }
 
-    fn tile_name(&self, tile_number: Tile) -> &str {
-        self.tile_names[tile_number].as_str()
+    pub fn bond_energy_of_tile_type_at_point(&self, state: &S, p: PointSafe2, t: Tile) -> Energy {
+        let tn = state.tile_to_n(p);
+        let tw = state.tile_to_w(p);
+        let te = state.tile_to_e(p);
+        let ts = state.tile_to_s(p);
+
+        let mut energy = self.get_energy_ns(tn, t)
+            + self.get_energy_ns(t, ts)
+            + self.get_energy_we(tw, t)
+            + self.get_energy_we(t, te);
+
+        if !self.has_duples {
+            return energy;
+        }
+
+        match self.tile_shape(t) {
+            TileShape::Single => (),
+            TileShape::DupleToRight(tright) => {
+                debug_assert_eq!(tright, te);
+                let tne = state.tile_to_ne(p);
+                let tee = state.tile_to_ee(p);
+                let tse = state.tile_to_se(p);
+                energy += self.get_energy_ns(tne, tright)
+                    + self.get_energy_we(tright, tee)
+                    + self.get_energy_ns(tright, tse);
+            }
+            TileShape::DupleToBottom(tbottom) => {
+                debug_assert_eq!(tbottom, ts);
+                let tse = state.tile_to_se(p);
+                let tss = state.tile_to_ss(p);
+                let tsw = state.tile_to_sw(p);
+                energy += self.get_energy_we(tbottom, tse)
+                    + self.get_energy_ns(tbottom, tss)
+                    + self.get_energy_we(tsw, tbottom);
+            }
+            // We should never want to calculate this for "accessory" parts of duples.
+            TileShape::DupleToLeft(_) => panic!(),
+            TileShape::DupleToTop(_) => panic!(),
+        };
+
+        return energy;
     }
 
-    fn bond_name(&self, _bond_number: usize) -> &str {
-        todo!()
+    fn points_to_update_around(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
+        // match self.chunk_size {
+        // ChunkSize::Single => {
+        let mut points = Vec::with_capacity(13);
+        points.extend_from_slice(&[
+            state.move_sa_n(*p),
+            state.move_sa_w(*p),
+            PointSafeHere(p.0),
+            state.move_sa_e(*p),
+            state.move_sa_s(*p),
+            state.move_sa_nn(*p),
+            state.move_sa_ne(*p),
+            state.move_sa_ee(*p),
+            state.move_sa_se(*p),
+            state.move_sa_ss(*p),
+            state.move_sa_sw(*p),
+            state.move_sa_ww(*p),
+            state.move_sa_nw(*p),
+        ]);
+        points
+        //     }
+        //     ChunkSize::Dimer => {
+        //         let mut points = Vec::with_capacity(10);
+        //         points.extend_from_slice(&[
+        //             state.move_sa_n(*p),
+        //             state.move_sa_w(*p),
+        //             PointSafeHere(p.0),
+        //             state.move_sa_e(*p),
+        //             state.move_sa_s(*p),
+        //             state.move_sa_nw(*p),
+        //             state.move_sa_ne(*p),
+        //             state.move_sa_sw(*p),
+        //         ]);
+
+        //         let w = state.move_sa_w(*p);
+        //         let n = state.move_sa_n(*p);
+
+        //         if state.inbounds(w.0) {
+        //             points.push(PointSafeHere(state.move_sh_w(w)));
+        //         }
+        //         if state.inbounds(n.0) {
+        //             points.push(PointSafeHere(state.move_sh_n(n)));
+        //         }
+        //         points
+        //     }
+        // }
     }
 
-    fn tile_colors(&self) -> Vec<[u8; 4]> {
-        self.tile_colors.clone()
-    }
-
-    fn tile_names(&self) -> Vec<String> {
-        self.tile_names.clone()
-    }
-
-    fn bond_names(&self) -> Vec<String> {
-        todo!()
-    }
-}
-
-impl<S: State> KTAM<S> {
     pub fn new_sized(ntiles: Tile, nglues: usize) -> Self {
         Self {
             tile_names: Vec::new(),
-            tile_concs: Array1::zeros(ntiles + 1),
+            tile_stoics: Array1::zeros(ntiles + 1),
             tile_edges: Array2::zeros((ntiles + 1, 4)),
             glue_strengths: Array1::zeros(nglues + 1),
             glue_links: Array2::zeros((nglues + 1, nglues + 1)),
-            g_se: (9.),
-            alpha: (0.),
-            kf: (1e-3),
             double_to_right: Array1::zeros(ntiles + 1),
             double_to_bottom: Array1::zeros(ntiles + 1),
             seed: Seed::None(),
             tile_colors: Vec::new(),
-            fission_handling: FissionHandling::NoFission,
             energy_ns: Array2::zeros((ntiles + 1, ntiles + 1)),
             energy_we: Array2::zeros((ntiles + 1, ntiles + 1)),
             friends_n: Vec::new(),
@@ -402,61 +553,34 @@ impl<S: State> KTAM<S> {
             double_to_left: Array1::zeros(ntiles + 1),
             double_to_top: Array1::zeros(ntiles + 1),
             _canvas: PhantomData,
+            threshold: 2.,
         }
     }
 
-    pub fn set_duples(&mut self, hduples: Vec<(usize, usize)>, vduples: Vec<(usize, usize)>) {
-        // Reset double_to_right and double_to_bottom to zeros
-        self.double_to_right.fill(0);
-        self.double_to_bottom.fill(0);
-
-        // For each hduple, set the first index to the second value
-        for (i, j) in hduples {
-            self.double_to_right[i] = j;
-        }
-
-        // For each vduples, set the first index to the second value
-        for (i, j) in vduples {
-            self.double_to_bottom[i] = j;
-        }
-
-        self.update_system();
-    }
-
-    pub fn from_ktam(
-        mut tile_stoics: Array1<f64>,
+    pub fn from_atam(
+        tile_stoics: Array1<f64>,
         tile_edges: Array2<Glue>,
         glue_strengths: Array1<f64>,
-        g_se: f64,
-        g_mc: f64,
-        alpha: Option<f64>,
-        _k_f: Option<f64>,
+        threshold: f64,
         seed: Option<Seed>,
-        fission_handling: Option<FissionHandling>,
-        _chunk_handling: Option<ChunkHandling>,
-        _chunk_size: Option<ChunkSize>,
         tile_names: Option<Vec<String>>,
         tile_colors: Option<Vec<[u8; 4]>>,
     ) -> Self {
         let ntiles = tile_stoics.len() as Tile;
 
-        tile_stoics.map_inplace(|x| *x *= 1.0e9 * (-g_mc + alpha.unwrap_or(0.)).exp());
-
-        let mut ktam = Self::new_sized(
+        let mut atam = Self::new_sized(
             tile_stoics.len() as Tile - 1,
             glue_strengths.len() as usize - 1,
         );
 
-        ktam.tile_concs = tile_stoics;
-        ktam.tile_edges = tile_edges;
-        ktam.glue_strengths = glue_strengths;
-        ktam.g_se = g_se;
-        ktam.alpha = alpha.unwrap_or(ktam.alpha);
-        ktam.seed = seed.unwrap_or(ktam.seed);
+        atam.tile_stoics = tile_stoics;
+        atam.tile_edges = tile_edges;
+        atam.glue_strengths = glue_strengths;
+        atam.seed = seed.unwrap_or(atam.seed);
         //ktam.tile_colors = tile_colors.unwrap_or(ktam.tile_colors);
-        ktam.tile_names = tile_names.unwrap_or(ktam.tile_names);
+        atam.tile_names = tile_names.unwrap_or(atam.tile_names);
 
-        ktam.tile_colors = match tile_colors {
+        atam.tile_colors = match tile_colors {
             Some(tc) => tc,
             None => {
                 let mut rng = rand::thread_rng();
@@ -475,27 +599,27 @@ impl<S: State> KTAM<S> {
             }
         };
 
-        ktam.fission_handling = fission_handling.unwrap_or(ktam.fission_handling);
+        atam.threshold = threshold;
 
-        ktam.update_system();
+        atam.update_system();
 
-        ktam
+        atam
     }
 
     pub fn update_system(&mut self) {
-        let ntiles = self.tile_concs.len();
+        let ntiles = self.tile_stoics.len();
 
         for t1 in 0..ntiles {
             for t2 in 0..ntiles {
                 let t1r = self.tile_edges.row(t1);
                 let t2r = self.tile_edges.row(t2);
-                self.energy_ns[(t1, t2)] = self.g_se * self.glue_links[(t1r[2], t2r[0])];
+                self.energy_ns[(t1, t2)] = self.glue_links[(t1r[2], t2r[0])];
                 if t1r[2] == t2r[0] {
-                    self.energy_ns[(t1, t2)] = self.g_se * self.glue_strengths[t1r[2]]
+                    self.energy_ns[(t1, t2)] = self.glue_strengths[t1r[2]]
                 }
-                self.energy_we[(t1, t2)] = self.g_se * self.glue_links[(t1r[1], t2r[3])];
+                self.energy_we[(t1, t2)] = self.glue_links[(t1r[1], t2r[3])];
                 if t1r[1] == t2r[3] {
-                    self.energy_we[(t1, t2)] = self.g_se * self.glue_strengths[t1r[1]]
+                    self.energy_we[(t1, t2)] = self.glue_strengths[t1r[1]]
                 }
             }
         }
@@ -608,363 +732,26 @@ impl<S: State> KTAM<S> {
         }
     }
 
-    pub fn is_seed(&self, p: PointSafe2) -> bool {
-        match &self.seed {
-            Seed::None() => false,
-            Seed::SingleTile {
-                point: seed_point,
-                tile: _,
-            } => return p == *seed_point,
-            Seed::MultiTile(seed_map) => return seed_map.contains_key(&p),
-        }
-    }
+    pub fn set_duples(&mut self, hduples: Vec<(usize, usize)>, vduples: Vec<(usize, usize)>) {
+        // Reset double_to_right and double_to_bottom to zeros
+        self.double_to_right.fill(0);
+        self.double_to_bottom.fill(0);
 
-    pub fn monomer_detachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
-        // If the point is a seed, then there is no detachment rate.
-        // ODD HACK: we set a very low detachment rate for seeds and duple bottom/right, to allow
-        // rate-based copying.  We ignore these below.
-        if self.is_seed(p) {
-            return FAKE_EVENT_RATE;
+        // For each hduple, set the first index to the second value
+        for (i, j) in hduples {
+            self.double_to_right[i] = j;
         }
 
-        let t = state.tile_at_point(p);
-        if t == 0 {
-            return 0.;
-        }
-        if (self.has_duples) && ((self.double_to_left[t] > 0) || (self.double_to_top[t] > 0)) {
-            return FAKE_EVENT_RATE;
-        }
-        self.kf
-            * energy_exp_times_u0(-self.bond_energy_of_tile_type_at_point(state, p, t) + self.alpha)
-    }
-
-    fn _seed_locs(&self) -> Vec<(PointSafe2, Tile)> {
-        let mut v = Vec::new();
-
-        match &self.seed {
-            Seed::None() => {}
-            Seed::SingleTile { point, tile } => {
-                v.push((*point, *tile)); // FIXME
-            }
-            Seed::MultiTile(f) => {
-                for (p, t) in f.into_iter() {
-                    v.push((*p, *t));
-                }
-            }
-        };
-        v
-    }
-
-    pub fn choose_detachment_at_point(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        mut acc: Rate,
-    ) -> (bool, Rate, Event) {
-        acc -= self.monomer_detachment_rate_at_point(state, p);
-        if acc <= 0. {
-            // FIXME: may slow things down
-            if self.is_seed(p)
-                || ((self.has_duples)
-                    && ((self.double_to_left[state.tile_at_point(p)] > 0)
-                        || (self.double_to_top[state.tile_at_point(p)] > 0)))
-            {
-                (true, acc, Event::None)
-            } else {
-                let mut possible_starts = Vec::new();
-                let mut now_empty = Vec::new();
-                let tile = { state.tile_at_point(p) as usize };
-
-                let tn = { state.tile_to_n(p) as usize };
-                let tw = { state.tile_to_w(p) as usize };
-                let te = { state.tile_to_e(p) as usize };
-                let ts = { state.tile_to_s(p) as usize };
-                // FIXME
-                if self.energy_ns[(tn, tile)] > 0. {
-                    possible_starts.push(PointSafe2(state.move_sa_n(p).0))
-                };
-                if self.energy_we[(tw, tile)] > 0. {
-                    possible_starts.push(PointSafe2(state.move_sa_w(p).0))
-                };
-                if self.energy_ns[(tile, ts)] > 0. {
-                    possible_starts.push(PointSafe2(state.move_sa_s(p).0))
-                };
-                if self.energy_we[(tile, te)] > 0. {
-                    possible_starts.push(PointSafe2(state.move_sa_e(p).0))
-                };
-
-                now_empty.push(p);
-
-                match self.determine_fission(state, &possible_starts, &now_empty) {
-                    FissionResult::NoFission => (true, acc, Event::MonomerDetachment(p)),
-                    FissionResult::FissionGroups(g) => {
-                        //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
-                        match self.fission_handling {
-                            FissionHandling::NoFission => (true, acc, Event::None),
-                            FissionHandling::JustDetach => (true, acc, Event::MonomerDetachment(p)),
-                            FissionHandling::KeepSeeded => {
-                                let sl = self._seed_locs();
-                                (
-                                    true,
-                                    acc,
-                                    Event::PolymerDetachment(
-                                        g.choose_deletions_seed_unattached(sl),
-                                    ),
-                                )
-                            }
-                            FissionHandling::KeepLargest => (
-                                true,
-                                acc,
-                                Event::PolymerDetachment(g.choose_deletions_keep_largest_group()),
-                            ),
-                            FissionHandling::KeepWeighted => (
-                                true,
-                                acc,
-                                Event::PolymerDetachment(g.choose_deletions_size_weighted()),
-                            ),
-                        }
-                    }
-                }
-            }
-        } else {
-            (false, acc, Event::None)
-        }
-    }
-
-    pub fn total_monomer_attachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
-        match self._find_monomer_attachment_possibilities_at_point(state, p, 0., true) {
-            (false, acc, _) => -acc,
-            _ => panic!(),
-        }
-    }
-
-    pub fn choose_attachment_at_point(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        acc: Rate,
-    ) -> (bool, Rate, Event) {
-        self.choose_monomer_attachment_at_point(state, p, acc)
-    }
-
-    pub fn choose_monomer_attachment_at_point(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        acc: Rate,
-    ) -> (bool, Rate, Event) {
-        self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
-    }
-
-    pub fn setup_state(&self, state: &mut S) {
-        for (p, t) in self.seed_locs() {
-            self.set_point(state, p.0, t);
-        }
-    }
-
-    fn _find_monomer_attachment_possibilities_at_point(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        mut acc: Rate,
-        just_calc: bool,
-    ) -> (bool, Rate, Event) {
-        let tn = state.tile_to_n(p);
-        let tw = state.tile_to_w(p);
-        let te = state.tile_to_e(p);
-        let ts = state.tile_to_s(p);
-
-        let mut friends = FnvHashSet::<Tile>::default();
-
-        if tn.nonzero() {
-            friends.extend(&self.friends_n[tn]);
-        }
-        if te.nonzero() {
-            friends.extend(&self.friends_e[te]);
-        }
-        if ts.nonzero() {
-            friends.extend(&self.friends_s[ts]);
-        }
-        if tw.nonzero() {
-            friends.extend(&self.friends_w[tw]);
+        // For each vduples, set the first index to the second value
+        for (i, j) in vduples {
+            self.double_to_bottom[i] = j;
         }
 
-        if self.has_duples {
-            let tss = state.tile_to_ss(p);
-            let tne = state.tile_to_ne(p);
-            let tee = state.tile_to_ee(p);
-            let tse = state.tile_to_se(p);
-
-            if tss.nonzero() {
-                friends.extend(&self.friends_ss[tss])
-            }
-            if tne.nonzero() {
-                friends.extend(&self.friends_ne[tne])
-            }
-            if tee.nonzero() {
-                friends.extend(&self.friends_ee[tee])
-            }
-            if tse.nonzero() {
-                friends.extend(&self.friends_se[tse])
-            }
-        }
-
-        for t in friends.drain() {
-            // FIXME: this is likely rather slow, but it's better than giving very confusing rates (many
-            // possible double-tile attachements at a point that aren't actually possible, because they are
-            // blocked).
-            match self.tile_shape(t) {
-                TileShape::Single => (),
-                TileShape::DupleToRight(_) => {
-                    if state.tile_to_e(p) != 0 {
-                        continue;
-                    }
-                }
-                TileShape::DupleToBottom(_) => {
-                    if state.tile_to_s(p) != 0 {
-                        continue;
-                    }
-                }
-                TileShape::DupleToLeft(_) => {
-                    if state.tile_to_w(p) != 0 {
-                        continue;
-                    }
-                }
-                TileShape::DupleToTop(_) => {
-                    if state.tile_to_n(p) != 0 {
-                        continue;
-                    }
-                }
-            }
-            acc -= self.kf * self.tile_concs[t];
-            if !just_calc & (acc <= (0.)) {
-                return (true, acc, Event::MonomerAttachment(p, t));
-            }
-        }
-        return (false, acc, Event::None);
-    }
-
-    pub fn bond_energy_of_tile_type_at_point(&self, state: &S, p: PointSafe2, t: Tile) -> Energy {
-        let tn = state.tile_to_n(p);
-        let tw = state.tile_to_w(p);
-        let te = state.tile_to_e(p);
-        let ts = state.tile_to_s(p);
-
-        let mut energy = self.get_energy_ns(tn, t)
-            + self.get_energy_ns(t, ts)
-            + self.get_energy_we(tw, t)
-            + self.get_energy_we(t, te);
-
-        if !self.has_duples {
-            return energy;
-        }
-
-        match self.tile_shape(t) {
-            TileShape::Single => (),
-            TileShape::DupleToRight(tright) => {
-                debug_assert_eq!(tright, te);
-                let tne = state.tile_to_ne(p);
-                let tee = state.tile_to_ee(p);
-                let tse = state.tile_to_se(p);
-                energy += self.get_energy_ns(tne, tright)
-                    + self.get_energy_we(tright, tee)
-                    + self.get_energy_ns(tright, tse);
-            }
-            TileShape::DupleToBottom(tbottom) => {
-                debug_assert_eq!(tbottom, ts);
-                let tse = state.tile_to_se(p);
-                let tss = state.tile_to_ss(p);
-                let tsw = state.tile_to_sw(p);
-                energy += self.get_energy_we(tbottom, tse)
-                    + self.get_energy_ns(tbottom, tss)
-                    + self.get_energy_we(tsw, tbottom);
-            }
-            // We should never want to calculate this for "accessory" parts of duples.
-            TileShape::DupleToLeft(_) => panic!(),
-            TileShape::DupleToTop(_) => panic!(),
-        };
-
-        return energy;
-    }
-
-    fn get_energy_ns(&self, tn: Tile, ts: Tile) -> Energy {
-        self.energy_ns[(tn, ts)]
-    }
-
-    fn get_energy_we(&self, tw: Tile, te: Tile) -> Energy {
-        self.energy_we[(tw, te)]
-    }
-
-    fn tile_shape(&self, t: Tile) -> TileShape {
-        let dr = self.double_to_right[t];
-        if dr.nonzero() {
-            return TileShape::DupleToRight(dr);
-        }
-        let db = self.double_to_bottom[t];
-        if db.nonzero() {
-            return TileShape::DupleToBottom(db);
-        }
-        let dl = self.double_to_left[t];
-        if dl.nonzero() {
-            return TileShape::DupleToLeft(dl);
-        }
-        let dt = self.double_to_top[t];
-        if dt.nonzero() {
-            return TileShape::DupleToTop(dt);
-        }
-        return TileShape::Single;
-    }
-
-    fn points_to_update_around(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
-        // match self.chunk_size {
-        // ChunkSize::Single => {
-        let mut points = Vec::with_capacity(13);
-        points.extend_from_slice(&[
-            state.move_sa_n(*p),
-            state.move_sa_w(*p),
-            PointSafeHere(p.0),
-            state.move_sa_e(*p),
-            state.move_sa_s(*p),
-            state.move_sa_nn(*p),
-            state.move_sa_ne(*p),
-            state.move_sa_ee(*p),
-            state.move_sa_se(*p),
-            state.move_sa_ss(*p),
-            state.move_sa_sw(*p),
-            state.move_sa_ww(*p),
-            state.move_sa_nw(*p),
-        ]);
-        points
-        //     }
-        //     ChunkSize::Dimer => {
-        //         let mut points = Vec::with_capacity(10);
-        //         points.extend_from_slice(&[
-        //             state.move_sa_n(*p),
-        //             state.move_sa_w(*p),
-        //             PointSafeHere(p.0),
-        //             state.move_sa_e(*p),
-        //             state.move_sa_s(*p),
-        //             state.move_sa_nw(*p),
-        //             state.move_sa_ne(*p),
-        //             state.move_sa_sw(*p),
-        //         ]);
-
-        //         let w = state.move_sa_w(*p);
-        //         let n = state.move_sa_n(*p);
-
-        //         if state.inbounds(w.0) {
-        //             points.push(PointSafeHere(state.move_sh_w(w)));
-        //         }
-        //         if state.inbounds(n.0) {
-        //             points.push(PointSafeHere(state.move_sh_n(n)));
-        //         }
-        //         points
-        //     }
-        // }
+        self.update_system();
     }
 }
 
-impl<St: State + StateCreate + 'static> SimFromTileSet for KTAM<St> {
+impl<St: State + StateCreate + 'static> SimFromTileSet for ATAM<St> {
     fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError> {
         let sys = Self::from_tileset(tileset);
         let size = match tileset.options.size {
@@ -981,7 +768,33 @@ impl<St: State + StateCreate + 'static> SimFromTileSet for KTAM<St> {
     }
 }
 
-impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
+impl<C: State> TileBondInfo for ATAM<C> {
+    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
+        self.tile_colors[tile_number as usize]
+    }
+
+    fn tile_name(&self, tile_number: Tile) -> &str {
+        self.tile_names[tile_number].as_str()
+    }
+
+    fn bond_name(&self, _bond_number: usize) -> &str {
+        todo!()
+    }
+
+    fn tile_colors(&self) -> Vec<[u8; 4]> {
+        self.tile_colors.clone()
+    }
+
+    fn tile_names(&self) -> Vec<String> {
+        self.tile_names.clone()
+    }
+
+    fn bond_names(&self) -> Vec<String> {
+        todo!()
+    }
+}
+
+impl<St: state::State + state::StateCreate> FromTileSet for ATAM<St> {
     fn from_tileset(tileset: &TileSet) -> Self {
         let (gluemap, gluestrengthmap) = tileset.number_glues().unwrap();
 
@@ -1034,18 +847,12 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
             .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
             .collect();
 
-        let mut newkt = Self::from_ktam(
+        let mut newkt = Self::from_atam(
             tileset.tile_stoics(),
             tile_edges,
             Array1::from(glue_strength_vec),
-            tileset.options.gse,
-            tileset.options.gmc,
-            Some(tileset.options.alpha),
-            tileset.options.kf,
+            tileset.options.threshold,
             Some(seed),
-            Some(tileset.options.fission),
-            tileset.options.chunk_handling,
-            tileset.options.chunk_size,
             Some(tile_names),
             Some(tileset.tile_colors()),
         );

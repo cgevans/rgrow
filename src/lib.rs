@@ -4,7 +4,7 @@
 extern crate ndarray;
 extern crate phf;
 
-pub mod parser;
+pub mod tileset;
 
 //#[cfg(feature = "parser_xgrow")]
 pub mod parser_xgrow;

@@ -4,12 +4,7 @@ extern crate ndarray;
 use clap::Parser;
 
 use rgrow::base::GrowError;
-use rgrow::models::ktam::KTAM;
-use rgrow::{ffs, parser::TileSet, parser_xgrow};
-
-use rgrow::{canvas, state};
-
-use rgrow::parser::FromTileSet;
+use rgrow::{parser_xgrow, tileset::TileSet};
 
 use serde_yaml;
 use std::fs::File;
@@ -31,9 +26,26 @@ enum SubCommand {
     //Parse(PO),
     //RunAtam(PO),
     Run(PO),
-    NucRate(PO),
+    NucRate(FFSOptions),
     RunXgrow(PO),
     //FissionTest(EO)
+}
+
+#[derive(Parser)]
+struct FFSOptions {
+    input: String,
+    #[arg(short, long, default_value_t = 0.01)]
+    varpermean2: f64,
+    #[arg(short, long, default_value_t = 1_000)]
+    min_configs: usize,
+    #[arg(short, long, default_value_t = 100)]
+    target_size: u32,
+    #[arg(short, long, default_value_t = 0.99)]
+    cutoff_probability: f64,
+    #[arg(short, long, default_value_t = 4)]
+    cutoff_surfaces: usize,
+    #[arg(short, long, default_value_t = 30)]
+    min_cutoff_size: u32,
 }
 
 #[derive(Parser)]
@@ -53,14 +65,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             let file = match File::open(po.input) {
                 Ok(f) => f,
-                Err(e) => return Err(Box::new(rgrow::parser::ParserError::Io { source: e })),
+                Err(e) => return Err(Box::new(rgrow::tileset::ParserError::Io { source: e })),
             };
             let parsed: TileSet = serde_yaml::from_reader(file)?;
             run_window(parsed)?;
             Ok(())
         }
         SubCommand::NucRate(po) => {
-            nucrate(po.input)?;
+            nucrate(po)?;
             Ok(())
         }
         SubCommand::RunXgrow(po) =>
@@ -73,22 +85,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn nucrate(input: String) -> Result<(), GrowError> {
-    let parsed: TileSet =
-        serde_yaml::from_reader(File::open(input).expect("Input file not found."))
+fn nucrate(po: FFSOptions) -> Result<(), GrowError> {
+    let tileset: TileSet =
+        serde_yaml::from_reader(File::open(po.input).expect("Input file not found."))
             .expect("Input file parse erorr.");
 
-    let system =
-        KTAM::<state::QuadTreeState<canvas::CanvasPeriodic, state::NullStateTracker>>::from_tileset(
-            &parsed,
-        );
-
-    let size = match parsed.options.size {
-        rgrow::parser::Size::Single(x) => x,
-        rgrow::parser::Size::Pair((x, y)) => x.max(y),
-    };
-
-    let ffsrun = ffs::FFSRun::create(system, 1000, 30, size, 1_000, 50_000, 3, 2);
+    let ffsrun = tileset.run_ffs(
+        po.varpermean2,
+        po.min_configs,
+        po.target_size,
+        po.cutoff_probability,
+        po.cutoff_surfaces,
+        po.min_cutoff_size,
+        10_000,
+        1_000_000,
+        2,
+        1,
+        false,
+    )?;
 
     println!("Nuc rate: {:e}", ffsrun.nucleation_rate());
     println!("Forwards: {:?}", ffsrun.forward_vec());

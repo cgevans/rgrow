@@ -1,4 +1,10 @@
-use crate::state::{NullStateTracker, StateTracked};
+use crate::base::GrowError;
+use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
+use crate::models::ktam::KTAM;
+use crate::models::oldktam::OldKTAM;
+use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
+use crate::system::SystemWithDimers;
+use crate::tileset::{CanvasType, FromTileSet, Model, Size, TileSet};
 
 use super::*;
 //use ndarray::prelude::*;
@@ -24,6 +30,148 @@ use system::{Orientation, System};
 
 const MAX_SAMPLES: usize = 100000;
 
+pub trait FFSResult {
+    fn nucleation_rate(&self) -> f64;
+    fn forward_vec(&self) -> &Vec<f64>;
+}
+
+impl<St: State + StateTracked<NullStateTracker>, Sy: System<St>> FFSResult for FFSRun<St, Sy> {
+    fn nucleation_rate(&self) -> Rate {
+        self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
+    }
+
+    fn forward_vec(&self) -> &Vec<f64> {
+        &self.forward_prob
+    }
+}
+
+impl TileSet {
+    pub fn run_ffs(
+        &self,
+        varpermean2: f64,
+        min_states: usize,
+        target_size: NumTiles,
+        cutoff_prob: f64,
+        cutoff_number: usize,
+        min_cutoff_size: NumTiles,
+        max_init_events: NumEvents,
+        max_subseq_events: NumEvents,
+        start_size: NumTiles,
+        size_step: NumTiles,
+        keep_states: bool,
+    ) -> Result<Box<dyn FFSResult>, GrowError> {
+        match self.options.model {
+            Model::KTAM => match self.options.canvas_type {
+                CanvasType::Square => Ok(Box::new(FFSRun::<
+                    QuadTreeState<CanvasSquare, NullStateTracker>,
+                    KTAM<QuadTreeState<CanvasSquare, NullStateTracker>>,
+                >::create_from_tileset(
+                    self,
+                    varpermean2,
+                    min_states,
+                    target_size,
+                    cutoff_prob,
+                    cutoff_number,
+                    min_cutoff_size,
+                    max_init_events,
+                    max_subseq_events,
+                    start_size,
+                    size_step,
+                    keep_states,
+                )?)),
+                CanvasType::Periodic => Ok(Box::new(FFSRun::<
+                    QuadTreeState<CanvasPeriodic, NullStateTracker>,
+                    KTAM<QuadTreeState<CanvasPeriodic, NullStateTracker>>,
+                >::create_from_tileset(
+                    self,
+                    varpermean2,
+                    min_states,
+                    target_size,
+                    cutoff_prob,
+                    cutoff_number,
+                    min_cutoff_size,
+                    max_init_events,
+                    max_subseq_events,
+                    start_size,
+                    size_step,
+                    keep_states,
+                )?)),
+                CanvasType::Tube => Ok(Box::new(FFSRun::<
+                    QuadTreeState<CanvasTube, NullStateTracker>,
+                    KTAM<QuadTreeState<CanvasTube, NullStateTracker>>,
+                >::create_from_tileset(
+                    self,
+                    varpermean2,
+                    min_states,
+                    target_size,
+                    cutoff_prob,
+                    cutoff_number,
+                    min_cutoff_size,
+                    max_init_events,
+                    max_subseq_events,
+                    start_size,
+                    size_step,
+                    keep_states,
+                )?)),
+            },
+            Model::ATAM => Err(GrowError::FFSCannotRunATAM),
+            Model::OldKTAM => match self.options.canvas_type {
+                CanvasType::Square => Ok(Box::new(FFSRun::<
+                    QuadTreeState<CanvasSquare, NullStateTracker>,
+                    OldKTAM<QuadTreeState<CanvasSquare, NullStateTracker>>,
+                >::create_from_tileset(
+                    self,
+                    varpermean2,
+                    min_states,
+                    target_size,
+                    cutoff_prob,
+                    cutoff_number,
+                    min_cutoff_size,
+                    max_init_events,
+                    max_subseq_events,
+                    start_size,
+                    size_step,
+                    keep_states,
+                )?)),
+                CanvasType::Periodic => Ok(Box::new(FFSRun::<
+                    QuadTreeState<CanvasPeriodic, NullStateTracker>,
+                    OldKTAM<QuadTreeState<CanvasPeriodic, NullStateTracker>>,
+                >::create_from_tileset(
+                    self,
+                    varpermean2,
+                    min_states,
+                    target_size,
+                    cutoff_prob,
+                    cutoff_number,
+                    min_cutoff_size,
+                    max_init_events,
+                    max_subseq_events,
+                    start_size,
+                    size_step,
+                    keep_states,
+                )?)),
+                CanvasType::Tube => Ok(Box::new(FFSRun::<
+                    QuadTreeState<CanvasTube, NullStateTracker>,
+                    OldKTAM<QuadTreeState<CanvasTube, NullStateTracker>>,
+                >::create_from_tileset(
+                    self,
+                    varpermean2,
+                    min_states,
+                    target_size,
+                    cutoff_prob,
+                    cutoff_number,
+                    min_cutoff_size,
+                    max_init_events,
+                    max_subseq_events,
+                    start_size,
+                    size_step,
+                    keep_states,
+                )?)),
+            },
+        }
+    }
+}
+
 pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St>> {
     pub system: Sy,
     pub level_list: Vec<FFSLevel<St, Sy>>,
@@ -33,7 +181,7 @@ pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St>> {
 
 impl<
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: System<St>,
+        Sy: SystemWithDimers<St> + FromTileSet,
     > FFSRun<St, Sy>
 {
     pub fn create(
@@ -148,7 +296,7 @@ impl<
         cutoff_prob: f64,
         cutoff_number: usize,
         min_cutoff_size: NumTiles,
-        canvas_size: CanvasLength,
+        canvas_size: (CanvasLength, CanvasLength),
         max_init_events: NumEvents,
         max_subseq_events: NumEvents,
         start_size: NumTiles,
@@ -221,12 +369,39 @@ impl<
         ret
     }
 
-    pub fn nucleation_rate(&self) -> Rate {
-        self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
-    }
-
-    pub fn forward_vec(&self) -> &Vec<f64> {
-        &self.forward_prob
+    pub fn create_from_tileset(
+        tileset: &TileSet,
+        varpermean2: f64,
+        min_states: usize,
+        target_size: NumTiles,
+        cutoff_prob: f64,
+        cutoff_number: usize,
+        min_cutoff_size: NumTiles,
+        max_init_events: NumEvents,
+        max_subseq_events: NumEvents,
+        start_size: NumTiles,
+        size_step: NumTiles,
+        keep_states: bool,
+    ) -> Result<Self, GrowError> {
+        let sys = Sy::from_tileset(tileset);
+        Ok(Self::create_with_constant_variance_and_size_cutoff(
+            sys,
+            varpermean2,
+            min_states,
+            target_size,
+            cutoff_prob,
+            cutoff_number,
+            min_cutoff_size,
+            match tileset.options.size {
+                Size::Single(x) => (x, x),
+                Size::Pair(p) => p,
+            },
+            max_init_events,
+            max_subseq_events,
+            start_size,
+            size_step,
+            keep_states,
+        ))
     }
 
     pub fn dimer_conc(&self) -> f64 {
@@ -247,7 +422,7 @@ pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System<St>> 
 impl<
         'a,
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: System<St>,
+        Sy: SystemWithDimers<St>,
     > FFSLevel<St, Sy>
 {
     pub fn drop_states(&mut self) -> &Self {
@@ -464,7 +639,7 @@ impl<
         system: &mut Sy,
         cvar: f64,
         min_samples: usize,
-        canvas_size: CanvasLength,
+        canvas_size: (CanvasLength, CanvasLength),
         max_events: u64,
         next_size: NumTiles,
     ) -> (Self, Self) {
@@ -481,14 +656,19 @@ impl<
         let weights: Vec<_> = dimers.iter().map(|d| d.formation_rate).collect();
         let chooser = WeightedIndex::new(&weights).unwrap();
 
-        let mid = canvas_size / 2;
+        if canvas_size.0 < 2 || canvas_size.1 < 2 {
+            panic!("Canvas size too small for dimers");
+        }
+        let mid = PointSafe2((canvas_size.0 / 2, canvas_size.1 / 2));
 
         let mut num_states = 0usize;
 
         let mut tile_list = Vec::with_capacity(min_samples);
 
+        let mut other: (usize, usize);
+
         while state_list.len() < MAX_SAMPLES {
-            let mut state = St::create_raw(Array2::zeros((canvas_size, canvas_size))).unwrap();
+            let mut state = St::create_raw(Array2::zeros(canvas_size)).unwrap();
 
             while state.ntiles() == 0 {
                 let i_old_state = chooser.sample(&mut rng);
@@ -496,12 +676,14 @@ impl<
 
                 match dimer.orientation {
                     Orientation::NS => {
-                        system.set_point(&mut state, (mid, mid), dimer.t1);
-                        system.set_point(&mut state, (mid + 1, mid), dimer.t2);
+                        other = state.move_sa_s(mid).0;
+                        system.set_point(&mut state, mid.0, dimer.t1);
+                        system.set_point(&mut state, other, dimer.t2);
                     }
                     Orientation::WE => {
-                        system.set_point(&mut state, (mid, mid), dimer.t1);
-                        system.set_point(&mut state, (mid, mid + 1), dimer.t2);
+                        other = state.move_sa_e(mid).0;
+                        system.set_point(&mut state, mid.0, dimer.t1);
+                        system.set_point(&mut state, other, dimer.t2);
                     }
                 };
 
@@ -513,16 +695,17 @@ impl<
                 if state.ntiles() >= next_size {
                     // FIXME: >= for duples is a hack.  Should count properly
                     // Create (retrospectively) a dimer state
-                    let mut dimer_state =
-                        St::create_raw(Array2::zeros((canvas_size, canvas_size))).unwrap();
+                    let mut dimer_state = St::create_raw(Array2::zeros(canvas_size)).unwrap();
                     match dimer.orientation {
                         Orientation::NS => {
-                            system.set_point(&mut dimer_state, (mid, mid), dimer.t1);
-                            system.set_point(&mut dimer_state, (mid + 1, mid), dimer.t2);
+                            other = dimer_state.move_sa_s(mid).0;
+                            system.set_point(&mut dimer_state, mid.0, dimer.t1);
+                            system.set_point(&mut dimer_state, other, dimer.t2);
                         }
                         Orientation::WE => {
-                            system.set_point(&mut dimer_state, (mid, mid), dimer.t1);
-                            system.set_point(&mut dimer_state, (mid, mid + 1), dimer.t2);
+                            other = dimer_state.move_sa_e(mid).0;
+                            system.set_point(&mut dimer_state, mid.0, dimer.t1);
+                            system.set_point(&mut dimer_state, other, dimer.t2);
                         }
                     };
 

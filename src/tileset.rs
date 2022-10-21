@@ -1,5 +1,6 @@
 use crate::base::GrowError;
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube};
+use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
@@ -210,7 +211,11 @@ fn canvas_type_default() -> CanvasType {
 pub enum Model {
     KTAM,
     ATAM,
-    StatickTAM,
+    OldKTAM,
+}
+
+fn threshold_default() -> f64 {
+    2.0
 }
 
 fn model_default() -> Model {
@@ -224,6 +229,8 @@ pub struct Args {
     pub gmc: f64,
     #[serde(default = "alpha_default")]
     pub alpha: f64,
+    #[serde(default = "threshold_default")]
+    pub threshold: f64,
     #[serde(default = "seed_default")]
     pub seed: ParsedSeed,
     #[serde(default = "size_default")]
@@ -269,6 +276,7 @@ impl Default for Args {
             hdoubletiles: Vec::new(),
             vdoubletiles: Vec::new(),
             model: model_default(),
+            threshold: threshold_default(),
         }
     }
 }
@@ -303,8 +311,18 @@ impl TileSet {
                     KTAM::<QuadTreeState<CanvasTube, NullStateTracker>>::sim_from_tileset(self)
                 }
             },
-            Model::ATAM => todo!(),
-            Model::StatickTAM => match self.options.canvas_type {
+            Model::ATAM => match self.options.canvas_type {
+                CanvasType::Square => {
+                    ATAM::<QuadTreeState<CanvasSquare, NullStateTracker>>::sim_from_tileset(self)
+                }
+                CanvasType::Periodic => {
+                    ATAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::sim_from_tileset(self)
+                }
+                CanvasType::Tube => {
+                    ATAM::<QuadTreeState<CanvasTube, NullStateTracker>>::sim_from_tileset(self)
+                }
+            },
+            Model::OldKTAM => match self.options.canvas_type {
                 CanvasType::Square => {
                     OldKTAM::<QuadTreeState<CanvasSquare, NullStateTracker>>::sim_from_tileset(self)
                 }

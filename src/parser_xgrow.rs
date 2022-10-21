@@ -3,8 +3,8 @@
 
 use crate::{base::Glue, system::FissionHandling};
 
-use super::parser;
-use super::parser::GlueIdent;
+use super::tileset;
+use super::tileset::GlueIdent;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
@@ -41,13 +41,13 @@ fn rsc<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (), E> {
     Ok((input, ()))
 }
 
-fn glue(input: &str) -> IResult<&str, parser::GlueIdent> {
-    fn glue_num(input: &str) -> IResult<&str, parser::GlueIdent> {
+fn glue(input: &str) -> IResult<&str, tileset::GlueIdent> {
+    fn glue_num(input: &str) -> IResult<&str, tileset::GlueIdent> {
         let (input, n) = map_res(digit1, |n: &str| n.parse::<Glue>())(input)?;
         Ok((input, GlueIdent::Num(n)))
     }
 
-    fn glue_name(input: &str) -> IResult<&str, parser::GlueIdent> {
+    fn glue_name(input: &str) -> IResult<&str, tileset::GlueIdent> {
         map(is_not(" \n\t}"), |n: &str| GlueIdent::Name(n.to_string()))(input)
     }
 
@@ -63,7 +63,7 @@ fn take_u32(input: &str) -> IResult<&str, u32> {
     Ok((input, n))
 }
 
-fn tile(input: &str) -> IResult<&str, parser::Tile> {
+fn tile(input: &str) -> IResult<&str, tileset::Tile> {
     let (input, edges) = std_delim(delimited(tag("{"), many1(std_delim(glue)), tag("}")))(input)?;
 
     let (input, stoic) = opt(std_delim(delimited(tag("["), string_f64, tag("]"))))(input)?;
@@ -75,7 +75,7 @@ fn tile(input: &str) -> IResult<&str, parser::Tile> {
 
     Ok((
         input,
-        parser::Tile {
+        tileset::Tile {
             name: None,
             edges,
             stoic,
@@ -84,14 +84,14 @@ fn tile(input: &str) -> IResult<&str, parser::Tile> {
     ))
 }
 
-fn tilelist(input: &str) -> IResult<&str, Vec<parser::Tile>> {
+fn tilelist(input: &str) -> IResult<&str, Vec<tileset::Tile>> {
     preceded(
         std_delim(tag("tile edges=")),
         std_delim(delimited(tag("{"), many1(std_delim(tile)), tag("}"))),
     )(input)
 }
 
-fn parse(input: &str) -> IResult<&str, parser::TileSet> {
+fn parse(input: &str) -> IResult<&str, tileset::TileSet> {
     // Consume initial comments
     let (input, _) = opt(std_delim(tag("tile edges matches {{N E S W}*}")))(input)?;
 
@@ -125,16 +125,16 @@ fn parse(input: &str) -> IResult<&str, parser::TileSet> {
         Some(b) => bondstrengths
             .iter()
             .zip(b)
-            .map(|(s, n)| parser::Bond {
-                name: parser::GlueIdent::Name(n.to_string()),
+            .map(|(s, n)| tileset::Bond {
+                name: tileset::GlueIdent::Name(n.to_string()),
                 strength: *s,
             })
             .collect(),
         None => bondstrengths
             .iter()
             .enumerate()
-            .map(|(i, s)| parser::Bond {
-                name: parser::GlueIdent::Num((i + 1) as Glue),
+            .map(|(i, s)| tileset::Bond {
+                name: tileset::GlueIdent::Num((i + 1) as Glue),
                 strength: *s,
             })
             .collect(),
@@ -148,7 +148,7 @@ fn parse(input: &str) -> IResult<&str, parser::TileSet> {
 
     Ok((
         input,
-        parser::TileSet {
+        tileset::TileSet {
             tiles,
             bonds,
             options,
@@ -166,7 +166,7 @@ enum XgrowArgs<'a> {
     Gmc(f64),
     UpdateRate(u64),
     Unhandled(&'a str),
-    Seed(parser::ParsedSeed),
+    Seed(tileset::ParsedSeed),
 }
 
 fn arg_block(input: &str) -> IResult<&str, XgrowArgs> {
@@ -201,7 +201,7 @@ fn arg_seed(input: &str) -> IResult<&str, XgrowArgs> {
         map(
             tuple((take_u32, tag(","), take_u32, tag(","), take_u32)),
             |(x, _, y, _, t)| {
-                XgrowArgs::Seed(parser::ParsedSeed::Single(
+                XgrowArgs::Seed(tileset::ParsedSeed::Single(
                     y as usize, x as usize, t as usize,
                 ))
             },
@@ -213,8 +213,8 @@ fn unhandled_option(input: &str) -> IResult<&str, XgrowArgs> {
     map(is_not(" \t\r\n%"), |x| XgrowArgs::Unhandled(x))(input)
 }
 
-fn xgrow_args(input: &str) -> IResult<&str, parser::Args> {
-    let mut args = parser::Args::default();
+fn xgrow_args(input: &str) -> IResult<&str, tileset::Args> {
+    let mut args = tileset::Args::default();
 
     let parsers = (
         arg_block,
@@ -236,7 +236,7 @@ fn xgrow_args(input: &str) -> IResult<&str, parser::Args> {
             }
             XgrowArgs::Size(n) => {
                 size = n;
-                args.size = crate::parser::Size::Single(n);
+                args.size = crate::tileset::Size::Single(n);
             }
             XgrowArgs::Gse(x) => {
                 args.gse = x;
@@ -257,8 +257,8 @@ fn xgrow_args(input: &str) -> IResult<&str, parser::Args> {
         i2 = input;
     }
 
-    if let parser::ParsedSeed::None() = args.seed {
-        args.seed = parser::ParsedSeed::Single(size - 2, size - 2, 1);
+    if let tileset::ParsedSeed::None() = args.seed {
+        args.seed = tileset::ParsedSeed::Single(size - 2, size - 2, 1);
     }
 
     args.fission = FissionHandling::NoFission;
@@ -266,7 +266,7 @@ fn xgrow_args(input: &str) -> IResult<&str, parser::Args> {
     Ok((i2, args))
 }
 
-pub fn parse_xgrow(file: String) -> Result<parser::TileSet, Box<dyn Error>> {
+pub fn parse_xgrow(file: String) -> Result<tileset::TileSet, Box<dyn Error>> {
     let mut f = File::open(file)?;
 
     let mut tilestring = String::new();

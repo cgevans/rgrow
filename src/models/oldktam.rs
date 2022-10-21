@@ -9,13 +9,13 @@ use serde::{Deserialize, Serialize};
 use crate::{
     base::{Energy, Glue, GrowError, Point, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
-    parser::{FromTileSet, ParsedSeed, SimFromTileSet, Size, TileSet},
     simulation::Simulation,
     state::{State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        SystemWithStateCreate, TileBondInfo,
+        SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
+    tileset::{FromTileSet, ParsedSeed, SimFromTileSet, Size, TileSet},
 };
 
 type Cache = SizedCache<(Tile, Tile, Tile, Tile), f64>;
@@ -730,40 +730,6 @@ where
         v
     }
 
-    fn calc_dimers(&self) -> Vec<DimerInfo> {
-        let mut dvec = Vec::new();
-
-        for ((t1, t2), e) in self.energy_ns.indexed_iter() {
-            if *e != 0. {
-                let biconc =
-                    f64::exp(2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
-                dvec.push(DimerInfo {
-                    t1: t1 as Tile,
-                    t2: t2 as Tile,
-                    orientation: Orientation::NS,
-                    formation_rate: self.k_f * biconc,
-                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
-                });
-            }
-        }
-
-        for ((t1, t2), e) in self.energy_we.indexed_iter() {
-            if *e != 0. {
-                let biconc =
-                    f64::exp(2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
-                dvec.push(DimerInfo {
-                    t1: t1 as Tile,
-                    t2: t2 as Tile,
-                    orientation: Orientation::WE,
-                    formation_rate: self.k_f * biconc,
-                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
-                });
-            }
-        }
-
-        dvec
-    }
-
     fn update_after_event(&self, mut state: &mut S, event: &Event) {
         match event {
             Event::None => {
@@ -858,6 +824,42 @@ where
         }
 
         arr
+    }
+}
+
+impl<St: State> SystemWithDimers<St> for OldKTAM<St> {
+    fn calc_dimers(&self) -> Vec<DimerInfo> {
+        let mut dvec = Vec::new();
+
+        for ((t1, t2), e) in self.energy_ns.indexed_iter() {
+            if *e != 0. {
+                let biconc =
+                    f64::exp(2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
+                dvec.push(DimerInfo {
+                    t1: t1 as Tile,
+                    t2: t2 as Tile,
+                    orientation: Orientation::NS,
+                    formation_rate: self.k_f * biconc,
+                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
+                });
+            }
+        }
+
+        for ((t1, t2), e) in self.energy_we.indexed_iter() {
+            if *e != 0. {
+                let biconc =
+                    f64::exp(2. * self.alpha) * self.tile_adj_concs[t1] * self.tile_adj_concs[t2];
+                dvec.push(DimerInfo {
+                    t1: t1 as Tile,
+                    t2: t2 as Tile,
+                    orientation: Orientation::WE,
+                    formation_rate: self.k_f * biconc,
+                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
+                });
+            }
+        }
+
+        dvec
     }
 }
 

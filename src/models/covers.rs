@@ -8,9 +8,9 @@ use crate::{
     base::{Glue, NumEvents, NumTiles, Point, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     models::oldktam::Seed,
-    parser::{FromTileSet, ParsedSeed, TileSet},
     state::{State, StateCreate},
-    system::{ChunkSize, DimerInfo, Event, StepOutcome, System, TileBondInfo},
+    system::{ChunkSize, DimerInfo, Event, StepOutcome, System, SystemWithDimers, TileBondInfo},
+    tileset::{FromTileSet, ParsedSeed, TileSet},
 };
 
 #[derive(Debug, Clone)]
@@ -152,10 +152,6 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
         self.inner.seed_locs()
     }
 
-    fn calc_dimers(&self) -> Vec<DimerInfo> {
-        self.inner.calc_dimers()
-    }
-
     fn calc_mismatch_locations(&self, state: &S) -> Array2<usize> {
         self.inner.calc_mismatch_locations(state)
     }
@@ -258,6 +254,12 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
             .collect::<Vec<_>>();
 
         state.update_multiple(&points, &rates);
+    }
+}
+
+impl<S: State> SystemWithDimers<S> for StaticKTAMCover<S> {
+    fn calc_dimers(&self) -> Vec<DimerInfo> {
+        self.inner.calc_dimers()
     }
 }
 

@@ -12,6 +12,8 @@ pub type CanvasLength = usize;
 pub enum GrowError {
     #[error("can't create canvas from array of size ({0}, {1})")]
     WrongCanvasSize(usize, usize),
+    #[error("FFS is meaningless for the aTAM.")]
+    FFSCannotRunATAM,
 }
 
 pub type GrowResult<T> = Result<T, GrowError>;

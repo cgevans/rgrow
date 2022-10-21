@@ -161,6 +161,8 @@ pub trait System<S: State>: Debug {
                 return Ok(EvolveOutcome::ReachWallTimeMax);
             } else if for_events.is_some_and(|e| events >= *e) {
                 return Ok(EvolveOutcome::ReachedEventsMax);
+            } else if state.total_rate() == 0. {
+                return Ok(EvolveOutcome::ReachedZeroRate);
             }
             let out = self.state_step(state, rng, rtime);
             match out {
@@ -260,9 +262,6 @@ pub trait System<S: State>: Debug {
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;
 
-    /// Returns information on dimers that the system can form, similarly useful for starting out a state.
-    fn calc_dimers(&self) -> Vec<DimerInfo>;
-
     fn calc_mismatch_locations(&self, state: &S) -> Array2<usize>;
 
     fn calc_mismatches(&self, state: &S) -> NumTiles {
@@ -278,6 +277,11 @@ pub trait System<S: State>: Debug {
 
         state.update_multiple(&points, &rates);
     }
+}
+
+pub trait SystemWithDimers<St: State>: System<St> {
+    /// Returns information on dimers that the system can form, similarly useful for starting out a state.
+    fn calc_dimers(&self) -> Vec<DimerInfo>;
 }
 
 pub trait TileBondInfo {
