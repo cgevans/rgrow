@@ -142,6 +142,14 @@ impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
             self.ntiles -= 1
         }
     }
+
+    fn draw_size(&self) -> (u32, u32) {
+        self.canvas.draw_size()
+    }
+
+    fn draw(&self, frame: &mut [u8], colors: &Vec<[u8; 4]>) {
+        self.canvas.draw(frame, colors)
+    }
 }
 
 impl<C, T> StateCreate for QuadTreeState<C, T>

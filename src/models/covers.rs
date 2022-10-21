@@ -358,7 +358,7 @@ impl<C: State> TileBondInfo for StaticKTAMCover<C> {
         todo!()
     }
 
-    fn tile_colors(&self) -> Vec<[u8; 4]> {
+    fn tile_colors(&self) -> &Vec<[u8; 4]> {
         self.inner.tile_colors()
     }
 

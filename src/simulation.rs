@@ -31,7 +31,8 @@ pub trait Simulation {
     ) -> Result<EvolveOutcome, GrowError>;
     fn state_ref(&self, state_index: usize) -> &dyn State;
     fn add_state(&mut self, shape: (usize, usize)) -> Result<usize, GrowError>;
-    fn draw(&self, state_index: usize, frame: &mut [u8], scaled: usize);
+    fn draw_size(&self, state_index: usize) -> (u32, u32);
+    fn draw(&self, state_index: usize, frame: &mut [u8]);
 }
 
 impl<Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo, St: State + StateCreate> Simulation
@@ -55,42 +56,12 @@ impl<Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo, St: State + Stat
     fn state_ref(&self, state_index: usize) -> &dyn State {
         &self.states[state_index]
     }
-    fn draw(&self, state_index: usize, frame: &mut [u8], scaled: usize) {
+    fn draw_size(&self, state_index: usize) -> (u32, u32) {
+        self.states[state_index].draw_size()
+    }
+    fn draw(&self, state_index: usize, frame: &mut [u8]) {
         let state = &self.states[state_index];
-        let mut scy = scaled;
-        let mut scx = scaled;
-        let mut x = 0;
-        let mut y = 0;
-        for pixel in frame.chunks_exact_mut(4) {
-            //println!("{} {}", x/scaled, y/scaled);
-
-            let tv = unsafe { state.uv_p((x, y)) };
-
-            scy -= 1;
-            if scy == 0 {
-                scy = scaled;
-                y += 1;
-                if y == state.ncols() {
-                    y = 0;
-                    scx -= 1;
-                    if scx == 0 {
-                        scx = scaled;
-                        x += 1;
-                        if x == state.nrows() {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            pixel.copy_from_slice(
-                &(if tv > 0 {
-                    self.system.tile_color(tv)
-                } else {
-                    [0, 0, 0, 0x00]
-                }),
-            );
-        }
+        state.draw(frame, self.system.tile_colors());
     }
     fn add_state(&mut self, shape: (usize, usize)) -> Result<usize, GrowError> {
         self.states.push(self.system.new_state(shape)?);

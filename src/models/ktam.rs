@@ -358,8 +358,8 @@ impl<C: State> TileBondInfo for KTAM<C> {
         todo!()
     }
 
-    fn tile_colors(&self) -> Vec<[u8; 4]> {
-        self.tile_colors.clone()
+    fn tile_colors(&self) -> &Vec<[u8; 4]> {
+        &self.tile_colors
     }
 
     fn tile_names(&self) -> Vec<String> {

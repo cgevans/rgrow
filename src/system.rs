@@ -289,7 +289,7 @@ pub trait TileBondInfo {
     fn tile_name(&self, tile_number: Tile) -> &str;
     fn bond_name(&self, bond_number: usize) -> &str;
 
-    fn tile_colors(&self) -> Vec<[u8; 4]>;
+    fn tile_colors(&self) -> &Vec<[u8; 4]>;
     fn tile_names(&self) -> Vec<String>;
     fn bond_names(&self) -> Vec<String>;
 }

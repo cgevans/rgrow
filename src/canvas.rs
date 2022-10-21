@@ -238,6 +238,17 @@ pub trait Canvas: std::fmt::Debug {
     unsafe fn uvm_w(&mut self, p: Point) -> &mut Tile {
         self.uvm_p(self.u_move_point_w(p))
     }
+
+    fn draw(&self, frame: &mut [u8], colors: &Vec<[u8; 4]>) {
+        for (p, v) in Iterator::zip(frame.chunks_exact_mut(4), self.raw_array().iter()) {
+            let color = colors[*v as usize];
+            p.copy_from_slice(&color);
+        }
+    }
+
+    fn draw_size(&self) -> (u32, u32) {
+        (self.ncols() as u32, self.nrows() as u32)
+    }
 }
 
 pub trait CanvasSquarable: Canvas {
@@ -258,8 +269,8 @@ impl CanvasSquarable for CanvasSquare {
 }
 
 impl CanvasCreate for CanvasSquare {
-    fn from_array(canvas: Array2<Tile>) -> GrowResult<Self> {
-        Ok(Self { values: canvas })
+    fn from_array(values: Array2<Tile>) -> GrowResult<Self> {
+        Ok(Self { values })
     }
 }
 
@@ -495,5 +506,24 @@ impl Canvas for CanvasTube {
 
     fn ncols(&self) -> usize {
         self.values.ncols()
+    }
+
+    fn draw_size(&self) -> (u32, u32) {
+        let s = (self.nrows() + self.ncols()) as u32;
+        (s, s)
+    }
+
+    fn draw(&self, frame: &mut [u8], colors: &Vec<[u8; 4]>) {
+        let s = self.nrows() + self.ncols();
+        let mut px: usize;
+        let mut py: usize;
+        let mut pos: usize;
+
+        for ((x, y), t) in self.values.indexed_iter() {
+            py = y;
+            px = x + y;
+            pos = 4 * (px * s + py);
+            frame[pos..pos + 4].copy_from_slice(&colors[*t])
+        }
     }
 }
