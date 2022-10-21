@@ -1,4 +1,5 @@
 use std::convert::TryInto;
+use std::time::Duration;
 
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
@@ -8,10 +9,11 @@ use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
 
+use crate::base::GrowError;
 use crate::simulation::EvolveBounds;
 
-pub fn run_ktam_window(parsed: crate::parser::TileSet) {
-    let mut sim = parsed.into_sim();
+pub fn run_window(parsed: crate::parser::TileSet) -> Result<(), GrowError> {
+    let mut sim = parsed.into_sim()?;
 
     let size1: usize;
     let size2: usize;
@@ -42,7 +44,6 @@ pub fn run_ktam_window(parsed: crate::parser::TileSet) {
         );
         WindowBuilder::new()
             .with_title("rgrow!")
-            .with_inner_size(size)
             .with_min_inner_size(size)
             .build(&event_loop)
             .unwrap()
@@ -60,11 +61,13 @@ pub fn run_ktam_window(parsed: crate::parser::TileSet) {
     };
 
     let bounds = EvolveBounds {
-        events: Some(parsed.options.update_rate),
-        time: Some(1e20),
-        size_min: Some(0),
+        events: None,
+        time: None,
+        size_min: None,
         size_max: None,
+        wall_time: Some(Duration::from_millis(16)),
     };
+    window.request_redraw();
 
     event_loop.run(move |event, _, control_flow| {
         if let Event::RedrawRequested(_) = event {
@@ -83,8 +86,8 @@ pub fn run_ktam_window(parsed: crate::parser::TileSet) {
             }
 
             // Update internal state and request a redraw
+            window.request_redraw();
         }
-
         sim.evolve(state_i, bounds);
         // match parsed.options.smax {
         //     Some(smax) => {if state.ntiles() > smax {break}}
@@ -92,6 +95,7 @@ pub fn run_ktam_window(parsed: crate::parser::TileSet) {
         // };
 
         sim.draw(state_i, pixels.get_frame(), scaled);
+        pixels.render().unwrap();
         window.request_redraw();
     });
 }

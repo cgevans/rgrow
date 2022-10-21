@@ -16,8 +16,6 @@ pub mod ui;
 pub mod base;
 pub mod canvas;
 pub mod ffs;
-pub mod fission;
-pub mod newfission;
 pub mod state;
 pub mod system;
 
@@ -25,4 +23,4 @@ pub mod ratestore;
 
 pub mod simulation;
 
-pub mod newsystem;
+pub mod models;

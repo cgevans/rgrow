@@ -1,7 +1,8 @@
-use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
-use crate::newsystem::{NewKTAM, Seed};
+use crate::base::GrowError;
+use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube};
+use crate::models::ktam::NewKTAM;
+use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
-use crate::system::StaticKTAM;
 
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;
@@ -10,12 +11,10 @@ use base::{NumEvents, NumTiles};
 use bimap::BiMap;
 use ndarray::prelude::*;
 use rand::prelude::Distribution;
-use rand::rngs::SmallRng;
-use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use simulation::{Sim, Simulation};
-use std::collections::{BTreeMap, HashMap};
+use simulation::Sim;
+use std::collections::BTreeMap;
 use std::io;
 use system::{ChunkHandling, ChunkSize};
 
@@ -44,7 +43,7 @@ pub enum TileIdent {
     Num(usize),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum ParsedSeed {
     None(),
@@ -52,7 +51,7 @@ pub enum ParsedSeed {
     Multi(Vec<(CanvasLength, CanvasLength, base::Tile)>),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tile {
     pub name: Option<String>,
     pub edges: Vec<GlueIdent>,
@@ -60,14 +59,15 @@ pub struct Tile {
     pub color: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 pub enum Direction {
     N,
     E,
     S,
     W,
 }
-#[derive(Serialize, Deserialize, Debug)]
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CoverStrand {
     pub name: Option<String>,
     pub glue: GlueIdent,
@@ -75,80 +75,80 @@ pub struct CoverStrand {
     pub stoic: f64,
 }
 
-// impl CoverStrand {
-//     fn to_tile(&self) -> Tile {
-//         let edges = match self.dir {
-//             Direction::N => {
-//                 vec![
-//                     self.glue.clone(),
-//                     GlueIdent::Num(0),
-//                     GlueIdent::Num(0),
-//                     GlueIdent::Num(0),
-//                 ]
-//             }
-//             Direction::E => {
-//                 vec![
-//                     GlueIdent::Num(0),
-//                     self.glue.clone(),
-//                     GlueIdent::Num(0),
-//                     GlueIdent::Num(0),
-//                 ]
-//             }
-//             Direction::S => {
-//                 vec![
-//                     GlueIdent::Num(0),
-//                     GlueIdent::Num(0),
-//                     self.glue.clone(),
-//                     GlueIdent::Num(0),
-//                 ]
-//             }
-//             Direction::W => {
-//                 vec![
-//                     GlueIdent::Num(0),
-//                     GlueIdent::Num(0),
-//                     GlueIdent::Num(0),
-//                     self.glue.clone(),
-//                 ]
-//             }
-//         };
+impl CoverStrand {
+    pub(crate) fn to_tile(&self) -> Tile {
+        let edges = match self.dir {
+            Direction::N => {
+                vec![
+                    self.glue.clone(),
+                    GlueIdent::Num(0),
+                    GlueIdent::Num(0),
+                    GlueIdent::Num(0),
+                ]
+            }
+            Direction::E => {
+                vec![
+                    GlueIdent::Num(0),
+                    self.glue.clone(),
+                    GlueIdent::Num(0),
+                    GlueIdent::Num(0),
+                ]
+            }
+            Direction::S => {
+                vec![
+                    GlueIdent::Num(0),
+                    GlueIdent::Num(0),
+                    self.glue.clone(),
+                    GlueIdent::Num(0),
+                ]
+            }
+            Direction::W => {
+                vec![
+                    GlueIdent::Num(0),
+                    GlueIdent::Num(0),
+                    GlueIdent::Num(0),
+                    self.glue.clone(),
+                ]
+            }
+        };
 
-//         Tile {
-//             name: None,
-//             edges,
-//             stoic: Some(self.stoic),
-//             color: None,
-//         }
-//     }
+        Tile {
+            name: None,
+            edges,
+            stoic: Some(self.stoic),
+            color: None,
+        }
+    }
 
-//     fn make_composite(&self, other: &CoverStrand) -> Tile {
-//         let es1 = self.to_tile().edges;
-//         let es2 = other.to_tile().edges;
+    pub(crate) fn make_composite(&self, other: &CoverStrand) -> Tile {
+        let es1 = self.to_tile().edges;
+        let es2 = other.to_tile().edges;
 
-//         let mut edges = Vec::new();
-//         for (e1, e2) in es1.iter().zip(&es2) {
-//             if *e1 == GlueIdent::Num(0) {
-//                 edges.push(e2.clone())
-//             } else {
-//                 edges.push(e1.clone())
-//             }
-//         }
+        let mut edges = Vec::new();
+        for (e1, e2) in es1.iter().zip(&es2) {
+            if *e1 == GlueIdent::Num(0) {
+                edges.push(e2.clone())
+            } else {
+                edges.push(e1.clone())
+            }
+        }
 
-//         Tile {
-//             name: None,
-//             edges,
-//             stoic: Some(0.),
-//             color: None,
-//         }
-//     }
-// }
+        Tile {
+            name: None,
+            edges,
+            stoic: Some(0.),
+            color: None,
+        }
+    }
+}
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Bond {
     pub name: GlueIdent,
     pub strength: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TileSet {
     pub tiles: Vec<Tile>,
     #[serde(default = "Vec::new")]
@@ -168,7 +168,7 @@ fn gmc_default() -> f64 {
     16.0
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Size {
     Single(CanvasLength),
@@ -188,13 +188,13 @@ fn fission_default() -> FissionHandling {
     FissionHandling::KeepSeeded
 }
 fn block_default() -> usize {
-    5
+    1
 }
 fn tilepairlist_default() -> Vec<(TileIdent, TileIdent)> {
     Vec::new()
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 
 pub enum CanvasType {
     Square,
@@ -206,7 +206,17 @@ fn canvas_type_default() -> CanvasType {
     CanvasType::Square
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Model {
+    KTAM,
+    ATAM,
+    StatickTAM,
+}
+
+fn model_default() -> Model {
+    Model::KTAM
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Args {
     #[serde(default = "gse_default", alias = "Gse")]
     pub gse: f64,
@@ -235,6 +245,8 @@ pub struct Args {
     pub hdoubletiles: Vec<(TileIdent, TileIdent)>,
     #[serde(default = "tilepairlist_default")]
     pub vdoubletiles: Vec<(TileIdent, TileIdent)>,
+    #[serde(default = "model_default")]
+    pub model: Model,
 }
 
 impl Default for Args {
@@ -256,8 +268,17 @@ impl Default for Args {
             canvas_type: CanvasType::Square,
             hdoubletiles: Vec::new(),
             vdoubletiles: Vec::new(),
+            model: model_default(),
         }
     }
+}
+
+pub trait FromTileSet {
+    fn from_tileset(tileset: &TileSet) -> Self;
+}
+
+pub trait SimFromTileSet {
+    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Sim>, GrowError>;
 }
 
 impl TileSet {
@@ -269,429 +290,36 @@ impl TileSet {
         serde_yaml::from_str(data).unwrap_or(Err(()))
     }
 
-    // pub fn into_system(&self) -> Box<dyn System<dyn State>> {
-    //     let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
-
-    //     let tile_edges = self.tile_edge_process(&gluemap);
-    //     let mut tile_concs = self.tile_stoics();
-    //     tile_concs *= f64::exp(-self.options.gmc + self.options.alpha);
-
-    //     let mut glue_strength_vec = Vec::<f64>::new();
-
-    //     let mut i: base::Glue = 0;
-    //     for (j, v) in gluestrengthmap {
-    //         assert!(j == i);
-    //         glue_strength_vec.push(v);
-    //         i += 1;
-    //     }
-
-    //     let seed = match &self.options.seed {
-    //         ParsedSeed::Single(y, x, v) => Seed::SingleTile {
-    //             point: (*y, *x),
-    //             tile: *v,
-    //         },
-    //         ParsedSeed::None() => Seed::None(),
-    //         ParsedSeed::Multi(vec) => {
-    //             let mut hm = HashMap::default();
-    //             hm.extend(vec.iter().map(|(y, x, v)| ((*y, *x), *v)));
-    //             Seed::MultiTile(hm)
-    //         }
-    //     };
-
-    //     Box::new(StaticKTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::from_ktam(
-    //         self.tile_stoics(),
-    //         tile_edges,
-    //         Array1::from(glue_strength_vec),
-    //         self.options.gse,
-    //         self.options.gmc,
-    //         Some(self.options.alpha),
-    //         self.options.kf,
-    //         Some(seed),
-    //         Some(self.options.fission),
-    //         self.options.chunk_handling,
-    //         self.options.chunk_size,
-    //         Some(self.tile_names()),
-    //         Some(self.tile_colors()),
-    //     ))
-
-    // }
-
-    // pub fn into_static_ktam_cover(
-    //     &mut self,
-    // ) -> StaticKTAMCover<QuadTreeState<CanvasSquare, NullStateTracker>> {
-    //     let cs = self.cover_strands.as_ref().unwrap();
-
-    //     let mut tile_is_cover = Vec::with_capacity(self.tiles.len() + cs.len());
-    //     let mut cover_attach_info = Vec::with_capacity(self.tiles.len() + cs.len());
-    //     let mut composite_detach_info = Vec::with_capacity(self.tiles.len() + cs.len());
-
-    //     let mut extratiles = Vec::new();
-
-    //     cover_attach_info.push(Vec::new());
-    //     composite_detach_info.push(Vec::new());
-    //     tile_is_cover.push(system::CoverType::NonCover);
-
-    //     for _ in 0..self.tiles.len() {
-    //         tile_is_cover.push(system::CoverType::NonCover);
-    //         cover_attach_info.push(Vec::new());
-    //         composite_detach_info.push(Vec::new());
-    //     }
-    //     for c in cs {
-    //         tile_is_cover.push(system::CoverType::Cover);
-    //         composite_detach_info.push(Vec::new());
-    //         cover_attach_info.push(Vec::new());
-    //         extratiles.push(c.to_tile());
-    //     }
-
-    //     let coverbegin = self.tiles.len() + 1;
-    //     let mut comp = coverbegin + cs.len();
-
-    //     for i in 0..cs.len() {
-    //         for j in i..cs.len() {
-    //             // Same direction: can't attach at the same place at the same time.
-    //             if cs[i].dir == cs[j].dir {
-    //                 continue;
-    //             }
-
-    //             assert!(comp == coverbegin + extratiles.len());
-    //             extratiles.push(cs[i].make_composite(&cs[j]));
-
-    //             cover_attach_info[coverbegin + i].push(system::CoverAttach {
-    //                 like_tile: (coverbegin + i),
-    //                 new_tile: comp,
-    //             });
-    //             cover_attach_info[coverbegin + j].push(system::CoverAttach {
-    //                 like_tile: (coverbegin + j),
-    //                 new_tile: comp,
-    //             });
-
-    //             tile_is_cover.push(system::CoverType::Composite);
-    //             composite_detach_info.push(vec![
-    //                 system::CompositeDetach {
-    //                     like_tile: (coverbegin + i),
-    //                     new_tile: (coverbegin + j),
-    //                 },
-    //                 system::CompositeDetach {
-    //                     like_tile: (coverbegin + j),
-    //                     new_tile: (coverbegin + i),
-    //                 },
-    //             ]);
-
-    //             comp += 1;
-    //         }
-    //     }
-
-    //     self.tiles.extend(extratiles);
-
-    //     for tile in self.tiles.iter() {
-    //         println!("{:?}", tile);
-    //     }
-
-    //     assert!(comp == self.tiles.len() + 1);
-
-    //     let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
-
-    //     let tile_edges = self.tile_edge_process(&gluemap);
-    //     let mut tile_concs = self.tile_stoics();
-    //     tile_concs *= f64::exp(-self.options.gmc + self.options.alpha);
-
-    //     let mut glue_strength_vec = Vec::<f64>::new();
-
-    //     let mut i: base::Glue = 0;
-    //     for (j, v) in gluestrengthmap {
-    //         assert!(j == i);
-    //         glue_strength_vec.push(v);
-    //         i += 1;
-    //     }
-
-    //     let seed = match &self.options.seed {
-    //         ParsedSeed::Single(y, x, v) => Seed::SingleTile {
-    //             point: PointSafe2((*y, *x)),
-    //             tile: *v,
-    //         },
-    //         ParsedSeed::None() => Seed::None(),
-    //         ParsedSeed::Multi(vec) => {
-    //             let mut hm = HashMap::default();
-    //             hm.extend(vec.iter().map(|(y, x, v)| (PointSafe2((*y, *x)), *v)));
-    //             Seed::MultiTile(hm)
-    //         }
-    //     };
-
-    //     let inner = NewKTAM::from_ktam(
-    //         self.tile_stoics(),
-    //         tile_edges,
-    //         Array1::from(glue_strength_vec),
-    //         self.options.gse,
-    //         self.options.gmc,
-    //         Some(self.options.alpha),
-    //         self.options.kf,
-    //         Some(seed),
-    //         Some(self.options.fission),
-    //         self.options.chunk_handling,
-    //         self.options.chunk_size,
-    //         Some(self.tile_names()),
-    //         Some(self.tile_colors()),
-    //     );
-
-    //     StaticKTAMCover {
-    //         inner,
-    //         tile_is_cover,
-    //         cover_attach_info,
-    //         composite_detach_info,
-    //     }
-    // }
-
-    pub fn into_static_seeded_ktam<St: state::State>(&self) -> StaticKTAM<St> {
-        let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
-
-        let tile_edges = self.tile_edge_process(&gluemap);
-        let mut tile_concs = self.tile_stoics();
-        tile_concs *= f64::exp(-self.options.gmc + self.options.alpha);
-
-        let mut glue_strength_vec = Vec::<f64>::new();
-
-        let mut i: base::Glue = 0;
-        for (j, v) in gluestrengthmap {
-            assert!(j == i);
-            glue_strength_vec.push(v);
-            i += 1;
-        }
-
-        let seed = match &self.options.seed {
-            ParsedSeed::Single(y, x, v) => crate::system::Seed::SingleTile {
-                point: (*y, *x),
-                tile: *v,
+    pub fn into_sim(&self) -> Result<Box<dyn Sim>, GrowError> {
+        match self.options.model {
+            Model::KTAM => match self.options.canvas_type {
+                CanvasType::Square => {
+                    NewKTAM::<QuadTreeState<CanvasSquare, NullStateTracker>>::sim_from_tileset(self)
+                }
+                CanvasType::Periodic => {
+                    NewKTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::sim_from_tileset(
+                        self,
+                    )
+                }
+                CanvasType::Tube => {
+                    NewKTAM::<QuadTreeState<CanvasTube, NullStateTracker>>::sim_from_tileset(self)
+                }
             },
-            ParsedSeed::None() => crate::system::Seed::None(),
-            ParsedSeed::Multi(vec) => {
-                let mut hm = HashMap::default();
-                hm.extend(vec.iter().map(|(y, x, v)| ((*y, *x), *v)));
-                crate::system::Seed::MultiTile(hm)
-            }
-        };
-
-        StaticKTAM::from_ktam(
-            self.tile_stoics(),
-            tile_edges,
-            Array1::from(glue_strength_vec),
-            self.options.gse,
-            self.options.gmc,
-            Some(self.options.alpha),
-            self.options.kf,
-            Some(seed),
-            Some(self.options.fission),
-            self.options.chunk_handling,
-            self.options.chunk_size,
-            Some(self.tile_names()),
-            Some(self.tile_colors()),
-        )
-    }
-
-    pub fn into_sim(&self) -> Box<dyn Sim> {
-        let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
-
-        let tile_edges = self.tile_edge_process(&gluemap);
-        let mut tile_concs = self.tile_stoics();
-        tile_concs *= f64::exp(-self.options.gmc + self.options.alpha);
-
-        let mut glue_strength_vec = Vec::<f64>::new();
-
-        let mut i: base::Glue = 0;
-        for (j, v) in gluestrengthmap {
-            assert!(j == i);
-            glue_strength_vec.push(v);
-            i += 1;
-        }
-
-        let seed = match &self.options.seed {
-            ParsedSeed::Single(y, x, v) => Seed::SingleTile {
-                point: PointSafe2((*y, *x)),
-                tile: *v,
+            Model::ATAM => todo!(),
+            Model::StatickTAM => match self.options.canvas_type {
+                CanvasType::Square => {
+                    OldKTAM::<QuadTreeState<CanvasSquare, NullStateTracker>>::sim_from_tileset(self)
+                }
+                CanvasType::Periodic => {
+                    OldKTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::sim_from_tileset(
+                        self,
+                    )
+                }
+                CanvasType::Tube => {
+                    OldKTAM::<QuadTreeState<CanvasTube, NullStateTracker>>::sim_from_tileset(self)
+                }
             },
-            ParsedSeed::None() => Seed::None(),
-            ParsedSeed::Multi(vec) => {
-                let mut hm = HashMap::default();
-                hm.extend(vec.iter().map(|(y, x, v)| (PointSafe2((*y, *x)), *v)));
-                Seed::MultiTile(hm)
-            }
-        };
-
-        let tile_names = self.tile_names();
-
-        fn tpmap(tile_names: &Vec<String>, tp: &TileIdent) -> usize {
-            match tp {
-                TileIdent::Name(x) => tile_names.iter().position(|y| *y == *x).unwrap(),
-                TileIdent::Num(x) => *x,
-            }
         }
-
-        let hdoubles: Vec<(usize, usize)> = self
-            .options
-            .hdoubletiles
-            .iter()
-            .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
-            .collect();
-
-        let vdoubles: Vec<(usize, usize)> = self
-            .options
-            .vdoubletiles
-            .iter()
-            .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
-            .collect();
-
-        match self.options.canvas_type {
-            CanvasType::Square => {
-                let mut newkt: NewKTAM<QuadTreeState<CanvasSquare, NullStateTracker>> =
-                    NewKTAM::from_ktam(
-                        self.tile_stoics(),
-                        tile_edges,
-                        Array1::from(glue_strength_vec),
-                        self.options.gse,
-                        self.options.gmc,
-                        Some(self.options.alpha),
-                        self.options.kf,
-                        Some(seed),
-                        Some(self.options.fission),
-                        self.options.chunk_handling,
-                        self.options.chunk_size,
-                        Some(tile_names),
-                        Some(self.tile_colors()),
-                    );
-
-                newkt.set_duples(hdoubles, vdoubles);
-
-                Box::new(Simulation {
-                    system: newkt,
-                    states: Vec::new(),
-                    rng: SmallRng::from_entropy(),
-                })
-            }
-            CanvasType::Periodic => {
-                let mut newkt: NewKTAM<QuadTreeState<CanvasPeriodic, NullStateTracker>> =
-                    NewKTAM::from_ktam(
-                        self.tile_stoics(),
-                        tile_edges,
-                        Array1::from(glue_strength_vec),
-                        self.options.gse,
-                        self.options.gmc,
-                        Some(self.options.alpha),
-                        self.options.kf,
-                        Some(seed),
-                        Some(self.options.fission),
-                        self.options.chunk_handling,
-                        self.options.chunk_size,
-                        Some(tile_names),
-                        Some(self.tile_colors()),
-                    );
-
-                newkt.set_duples(hdoubles, vdoubles);
-
-                Box::new(Simulation {
-                    system: newkt,
-                    states: Vec::new(),
-                    rng: SmallRng::from_entropy(),
-                })
-            }
-            CanvasType::Tube => {
-                let mut newkt: NewKTAM<QuadTreeState<CanvasTube, NullStateTracker>> =
-                    NewKTAM::from_ktam(
-                        self.tile_stoics(),
-                        tile_edges,
-                        Array1::from(glue_strength_vec),
-                        self.options.gse,
-                        self.options.gmc,
-                        Some(self.options.alpha),
-                        self.options.kf,
-                        Some(seed),
-                        Some(self.options.fission),
-                        self.options.chunk_handling,
-                        self.options.chunk_size,
-                        Some(tile_names),
-                        Some(self.tile_colors()),
-                    );
-
-                newkt.set_duples(hdoubles, vdoubles);
-
-                Box::new(Simulation {
-                    system: newkt,
-                    states: Vec::new(),
-                    rng: SmallRng::from_entropy(),
-                })
-            }
-        }
-    }
-
-    pub fn into_newktam<St: state::State>(&self) -> NewKTAM<St> {
-        let (gluemap, gluestrengthmap) = self.number_glues().unwrap();
-
-        let tile_edges = self.tile_edge_process(&gluemap);
-        let mut tile_concs = self.tile_stoics();
-        tile_concs *= f64::exp(-self.options.gmc + self.options.alpha);
-
-        let mut glue_strength_vec = Vec::<f64>::new();
-
-        let mut i: base::Glue = 0;
-        for (j, v) in gluestrengthmap {
-            assert!(j == i);
-            glue_strength_vec.push(v);
-            i += 1;
-        }
-
-        let seed = match &self.options.seed {
-            ParsedSeed::Single(y, x, v) => Seed::SingleTile {
-                point: PointSafe2((*y, *x)),
-                tile: *v,
-            },
-            ParsedSeed::None() => Seed::None(),
-            ParsedSeed::Multi(vec) => {
-                let mut hm = HashMap::default();
-                hm.extend(vec.iter().map(|(y, x, v)| (PointSafe2((*y, *x)), *v)));
-                Seed::MultiTile(hm)
-            }
-        };
-
-        let tile_names = self.tile_names();
-
-        fn tpmap(tile_names: &Vec<String>, tp: &TileIdent) -> usize {
-            match tp {
-                TileIdent::Name(x) => tile_names.iter().position(|y| *y == *x).unwrap(),
-                TileIdent::Num(x) => *x,
-            }
-        }
-
-        let hdoubles: Vec<(usize, usize)> = self
-            .options
-            .hdoubletiles
-            .iter()
-            .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
-            .collect();
-
-        let vdoubles: Vec<(usize, usize)> = self
-            .options
-            .vdoubletiles
-            .iter()
-            .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
-            .collect();
-
-        let mut newkt = NewKTAM::from_ktam(
-            self.tile_stoics(),
-            tile_edges,
-            Array1::from(glue_strength_vec),
-            self.options.gse,
-            self.options.gmc,
-            Some(self.options.alpha),
-            self.options.kf,
-            Some(seed),
-            Some(self.options.fission),
-            self.options.chunk_handling,
-            self.options.chunk_size,
-            Some(tile_names),
-            Some(self.tile_colors()),
-        );
-
-        newkt.set_duples(hdoubles, vdoubles);
-
-        newkt
     }
 
     pub fn number_glues(&self) -> Result<(BiMap<&str, Glue>, BTreeMap<Glue, f64>), ()> {

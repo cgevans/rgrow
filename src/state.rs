@@ -3,7 +3,7 @@ use crate::canvas::{Canvas, CanvasCreate, CanvasSquarable};
 use crate::{
     canvas::PointSafe2,
     canvas::PointSafeHere,
-    ratestore::{CreateSizedRateStore, QuadTreeArray, RateStore},
+    ratestore::{CreateSizedRateStore, QuadTreeSquareArray, RateStore},
     system,
 };
 use ndarray::prelude::*;
@@ -30,7 +30,7 @@ pub trait StateCreate: Sized {
 
 #[derive(Debug, Clone)]
 pub struct QuadTreeState<C: CanvasSquarable, T: StateTracker> {
-    pub rates: QuadTreeArray<Rate>,
+    pub rates: QuadTreeSquareArray<Rate>,
     pub canvas: C,
     ntiles: NumTiles,
     total_events: NumEvents,
@@ -152,7 +152,7 @@ where
     fn create_raw(canvas: Array2<Tile>) -> Result<Self, GrowError> {
         let (ys, xs) = canvas.dim();
 
-        let rates = QuadTreeArray::new_with_size(ys.max(xs));
+        let rates = QuadTreeSquareArray::new_with_size(xs, ys);
 
         let canvas = C::from_array(canvas)?;
         let tracker = T::default(&canvas);

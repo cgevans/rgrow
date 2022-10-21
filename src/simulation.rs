@@ -1,9 +1,10 @@
 //$ Simulations hold both a model and a state, so that they can be handled without knowing the specific model, state, or canvas being used.
 
+use std::time::Duration;
+
 use rand::prelude::SmallRng;
 
 use crate::base::{GrowError, NumEvents, NumTiles};
-use crate::canvas::PointSafe2;
 use crate::state::{State, StateCreate};
 use crate::system::{StepOutcome, System};
 use crate::system::{SystemWithStateCreate, TileBondInfo};
@@ -14,6 +15,7 @@ pub struct EvolveBounds {
     pub time: Option<f64>,
     pub size_min: Option<NumTiles>,
     pub size_max: Option<NumTiles>,
+    pub wall_time: Option<Duration>,
 }
 
 pub enum EvolveOutcome {
@@ -48,6 +50,7 @@ impl<Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo, St: State + Stat
             bounds.time,
             bounds.size_min,
             bounds.size_max,
+            bounds.wall_time,
         );
         EvolveOutcome::Events
     }
@@ -60,10 +63,10 @@ impl<Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo, St: State + Stat
         let mut scx = scaled;
         let mut x = 0;
         let mut y = 0;
-        for (pixel) in frame.chunks_exact_mut(4) {
+        for pixel in frame.chunks_exact_mut(4) {
             //println!("{} {}", x/scaled, y/scaled);
 
-            let tv = unsafe { state.tile_at_point(PointSafe2((x, y))) };
+            let tv = unsafe { state.uv_p((x, y)) };
 
             scy -= 1;
             if scy == 0 {

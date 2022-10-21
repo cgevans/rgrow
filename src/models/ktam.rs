@@ -1,18 +1,20 @@
+use super::ktam_fission::*;
 use crate::{
-    base::Point,
+    base::{GrowError, Point},
     canvas::{Canvas, CanvasSquarable, PointSafe2, PointSafeHere},
-    newfission,
-    state::{QuadTreeState, State, StateTracker},
+    parser::{FromTileSet, ParsedSeed, SimFromTileSet, Size, TileIdent, TileSet},
+    simulation::Sim,
+    state::{self, QuadTreeState, State, StateCreate, StateTracker},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        TileBondInfo,
+        SystemWithStateCreate, TileBondInfo,
     },
 };
 use fnv::{FnvHashMap, FnvHashSet};
 use ndarray::prelude::*;
-use rand::prelude::Distribution;
+use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
+use std::{collections::HashMap, marker::PhantomData};
 
 type Conc = f64;
 type Glue = usize;
@@ -693,10 +695,8 @@ impl<S: State> NewKTAM<S> {
                 now_empty.push(p);
 
                 match self.determine_fission(state, &possible_starts, &now_empty) {
-                    newfission::FissionResult::NoFission => {
-                        (true, acc, Event::MonomerDetachment(p))
-                    }
-                    newfission::FissionResult::FissionGroups(g) => {
+                    FissionResult::NoFission => (true, acc, Event::MonomerDetachment(p)),
+                    FissionResult::FissionGroups(g) => {
                         //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
                         match self.fission_handling {
                             FissionHandling::NoFission => (true, acc, Event::None),
@@ -960,5 +960,97 @@ impl<S: State> NewKTAM<S> {
         //         points
         //     }
         // }
+    }
+}
+
+impl<St: State + StateCreate + 'static> SimFromTileSet for NewKTAM<St> {
+    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Sim>, GrowError> {
+        let sys = Self::from_tileset(tileset);
+        let size = match tileset.options.size {
+            Size::Single(x) => (x, x),
+            Size::Pair((x, y)) => (x, y),
+        };
+        let state = sys.new_state(size)?;
+        let sim = crate::simulation::Simulation {
+            system: sys,
+            states: vec![state],
+            rng: SmallRng::from_entropy(),
+        };
+        Ok(Box::new(sim))
+    }
+}
+
+impl<St: state::State + state::StateCreate> FromTileSet for NewKTAM<St> {
+    fn from_tileset(tileset: &TileSet) -> Self {
+        let (gluemap, gluestrengthmap) = tileset.number_glues().unwrap();
+
+        let tile_edges = tileset.tile_edge_process(&gluemap);
+        let mut tile_concs = tileset.tile_stoics();
+        tile_concs *= f64::exp(-tileset.options.gmc + tileset.options.alpha);
+
+        let mut glue_strength_vec = Vec::<f64>::new();
+
+        let mut i: Glue = 0;
+        for (j, v) in gluestrengthmap {
+            assert!(j == i);
+            glue_strength_vec.push(v);
+            i += 1;
+        }
+
+        let seed = match &tileset.options.seed {
+            ParsedSeed::Single(y, x, v) => Seed::SingleTile {
+                point: PointSafe2((*y, *x)),
+                tile: *v,
+            },
+            ParsedSeed::None() => Seed::None(),
+            ParsedSeed::Multi(vec) => {
+                let mut hm = HashMap::default();
+                hm.extend(vec.iter().map(|(y, x, v)| (PointSafe2((*y, *x)), *v)));
+                Seed::MultiTile(hm)
+            }
+        };
+
+        let tile_names = tileset.tile_names();
+
+        fn tpmap(tile_names: &Vec<String>, tp: &TileIdent) -> usize {
+            match tp {
+                TileIdent::Name(x) => tile_names.iter().position(|y| *y == *x).unwrap(),
+                TileIdent::Num(x) => *x,
+            }
+        }
+
+        let hdoubles: Vec<(usize, usize)> = tileset
+            .options
+            .hdoubletiles
+            .iter()
+            .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
+            .collect();
+
+        let vdoubles: Vec<(usize, usize)> = tileset
+            .options
+            .vdoubletiles
+            .iter()
+            .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
+            .collect();
+
+        let mut newkt = NewKTAM::from_ktam(
+            tileset.tile_stoics(),
+            tile_edges,
+            Array1::from(glue_strength_vec),
+            tileset.options.gse,
+            tileset.options.gmc,
+            Some(tileset.options.alpha),
+            tileset.options.kf,
+            Some(seed),
+            Some(tileset.options.fission),
+            tileset.options.chunk_handling,
+            tileset.options.chunk_size,
+            Some(tile_names),
+            Some(tileset.tile_colors()),
+        );
+
+        newkt.set_duples(hdoubles, vdoubles);
+
+        newkt
     }
 }
