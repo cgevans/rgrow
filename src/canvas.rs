@@ -15,7 +15,7 @@ pub struct PointSafe2(pub Point);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
 pub struct PointSafeHere(pub Point);
 
-pub trait Canvas: std::fmt::Debug {
+pub trait Canvas: std::fmt::Debug + Sync + Send + 'static {
     unsafe fn uv_p(&self, p: Point) -> Tile {
         *self.uv_pr(p)
     }

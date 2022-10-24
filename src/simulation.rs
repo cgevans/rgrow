@@ -22,7 +22,6 @@ pub(crate) struct ConcreteSimulation<Sy: System<St>, St: State> {
     pub states: Vec<St>,
     pub rng: SmallRng,
 }
-
 pub trait Simulation: Send {
     fn evolve(
         &mut self,
@@ -31,13 +30,23 @@ pub trait Simulation: Send {
     ) -> Result<EvolveOutcome, GrowError>;
     fn state_ref(&self, state_index: usize) -> &dyn State;
     fn add_state(&mut self, shape: (usize, usize)) -> Result<usize, GrowError>;
+    fn add_n_states(&mut self, n: usize, shape: (usize, usize)) -> Result<Vec<usize>, GrowError> {
+        let mut indices = Vec::with_capacity(n);
+        for _ in 0..n {
+            indices.push(self.add_state(shape)?);
+        }
+        Ok(indices)
+    }
     fn draw_size(&self, state_index: usize) -> (u32, u32);
     fn draw(&self, state_index: usize, frame: &mut [u8]);
+
+    #[cfg(feature = "use_rayon")]
+    fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>>;
 }
 
 impl<
-        Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo + Send,
-        St: State + StateCreate + Send,
+        Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo + Send + Sync,
+        St: State + StateCreate,
     > Simulation for ConcreteSimulation<Sy, St>
 {
     fn evolve(
@@ -65,8 +74,30 @@ impl<
         let state = &self.states[state_index];
         state.draw(frame, self.system.tile_colors());
     }
+
     fn add_state(&mut self, shape: (usize, usize)) -> Result<usize, GrowError> {
         self.states.push(self.system.new_state(shape)?);
         Ok(self.states.len() - 1)
+    }
+
+    #[cfg(feature = "use_rayon")]
+    fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>> {
+        use rand::SeedableRng;
+        use rayon::prelude::*;
+        let sys = &self.system;
+        self.states
+            .par_iter_mut()
+            .map(|state| {
+                sys.evolve(
+                    state,
+                    &mut SmallRng::from_entropy(),
+                    bounds.events,
+                    bounds.time,
+                    bounds.size_min,
+                    bounds.size_max,
+                    bounds.wall_time,
+                )
+            })
+            .collect()
     }
 }

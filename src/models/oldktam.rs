@@ -104,6 +104,7 @@ pub struct OldKTAM<C: State> {
 }
 
 unsafe impl<C: State> Send for OldKTAM<C> {}
+unsafe impl<C: State> Sync for OldKTAM<C> {}
 
 impl<C: State> TileBondInfo for OldKTAM<C> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
@@ -863,7 +864,7 @@ impl<St: State> SystemWithDimers<St> for OldKTAM<St> {
     }
 }
 
-impl<St: State + StateCreate + Send + 'static> SimFromTileSet for OldKTAM<St> {
+impl<St: State + StateCreate> SimFromTileSet for OldKTAM<St> {
     fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError> {
         let sys = Self::from_tileset(tileset);
         let size = match tileset.options.size {

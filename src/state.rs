@@ -309,7 +309,7 @@ where
         self
     }
 }
-pub trait StateTracker: Clone + Debug {
+pub trait StateTracker: Clone + Debug + Sync + Send + 'static {
     fn default(canvas: &dyn Canvas) -> Self;
 
     fn record_single_event(&mut self, event: &system::Event) -> &mut Self;

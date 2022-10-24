@@ -15,16 +15,9 @@ use ndarray::Array2;
 use rand::Rng;
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
 use rand::{prelude::SmallRng, SeedableRng};
-#[cfg(feature = "rayon")]
-use rayon::prelude::*;
+
 use state::{DangerousStateClone, State, StateCreate};
-#[cfg(feature = "rayon")]
-use std::sync::Arc;
-#[cfg(feature = "rayon")]
-use std::{
-    marker::PhantomData,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
 

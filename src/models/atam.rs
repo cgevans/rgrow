@@ -760,7 +760,7 @@ impl<S: State> ATAM<S> {
     }
 }
 
-impl<St: State + StateCreate + Send + 'static> SimFromTileSet for ATAM<St> {
+impl<St: State + StateCreate> SimFromTileSet for ATAM<St> {
     fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError> {
         let sys = Self::from_tileset(tileset);
         let size = match tileset.options.size {

@@ -1112,7 +1112,7 @@ impl<S: State> KTAM<S> {
     }
 }
 
-impl<St: State + StateCreate + Send + 'static> SimFromTileSet for KTAM<St> {
+impl<St: State + StateCreate> SimFromTileSet for KTAM<St> {
     fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError> {
         let sys = Self::from_tileset(tileset);
         let size = match tileset.options.size {
