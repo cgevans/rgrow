@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(e) => return Err(Box::new(rgrow::tileset::ParserError::Io { source: e })),
             };
             let parsed: TileSet = serde_yaml::from_reader(file)?;
-            run_window(parsed)?;
+            run_window(&parsed)?;
             Ok(())
         }
         SubCommand::NucRate(po) => {
@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(feature = "ui")]
         {
             let parsed = parser_xgrow::parse_xgrow(po.input)?;
-            run_window(parsed)?;
+            run_window(&parsed)?;
             Ok(())
         }
     }
@@ -102,6 +102,7 @@ fn nucrate(po: FFSOptions) -> Result<(), GrowError> {
         2,
         1,
         false,
+        None,
     )?;
 
     println!("Nuc rate: {:e}", ffsrun.nucleation_rate());

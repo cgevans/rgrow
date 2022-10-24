@@ -5,13 +5,17 @@ use winit_input_helper::WinitInputHelper;
 
 use pixels::{Pixels, SurfaceTexture};
 use winit::dpi::LogicalSize;
-use winit::event::{Event, VirtualKeyCode};
-use winit::event_loop::{ControlFlow, EventLoop};
 
 use crate::base::GrowError;
-use crate::simulation::EvolveBounds;
+use crate::simulation::{EvolveBounds, Simulation};
+use winit::event::VirtualKeyCode;
+use winit::platform::run_return::EventLoopExtRunReturn;
+use winit::{
+    event::Event,
+    event_loop::{ControlFlow, EventLoop},
+};
 
-pub fn run_window(parsed: crate::tileset::TileSet) -> Result<(), GrowError> {
+pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation>, GrowError> {
     let mut sim = parsed.into_simulation()?;
 
     let size1: usize;
@@ -32,7 +36,7 @@ pub fn run_window(parsed: crate::tileset::TileSet) -> Result<(), GrowError> {
 
     let state = sim.state_ref(state_i);
 
-    let event_loop = EventLoop::new();
+    let mut event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
     let window = {
         let size = LogicalSize::new((state.ncols()) as f64, (state.nrows()) as f64);
@@ -60,7 +64,7 @@ pub fn run_window(parsed: crate::tileset::TileSet) -> Result<(), GrowError> {
     };
     window.request_redraw();
 
-    event_loop.run(move |event, _, control_flow| {
+    event_loop.run_return(|event, _, control_flow| {
         if let Event::RedrawRequested(_) = event {
             pixels.render().unwrap();
         }
@@ -89,4 +93,5 @@ pub fn run_window(parsed: crate::tileset::TileSet) -> Result<(), GrowError> {
         pixels.render().unwrap();
         window.request_redraw();
     });
+    Ok(sim)
 }

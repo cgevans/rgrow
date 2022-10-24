@@ -54,6 +54,7 @@ impl TileSet {
         start_size: NumTiles,
         size_step: NumTiles,
         keep_states: bool,
+        min_nuc_rate: Option<f64>,
     ) -> Result<Box<dyn FFSResult>, GrowError> {
         match self.options.model {
             Model::KTAM => match self.options.canvas_type {
@@ -73,6 +74,7 @@ impl TileSet {
                     start_size,
                     size_step,
                     keep_states,
+                    min_nuc_rate,
                 )?)),
                 CanvasType::Periodic => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasPeriodic, NullStateTracker>,
@@ -90,6 +92,7 @@ impl TileSet {
                     start_size,
                     size_step,
                     keep_states,
+                    min_nuc_rate,
                 )?)),
                 CanvasType::Tube => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasTube, NullStateTracker>,
@@ -107,6 +110,7 @@ impl TileSet {
                     start_size,
                     size_step,
                     keep_states,
+                    min_nuc_rate,
                 )?)),
             },
             Model::ATAM => Err(GrowError::FFSCannotRunATAM),
@@ -127,6 +131,7 @@ impl TileSet {
                     start_size,
                     size_step,
                     keep_states,
+                    min_nuc_rate,
                 )?)),
                 CanvasType::Periodic => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasPeriodic, NullStateTracker>,
@@ -144,6 +149,7 @@ impl TileSet {
                     start_size,
                     size_step,
                     keep_states,
+                    min_nuc_rate,
                 )?)),
                 CanvasType::Tube => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasTube, NullStateTracker>,
@@ -161,6 +167,7 @@ impl TileSet {
                     start_size,
                     size_step,
                     keep_states,
+                    min_nuc_rate,
                 )?)),
             },
         }
@@ -176,7 +183,7 @@ pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St>> {
 
 impl<
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: SystemWithDimers<St> + FromTileSet,
+        Sy: SystemWithDimers<St> + FromTileSet + Send,
     > FFSRun<St, Sy>
 {
     pub fn create(
@@ -220,10 +227,6 @@ impl<
                     size_step,
                     max_subseq_events,
                 ));
-            // println!(
-            //     "Done with target size {}.",
-            //     ret.level_list.last().unwrap().target_size
-            // );
         }
 
         ret.forward_prob
@@ -297,6 +300,7 @@ impl<
         start_size: NumTiles,
         size_step: NumTiles,
         keep_states: bool,
+        min_nuc_rate: Option<f64>,
     ) -> Self {
         let level_list = Vec::new();
 
@@ -359,6 +363,12 @@ impl<
             } else {
                 above_cutoff = 0;
             }
+
+            if let Some(min_nuc_rate) = min_nuc_rate {
+                if ret.nucleation_rate() < min_nuc_rate {
+                    break;
+                }
+            }
         }
 
         ret
@@ -377,6 +387,7 @@ impl<
         start_size: NumTiles,
         size_step: NumTiles,
         keep_states: bool,
+        min_nuc_rate: Option<f64>,
     ) -> Result<Self, GrowError> {
         let sys = Sy::from_tileset(tileset);
         Ok(Self::create_with_constant_variance_and_size_cutoff(
@@ -396,6 +407,7 @@ impl<
             start_size,
             size_step,
             keep_states,
+            min_nuc_rate,
         ))
     }
 
