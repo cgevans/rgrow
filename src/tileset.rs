@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use simulation::Simulation;
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 use std::io;
 use system::{ChunkHandling, ChunkSize};
 
@@ -28,20 +29,56 @@ pub enum ParserError {
         #[source]
         source: io::Error,
     },
+    #[error("Inconsistent glue strengths: {name}/{num} has strength {s1} and {s2}.")]
+    InconsistentGlueStrength {
+        name: GlueIdent,
+        num: Glue,
+        s1: f64,
+        s2: f64,
+    },
+    #[error("Glue is defined multiple times.")]
+    RepeatedGlueDef,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(untagged)]
 pub enum GlueIdent {
     Name(String),
     Num(Glue),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(untagged)]
 pub enum TileIdent {
     Name(String),
     Num(usize),
+}
+
+impl Display for GlueIdent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(s) => write!(f, "\"{}\"", s),
+            Self::Num(n) => write!(f, "{}", n),
+        }
+    }
+}
+
+impl core::fmt::Debug for GlueIdent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(s) => write!(f, "\"{}\"", s),
+            Self::Num(n) => write!(f, "{}", n),
+        }
+    }
+}
+
+impl core::fmt::Debug for TileIdent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(s) => write!(f, "\"{}\"", s),
+            Self::Num(n) => write!(f, "{}", n),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -204,7 +241,7 @@ pub enum CanvasType {
 }
 
 fn canvas_type_default() -> CanvasType {
-    CanvasType::Square
+    CanvasType::Periodic
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -298,7 +335,7 @@ impl TileSet {
         serde_yaml::from_str(data).unwrap_or(Err(()))
     }
 
-    pub fn into_sim(&self) -> Result<Box<dyn Simulation>, GrowError> {
+    pub fn into_simulation(&self) -> Result<Box<dyn Simulation>, GrowError> {
         match self.options.model {
             Model::KTAM => match self.options.canvas_type {
                 CanvasType::Square => {
@@ -338,7 +375,7 @@ impl TileSet {
         }
     }
 
-    pub fn number_glues(&self) -> Result<(BiMap<&str, Glue>, BTreeMap<Glue, f64>), ()> {
+    pub fn number_glues(&self) -> Result<(BiMap<&str, Glue>, BTreeMap<Glue, f64>), ParserError> {
         let mut gluemap = BiMap::new();
         let mut gluestrengthmap = BTreeMap::<Glue, f64>::new();
 
@@ -354,11 +391,16 @@ impl TileSet {
                 GlueIdent::Name(n) => {
                     gluemap
                         .insert_no_overwrite(&n, gluenum)
-                        .expect("Glue already here");
+                        .map_err(|(_l, _r)| ParserError::RepeatedGlueDef)?;
                     match gluestrengthmap.get(&gluenum) {
                         Some(s) => {
                             if *s != bond.strength {
-                                return Err(());
+                                return Err(ParserError::InconsistentGlueStrength {
+                                    name: bond.name.clone(),
+                                    num: gluenum,
+                                    s1: bond.strength,
+                                    s2: bond.strength,
+                                });
                             }
                         }
 
@@ -371,7 +413,12 @@ impl TileSet {
                 GlueIdent::Num(i) => match gluestrengthmap.get(i) {
                     Some(s) => {
                         if *s != bond.strength {
-                            return Err(());
+                            return Err(ParserError::InconsistentGlueStrength {
+                                name: bond.name.clone(),
+                                num: *i,
+                                s1: bond.strength,
+                                s2: bond.strength,
+                            });
                         }
                     }
 
@@ -389,7 +436,9 @@ impl TileSet {
                         Some(_) => {}
 
                         None => {
-                            gluemap.insert_no_overwrite(&n, gluenum).unwrap();
+                            gluemap
+                                .insert_no_overwrite(&n, gluenum)
+                                .map_err(|(_l, _r)| ParserError::RepeatedGlueDef)?;
 
                             match gluestrengthmap.get(&gluenum) {
                                 Some(_) => {}

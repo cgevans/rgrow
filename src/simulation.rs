@@ -23,7 +23,7 @@ pub(crate) struct ConcreteSimulation<Sy: System<St>, St: State> {
     pub rng: SmallRng,
 }
 
-pub trait Simulation {
+pub trait Simulation: Send {
     fn evolve(
         &mut self,
         state_index: usize,
@@ -35,8 +35,10 @@ pub trait Simulation {
     fn draw(&self, state_index: usize, frame: &mut [u8]);
 }
 
-impl<Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo, St: State + StateCreate> Simulation
-    for ConcreteSimulation<Sy, St>
+impl<
+        Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo + Send,
+        St: State + StateCreate + Send,
+    > Simulation for ConcreteSimulation<Sy, St>
 {
     fn evolve(
         &mut self,

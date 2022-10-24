@@ -12,7 +12,7 @@ use crate::base::GrowError;
 use crate::simulation::EvolveBounds;
 
 pub fn run_window(parsed: crate::tileset::TileSet) -> Result<(), GrowError> {
-    let mut sim = parsed.into_sim()?;
+    let mut sim = parsed.into_simulation()?;
 
     let size1: usize;
     let size2: usize;

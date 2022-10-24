@@ -105,6 +105,10 @@ pub trait SystemWithStateCreate<S: State + StateCreate>: System<S> {
 impl<Sy: System<S>, S: State + StateCreate> SystemWithStateCreate<S> for Sy {}
 
 pub trait System<S: State>: Debug {
+    fn calc_ntiles(&self, state: &S) -> NumTiles {
+        state.calc_ntiles()
+    }
+
     fn state_step(
         &self,
         mut state: &mut S,

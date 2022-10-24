@@ -1,4 +1,6 @@
 #![feature(is_some_with)]
+#![feature(map_first_last)]
+
 //! The rgrow (FIXME: we need a better name!) tileset simulator.  This generally uses the algorithms of the venerable Xgrow.
 
 extern crate ndarray;

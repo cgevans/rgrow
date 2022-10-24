@@ -116,6 +116,10 @@ impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
         self.canvas.calc_ntiles()
     }
 
+    fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
+        self.canvas.calc_ntiles_with_tilearray(should_be_counted)
+    }
+
     fn raw_array(&self) -> ArrayView2<Tile> {
         self.canvas.raw_array()
     }
@@ -140,6 +144,26 @@ impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
         }
         if (old_tile > 0) & (*t == 0) {
             self.ntiles -= 1
+        }
+    }
+
+    fn set_sa_countabletilearray(
+        &mut self,
+        p: &PointSafe2,
+        t: &Tile,
+        should_be_counted: &Array1<bool>,
+    ) {
+        let r = unsafe { self.uvm_p(p.0) };
+
+        let old_tile = *r;
+
+        *r = *t;
+
+        if should_be_counted[old_tile as usize] & !should_be_counted[*t as usize] {
+            self.ntiles -= 1
+        }
+        if !should_be_counted[old_tile as usize] & should_be_counted[*t as usize] {
+            self.ntiles += 1
         }
     }
 
@@ -223,10 +247,6 @@ impl<C: Canvas + CanvasSquarable, T: StateTracker> DangerousStateClone for QuadT
         self.tracker = source.tracker.clone();
 
         self.rates.1 = source.rates.1;
-
-        if self.canvas.calc_ntiles() != self.ntiles {
-            panic!("sink {:?} / source {:?}", self, source);
-        }
 
         self
     }

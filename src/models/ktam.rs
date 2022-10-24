@@ -99,6 +99,7 @@ pub struct KTAM<C: Canvas> {
     has_duples: bool,
     double_to_left: Array1<Tile>,
     double_to_top: Array1<Tile>,
+    should_be_counted: Array1<bool>,
 
     /// We need to store the type of canvas we're using so we know
     /// how to move around.
@@ -144,6 +145,10 @@ impl<S: State> System<S> for KTAM<S> {
             Event::PolymerAttachment(_) => todo!(),
             Event::PolymerChange(_) => todo!(),
         }
+    }
+
+    fn calc_ntiles(&self, state: &S) -> crate::base::NumTiles {
+        state.calc_ntiles_with_tilearray(&self.should_be_counted)
     }
 
     fn event_rate_at_point(&self, state: &S, p: crate::canvas::PointSafeHere) -> crate::base::Rate {
@@ -195,41 +200,73 @@ impl<S: State> System<S> for KTAM<S> {
             TileShape::Single => (),
             TileShape::DupleToRight(dt) => {
                 debug_assert_eq!(dt, state.tile_to_e(point));
-                state.set_sa(&PointSafe2(state.move_sa_e(point).0), &0usize)
+                state.set_sa_countabletilearray(
+                    &PointSafe2(state.move_sa_e(point).0),
+                    &0usize,
+                    &self.should_be_counted,
+                )
             }
             TileShape::DupleToBottom(dt) => {
                 debug_assert_eq!(dt, state.tile_to_s(point));
-                state.set_sa(&PointSafe2(state.move_sa_s(point).0), &0usize)
+                state.set_sa_countabletilearray(
+                    &PointSafe2(state.move_sa_s(point).0),
+                    &0usize,
+                    &self.should_be_counted,
+                )
             }
             TileShape::DupleToLeft(dt) => {
                 debug_assert_eq!(dt, state.tile_to_w(point));
-                state.set_sa(&PointSafe2(state.move_sa_w(point).0), &0usize)
+                state.set_sa_countabletilearray(
+                    &PointSafe2(state.move_sa_w(point).0),
+                    &0usize,
+                    &self.should_be_counted,
+                )
             }
             TileShape::DupleToTop(dt) => {
                 debug_assert_eq!(dt, state.tile_to_n(point));
-                state.set_sa(&PointSafe2(state.move_sa_n(point).0), &0usize)
+                state.set_sa_countabletilearray(
+                    &PointSafe2(state.move_sa_n(point).0),
+                    &0usize,
+                    &self.should_be_counted,
+                )
             }
         }
 
-        state.set_sa(&point, &tile);
+        state.set_sa_countabletilearray(&point, &tile, &self.should_be_counted);
 
         match self.tile_shape(tile) {
             TileShape::Single => (),
             TileShape::DupleToRight(dt) => {
                 debug_assert_eq!(state.tile_to_e(point), 0);
-                state.set_sa(&PointSafe2(state.move_sa_e(point).0), &dt);
+                state.set_sa_countabletilearray(
+                    &PointSafe2(state.move_sa_e(point).0),
+                    &dt,
+                    &self.should_be_counted,
+                );
             }
             TileShape::DupleToBottom(dt) => {
                 debug_assert_eq!(state.tile_to_s(point), 0);
-                state.set_sa(&PointSafe2(state.move_sa_s(point).0), &dt);
+                state.set_sa_countabletilearray(
+                    &PointSafe2(state.move_sa_s(point).0),
+                    &dt,
+                    &self.should_be_counted,
+                );
             }
             TileShape::DupleToLeft(dt) => {
                 debug_assert_eq!(state.tile_to_w(point), 0);
-                state.set_sa(&PointSafe2(state.move_sa_w(point).0), &dt);
+                state.set_sa_countabletilearray(
+                    &PointSafe2(state.move_sa_w(point).0),
+                    &dt,
+                    &self.should_be_counted,
+                );
             }
             TileShape::DupleToTop(dt) => {
                 debug_assert_eq!(state.tile_to_n(point), 0);
-                state.set_sa(&PointSafe2(state.move_sa_n(point).0), &dt);
+                state.set_sa_countabletilearray(
+                    &PointSafe2(state.move_sa_n(point).0),
+                    &dt,
+                    &self.should_be_counted,
+                );
             }
         }
 
@@ -247,19 +284,35 @@ impl<S: State> System<S> for KTAM<S> {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(state.tile_to_e(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &dt);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_e(*point).0),
+                            &dt,
+                            &self.should_be_counted,
+                        );
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(state.tile_to_s(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &dt);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_s(*point).0),
+                            &dt,
+                            &self.should_be_counted,
+                        );
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(state.tile_to_w(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &dt);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_w(*point).0),
+                            &dt,
+                            &self.should_be_counted,
+                        );
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(state.tile_to_n(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &dt);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_n(*point).0),
+                            &dt,
+                            &self.should_be_counted,
+                        );
                     }
                 }
             }
@@ -268,31 +321,118 @@ impl<S: State> System<S> for KTAM<S> {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(state.tile_to_e(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &0usize);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_e(*point).0),
+                            &0usize,
+                            &self.should_be_counted,
+                        );
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(state.tile_to_s(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &0usize);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_s(*point).0),
+                            &0usize,
+                            &self.should_be_counted,
+                        );
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(state.tile_to_w(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &0usize);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_w(*point).0),
+                            &0usize,
+                            &self.should_be_counted,
+                        );
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(state.tile_to_n(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &0usize);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_n(*point).0),
+                            &0usize,
+                            &self.should_be_counted,
+                        );
                     }
                 }
-                state.set_sa(point, &0usize);
+                state.set_sa_countabletilearray(point, &0usize, &self.should_be_counted);
             }
             Event::PolymerAttachment(changelist) | Event::PolymerChange(changelist) => {
                 for (point, tile) in changelist {
-                    state.set_sa(point, tile);
+                    state.set_sa_countabletilearray(point, tile, &self.should_be_counted);
+                    match self.tile_shape(*tile) {
+                        TileShape::Single => (),
+                        TileShape::DupleToRight(dt) => {
+                            debug_assert_eq!(state.tile_to_e(*point), 0);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_e(*point).0),
+                                &dt,
+                                &self.should_be_counted,
+                            );
+                        }
+                        TileShape::DupleToBottom(dt) => {
+                            debug_assert_eq!(state.tile_to_s(*point), 0);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_s(*point).0),
+                                &dt,
+                                &self.should_be_counted,
+                            );
+                        }
+                        TileShape::DupleToLeft(dt) => {
+                            debug_assert_eq!(state.tile_to_w(*point), 0);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_w(*point).0),
+                                &dt,
+                                &self.should_be_counted,
+                            );
+                        }
+                        TileShape::DupleToTop(dt) => {
+                            debug_assert_eq!(state.tile_to_n(*point), 0);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_n(*point).0),
+                                &dt,
+                                &self.should_be_counted,
+                            );
+                        }
+                    }
                 }
             }
             Event::PolymerDetachment(changelist) => {
                 for point in changelist {
-                    state.set_sa(point, &0usize);
+                    match self.tile_shape(state.tile_at_point(*point)) {
+                        TileShape::Single => (),
+                        TileShape::DupleToRight(dt) => {
+                            debug_assert_eq!(state.tile_to_e(*point), dt);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_e(*point).0),
+                                &0usize,
+                                &self.should_be_counted,
+                            );
+                        }
+                        TileShape::DupleToBottom(dt) => {
+                            debug_assert_eq!(state.tile_to_s(*point), dt);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_s(*point).0),
+                                &0usize,
+                                &self.should_be_counted,
+                            );
+                        }
+                        TileShape::DupleToLeft(dt) => {
+                            debug_assert_eq!(state.tile_to_w(*point), dt);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_w(*point).0),
+                                &0usize,
+                                &self.should_be_counted,
+                            );
+                        }
+                        TileShape::DupleToTop(dt) => {
+                            debug_assert_eq!(state.tile_to_n(*point), dt);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_n(*point).0),
+                                &0usize,
+                                &self.should_be_counted,
+                            );
+                        }
+                    }
+
+                    state.set_sa_countabletilearray(point, &0usize, &self.should_be_counted);
                 }
             }
         }
@@ -316,7 +456,7 @@ impl<St: State> SystemWithDimers<St> for KTAM<St> {
         let mut dvec = Vec::new();
 
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
-            if *e != 0. {
+            if *e > 0. {
                 let biconc = self.tile_concs[t1] * self.tile_concs[t2];
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
@@ -329,7 +469,7 @@ impl<St: State> SystemWithDimers<St> for KTAM<St> {
         }
 
         for ((t1, t2), e) in self.energy_we.indexed_iter() {
-            if *e != 0. {
+            if *e > 0. {
                 let biconc = f64::exp(2. * self.alpha) * self.tile_concs[t1] * self.tile_concs[t2];
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
@@ -401,6 +541,7 @@ impl<S: State> KTAM<S> {
             has_duples: false,
             double_to_left: Array1::zeros(ntiles + 1),
             double_to_top: Array1::zeros(ntiles + 1),
+            should_be_counted: Array1::default(ntiles + 1),
             _canvas: PhantomData,
         }
     }
@@ -498,6 +639,11 @@ impl<S: State> KTAM<S> {
                     self.energy_we[(t1, t2)] = self.g_se * self.glue_strengths[t1r[1]]
                 }
             }
+            if (t1 > 0) && (self.tile_concs[t1] > 0.) {
+                self.should_be_counted[t1] = true;
+            } else {
+                self.should_be_counted[t1] = false;
+            }
         }
 
         if (self.double_to_right.sum() > 0) || (self.double_to_bottom.sum() > 0) {
@@ -505,12 +651,14 @@ impl<S: State> KTAM<S> {
             for (t1, t2) in self.double_to_right.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
                     self.double_to_left[*t2] = t1;
+                    self.should_be_counted[*t2] = false;
                     self.energy_we[(t1, *t2)] = 0.0;
                 }
             }
             for (t1, t2) in self.double_to_bottom.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
                     self.double_to_top[*t2] = t1;
+                    self.should_be_counted[*t2] = false;
                     self.energy_ns[(t1, *t2)] = 0.0;
                 }
             }
@@ -964,7 +1112,7 @@ impl<S: State> KTAM<S> {
     }
 }
 
-impl<St: State + StateCreate + 'static> SimFromTileSet for KTAM<St> {
+impl<St: State + StateCreate + Send + 'static> SimFromTileSet for KTAM<St> {
     fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError> {
         let sys = Self::from_tileset(tileset);
         let size = match tileset.options.size {
@@ -989,13 +1137,16 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
         let mut tile_concs = tileset.tile_stoics();
         tile_concs *= f64::exp(-tileset.options.gmc + tileset.options.alpha);
 
-        let mut glue_strength_vec = Vec::<f64>::new();
+        // Get the highest glue number.
+        let highglue = match gluestrengthmap.last_key_value() {
+            Some((k, _)) => *k,
+            None => panic!("No glues in tileset!"),
+        };
 
-        let mut i: Glue = 0;
+        let mut glue_strengths = Array1::<Strength>::ones(highglue + 1);
+
         for (j, v) in gluestrengthmap {
-            assert!(j == i);
-            glue_strength_vec.push(v);
-            i += 1;
+            glue_strengths[j] = v;
         }
 
         let seed = match &tileset.options.seed {
@@ -1037,7 +1188,7 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
         let mut newkt = Self::from_ktam(
             tileset.tile_stoics(),
             tile_edges,
-            Array1::from(glue_strength_vec),
+            glue_strengths,
             tileset.options.gse,
             tileset.options.gmc,
             Some(tileset.options.alpha),

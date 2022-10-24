@@ -85,6 +85,7 @@ pub struct ATAM<C: Canvas> {
     has_duples: bool,
     double_to_left: Array1<Tile>,
     double_to_top: Array1<Tile>,
+    should_be_counted: Array1<bool>,
 
     /// We need to store the type of canvas we're using so we know
     /// how to move around.
@@ -552,6 +553,7 @@ impl<S: State> ATAM<S> {
             has_duples: false,
             double_to_left: Array1::zeros(ntiles + 1),
             double_to_top: Array1::zeros(ntiles + 1),
+            should_be_counted: Array1::default(ntiles + 1),
             _canvas: PhantomData,
             threshold: 2.,
         }
@@ -622,6 +624,11 @@ impl<S: State> ATAM<S> {
                     self.energy_we[(t1, t2)] = self.glue_strengths[t1r[1]]
                 }
             }
+            if (t1 > 0) && (self.tile_stoics[t1] > 0.) {
+                self.should_be_counted[t1] = true;
+            } else {
+                self.should_be_counted[t1] = false;
+            }
         }
 
         if (self.double_to_right.sum() > 0) || (self.double_to_bottom.sum() > 0) {
@@ -630,12 +637,14 @@ impl<S: State> ATAM<S> {
                 if (t1 > 0) & (t2 > &0) {
                     self.double_to_left[*t2] = t1;
                     self.energy_we[(t1, *t2)] = 0.0;
+                    self.should_be_counted[*t2] = false;
                 }
             }
             for (t1, t2) in self.double_to_bottom.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
                     self.double_to_top[*t2] = t1;
                     self.energy_ns[(t1, *t2)] = 0.0;
+                    self.should_be_counted[*t2] = false;
                 }
             }
         } else {
@@ -751,7 +760,7 @@ impl<S: State> ATAM<S> {
     }
 }
 
-impl<St: State + StateCreate + 'static> SimFromTileSet for ATAM<St> {
+impl<St: State + StateCreate + Send + 'static> SimFromTileSet for ATAM<St> {
     fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError> {
         let sys = Self::from_tileset(tileset);
         let size = match tileset.options.size {

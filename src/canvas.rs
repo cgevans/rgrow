@@ -27,9 +27,19 @@ pub trait Canvas: std::fmt::Debug {
     fn u_move_point_w(&self, p: Point) -> Point;
     fn inbounds(&self, p: Point) -> bool;
     fn calc_ntiles(&self) -> NumTiles;
+    fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles;
     fn raw_array(&self) -> ArrayView2<Tile>;
     fn nrows(&self) -> usize;
     fn ncols(&self) -> usize;
+
+    fn set_sa_countabletilearray(
+        &mut self,
+        p: &PointSafe2,
+        t: &Tile,
+        _should_be_counted: &Array1<bool>,
+    ) {
+        self.set_sa(p, t);
+    }
 
     fn move_sa_n(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_n(p.0))
@@ -347,6 +357,12 @@ impl Canvas for CanvasSquare {
     fn ncols(&self) -> usize {
         self.values.ncols()
     }
+
+    fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
+        self.values.fold(0, |x, y| {
+            x + (if should_be_counted[*y as usize] { 1 } else { 0 })
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -407,6 +423,12 @@ impl Canvas for CanvasPeriodic {
     fn calc_ntiles(&self) -> NumTiles {
         self.values
             .fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 }))
+    }
+
+    fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
+        self.values.fold(0, |x, y| {
+            x + (if should_be_counted[*y as usize] { 1 } else { 0 })
+        })
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {
@@ -494,6 +516,12 @@ impl Canvas for CanvasTube {
     fn calc_ntiles(&self) -> NumTiles {
         self.values
             .fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 }))
+    }
+
+    fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
+        self.values.fold(0, |x, y| {
+            x + (if should_be_counted[*y as usize] { 1 } else { 0 })
+        })
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {

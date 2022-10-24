@@ -1,5 +1,5 @@
 use crate::base::GrowError;
-use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
+use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2, PointSafeHere};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
@@ -30,12 +30,14 @@ use system::{Orientation, System};
 
 const MAX_SAMPLES: usize = 100000;
 
-pub trait FFSResult {
+pub trait FFSResult: Send {
     fn nucleation_rate(&self) -> f64;
     fn forward_vec(&self) -> &Vec<f64>;
 }
 
-impl<St: State + StateTracked<NullStateTracker>, Sy: System<St>> FFSResult for FFSRun<St, Sy> {
+impl<St: State + StateTracked<NullStateTracker> + Send, Sy: System<St> + Send> FFSResult
+    for FFSRun<St, Sy>
+{
     fn nucleation_rate(&self) -> Rate {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
@@ -452,6 +454,11 @@ impl<
                 i_old_state = chooser.sample(&mut rng);
 
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
+
+                if system.calc_ntiles(&state) != state.ntiles() {
+                    panic!("sink {:?}", state);
+                }
+
                 system.evolve_in_size_range_events_max(
                     &mut state,
                     0,
@@ -521,6 +528,14 @@ impl<
                 i_old_state = chooser.sample(&mut rng);
 
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
+                if system.calc_ntiles(&state) != state.ntiles() {
+                    panic!(
+                        "{:?} {:?} {:?}",
+                        system.calc_ntiles(&state),
+                        state,
+                        &self.state_list[i_old_state]
+                    );
+                }
                 system.evolve_in_size_range_events_max(
                     &mut state,
                     0,
@@ -686,6 +701,20 @@ impl<
                         system.set_point(&mut state, other, dimer.t2);
                     }
                 };
+
+                if state.ntiles() != system.calc_ntiles(&state) {
+                    println!(
+                        "{:?} {} {} {:?} {:?} {:?}",
+                        dimer,
+                        state.ntiles(),
+                        system.calc_ntiles(&state),
+                        state,
+                        system.event_rate_at_point(&state, PointSafeHere((6, 4))),
+                        state.tile_at_point(PointSafe2((6, 4))),
+                    );
+                    // wait for 0.5 seconds
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
 
                 system.evolve_in_size_range_events_max(
                     &mut state, 0, next_size, max_events, &mut rng,
