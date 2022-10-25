@@ -6,10 +6,10 @@ use pyo3::exceptions::ValueError;
 use pyo3::types::PyType;
 use pyo3::{prelude::*, wrap_pyfunction};
 use rgrow as rg;
+use rgrow::canvas::{Canvas, CanvasCreate};
 use rgrow::ffs;
 use rgrow::state::{StateCreate, StateEvolve, StateStatus, StateStep, StateUpdateSingle};
 use rgrow::system::FissionHandling;
-use rgrow::canvas::{Canvas, CanvasCreate};
 
 #[pymodule]
 fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
@@ -98,19 +98,25 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
                 None,
             );
 
-            Ok(Self { inner: Box::new(inner) })
+            Ok(Self {
+                inner: Box::new(inner),
+            })
         }
 
         #[classmethod]
-        fn from_json(
-            _cls: &PyType,
-            json_data: &str
-        ) -> PyResult<Self> {
+        fn from_json(_cls: &PyType, json_data: &str) -> PyResult<Self> {
             let tileset = match rgrow::parser::TileSet::from_json(json_data) {
                 Ok(t) => t,
-                Err(e) => return Err(ValueError::py_err(format!("Couldn't parse tileset json: {:?}", e)))
+                Err(e) => {
+                    return Err(ValueError::py_err(format!(
+                        "Couldn't parse tileset json: {:?}",
+                        e
+                    )))
+                }
             };
-            Ok(StaticKTAM { inner: tileset.into_static_seeded_ktam() })
+            Ok(StaticKTAM {
+                inner: tileset.into_static_seeded_ktam(),
+            })
         }
 
         /// StaticKTAM.from_raw(tile_rates, energy_ns, energy_we, k_f, alpha, fission)
@@ -193,7 +199,11 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
     #[derive(Clone, Debug)]
     #[text_signature = "(canvas, system)"]
     struct StateKTAM {
-        inner: rg::QuadTreeState<rg::CanvasSquare, rg::StaticKTAM<rg::CanvasSquare>, rg::NullStateTracker>,
+        inner: rg::QuadTreeState<
+            rg::CanvasSquare,
+            rg::StaticKTAM<rg::CanvasSquare>,
+            rg::NullStateTracker,
+        >,
     }
 
     #[pymethods]
@@ -470,12 +480,13 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         let assemblies = fr
             .level_list
-            .last().unwrap()
-                    .state_list
-                    .iter()
-                    .map(|state| state.canvas.raw_array().to_pyarray(py))
-                    .collect();
-    
+            .last()
+            .unwrap()
+            .state_list
+            .iter()
+            .map(|state| state.canvas.raw_array().to_pyarray(py))
+            .collect();
+
         let ret = (
             fr.nucleation_rate(),
             fr.dimerization_rate,
@@ -529,12 +540,13 @@ fn rgrow<'py>(_py: Python<'py>, m: &PyModule) -> PyResult<()> {
 
         let assemblies = fr
             .level_list
-            .last().unwrap()
-                    .state_list
-                    .iter()
-                    .map(|state| state.canvas.raw_array().to_pyarray(py))
-                    .collect();
-    
+            .last()
+            .unwrap()
+            .state_list
+            .iter()
+            .map(|state| state.canvas.raw_array().to_pyarray(py))
+            .collect();
+
         let ret = (
             fr.nucleation_rate(),
             fr.dimerization_rate,
