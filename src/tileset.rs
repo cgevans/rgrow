@@ -390,7 +390,7 @@ impl TileSet {
             match &bond.name {
                 GlueIdent::Name(n) => {
                     gluemap
-                        .insert_no_overwrite(&n, gluenum)
+                        .insert_no_overwrite(n, gluenum)
                         .map_err(|(_l, _r)| ParserError::RepeatedGlueDef)?;
                     match gluestrengthmap.get(&gluenum) {
                         Some(s) => {
@@ -437,7 +437,7 @@ impl TileSet {
 
                         None => {
                             gluemap
-                                .insert_no_overwrite(&n, gluenum)
+                                .insert_no_overwrite(n, gluenum)
                                 .map_err(|(_l, _r)| ParserError::RepeatedGlueDef)?;
 
                             match gluestrengthmap.get(&gluenum) {
@@ -480,7 +480,7 @@ impl TileSet {
             assert!(v.len() == 4);
             tile_edges.append(&mut v);
         }
-        return Array2::from_shape_vec((tile_edges.len() / 4, 4), tile_edges).unwrap();
+        Array2::from_shape_vec((tile_edges.len() / 4, 4), tile_edges).unwrap()
     }
 
     pub fn tile_stoics(&self) -> Array1<f64> {

@@ -208,8 +208,8 @@ impl<
         let mut ret = Self {
             level_list,
             dimerization_rate,
-            system: system,
-            forward_prob: forward_prob,
+            system,
+            forward_prob,
         };
 
         ret.level_list.push(FFSLevel::nmers_from_dimers(
@@ -255,7 +255,7 @@ impl<
         let mut ret = Self {
             level_list,
             dimerization_rate,
-            system: system,
+            system,
             forward_prob: Vec::new(),
         };
 
@@ -312,7 +312,7 @@ impl<
         let mut ret = Self {
             level_list,
             dimerization_rate,
-            system: system,
+            system,
             forward_prob: Vec::new(),
         };
 
@@ -497,7 +497,7 @@ impl<
             p_r,
             target_size,
             system: std::marker::PhantomData::<Sy>,
-            num_states: num_states,
+            num_states,
             num_trials: i,
         }
     }
@@ -579,7 +579,7 @@ impl<
             p_r,
             target_size,
             system: std::marker::PhantomData::<Sy>,
-            num_states: num_states,
+            num_states,
             num_trials: i,
         }
     }
@@ -650,7 +650,7 @@ impl<
             previous_list,
             p_r,
             target_size: next_size,
-            num_states: num_states,
+            num_states,
             num_trials: i,
         }
     }
@@ -782,7 +782,7 @@ impl<
                 previous_list,
                 p_r,
                 target_size: next_size,
-                num_states: num_states,
+                num_states,
                 num_trials: i,
             },
             Self {
@@ -791,7 +791,7 @@ impl<
                 previous_list: tile_list,
                 p_r: 1.0,
                 target_size: 2,
-                num_states: num_states,
+                num_states,
                 num_trials: num_states,
             },
         )

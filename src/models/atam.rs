@@ -120,7 +120,7 @@ impl<S: State> System<S> for ATAM<S> {
             Event::PolymerDetachment(v) => {
                 let mut points = Vec::new();
                 for p in v {
-                    points.extend(self.points_to_update_around(state, &p));
+                    points.extend(self.points_to_update_around(state, p));
                 }
                 points.sort_unstable();
                 points.dedup();
@@ -285,7 +285,7 @@ impl<S: State> System<S> for ATAM<S> {
                 v.push((*point, *tile)); // FIXME
             }
             Seed::MultiTile(f) => {
-                for (p, t) in f.into_iter() {
+                for (p, t) in f.iter() {
                     v.push((*p, *t));
                 }
             }
@@ -324,7 +324,7 @@ impl<S: State> ATAM<S> {
         if dt.nonzero() {
             return TileShape::DupleToTop(dt);
         }
-        return TileShape::Single;
+        TileShape::Single
     }
 
     pub fn total_monomer_attachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
@@ -434,7 +434,7 @@ impl<S: State> ATAM<S> {
                 return (true, acc, Event::MonomerAttachment(p, t));
             }
         }
-        return (false, acc, Event::None);
+        (false, acc, Event::None)
     }
 
     pub fn bond_energy_of_tile_type_at_point(&self, state: &S, p: PointSafe2, t: Tile) -> Energy {
@@ -477,7 +477,7 @@ impl<S: State> ATAM<S> {
             TileShape::DupleToTop(_) => panic!(),
         };
 
-        return energy;
+        energy
     }
 
     fn points_to_update_around(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {

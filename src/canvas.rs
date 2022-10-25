@@ -297,7 +297,7 @@ impl Canvas for CanvasSquare {
 
     #[inline(always)]
     fn inbounds(&self, p: Point) -> bool {
-        return (p.0 >= 2) & (p.1 >= 2) & (p.0 < self.nrows() - 2) & (p.1 < self.ncols() - 2);
+        (p.0 >= 2) & (p.1 >= 2) & (p.0 < self.nrows() - 2) & (p.1 < self.ncols() - 2)
     }
 
     #[inline(always)]
@@ -385,7 +385,7 @@ impl CanvasSquarable for CanvasPeriodic {
 
 impl Canvas for CanvasPeriodic {
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
-        &self.values.uget(p)
+        self.values.uget(p)
     }
 
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {

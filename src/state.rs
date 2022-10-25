@@ -77,7 +77,7 @@ impl<C: CanvasSquarable, T: StateTracker> RateStoreP for QuadTreeState<C, T> {
     fn update_multiple(&mut self, points: &[PointSafeHere], rates: &[Rate]) {
         // FIXME
         let ap = points.iter().map(|x| x.0).collect::<Vec<_>>();
-        self.rates.update_multiple(&ap, &rates);
+        self.rates.update_multiple(&ap, rates);
     }
 
     fn total_rate(&self) -> Rate {

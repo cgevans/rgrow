@@ -136,7 +136,7 @@ impl<S: State> System<S> for KTAM<S> {
             Event::PolymerDetachment(v) => {
                 let mut points = Vec::new();
                 for p in v {
-                    points.extend(self.points_to_update_around(state, &p));
+                    points.extend(self.points_to_update_around(state, p));
                 }
                 points.sort_unstable();
                 points.dedup();
@@ -763,8 +763,8 @@ impl<S: State> KTAM<S> {
             Seed::SingleTile {
                 point: seed_point,
                 tile: _,
-            } => return p == *seed_point,
-            Seed::MultiTile(seed_map) => return seed_map.contains_key(&p),
+            } => p == *seed_point,
+            Seed::MultiTile(seed_map) => seed_map.contains_key(&p),
         }
     }
 
@@ -796,7 +796,7 @@ impl<S: State> KTAM<S> {
                 v.push((*point, *tile)); // FIXME
             }
             Seed::MultiTile(f) => {
-                for (p, t) in f.into_iter() {
+                for (p, t) in f.iter() {
                     v.push((*p, *t));
                 }
             }
@@ -990,7 +990,7 @@ impl<S: State> KTAM<S> {
                 return (true, acc, Event::MonomerAttachment(p, t));
             }
         }
-        return (false, acc, Event::None);
+        (false, acc, Event::None)
     }
 
     pub fn bond_energy_of_tile_type_at_point(&self, state: &S, p: PointSafe2, t: Tile) -> Energy {
@@ -1033,7 +1033,7 @@ impl<S: State> KTAM<S> {
             TileShape::DupleToTop(_) => panic!(),
         };
 
-        return energy;
+        energy
     }
 
     fn get_energy_ns(&self, tn: Tile, ts: Tile) -> Energy {
@@ -1061,7 +1061,7 @@ impl<S: State> KTAM<S> {
         if dt.nonzero() {
             return TileShape::DupleToTop(dt);
         }
-        return TileShape::Single;
+        TileShape::Single
     }
 
     fn points_to_update_around(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {

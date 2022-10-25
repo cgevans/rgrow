@@ -113,8 +113,8 @@ impl GroupInfo {
             }
             true
         } else {
-            self.map.insert(point2.clone(), g1);
-            self.pointlist[g1].push(point2.clone());
+            self.map.insert(*point2, g1);
+            self.pointlist[g1].push(*point2);
             false
         }
     }

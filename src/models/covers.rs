@@ -46,7 +46,7 @@ pub struct StaticKTAMCover<S: State> {
 }
 
 impl<S: State> System<S> for StaticKTAMCover<S> {
-    fn update_after_event(&self, mut state: &mut S, event: &Event) {
+    fn update_after_event(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => {
                 panic!("Being asked to update after a dead event.")
@@ -62,7 +62,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
                         state.move_sa_e(*p),
                         state.move_sa_s(*p),
                     ];
-                    self.update_points(&mut state, &points);
+                    self.update_points(state, &points);
                 }
                 ChunkSize::Dimer => {
                     let mut points = Vec::with_capacity(10);
@@ -87,7 +87,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
                         points.push(PointSafeHere(state.move_sh_n(n)));
                     }
 
-                    self.update_points(&mut state, &points);
+                    self.update_points(state, &points);
                 }
             },
             Event::PolymerDetachment(v) => {
@@ -97,7 +97,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
                 }
                 points.sort_unstable();
                 points.dedup();
-                self.update_points(&mut state, &points);
+                self.update_points(state, &points);
             }
             Event::PolymerAttachment(v) | Event::PolymerChange(v) => {
                 let mut points = Vec::new();
@@ -106,7 +106,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
                 }
                 points.sort_unstable();
                 points.dedup();
-                self.update_points(&mut state, &points);
+                self.update_points(state, &points);
             }
         }
     }
@@ -156,26 +156,21 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
         self.inner.calc_mismatch_locations(state)
     }
 
-    fn state_step(
-        &self,
-        mut state: &mut S,
-        mut rng: &mut SmallRng,
-        max_time_step: f64,
-    ) -> StepOutcome {
+    fn state_step(&self, state: &mut S, rng: &mut SmallRng, max_time_step: f64) -> StepOutcome {
         let time_step = -f64::ln(rng.gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
             return StepOutcome::NoEventIn(max_time_step);
         }
-        let (point, remainder) = state.choose_point(&mut rng); // todo: resultify
-        let event = self.choose_event_at_point(&mut state, PointSafe2(point), remainder); // FIXME
+        let (point, remainder) = state.choose_point(rng); // todo: resultify
+        let event = self.choose_event_at_point(state, PointSafe2(point), remainder); // FIXME
         if let Event::None = event {
             state.add_time(time_step);
             return StepOutcome::DeadEventAt(time_step);
         }
 
-        self.perform_event(&mut state, &event);
-        self.update_after_event(&mut state, &event);
+        self.perform_event(state, &event);
+        self.update_after_event(state, &event);
         state.add_time(time_step);
         StepOutcome::HadEventAt(time_step)
     }
@@ -253,7 +248,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
             .map(|p| self.event_rate_at_point(state, *p))
             .collect::<Vec<_>>();
 
-        state.update_multiple(&points, &rates);
+        state.update_multiple(points, &rates);
     }
 }
 

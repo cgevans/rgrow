@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use fltk::{app, enums::Event, prelude::*, window::Window};
+use fltk::{app, prelude::*, window::Window};
 
-use pixels::{Error, Pixels, SurfaceTexture};
+use pixels::{Pixels, SurfaceTexture};
 
 use crate::base::GrowError;
 use crate::simulation::{EvolveBounds, Simulation};

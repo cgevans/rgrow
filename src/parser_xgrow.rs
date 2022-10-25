@@ -182,11 +182,11 @@ fn arg_size(input: &str) -> IResult<&str, XgrowArgs> {
 }
 
 fn arg_gse(input: &str) -> IResult<&str, XgrowArgs> {
-    map(preceded(tag("Gse="), string_f64), |x| XgrowArgs::Gse(x))(input)
+    map(preceded(tag("Gse="), string_f64), XgrowArgs::Gse)(input)
 }
 
 fn arg_gmc(input: &str) -> IResult<&str, XgrowArgs> {
-    map(preceded(tag("Gmc="), string_f64), |x| XgrowArgs::Gmc(x))(input)
+    map(preceded(tag("Gmc="), string_f64), XgrowArgs::Gmc)(input)
 }
 
 fn arg_update_rate(input: &str) -> IResult<&str, XgrowArgs> {
@@ -210,7 +210,7 @@ fn arg_seed(input: &str) -> IResult<&str, XgrowArgs> {
 }
 
 fn unhandled_option(input: &str) -> IResult<&str, XgrowArgs> {
-    map(is_not(" \t\r\n%"), |x| XgrowArgs::Unhandled(x))(input)
+    map(is_not(" \t\r\n%"), XgrowArgs::Unhandled)(input)
 }
 
 fn xgrow_args(input: &str) -> IResult<&str, tileset::Args> {

@@ -193,7 +193,7 @@ impl<C: State> OldKTAM<C> {
 
         let (friends_n, friends_e, friends_s, friends_w) =
             create_friend_data(&energy_ns, &energy_we);
-        return OldKTAM {
+        OldKTAM {
             tile_adj_concs: tile_stoics * f64::exp(-g_mc),
             energy_ns,
             energy_we,
@@ -213,7 +213,7 @@ impl<C: State> OldKTAM<C> {
             chunk_handling: chunk_handling.unwrap_or(ChunkHandling::None),
             chunk_size: chunk_size.unwrap_or(ChunkSize::Single),
             _canvas: PhantomData,
-        };
+        }
     }
 
     pub(crate) fn points_to_update_around(&self, state: &C, p: &PointSafe2) -> Vec<PointSafeHere> {
@@ -307,10 +307,10 @@ impl<C: State> OldKTAM<C> {
             friends_w,
             insertcache: ClonableCache(RwLock::new(Cache::with_size(10000))),
             seed: Seed::None(),
-            alpha: alpha,
+            alpha,
             g_mc: None,
             g_se: None,
-            k_f: k_f,
+            k_f,
             fission_handling: fission_handling.unwrap_or(FissionHandling::NoFission),
             tile_names,
             tile_colors,
@@ -342,20 +342,8 @@ impl<C: State> OldKTAM<C> {
     fn is_seed(&self, p: Point) -> bool {
         match &self.seed {
             Seed::None() => false,
-            Seed::SingleTile { point, tile: _ } => {
-                if p == *point {
-                    true
-                } else {
-                    false
-                }
-            }
-            Seed::MultiTile(map) => {
-                if map.contains_key(&p) {
-                    true
-                } else {
-                    false
-                }
-            }
+            Seed::SingleTile { point, tile: _ } => p == *point,
+            Seed::MultiTile(map) => map.contains_key(&p),
         }
     }
 
@@ -443,7 +431,7 @@ impl<C: State> OldKTAM<C> {
                     if self.energy_we[(t2, { canvas.tile_to_e(p2) } as usize)] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
                     };
-                    return ();
+                    return;
                 }
                 *acc -= self.dimer_e_detach_rate(canvas, p.0, tile, ts);
                 if *acc <= 0. {
@@ -471,7 +459,7 @@ impl<C: State> OldKTAM<C> {
                     if self.energy_ns[(t2, { canvas.tile_to_s(p2) } as usize)] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
                     };
-                    return ();
+                    return;
                 }
                 panic!("{:#?}", acc)
             }
@@ -722,7 +710,7 @@ where
                 v.push((PointSafe2(*point), *tile)); // FIXME
             }
             Seed::MultiTile(f) => {
-                for (p, t) in f.into_iter() {
+                for (p, t) in f.iter() {
                     v.push((PointSafe2(*p), *t));
                 }
             }
@@ -731,7 +719,7 @@ where
         v
     }
 
-    fn update_after_event(&self, mut state: &mut S, event: &Event) {
+    fn update_after_event(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => {
                 panic!("Being asked to update after a dead event.")
@@ -747,7 +735,7 @@ where
                         state.move_sa_e(*p),
                         state.move_sa_s(*p),
                     ];
-                    self.update_points(&mut state, &points);
+                    self.update_points(state, &points);
                 }
                 ChunkSize::Dimer => {
                     let mut points = Vec::with_capacity(10);
@@ -772,7 +760,7 @@ where
                         points.push(PointSafeHere(state.move_sh_n(n)));
                     }
 
-                    self.update_points(&mut state, &points);
+                    self.update_points(state, &points);
                 }
             },
             Event::PolymerDetachment(v) => {
@@ -782,7 +770,7 @@ where
                 }
                 points.sort_unstable();
                 points.dedup();
-                self.update_points(&mut state, &points);
+                self.update_points(state, &points);
             }
             Event::PolymerAttachment(v) | Event::PolymerChange(v) => {
                 let mut points = Vec::new();
@@ -791,7 +779,7 @@ where
                 }
                 points.sort_unstable();
                 points.dedup();
-                self.update_points(&mut state, &points);
+                self.update_points(state, &points);
             }
         }
     }

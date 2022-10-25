@@ -6,7 +6,6 @@ use clap::Parser;
 use rgrow::base::GrowError;
 use rgrow::{parser_xgrow, tileset::TileSet};
 
-use serde_yaml;
 use std::fs::File;
 
 #[cfg(feature = "ui")]
