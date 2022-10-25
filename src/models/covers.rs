@@ -236,20 +236,6 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
             }
         }
     }
-
-    fn calc_mismatches(&self, state: &S) -> NumTiles {
-        let arr = self.calc_mismatch_locations(state);
-        arr.sum() as u32 / 2
-    }
-
-    fn update_points(&self, state: &mut S, points: &[PointSafeHere]) {
-        let rates = points
-            .iter()
-            .map(|p| self.event_rate_at_point(state, *p))
-            .collect::<Vec<_>>();
-
-        state.update_multiple(points, &rates);
-    }
 }
 
 impl<S: State> SystemWithDimers<S> for StaticKTAMCover<S> {

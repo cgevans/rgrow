@@ -115,23 +115,7 @@ impl<S: State> System<S> for KTAM<S> {
             Event::MonomerAttachment(p, _)
             | Event::MonomerDetachment(p)
             | Event::MonomerChange(p, _) => {
-                let points = [
-                    state.move_sa_n(*p),
-                    state.move_sa_w(*p),
-                    PointSafeHere(p.0),
-                    state.move_sa_e(*p),
-                    state.move_sa_s(*p),
-                    state.move_sa_nn(*p),
-                    state.move_sa_ne(*p),
-                    state.move_sa_ee(*p),
-                    state.move_sa_se(*p),
-                    state.move_sa_ss(*p),
-                    state.move_sa_sw(*p),
-                    state.move_sa_ww(*p),
-                    state.move_sa_nw(*p),
-                ];
-
-                self.update_points(state, &points);
+                self._update_monomer_points(state, p);
             }
             Event::PolymerDetachment(v) => {
                 let mut points = Vec::new();
@@ -1044,6 +1028,7 @@ impl<S: State> KTAM<S> {
         self.energy_we[(tw, te)]
     }
 
+    #[inline(always)]
     fn tile_shape(&self, t: Tile) -> TileShape {
         let dr = self.double_to_right[t];
         if dr.nonzero() {
@@ -1062,6 +1047,64 @@ impl<S: State> KTAM<S> {
             return TileShape::DupleToTop(dt);
         }
         TileShape::Single
+    }
+
+    fn _update_monomer_points(&self, state: &mut S, p: &PointSafe2) {
+        let points = [
+            (
+                state.move_sa_n(*p),
+                self.event_rate_at_point(state, state.move_sa_n(*p)),
+            ),
+            (
+                state.move_sa_w(*p),
+                self.event_rate_at_point(state, state.move_sa_w(*p)),
+            ),
+            (
+                PointSafeHere(p.0),
+                self.event_rate_at_point(state, PointSafeHere(p.0)),
+            ),
+            (
+                state.move_sa_e(*p),
+                self.event_rate_at_point(state, state.move_sa_e(*p)),
+            ),
+            (
+                state.move_sa_s(*p),
+                self.event_rate_at_point(state, state.move_sa_s(*p)),
+            ),
+            (
+                state.move_sa_nn(*p),
+                self.event_rate_at_point(state, state.move_sa_nn(*p)),
+            ),
+            (
+                state.move_sa_ne(*p),
+                self.event_rate_at_point(state, state.move_sa_ne(*p)),
+            ),
+            (
+                state.move_sa_ee(*p),
+                self.event_rate_at_point(state, state.move_sa_ee(*p)),
+            ),
+            (
+                state.move_sa_se(*p),
+                self.event_rate_at_point(state, state.move_sa_se(*p)),
+            ),
+            (
+                state.move_sa_ss(*p),
+                self.event_rate_at_point(state, state.move_sa_ss(*p)),
+            ),
+            (
+                state.move_sa_sw(*p),
+                self.event_rate_at_point(state, state.move_sa_sw(*p)),
+            ),
+            (
+                state.move_sa_ww(*p),
+                self.event_rate_at_point(state, state.move_sa_ww(*p)),
+            ),
+            (
+                state.move_sa_nw(*p),
+                self.event_rate_at_point(state, state.move_sa_nw(*p)),
+            ),
+        ];
+        state.update_multiple(&points);
     }
 
     fn points_to_update_around(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {

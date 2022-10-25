@@ -266,12 +266,12 @@ pub trait System<S: State>: Debug {
     }
 
     fn update_points(&self, state: &mut S, points: &[PointSafeHere]) {
-        let rates = points
+        let p = points
             .iter()
-            .map(|p| self.event_rate_at_point(state, *p))
+            .map(|p| (*p, self.event_rate_at_point(state, *p)))
             .collect::<Vec<_>>();
 
-        state.update_multiple(points, &rates);
+        state.update_multiple(&p);
     }
 }
 

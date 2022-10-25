@@ -2,7 +2,7 @@ use ndarray::Array2;
 use rand::{prelude::SmallRng, Rng};
 
 use crate::base::{Point, Rate};
-
+use crate::canvas::PointSafeHere;
 // A RateStore stores event rates for points on a canvas, and allows a continuous-time Markov chain
 // choice of a point based on those rates.  It makes no assumptions about relationships between the
 // points, beyond the points being defined by two integer coordinates; eg, they do not need to be a
@@ -10,7 +10,7 @@ use crate::base::{Point, Rate};
 pub trait RateStore {
     fn choose_point(&self, rng: &mut SmallRng) -> (Point, Rate);
     fn update_point(&mut self, point: Point, new_rate: Rate);
-    fn update_multiple(&mut self, points: &[Point], rates: &[Rate]);
+    fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]);
     fn total_rate(&self) -> Rate;
 }
 
@@ -99,15 +99,15 @@ impl RateStore for QuadTreeSquareArray<Rate> {
     }
 
     #[inline(always)]
-    fn update_multiple(&mut self, points: &[Point], rates: &[Rate]) {
+    fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]) {
         let mut todo = Vec::<Point>::new();
 
         let mut rtiter = self.0.iter_mut();
         let mut r_prev = rtiter.next().unwrap();
 
-        for (p, r) in points.iter().zip(rates) {
-            r_prev[*p] = *r;
-            let n = (p.0 / 2, p.1 / 2);
+        for (p, r) in to_update {
+            r_prev[p.0] = *r;
+            let n = (p.0 .0 / 2, p.0 .1 / 2);
             if todo.iter().rev().all(|x| n != *x) {
                 todo.push(n);
             }
@@ -147,90 +147,3 @@ fn qt_update_level_val(rn: &mut f64, rt: &Array2<Rate>, np: Point) {
             + *rt.uget((ip.0 + 1, ip.1 + 1));
     }
 }
-
-// /// (array, tree_row, tree_col)
-// pub struct QuadTreeRectArray<R>(pub Vec<(Array2<R>, bool, bool)>);
-
-// impl RateStore for QuadTreeRectArray<Rate> {
-//     fn choose_point(&self, rng: &mut SmallRng) -> (Point, Rate) {
-//         let mut threshold = self.0.first().unwrap().0.get((0, 0)).unwrap() * rng.gen::<f64>();
-//         let mut x = 0;
-//         let mut y = 0;
-
-//         for (r, tr, tc) in self.0.iter().rev() {
-//             if *tc {
-//                 y *= 2
-//             };
-//             if *tr {
-//                 x *= 2
-//             };
-//             let mut v = unsafe { *r.uget((x, y)) };
-//             if threshold - v <= 0. {
-//                 continue;
-//             }
-//             threshold -= v;
-//             if *tc {
-//                 y += 1;
-//                 v = unsafe { *r.uget((x, y)) };
-//                 if threshold - v <= 0. {
-//                     continue;
-//                 }
-//                 y -= 1;
-//                 threshold -= v;
-//             }
-//             if *tr {
-//                 x += 1;
-//                 v = unsafe { *r.uget((x, y)) };
-//                 if threshold - v <= 0. {
-//                     continue;
-//                 }
-//                 x -= 1;
-//                 threshold -= v;
-//             }
-//             if *tc && *tr {
-//                 y += 1;
-//                 x += 1;
-//                 v = unsafe { *r.uget((x, y)) };
-//                 if threshold - v <= 0. {
-//                     continue;
-//                 }
-//                 y -= 1;
-//                 x -= 1;
-//                 threshold -= v;
-//             }
-//             panic!("Failure in quadtree position finding: remaining threshold {:?}, ratetree array {:?}.", threshold, r);
-//         }
-//         ((x, y), threshold)
-//     }
-
-//     fn update_point(&mut self, mut point: Point, new_rate: Rate) {
-//         let mut rtiter = self.0.iter_mut();
-//         let (mut r_prev, rtr, rtc) = rtiter.next().unwrap();
-
-//         r_prev[point] = new_rate;
-
-//         for (r_next, _ntr, _ntc) in rtiter {
-//             point = (if *rtr {point.0 / 2} else {point.0}, if *rtc {point.1 / 2} else {point.1});
-//             if *rtr && *rtc {
-//                 qt_update_level(r_next, &r_prev, point);
-//             } else if *rtr {
-//                 todo!()
-//                 // qt_update_level_row(r_next, r_prev, point);
-//             } else if *rtc {
-//                 todo!()
-//                 // qt_update_level_col(r_next, r_prev, point);
-//             } else {
-//                 todo!()
-//             }
-//             r_prev = *r_next;
-//         }
-//     }
-
-//     fn update_multiple(&mut self, points: &[Point], rates: &[Rate]) {
-//         todo!()
-//     }
-
-//     fn total_rate(&self) -> Rate {
-//         todo!()
-//     }
-// }
