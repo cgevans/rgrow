@@ -40,10 +40,9 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
 
     // add a frame with a label at the bottom of the window
     let mut frame = fltk::frame::Frame::default()
-        .with_size(100, 30)
+        .with_size(win.pixel_w(), 30)
         .with_pos(0, win.pixel_h() - 30)
         .with_label("Hello");
-
     win.end();
     win.show();
 
@@ -53,8 +52,6 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     let surface_texture = SurfaceTexture::new(win_width, win_height - 30, &win);
 
     let (width, height) = sim.draw_size(0);
-
-    println!("{} {}", width, height);
 
     let mut pixels = { Pixels::new(width, height, surface_texture).unwrap() };
 
@@ -72,6 +69,8 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
             win_width = win.pixel_w() as u32;
             win_height = win.pixel_h() as u32;
             pixels.resize_surface(win_width, win_height - 30);
+            frame.set_pos(0, (win_height - 30) as i32);
+            frame.set_size(win_width as i32, 30);
         }
 
         sim.evolve(state_i, bounds).unwrap();
@@ -82,7 +81,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
 
         // Update text with the simulation time, events, and tiles
         frame.set_label(&format!(
-            "Time: {}\tEvents: {}\tTiles: {}",
+            "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}",
             state.time(),
             state.total_events(),
             state.ntiles()
