@@ -1,19 +1,15 @@
 use std::time::Duration;
 
-use winit::window::WindowBuilder;
-use winit_input_helper::WinitInputHelper;
+use fltk::{app, enums::Event, prelude::*, window::Window};
 
-use pixels::{Pixels, SurfaceTexture};
-use winit::dpi::LogicalSize;
+use pixels::{Error, Pixels, SurfaceTexture};
 
 use crate::base::GrowError;
 use crate::simulation::{EvolveBounds, Simulation};
-use winit::event::VirtualKeyCode;
-use winit::platform::run_return::EventLoopExtRunReturn;
-use winit::{
-    event::Event,
-    event_loop::{ControlFlow, EventLoop},
-};
+
+thread_local! {
+    pub static APP: fltk::app::App = app::App::default()
+}
 
 pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation>, GrowError> {
     let mut sim = parsed.into_simulation()?;
@@ -33,27 +29,34 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     }
 
     let state_i = sim.add_state((size1, size2)).unwrap();
+    let mut state = sim.state_ref(state_i);
 
-    let state = sim.state_ref(state_i);
+    //let app = app::App::default();
+    let mut win = Window::default()
+        .with_size(state.ncols() as i32, (state.nrows() + 30) as i32)
+        .with_label("rgrow!");
 
-    let mut event_loop = EventLoop::new();
-    let mut input = WinitInputHelper::new();
-    let window = {
-        let size = LogicalSize::new((state.ncols()) as f64, (state.nrows()) as f64);
-        WindowBuilder::new()
-            .with_title("rgrow!")
-            .with_min_inner_size(size)
-            .build(&event_loop)
-            .unwrap()
-    };
-    window.request_redraw();
+    win.make_resizable(true);
 
-    let mut pixels = {
-        let window_size = window.inner_size();
-        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        let (width, height) = sim.draw_size(0);
-        Pixels::new(width, height, surface_texture).unwrap()
-    };
+    // add a frame with a label at the bottom of the window
+    let mut frame = fltk::frame::Frame::default()
+        .with_size(100, 30)
+        .with_pos(0, win.pixel_h() - 30)
+        .with_label("Hello");
+
+    win.end();
+    win.show();
+
+    let mut win_width = win.pixel_w() as u32;
+    let mut win_height = win.pixel_h() as u32;
+
+    let surface_texture = SurfaceTexture::new(win_width, win_height - 30, &win);
+
+    let (width, height) = sim.draw_size(0);
+
+    println!("{} {}", width, height);
+
+    let mut pixels = { Pixels::new(width, height, surface_texture).unwrap() };
 
     let bounds = EvolveBounds {
         events: None,
@@ -62,36 +65,31 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
         size_max: None,
         wall_time: Some(Duration::from_millis(16)),
     };
-    window.request_redraw();
 
-    event_loop.run_return(|event, _, control_flow| {
-        if let Event::RedrawRequested(_) = event {
-            pixels.render().unwrap();
+    while app::wait() {
+        // Check if window was resized
+        if win.w() != win_width as i32 || win.h() != win_height as i32 {
+            win_width = win.pixel_w() as u32;
+            win_height = win.pixel_h() as u32;
+            pixels.resize_surface(win_width, win_height - 30);
         }
 
-        if input.update(&event) {
-            if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
-                *control_flow = ControlFlow::Exit;
-                return;
-            }
-
-            // Resize the window
-            if let Some(size) = input.window_resized() {
-                pixels.resize(size.width, size.height);
-            }
-
-            // Update internal state and request a redraw
-            window.request_redraw();
-        }
         sim.evolve(state_i, bounds).unwrap();
-        // match parsed.options.smax {
-        //     Some(smax) => {if state.ntiles() > smax {break}}
-        //     None => {}
-        // };
 
         sim.draw(state_i, pixels.get_frame());
         pixels.render().unwrap();
-        window.request_redraw();
-    });
+        state = sim.state_ref(state_i);
+
+        // Update text with the simulation time, events, and tiles
+        frame.set_label(&format!(
+            "Time: {}\tEvents: {}\tTiles: {}",
+            state.time(),
+            state.total_events(),
+            state.ntiles()
+        ));
+
+        app::flush();
+        app::awake();
+    }
     Ok(sim)
 }

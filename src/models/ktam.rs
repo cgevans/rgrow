@@ -436,6 +436,7 @@ impl<S: State> System<S> for KTAM<S> {
                 }
             }
         }
+        state.add_events(1);
     }
 
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)> {

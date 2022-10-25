@@ -17,6 +17,8 @@ pub trait State: RateStoreP + Canvas + StateStatus {
 pub trait StateStatus {
     fn ntiles(&self) -> NumTiles;
     fn total_events(&self) -> NumEvents;
+    fn add_events(&mut self, n: NumEvents);
+    fn reset_events(&mut self);
     fn add_time(&mut self, time: f64);
     fn time(&self) -> f64;
 }
@@ -219,6 +221,14 @@ impl<C: CanvasSquarable, T: StateTracker> StateStatus for QuadTreeState<C, T> {
 
     fn time(&self) -> f64 {
         self.time
+    }
+
+    fn add_events(&mut self, n: NumEvents) {
+        self.total_events += n;
+    }
+
+    fn reset_events(&mut self) {
+        self.total_events = 0;
     }
 }
 
