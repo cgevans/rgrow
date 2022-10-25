@@ -22,6 +22,9 @@ use system::{ChunkHandling, ChunkSize};
 
 use thiserror;
 
+type GlueNameMap<'a> = BiMap<&'a str, Glue>;
+type GlueStrengthMap = BTreeMap<Glue, f64>;
+
 #[derive(thiserror::Error, Debug)]
 pub enum ParserError {
     #[error("I/O error: {source}")]
@@ -191,6 +194,8 @@ pub struct TileSet {
     pub tiles: Vec<Tile>,
     #[serde(default = "Vec::new")]
     pub bonds: Vec<Bond>,
+    #[serde(default = "Vec::new")]
+    pub glues: Vec<(GlueIdent, GlueIdent, f64)>,
     #[serde(alias = "xgrowargs")]
     pub options: Args,
     pub cover_strands: Option<Vec<CoverStrand>>,
@@ -225,8 +230,8 @@ fn seed_default() -> ParsedSeed {
 fn fission_default() -> FissionHandling {
     FissionHandling::KeepSeeded
 }
-fn block_default() -> usize {
-    1
+fn block_default() -> Option<usize> {
+    None
 }
 fn tilepairlist_default() -> Vec<(TileIdent, TileIdent)> {
     Vec::new()
@@ -280,7 +285,7 @@ pub struct Args {
     #[serde(default = "fission_default")]
     pub fission: FissionHandling,
     #[serde(default = "block_default")]
-    pub block: usize,
+    pub block: Option<usize>,
     pub chunk_handling: Option<ChunkHandling>,
     pub chunk_size: Option<ChunkSize>,
     #[serde(default = "canvas_type_default")]
@@ -331,8 +336,8 @@ impl TileSet {
         serde_json::from_str(data)
     }
 
-    pub fn from_yaml(data: &str) -> Result<Self, ()> {
-        serde_yaml::from_str(data).unwrap_or(Err(()))
+    pub fn from_yaml(data: &str) -> Result<Self, serde_yaml::Error> {
+        serde_yaml::from_str(data)
     }
 
     pub fn into_simulation(&self) -> Result<Box<dyn Simulation>, GrowError> {
@@ -375,7 +380,7 @@ impl TileSet {
         }
     }
 
-    pub fn number_glues(&self) -> Result<(BiMap<&str, Glue>, BTreeMap<Glue, f64>), ParserError> {
+    pub fn number_glues(&self) -> Result<(GlueNameMap, GlueStrengthMap), ParserError> {
         let mut gluemap = BiMap::new();
         let mut gluestrengthmap = BTreeMap::<Glue, f64>::new();
 
@@ -495,7 +500,7 @@ impl TileSet {
                 self.tiles
                     .iter()
                     .enumerate()
-                    .map(|(i, x)| x.name.clone().unwrap_or((i + 1).to_string())),
+                    .map(|(i, x)| x.name.clone().unwrap_or_else(|| (i + 1).to_string())),
             )
             .collect()
     }

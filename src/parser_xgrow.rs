@@ -151,6 +151,7 @@ fn parse(input: &str) -> IResult<&str, tileset::TileSet> {
         tileset::TileSet {
             tiles,
             bonds,
+            glues: Vec::new(),
             options,
             cover_strands: None,
         },
@@ -232,7 +233,7 @@ fn xgrow_args(input: &str) -> IResult<&str, tileset::Args> {
     while let Ok((input, x)) = std_delim(alt(parsers))(i2) {
         match x {
             XgrowArgs::Block(n) => {
-                args.block = n;
+                args.block = Some(n);
             }
             XgrowArgs::Size(n) => {
                 size = n;

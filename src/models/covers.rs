@@ -5,7 +5,7 @@ use rand::{rngs::SmallRng, Rng};
 
 use super::oldktam::OldKTAM;
 use crate::{
-    base::{Glue, NumEvents, NumTiles, Point, Rate, Tile},
+    base::{NumEvents, NumTiles, Point, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     models::oldktam::Seed,
     state::{State, StateCreate},
@@ -434,11 +434,9 @@ impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
 
         let mut glue_strength_vec = Vec::<f64>::new();
 
-        let mut i: Glue = 0;
-        for (j, v) in gluestrengthmap {
+        for (i, (j, v)) in gluestrengthmap.into_iter().enumerate() {
             assert!(j == i);
             glue_strength_vec.push(v);
-            i += 1;
         }
 
         let seed = match &tsc.options.seed {

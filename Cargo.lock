@@ -1678,7 +1678,7 @@ checksum = "f1382d1f0a252c4bf97dc20d979a2fdd05b024acd7c2ed0f7595d7817666a157"
 
 [[package]]
 name = "rgrow"
-version = "0.6.0-dev.9"
+version = "0.6.0"
 dependencies = [
  "bimap",
  "cached",
@@ -1697,7 +1697,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "thiserror",
- "winit 0.27.4",
+ "winit 0.26.1",
  "winit-modular",
  "winit_input_helper",
 ]

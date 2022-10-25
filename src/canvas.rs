@@ -16,10 +16,16 @@ pub struct PointSafe2(pub Point);
 pub struct PointSafeHere(pub Point);
 
 pub trait Canvas: std::fmt::Debug + Sync + Send + 'static {
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     unsafe fn uv_p(&self, p: Point) -> Tile {
         *self.uv_pr(p)
     }
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     unsafe fn uv_pr(&self, p: Point) -> &Tile;
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile;
     fn u_move_point_n(&self, p: Point) -> Point;
     fn u_move_point_e(&self, p: Point) -> Point;
@@ -195,61 +201,85 @@ pub trait Canvas: std::fmt::Debug + Sync + Send + 'static {
         self.v_sh(self.move_sa_nw(p))
     }
 
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uv_n(&self, p: Point) -> Tile {
         self.uv_p(self.u_move_point_n(p))
     }
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uv_e(&self, p: Point) -> Tile {
         self.uv_p(self.u_move_point_e(p))
     }
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uv_s(&self, p: Point) -> Tile {
         self.uv_p(self.u_move_point_s(p))
     }
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uv_w(&self, p: Point) -> Tile {
         self.uv_p(self.u_move_point_w(p))
     }
 
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uv_nw(&self, p: Point) -> Tile {
         self.uv_p(self.u_move_point_nw(p))
     }
 
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uv_ne(&self, p: Point) -> Tile {
         self.uv_p(self.u_move_point_ne(p))
     }
 
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uv_sw(&self, p: Point) -> Tile {
         self.uv_p(self.u_move_point_sw(p))
     }
 
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uv_se(&self, p: Point) -> Tile {
         self.uv_p(self.u_move_point_se(p))
     }
 
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uvm_n(&mut self, p: Point) -> &mut Tile {
         self.uvm_p(self.u_move_point_n(p))
     }
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uvm_e(&mut self, p: Point) -> &mut Tile {
         self.uvm_p(self.u_move_point_e(p))
     }
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uvm_s(&mut self, p: Point) -> &mut Tile {
         self.uvm_p(self.u_move_point_s(p))
     }
+    /// # Safety
+    /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     #[inline(always)]
     unsafe fn uvm_w(&mut self, p: Point) -> &mut Tile {
         self.uvm_p(self.u_move_point_w(p))
     }
 
-    fn draw(&self, frame: &mut [u8], colors: &Vec<[u8; 4]>) {
+    fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
         for (p, v) in Iterator::zip(frame.chunks_exact_mut(4), self.raw_array().iter()) {
             let color = colors[*v as usize];
             p.copy_from_slice(&color);
@@ -541,7 +571,7 @@ impl Canvas for CanvasTube {
         (s, s)
     }
 
-    fn draw(&self, frame: &mut [u8], colors: &Vec<[u8; 4]>) {
+    fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
         let s = self.nrows() + self.ncols();
         let mut px: usize;
         let mut py: usize;

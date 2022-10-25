@@ -32,6 +32,15 @@ pub enum StepOutcome {
     ZeroRate,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct EvolveBounds {
+    pub events: Option<NumEvents>,
+    pub time: Option<f64>,
+    pub size_min: Option<NumTiles>,
+    pub size_max: Option<NumTiles>,
+    pub wall_time: Option<Duration>,
+}
+
 #[derive(Debug, Clone)]
 pub enum EvolveOutcome {
     ReachedEventsMax,
@@ -131,31 +140,30 @@ pub trait System<S: State>: Debug {
         &self,
         state: &mut S,
         rng: &mut SmallRng,
-        for_events: Option<NumEvents>,
-        for_time: Option<f64>,
-        min_size: Option<NumTiles>,
-        max_size: Option<NumTiles>,
-        for_wall_time: Option<Duration>,
+        bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError> {
         let mut events = 0;
-        let mut rtime = match for_time {
+        let mut rtime = match bounds.time {
             Some(t) => t,
             None => f64::INFINITY,
         };
 
         // If we have a for_wall_time, get an instant to compare to
-        let start_time = for_wall_time.map(|_| std::time::Instant::now());
+        let start_time = bounds.wall_time.map(|_| std::time::Instant::now());
 
         loop {
-            if min_size.is_some_and(|ms| state.ntiles() <= *ms) {
+            if bounds.size_min.is_some_and(|ms| state.ntiles() <= *ms) {
                 return Ok(EvolveOutcome::ReachedSizeMin);
-            } else if max_size.is_some_and(|ms| state.ntiles() >= *ms) {
+            } else if bounds.size_max.is_some_and(|ms| state.ntiles() >= *ms) {
                 return Ok(EvolveOutcome::ReachedSizeMax);
             } else if rtime <= 0. {
                 return Ok(EvolveOutcome::ReachedTimeMax);
-            } else if for_wall_time.is_some_and(|t| start_time.unwrap().elapsed() >= *t) {
+            } else if bounds
+                .wall_time
+                .is_some_and(|t| start_time.unwrap().elapsed() >= *t)
+            {
                 return Ok(EvolveOutcome::ReachWallTimeMax);
-            } else if for_events.is_some_and(|e| events >= *e) {
+            } else if bounds.events.is_some_and(|e| events >= *e) {
                 return Ok(EvolveOutcome::ReachedEventsMax);
             } else if state.total_rate() == 0. {
                 return Ok(EvolveOutcome::ReachedZeroRate);

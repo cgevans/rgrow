@@ -8,8 +8,9 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
-    tileset::{FromTileSet, ParsedSeed, SimFromTileSet, Size, TileIdent, TileSet},
+    tileset::{FromTileSet, GlueIdent, ParsedSeed, SimFromTileSet, Size, TileIdent, TileSet},
 };
+use bimap::BiHashMap;
 use fnv::{FnvHashMap, FnvHashSet};
 use ndarray::prelude::*;
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
@@ -1208,10 +1209,17 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
 
         let tile_names = tileset.tile_names();
 
-        fn tpmap(tile_names: &Vec<String>, tp: &TileIdent) -> usize {
+        fn tpmap(tile_names: &[String], tp: &TileIdent) -> usize {
             match tp {
                 TileIdent::Name(x) => tile_names.iter().position(|y| *y == *x).unwrap(),
                 TileIdent::Num(x) => *x,
+            }
+        }
+
+        fn gpmap(gpmap: &BiHashMap<&str, usize>, gp: &GlueIdent) -> usize {
+            match gp {
+                GlueIdent::Name(x) => *gpmap.get_by_left(&x.as_str()).unwrap(),
+                GlueIdent::Num(x) => *x,
             }
         }
 
@@ -1246,6 +1254,13 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
         );
 
         newkt.set_duples(hdoubles, vdoubles);
+
+        for (g1, g2, s) in &tileset.glues {
+            newkt.glue_links[(gpmap(&gluemap, g1), gpmap(&gluemap, g2))] = *s;
+            newkt.glue_links[(gpmap(&gluemap, g2), gpmap(&gluemap, g1))] = *s;
+        }
+
+        newkt.update_system();
 
         newkt
     }

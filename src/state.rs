@@ -172,7 +172,7 @@ impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
         self.canvas.draw_size()
     }
 
-    fn draw(&self, frame: &mut [u8], colors: &Vec<[u8; 4]>) {
+    fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
         self.canvas.draw(frame, colors)
     }
 }
@@ -282,7 +282,6 @@ impl<C: Canvas + CanvasSquarable, T: StateTracker> DangerousStateClone for QuadT
                         // Tile must have nonzero rate, so we only check if the rate is nonzero.
                         let v = unsafe { self.canvas.uvm_p((*yy, *xx)) };
                         *v = t;
-                        drop(v);
                     }
                 }
             }

@@ -4,8 +4,9 @@ use crate::{
     simulation::Simulation,
     state::{self, State, StateCreate},
     system::{Event, System, SystemWithStateCreate, TileBondInfo},
-    tileset::{FromTileSet, ParsedSeed, SimFromTileSet, Size, TileIdent, TileSet},
+    tileset::{FromTileSet, GlueIdent, ParsedSeed, SimFromTileSet, Size, TileIdent, TileSet},
 };
+use bimap::BiHashMap;
 use fnv::{FnvHashMap, FnvHashSet};
 use ndarray::prelude::*;
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
@@ -813,11 +814,9 @@ impl<St: state::State + state::StateCreate> FromTileSet for ATAM<St> {
 
         let mut glue_strength_vec = Vec::<f64>::new();
 
-        let mut i: Glue = 0;
-        for (j, v) in gluestrengthmap {
+        for (i, (j, v)) in gluestrengthmap.into_iter().enumerate() {
             assert!(j == i);
             glue_strength_vec.push(v);
-            i += 1;
         }
 
         let seed = match &tileset.options.seed {
@@ -835,10 +834,17 @@ impl<St: state::State + state::StateCreate> FromTileSet for ATAM<St> {
 
         let tile_names = tileset.tile_names();
 
-        fn tpmap(tile_names: &Vec<String>, tp: &TileIdent) -> usize {
+        fn tpmap(tile_names: &[String], tp: &TileIdent) -> usize {
             match tp {
                 TileIdent::Name(x) => tile_names.iter().position(|y| *y == *x).unwrap(),
                 TileIdent::Num(x) => *x,
+            }
+        }
+
+        fn gpmap(gpmap: &BiHashMap<&str, usize>, gp: &GlueIdent) -> usize {
+            match gp {
+                GlueIdent::Name(x) => *gpmap.get_by_left(&x.as_str()).unwrap(),
+                GlueIdent::Num(x) => *x,
             }
         }
 
@@ -867,6 +873,13 @@ impl<St: state::State + state::StateCreate> FromTileSet for ATAM<St> {
         );
 
         newkt.set_duples(hdoubles, vdoubles);
+
+        for (g1, g2, s) in &tileset.glues {
+            newkt.glue_links[(gpmap(&gluemap, g1), gpmap(&gluemap, g2))] = *s;
+            newkt.glue_links[(gpmap(&gluemap, g2), gpmap(&gluemap, g1))] = *s;
+        }
+
+        newkt.update_system();
 
         newkt
     }

@@ -158,8 +158,8 @@ xgrowargs:
   - [16,3,16]
   - [17,2,17]
   size: [28, 128]
-  block: 1
   fission: keep-seeded
   canvas_type: Periodic 
   threshold: 2
   model: KTAM
+  # Or ATAM!

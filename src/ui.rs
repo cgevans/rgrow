@@ -5,8 +5,8 @@ use fltk::{app, prelude::*, window::Window};
 use pixels::{Pixels, SurfaceTexture};
 
 use crate::base::GrowError;
-use crate::simulation::{EvolveBounds, Simulation};
-
+use crate::simulation::Simulation;
+use crate::system::EvolveBounds;
 thread_local! {
     pub static APP: fltk::app::App = app::App::default()
 }
@@ -31,9 +31,21 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     let state_i = sim.add_state((size1, size2)).unwrap();
     let mut state = sim.state_ref(state_i);
 
+    let scale = match parsed.options.block {
+        Some(i) => i,
+        None => {
+            let (w, h) = app::screen_size();
+            (w / (size2 as f64)).min(h / (size1 as f64)).floor() as usize
+        }
+    };
+    app::screen_size();
+
     //let app = app::App::default();
     let mut win = Window::default()
-        .with_size(state.ncols() as i32, (state.nrows() + 30) as i32)
+        .with_size(
+            (scale * state.ncols()) as i32,
+            ((scale * state.nrows()) + 30) as i32,
+        )
         .with_label("rgrow!");
 
     win.make_resizable(true);
