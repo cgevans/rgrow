@@ -1,5 +1,5 @@
 use crate::base::GrowError;
-use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2, PointSafeHere};
+use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
