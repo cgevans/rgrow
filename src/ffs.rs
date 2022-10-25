@@ -460,9 +460,7 @@ impl<
 
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
 
-                if system.calc_ntiles(&state) != state.ntiles() {
-                    panic!("sink {:?}", state);
-                }
+                debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
 
                 system.evolve_in_size_range_events_max(
                     &mut state,
@@ -533,14 +531,8 @@ impl<
                 i_old_state = chooser.sample(&mut rng);
 
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
-                if system.calc_ntiles(&state) != state.ntiles() {
-                    panic!(
-                        "{:?} {:?} {:?}",
-                        system.calc_ntiles(&state),
-                        state,
-                        &self.state_list[i_old_state]
-                    );
-                }
+                debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
+
                 system.evolve_in_size_range_events_max(
                     &mut state,
                     0,
@@ -707,19 +699,7 @@ impl<
                     }
                 };
 
-                if state.ntiles() != system.calc_ntiles(&state) {
-                    println!(
-                        "{:?} {} {} {:?} {:?} {:?}",
-                        dimer,
-                        state.ntiles(),
-                        system.calc_ntiles(&state),
-                        state,
-                        system.event_rate_at_point(&state, PointSafeHere((6, 4))),
-                        state.tile_at_point(PointSafe2((6, 4))),
-                    );
-                    // wait for 0.5 seconds
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                }
+                debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
 
                 system.evolve_in_size_range_events_max(
                     &mut state, 0, next_size, max_events, &mut rng,
