@@ -7,7 +7,7 @@ use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    base::{Energy, Glue, GrowError, Point, Rate, Tile},
+    base::{Energy, Glue, GrowError, Point, Rate, RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     simulation::Simulation,
     state::{State, StateCreate},
@@ -15,7 +15,9 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
-    tileset::{FromTileSet, ParsedSeed, SimFromTileSet, Size, TileSet},
+    tileset::{
+        FromTileSet, ParsedSeed, ParserError, ProcessedTileSet, SimFromTileSet, Size, TileSet,
+    },
 };
 
 type Cache = SizedCache<(Tile, Tile, Tile, Tile), f64>;
@@ -853,8 +855,8 @@ impl<St: State> SystemWithDimers<St> for OldKTAM<St> {
 }
 
 impl<St: State + StateCreate> SimFromTileSet for OldKTAM<St> {
-    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError> {
-        let sys = Self::from_tileset(tileset);
+    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
+        let sys = Self::from_tileset(tileset)?;
         let size = match tileset.options.size {
             Size::Single(x) => (x, x),
             Size::Pair((x, y)) => (x, y),
@@ -870,21 +872,8 @@ impl<St: State + StateCreate> SimFromTileSet for OldKTAM<St> {
 }
 
 impl<St: State + StateCreate> FromTileSet for OldKTAM<St> {
-    fn from_tileset(tileset: &TileSet) -> Self {
-        let (gluemap, gluestrengthmap) = tileset.number_glues().unwrap();
-
-        let tile_edges = tileset.tile_edge_process(&gluemap);
-        let mut tile_concs = tileset.tile_stoics();
-        tile_concs *= f64::exp(-tileset.options.gmc + tileset.options.alpha);
-
-        let mut glue_strength_vec = Vec::<f64>::new();
-
-        let mut i: Glue = 0;
-        for (j, v) in gluestrengthmap {
-            assert!(j == i);
-            glue_strength_vec.push(v);
-            i += 1;
-        }
+    fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
+        let proc = ProcessedTileSet::from_tileset(tileset)?;
 
         let seed = match &tileset.options.seed {
             ParsedSeed::Single(y, x, v) => Seed::SingleTile {
@@ -899,10 +888,10 @@ impl<St: State + StateCreate> FromTileSet for OldKTAM<St> {
             }
         };
 
-        OldKTAM::from_ktam(
-            tileset.tile_stoics(),
-            tile_edges,
-            Array1::from(glue_strength_vec),
+        Ok(OldKTAM::from_ktam(
+            proc.tile_stoics,
+            proc.tile_edges,
+            proc.glue_strengths,
             tileset.options.gse,
             tileset.options.gmc,
             Some(tileset.options.alpha),
@@ -911,8 +900,8 @@ impl<St: State + StateCreate> FromTileSet for OldKTAM<St> {
             Some(tileset.options.fission),
             tileset.options.chunk_handling,
             tileset.options.chunk_size,
-            Some(tileset.tile_names()),
-            Some(tileset.tile_colors()),
-        )
+            Some(proc.tile_names),
+            Some(proc.tile_colors),
+        ))
     }
 }

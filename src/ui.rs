@@ -4,14 +4,14 @@ use fltk::{app, prelude::*, window::Window};
 
 use pixels::{Pixels, SurfaceTexture};
 
-use crate::base::GrowError;
+use crate::base::{GrowError, RgrowError};
 use crate::simulation::Simulation;
 use crate::system::EvolveBounds;
 thread_local! {
     pub static APP: fltk::app::App = app::App::default()
 }
 
-pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation>, GrowError> {
+pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
     let mut sim = parsed.into_simulation()?;
 
     let size1: usize;
@@ -28,7 +28,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
         }
     }
 
-    let state_i = sim.add_state((size1, size2)).unwrap();
+    let state_i = sim.add_state((size1, size2))?;
     let mut state = sim.state_ref(state_i);
 
     let scale = match parsed.options.block {
@@ -65,7 +65,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
 
     let (width, height) = sim.draw_size(0);
 
-    let mut pixels = { Pixels::new(width, height, surface_texture).unwrap() };
+    let mut pixels = { Pixels::new(width, height, surface_texture)? };
 
     let bounds = EvolveBounds {
         events: None,
@@ -85,10 +85,10 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
             frame.set_size(win_width as i32, 30);
         }
 
-        sim.evolve(state_i, bounds).unwrap();
+        sim.evolve(state_i, bounds)?;
 
         sim.draw(state_i, pixels.get_frame());
-        pixels.render().unwrap();
+        pixels.render()?;
         state = sim.state_ref(state_i);
 
         // Update text with the simulation time, events, and tiles

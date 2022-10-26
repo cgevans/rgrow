@@ -5,12 +5,12 @@ use rand::{rngs::SmallRng, Rng};
 
 use super::oldktam::OldKTAM;
 use crate::{
-    base::{NumEvents, NumTiles, Point, Rate, Tile},
+    base::{NumEvents, NumTiles, Point, Rate, RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     models::oldktam::Seed,
     state::{State, StateCreate},
     system::{ChunkSize, DimerInfo, Event, StepOutcome, System, SystemWithDimers, TileBondInfo},
-    tileset::{FromTileSet, ParsedSeed, TileSet},
+    tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, TileSet},
 };
 
 #[derive(Debug, Clone)]
@@ -353,7 +353,7 @@ impl<C: State> TileBondInfo for StaticKTAMCover<C> {
 }
 
 impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
-    fn from_tileset(tileset: &TileSet) -> Self {
+    fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
         let mut tsc: TileSet = (*tileset).to_owned();
 
         let cs = tsc.cover_strands.as_ref().unwrap();
@@ -426,18 +426,9 @@ impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
 
         assert!(comp == tsc.tiles.len() + 1);
 
-        let (gluemap, gluestrengthmap) = tsc.number_glues().unwrap();
+        let proc = ProcessedTileSet::from_tileset(&tsc)?;
 
-        let tile_edges = tsc.tile_edge_process(&gluemap);
-        let mut tile_concs = tsc.tile_stoics();
-        tile_concs *= f64::exp(-tsc.options.gmc + tsc.options.alpha);
-
-        let mut glue_strength_vec = Vec::<f64>::new();
-
-        for (i, (j, v)) in gluestrengthmap.into_iter().enumerate() {
-            assert!(j == i);
-            glue_strength_vec.push(v);
-        }
+        let tile_edges = proc.tile_edges;
 
         let seed = match &tsc.options.seed {
             ParsedSeed::Single(y, x, v) => Seed::SingleTile {
@@ -453,9 +444,9 @@ impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
         };
 
         let inner = OldKTAM::from_ktam(
-            tsc.tile_stoics(),
+            proc.tile_stoics,
             tile_edges,
-            Array1::from(glue_strength_vec),
+            proc.glue_strengths,
             tsc.options.gse,
             tsc.options.gmc,
             Some(tsc.options.alpha),
@@ -464,15 +455,15 @@ impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
             Some(tsc.options.fission),
             tsc.options.chunk_handling,
             tsc.options.chunk_size,
-            Some(tsc.tile_names()),
-            Some(tsc.tile_colors()),
+            Some(proc.tile_names),
+            Some(proc.tile_colors),
         );
 
-        StaticKTAMCover {
+        Ok(StaticKTAMCover {
             inner,
             tile_is_cover,
             cover_attach_info,
             composite_detach_info,
-        }
+        })
     }
 }

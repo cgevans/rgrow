@@ -1,7 +1,7 @@
 //! A parser for the original Xgrow tileset files.  Note that this tries to fit Xgrow's behavior closely, so parsing is occasionally weird
 //! (eg, *no* whitespace is needed to separate things)
 
-use crate::{base::Glue, system::FissionHandling};
+use crate::{base::Glue, system::FissionHandling, tileset::TileShape};
 
 use super::tileset;
 use super::tileset::GlueIdent;
@@ -80,6 +80,7 @@ fn tile(input: &str) -> IResult<&str, tileset::Tile> {
             edges,
             stoic,
             color,
+            shape: Some(TileShape::Single),
         },
     ))
 }

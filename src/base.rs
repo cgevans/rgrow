@@ -1,5 +1,7 @@
 use thiserror;
 
+use crate::tileset::ParserError;
+
 pub type Point = (usize, usize);
 pub type NumTiles = u32;
 pub type NumEvents = u64;
@@ -14,6 +16,17 @@ pub enum GrowError {
     WrongCanvasSize(usize, usize),
     #[error("FFS is meaningless for the aTAM.")]
     FFSCannotRunATAM,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum RgrowError {
+    #[error(transparent)]
+    Parser(#[from] ParserError),
+    #[error(transparent)]
+    Grow(#[from] GrowError),
+    #[cfg(feature = "ui")]
+    #[error(transparent)]
+    Pixel(#[from] pixels::Error),
 }
 
 pub type GrowResult<T> = Result<T, GrowError>;

@@ -12,7 +12,7 @@ pub(crate) struct ConcreteSimulation<Sy: System<St>, St: State> {
     pub states: Vec<St>,
     pub rng: SmallRng,
 }
-pub trait Simulation: Send {
+pub trait Simulation: Send + Sync {
     fn evolve(
         &mut self,
         state_index: usize,

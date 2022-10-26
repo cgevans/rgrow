@@ -1,4 +1,4 @@
-use crate::base::GrowError;
+use crate::base::{GrowError, RgrowError};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube};
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
@@ -22,7 +22,7 @@ use system::{ChunkHandling, ChunkSize};
 
 use thiserror;
 
-type GlueNameMap<'a> = BiMap<&'a str, Glue>;
+type GlueNameMap = BiMap<String, Glue>;
 type GlueStrengthMap = BTreeMap<Glue, f64>;
 
 #[derive(thiserror::Error, Debug)]
@@ -40,7 +40,9 @@ pub enum ParserError {
         s2: f64,
     },
     #[error("Glue is defined multiple times.")]
-    RepeatedGlueDef,
+    RepeatedGlueDef { name: String },
+    #[error("Repeated tile definition for {name}.")]
+    RepeatedTileName { name: String },
 }
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -93,11 +95,20 @@ pub enum ParsedSeed {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum TileShape {
+    Single,
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tile {
     pub name: Option<String>,
     pub edges: Vec<GlueIdent>,
     pub stoic: Option<f64>,
     pub color: Option<String>,
+    pub shape: Option<TileShape>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
@@ -158,6 +169,7 @@ impl CoverStrand {
             edges,
             stoic: Some(self.stoic),
             color: None,
+            shape: None,
         }
     }
 
@@ -179,6 +191,7 @@ impl CoverStrand {
             edges,
             stoic: Some(0.),
             color: None,
+            shape: None,
         }
     }
 }
@@ -191,6 +204,7 @@ pub struct Bond {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TileSet {
+    #[serde(default = "Vec::new")]
     pub tiles: Vec<Tile>,
     #[serde(default = "Vec::new")]
     pub bonds: Vec<Bond>,
@@ -284,7 +298,6 @@ pub struct Args {
     pub kf: Option<f64>,
     #[serde(default = "fission_default")]
     pub fission: FissionHandling,
-    #[serde(default = "block_default")]
     pub block: Option<usize>,
     pub chunk_handling: Option<ChunkHandling>,
     pub chunk_size: Option<ChunkSize>,
@@ -323,12 +336,12 @@ impl Default for Args {
     }
 }
 
-pub trait FromTileSet {
-    fn from_tileset(tileset: &TileSet) -> Self;
+pub trait FromTileSet: Sized {
+    fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError>;
 }
 
 pub trait SimFromTileSet {
-    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError>;
+    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError>;
 }
 
 impl TileSet {
@@ -340,7 +353,7 @@ impl TileSet {
         serde_yaml::from_str(data)
     }
 
-    pub fn into_simulation(&self) -> Result<Box<dyn Simulation>, GrowError> {
+    pub fn into_simulation(&self) -> Result<Box<dyn Simulation>, RgrowError> {
         match self.options.model {
             Model::KTAM => match self.options.canvas_type {
                 CanvasType::Square => {
@@ -379,24 +392,44 @@ impl TileSet {
             },
         }
     }
+}
 
-    pub fn number_glues(&self) -> Result<(GlueNameMap, GlueStrengthMap), ParserError> {
-        let mut gluemap = BiMap::new();
+/// A processed tile set, suitable for most common models.
+pub(crate) struct ProcessedTileSet {
+    /// Numbered tile edges.  Single-site tiles only.
+    pub(crate) tile_edges: Array2<Glue>,
+    /// Tile stoichiometries.
+    pub(crate) tile_stoics: Array1<f64>,
+    pub(crate) tile_names: Vec<String>,
+    pub(crate) tile_colors: Vec<[u8; 4]>,
+    pub(crate) glue_names: Vec<String>,
+    pub(crate) glue_strengths: Array1<f64>,
+    pub(crate) has_duples: bool,
+
+    glue_map: GlueNameMap,
+}
+
+impl ProcessedTileSet {
+    pub fn from_tileset(tileset: &TileSet) -> Result<Self, ParserError> {
+        // Process  glues.
+        let mut glue_map = BiMap::new();
         let mut gluestrengthmap = BTreeMap::<Glue, f64>::new();
 
         let mut gluenum: Glue = 1;
 
         // We'll deal with zero first, which must be null.
         gluestrengthmap.insert(0, 0.);
-        gluemap.insert("0", 0);
+        glue_map.insert("0".to_string(), 0);
 
         // Start with the bond list, which we will take as the more authoritative thing.
-        for bond in &self.bonds {
+        for bond in &tileset.bonds {
             match &bond.name {
                 GlueIdent::Name(n) => {
-                    gluemap
-                        .insert_no_overwrite(n, gluenum)
-                        .map_err(|(_l, _r)| ParserError::RepeatedGlueDef)?;
+                    glue_map
+                        .insert_no_overwrite(n.clone(), gluenum)
+                        .map_err(|(l, _r)| ParserError::RepeatedGlueDef {
+                            name: l.to_string(),
+                        })?;
                     match gluestrengthmap.get(&gluenum) {
                         Some(s) => {
                             if *s != bond.strength {
@@ -434,16 +467,30 @@ impl TileSet {
             }
         }
 
-        for tile in &self.tiles {
+        // Get the highest glue number.
+        let highglue = match gluestrengthmap.last_key_value() {
+            Some((k, _)) => *k,
+            None => panic!("No glues in tileset!"),
+        };
+
+        let mut glue_strengths = Array1::<f64>::ones(highglue + 1);
+
+        for (j, v) in &gluestrengthmap {
+            glue_strengths[*j] = *v;
+        }
+
+        for tile in &tileset.tiles {
             for name in &tile.edges {
                 match &name {
-                    GlueIdent::Name(n) => match gluemap.get_by_left(&n.as_str()) {
+                    GlueIdent::Name(n) => match glue_map.get_by_left(&n) {
                         Some(_) => {}
 
                         None => {
-                            gluemap
-                                .insert_no_overwrite(n, gluenum)
-                                .map_err(|(_l, _r)| ParserError::RepeatedGlueDef)?;
+                            glue_map.insert_no_overwrite(n.clone(), gluenum).map_err(
+                                |(l, _r)| ParserError::RepeatedGlueDef {
+                                    name: l.to_string(),
+                                },
+                            )?;
 
                             match gluestrengthmap.get(&gluenum) {
                                 Some(_) => {}
@@ -466,64 +513,95 @@ impl TileSet {
             }
         }
 
-        Ok((gluemap, gluestrengthmap))
-    }
+        let mut tile_names = Vec::with_capacity(tileset.tiles.len() + 1);
+        let mut tile_colors = Vec::with_capacity(tileset.tiles.len() + 1);
+        let mut tile_stoics = Vec::with_capacity(tileset.tiles.len() + 1);
+        let mut tile_edges = Vec::with_capacity((tileset.tiles.len() + 1) * 4);
 
-    pub fn tile_edge_process(&self, gluemap: &BiMap<&str, Glue>) -> Array2<Glue> {
-        let mut tile_edges: Vec<Glue> = Vec::new();
-
+        // Push the zero state
+        tile_names.push("empty".to_string());
+        tile_colors.push([0, 0, 0, 0]);
+        tile_stoics.push(0.);
         tile_edges.append(&mut vec![0, 0, 0, 0]);
 
+        let mut tile_i = 1;
+
         let mut v: Vec<Glue> = Vec::new();
-        for tile in &self.tiles {
-            for te in &tile.edges {
-                match te {
-                    GlueIdent::Name(n) => v.push(*gluemap.get_by_left(&n.as_str()).unwrap()),
-                    GlueIdent::Num(i) => v.push(*i),
+
+        for tile in &tileset.tiles {
+            // Ensure the tile name hasn't already been used.
+            let tile_name: String = match &tile.name {
+                Some(name) => {
+                    if tile_names.contains(&name) {
+                        return Err(ParserError::RepeatedTileName { name: name.clone() });
+                    } else {
+                        name.clone()
+                    }
                 }
-            }
-            assert!(v.len() == 4);
-            tile_edges.append(&mut v);
-        }
-        Array2::from_shape_vec((tile_edges.len() / 4, 4), tile_edges).unwrap()
-    }
+                None => tile_i.to_string(),
+            };
 
-    pub fn tile_stoics(&self) -> Array1<f64> {
-        std::iter::once(0.)
-            .chain(self.tiles.iter().map(|x| x.stoic.unwrap_or(1.)))
-            .collect()
-    }
+            let tile_stoic = tile.stoic.unwrap_or(1.);
 
-    pub fn tile_names(&self) -> Vec<String> {
-        std::iter::once("empty".to_string())
-            .chain(
-                self.tiles
-                    .iter()
-                    .enumerate()
-                    .map(|(i, x)| x.name.clone().unwrap_or_else(|| (i + 1).to_string())),
-            )
-            .collect()
-    }
-
-    pub fn tile_colors(&self) -> Vec<[u8; 4]> {
-        let mut tc = Vec::new();
-
-        tc.push([0, 0, 0, 0]);
-        let mut rng = rand::thread_rng();
-        let ug = rand::distributions::Uniform::new(100u8, 254);
-
-        for tile in &self.tiles {
-            tc.push(match &tile.color {
+            let tile_color = match &tile.color {
                 Some(tc) => *super::colors::COLORS.get(tc.as_str()).unwrap(),
-                None => [
-                    ug.sample(&mut rng),
-                    ug.sample(&mut rng),
-                    ug.sample(&mut rng),
-                    0xffu8,
-                ],
-            });
+                None => {
+                    let mut rng = rand::thread_rng();
+                    let ug = rand::distributions::Uniform::new(100u8, 254);
+                    [
+                        ug.sample(&mut rng),
+                        ug.sample(&mut rng),
+                        ug.sample(&mut rng),
+                        0xffu8,
+                    ]
+                }
+            };
+
+            match &tile.shape.as_ref().unwrap_or(&TileShape::Single) {
+                TileShape::Single => {
+                    for te in &tile.edges {
+                        match te {
+                            GlueIdent::Name(n) => v.push(*glue_map.get_by_left(&n).unwrap()),
+                            GlueIdent::Num(i) => v.push(*i),
+                        }
+                    }
+                    assert!(v.len() == 4);
+                    tile_edges.append(&mut v);
+                }
+                TileShape::Horizontal => todo!(),
+                TileShape::Vertical => todo!(),
+            }
+
+            tile_names.push(tile_name);
+            tile_colors.push(tile_color);
+            tile_stoics.push(tile_stoic);
+
+            tile_i += 1;
         }
 
-        tc
+        Ok(Self {
+            tile_edges: Array2::from_shape_vec((tile_edges.len() + 1, 4), tile_edges).unwrap(),
+            tile_stoics: Array1::from_vec(tile_stoics),
+            tile_names,
+            tile_colors,
+            glue_names: Vec::new(),
+            glue_strengths,
+            has_duples: false,
+            glue_map,
+        })
+    }
+
+    pub fn tpmap(&self, tp: &TileIdent) -> usize {
+        match tp {
+            TileIdent::Name(x) => self.tile_names.iter().position(|y| *y == *x).unwrap(),
+            TileIdent::Num(x) => *x,
+        }
+    }
+
+    pub fn gpmap(&self, gp: &GlueIdent) -> usize {
+        match gp {
+            GlueIdent::Name(x) => *self.glue_map.get_by_left(x).unwrap(),
+            GlueIdent::Num(x) => *x,
+        }
     }
 }

@@ -3,7 +3,7 @@ extern crate ndarray;
 
 use clap::Parser;
 
-use rgrow::base::GrowError;
+use rgrow::base::{GrowError, RgrowError};
 use rgrow::{parser_xgrow, tileset::TileSet};
 
 use std::fs::File;
@@ -84,7 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn nucrate(po: FFSOptions) -> Result<(), GrowError> {
+fn nucrate(po: FFSOptions) -> Result<(), RgrowError> {
     let tileset: TileSet =
         serde_yaml::from_reader(File::open(po.input).expect("Input file not found."))
             .expect("Input file parse erorr.");

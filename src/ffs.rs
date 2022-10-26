@@ -1,4 +1,4 @@
-use crate::base::GrowError;
+use crate::base::{GrowError, RgrowError};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
@@ -55,7 +55,7 @@ impl TileSet {
         size_step: NumTiles,
         keep_states: bool,
         min_nuc_rate: Option<f64>,
-    ) -> Result<Box<dyn FFSResult>, GrowError> {
+    ) -> Result<Box<dyn FFSResult>, RgrowError> {
         match self.options.model {
             Model::KTAM => match self.options.canvas_type {
                 CanvasType::Square => Ok(Box::new(FFSRun::<
@@ -113,7 +113,7 @@ impl TileSet {
                     min_nuc_rate,
                 )?)),
             },
-            Model::ATAM => Err(GrowError::FFSCannotRunATAM),
+            Model::ATAM => Err(GrowError::FFSCannotRunATAM.into()),
             Model::OldKTAM => match self.options.canvas_type {
                 CanvasType::Square => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasSquare, NullStateTracker>,
@@ -388,8 +388,8 @@ impl<
         size_step: NumTiles,
         keep_states: bool,
         min_nuc_rate: Option<f64>,
-    ) -> Result<Self, GrowError> {
-        let sys = Sy::from_tileset(tileset);
+    ) -> Result<Self, RgrowError> {
+        let sys = Sy::from_tileset(tileset)?;
         Ok(Self::create_with_constant_variance_and_size_cutoff(
             sys,
             varpermean2,

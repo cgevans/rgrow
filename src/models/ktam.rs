@@ -1,6 +1,6 @@
 use super::ktam_fission::*;
 use crate::{
-    base::{GrowError, Point},
+    base::{GrowError, Point, RgrowError},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     simulation::Simulation,
     state::{self, State, StateCreate},
@@ -8,7 +8,10 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
-    tileset::{FromTileSet, GlueIdent, ParsedSeed, SimFromTileSet, Size, TileIdent, TileSet},
+    tileset::{
+        FromTileSet, GlueIdent, ParsedSeed, ParserError, ProcessedTileSet, SimFromTileSet, Size,
+        TileIdent, TileSet,
+    },
 };
 use bimap::BiHashMap;
 use fnv::{FnvHashMap, FnvHashSet};
@@ -1158,8 +1161,8 @@ impl<S: State> KTAM<S> {
 }
 
 impl<St: State + StateCreate> SimFromTileSet for KTAM<St> {
-    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, GrowError> {
-        let sys = Self::from_tileset(tileset);
+    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
+        let sys = Self::from_tileset(tileset)?;
         let size = match tileset.options.size {
             Size::Single(x) => (x, x),
             Size::Pair((x, y)) => (x, y),
@@ -1175,24 +1178,8 @@ impl<St: State + StateCreate> SimFromTileSet for KTAM<St> {
 }
 
 impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
-    fn from_tileset(tileset: &TileSet) -> Self {
-        let (gluemap, gluestrengthmap) = tileset.number_glues().unwrap();
-
-        let tile_edges = tileset.tile_edge_process(&gluemap);
-        let mut tile_concs = tileset.tile_stoics();
-        tile_concs *= f64::exp(-tileset.options.gmc + tileset.options.alpha);
-
-        // Get the highest glue number.
-        let highglue = match gluestrengthmap.last_key_value() {
-            Some((k, _)) => *k,
-            None => panic!("No glues in tileset!"),
-        };
-
-        let mut glue_strengths = Array1::<Strength>::ones(highglue + 1);
-
-        for (j, v) in gluestrengthmap {
-            glue_strengths[j] = v;
-        }
+    fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
+        let proc = ProcessedTileSet::from_tileset(tileset)?;
 
         let seed = match &tileset.options.seed {
             ParsedSeed::Single(y, x, v) => Seed::SingleTile {
@@ -1207,40 +1194,30 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
             }
         };
 
-        let tile_names = tileset.tile_names();
-
-        fn tpmap(tile_names: &[String], tp: &TileIdent) -> usize {
-            match tp {
-                TileIdent::Name(x) => tile_names.iter().position(|y| *y == *x).unwrap(),
-                TileIdent::Num(x) => *x,
-            }
-        }
-
-        fn gpmap(gpmap: &BiHashMap<&str, usize>, gp: &GlueIdent) -> usize {
-            match gp {
-                GlueIdent::Name(x) => *gpmap.get_by_left(&x.as_str()).unwrap(),
-                GlueIdent::Num(x) => *x,
-            }
-        }
-
         let hdoubles: Vec<(usize, usize)> = tileset
             .options
             .hdoubletiles
             .iter()
-            .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
+            .map(|(a, b)| (proc.tpmap(a), proc.tpmap(b)))
             .collect();
 
         let vdoubles: Vec<(usize, usize)> = tileset
             .options
             .vdoubletiles
             .iter()
-            .map(|(a, b)| (tpmap(&tile_names, a), tpmap(&tile_names, b)))
+            .map(|(a, b)| (proc.tpmap(a), proc.tpmap(b)))
             .collect();
 
+        let gluelinks = tileset
+            .glues
+            .iter()
+            .map(|(g1, g2, s)| (proc.gpmap(g1), proc.gpmap(g2), *s))
+            .collect::<Vec<_>>();
+
         let mut newkt = Self::from_ktam(
-            tileset.tile_stoics(),
-            tile_edges,
-            glue_strengths,
+            proc.tile_stoics,
+            proc.tile_edges,
+            proc.glue_strengths,
             tileset.options.gse,
             tileset.options.gmc,
             Some(tileset.options.alpha),
@@ -1249,19 +1226,19 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
             Some(tileset.options.fission),
             tileset.options.chunk_handling,
             tileset.options.chunk_size,
-            Some(tile_names),
-            Some(tileset.tile_colors()),
+            Some(proc.tile_names),
+            Some(proc.tile_colors),
         );
 
         newkt.set_duples(hdoubles, vdoubles);
 
-        for (g1, g2, s) in &tileset.glues {
-            newkt.glue_links[(gpmap(&gluemap, g1), gpmap(&gluemap, g2))] = *s;
-            newkt.glue_links[(gpmap(&gluemap, g2), gpmap(&gluemap, g1))] = *s;
+        for (g1, g2, s) in gluelinks {
+            newkt.glue_links[(g2, g1)] = s;
+            newkt.glue_links[(g1, g2)] = s;
         }
 
         newkt.update_system();
 
-        newkt
+        Ok(newkt)
     }
 }
