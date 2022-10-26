@@ -160,10 +160,10 @@ impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
 
         *r = *t;
 
-        if should_be_counted[old_tile as usize] & !should_be_counted[*t as usize] {
+        if should_be_counted[old_tile] & !should_be_counted[*t] {
             self.ntiles -= 1
         }
-        if !should_be_counted[old_tile as usize] & should_be_counted[*t as usize] {
+        if !should_be_counted[old_tile] & should_be_counted[*t] {
             self.ntiles += 1
         }
     }

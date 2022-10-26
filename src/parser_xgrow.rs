@@ -247,7 +247,7 @@ fn xgrow_args(input: &str) -> IResult<&str, tileset::Args> {
                 args.gmc = x;
             }
             XgrowArgs::Unhandled(u) => {
-                println!("Warning: \"{}\" unhandled.", u);
+                println!("Warning: \"{u}\" unhandled.");
             }
             XgrowArgs::UpdateRate(x) => {
                 args.update_rate = x;

@@ -281,7 +281,7 @@ pub trait Canvas: std::fmt::Debug + Sync + Send + 'static {
 
     fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
         for (p, v) in Iterator::zip(frame.chunks_exact_mut(4), self.raw_array().iter()) {
-            let color = colors[*v as usize];
+            let color = colors[*v];
             p.copy_from_slice(&color);
         }
     }
@@ -372,8 +372,7 @@ impl Canvas for CanvasSquare {
 
     #[inline(always)]
     fn calc_ntiles(&self) -> NumTiles {
-        self.values
-            .fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 }))
+        self.values.fold(0, |x, y| x + u32::from(*y != 0))
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {
@@ -389,9 +388,8 @@ impl Canvas for CanvasSquare {
     }
 
     fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
-        self.values.fold(0, |x, y| {
-            x + (if should_be_counted[*y as usize] { 1 } else { 0 })
-        })
+        self.values
+            .fold(0, |x, y| x + u32::from(should_be_counted[*y]))
     }
 }
 
@@ -451,14 +449,12 @@ impl Canvas for CanvasPeriodic {
     }
 
     fn calc_ntiles(&self) -> NumTiles {
-        self.values
-            .fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 }))
+        self.values.fold(0, |x, y| x + u32::from(*y != 0))
     }
 
     fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
-        self.values.fold(0, |x, y| {
-            x + (if should_be_counted[*y as usize] { 1 } else { 0 })
-        })
+        self.values
+            .fold(0, |x, y| x + u32::from(should_be_counted[*y]))
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {
@@ -544,14 +540,12 @@ impl Canvas for CanvasTube {
     }
 
     fn calc_ntiles(&self) -> NumTiles {
-        self.values
-            .fold(0, |x, y| x + (if *y == 0 { 0 } else { 1 }))
+        self.values.fold(0, |x, y| x + u32::from(*y != 0))
     }
 
     fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
-        self.values.fold(0, |x, y| {
-            x + (if should_be_counted[*y as usize] { 1 } else { 0 })
-        })
+        self.values
+            .fold(0, |x, y| x + u32::from(should_be_counted[*y]))
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {

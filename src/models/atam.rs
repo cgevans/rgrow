@@ -571,10 +571,7 @@ impl<S: State> ATAM<S> {
     ) -> Self {
         let ntiles = tile_stoics.len() as Tile;
 
-        let mut atam = Self::new_sized(
-            tile_stoics.len() as Tile - 1,
-            glue_strengths.len() as usize - 1,
-        );
+        let mut atam = Self::new_sized(tile_stoics.len() as Tile - 1, glue_strengths.len() - 1);
 
         atam.tile_stoics = tile_stoics;
         atam.tile_edges = tile_edges;
@@ -780,7 +777,7 @@ impl<St: State + StateCreate> SimFromTileSet for ATAM<St> {
 
 impl<C: State> TileBondInfo for ATAM<C> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.tile_colors[tile_number as usize]
+        self.tile_colors[tile_number]
     }
 
     fn tile_name(&self, tile_number: Tile) -> &str {

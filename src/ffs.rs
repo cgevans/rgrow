@@ -527,7 +527,7 @@ impl<
 
             while state.ntiles() == 0 {
                 if state.total_rate() != 0. {
-                    panic!("Total rate is not zero! {:?}", state);
+                    panic!("Total rate is not zero! {state:?}");
                 };
                 i_old_state = chooser.sample(&mut rng);
 
@@ -729,9 +729,9 @@ impl<
                     dimer_state_list.push(dimer_state);
 
                     if rng.gen::<bool>() {
-                        tile_list.push(dimer.t1 as usize);
+                        tile_list.push(dimer.t1);
                     } else {
-                        tile_list.push(dimer.t2 as usize);
+                        tile_list.push(dimer.t2);
                     }
 
                     previous_list.push(num_states);

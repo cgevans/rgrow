@@ -201,7 +201,7 @@ pub trait System<S: State>: Debug {
                     events += 1;
                 }
                 StepOutcome::NoEventIn(_) => {
-                    println!("Timeout {:?}", state);
+                    println!("Timeout {state:?}");
                 }
                 StepOutcome::DeadEventAt(_) => {
                     println!("Dead");

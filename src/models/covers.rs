@@ -115,7 +115,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
     }
 
     fn event_rate_at_point(&self, state: &S, p: PointSafeHere) -> Rate {
-        let t = state.v_sh(p) as usize;
+        let t = state.v_sh(p);
 
         if !state.inbounds(p.0) {
             return 0.;
@@ -134,7 +134,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
     }
 
     fn choose_event_at_point(&self, state: &S, p: PointSafe2, acc: Rate) -> Event {
-        let t = state.tile_at_point(p) as usize;
+        let t = state.tile_at_point(p);
 
         match self.tile_is_cover[t] {
             CoverType::NonCover => self.inner.choose_event_at_point(state, p, acc),
@@ -194,7 +194,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
                     events += 1;
                 }
                 StepOutcome::NoEventIn(_) => {
-                    println!("Timeout {:?}", state);
+                    println!("Timeout {state:?}");
                 }
                 StepOutcome::DeadEventAt(_) => {
                     println!("Dead");
@@ -249,7 +249,7 @@ impl<S: State> SystemWithDimers<S> for StaticKTAMCover<S> {
 
 impl<S: State> StaticKTAMCover<S> {
     fn cover_to_composite_rate(&self, state: &S, p: PointSafe2, t: usize) -> Rate {
-        let cc = &self.cover_attach_info[t as usize];
+        let cc = &self.cover_attach_info[t];
 
         let mut total_rate = 0.;
         for c in cc {
@@ -258,8 +258,7 @@ impl<S: State> StaticKTAMCover<S> {
                 .bond_strength_of_tile_at_point(state, p, c.like_tile)
                 > 0.
             {
-                total_rate +=
-                    self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile as usize];
+                total_rate += self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile];
             }
         }
 
@@ -272,7 +271,7 @@ impl<S: State> StaticKTAMCover<S> {
         t: usize,
         mut acc: Rate,
     ) -> PossibleChoice {
-        let cc = &self.cover_attach_info[t as usize];
+        let cc = &self.cover_attach_info[t];
 
         for c in cc {
             if self
@@ -280,7 +279,7 @@ impl<S: State> StaticKTAMCover<S> {
                 .bond_strength_of_tile_at_point(state, p, c.like_tile)
                 > 0.
             {
-                acc -= self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile as usize];
+                acc -= self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile];
                 if acc <= 0. {
                     return PossibleChoice::Event(Event::MonomerChange(p, c.new_tile));
                 }
@@ -290,7 +289,7 @@ impl<S: State> StaticKTAMCover<S> {
         PossibleChoice::Remainder(acc)
     }
     fn composite_to_cover_rate(&self, state: &S, p: PointSafe2, t: usize) -> Rate {
-        let cc = &self.composite_detach_info[t as usize];
+        let cc = &self.composite_detach_info[t];
 
         let mut total_rate = 0.;
         for c in cc {
@@ -311,7 +310,7 @@ impl<S: State> StaticKTAMCover<S> {
         t: usize,
         mut acc: Rate,
     ) -> PossibleChoice {
-        let cc = &self.composite_detach_info[t as usize];
+        let cc = &self.composite_detach_info[t];
 
         for c in cc {
             acc -= self.inner.k_f_hat()
@@ -331,11 +330,11 @@ impl<S: State> StaticKTAMCover<S> {
 
 impl<C: State> TileBondInfo for StaticKTAMCover<C> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.inner.tile_colors[tile_number as usize]
+        self.inner.tile_colors[tile_number]
     }
 
     fn tile_name(&self, tile_number: Tile) -> &str {
-        self.inner.tile_names[tile_number as usize].as_str()
+        self.inner.tile_names[tile_number].as_str()
     }
 
     fn bond_name(&self, _bond_number: usize) -> &str {
@@ -424,7 +423,7 @@ impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
         tsc.tiles.extend(extratiles);
 
         for tile in tsc.tiles.iter() {
-            println!("{:?}", tile);
+            println!("{tile:?}");
         }
 
         assert!(comp == tsc.tiles.len() + 1);

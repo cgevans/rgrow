@@ -63,8 +63,8 @@ pub enum TileIdent {
 impl Display for GlueIdent {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Name(s) => write!(f, "\"{}\"", s),
-            Self::Num(n) => write!(f, "{}", n),
+            Self::Name(s) => write!(f, "\"{s}\""),
+            Self::Num(n) => write!(f, "{n}"),
         }
     }
 }
@@ -72,8 +72,8 @@ impl Display for GlueIdent {
 impl core::fmt::Debug for GlueIdent {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Name(s) => write!(f, "\"{}\"", s),
-            Self::Num(n) => write!(f, "{}", n),
+            Self::Name(s) => write!(f, "\"{s}\""),
+            Self::Num(n) => write!(f, "{n}"),
         }
     }
 }
@@ -81,8 +81,8 @@ impl core::fmt::Debug for GlueIdent {
 impl core::fmt::Debug for TileIdent {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Name(s) => write!(f, "\"{}\"", s),
-            Self::Num(n) => write!(f, "{}", n),
+            Self::Name(s) => write!(f, "\"{s}\""),
+            Self::Num(n) => write!(f, "{n}"),
         }
     }
 }

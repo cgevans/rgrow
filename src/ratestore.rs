@@ -76,7 +76,7 @@ impl RateStore for QuadTreeSquareArray<Rate> {
             if threshold - v <= 0. {
                 continue;
             } else {
-                panic!("Failure in quadtree position finding: remaining threshold {:?}, ratetree array {:?}.", threshold, r);
+                panic!("Failure in quadtree position finding: remaining threshold {threshold:?}, ratetree array {r:?}.");
             }
         }
 

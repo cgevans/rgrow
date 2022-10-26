@@ -206,7 +206,7 @@ impl GroupInfo {
                 }
             };
         }
-        mergedpointhash.into_iter().map(|(_x, y)| y).collect()
+        mergedpointhash.into_values().collect()
     }
 
     fn n_groups(&self) -> usize {
@@ -234,14 +234,14 @@ impl<C: State> OldKTAM<C> {
         if now_empty.len() == 1 {
             let p = now_empty[0];
 
-            let tn = canvas.tile_to_n(p) as usize;
-            let tw = canvas.tile_to_w(p) as usize;
-            let te = canvas.tile_to_e(p) as usize;
-            let ts = canvas.tile_to_s(p) as usize;
-            let tnw = canvas.tile_to_nw(p) as usize;
-            let tne = canvas.tile_to_ne(p) as usize;
-            let tsw = canvas.tile_to_sw(p) as usize;
-            let tse = canvas.tile_to_se(p) as usize;
+            let tn = canvas.tile_to_n(p);
+            let tw = canvas.tile_to_w(p);
+            let te = canvas.tile_to_e(p);
+            let ts = canvas.tile_to_s(p);
+            let tnw = canvas.tile_to_nw(p);
+            let tne = canvas.tile_to_ne(p);
+            let tsw = canvas.tile_to_sw(p);
+            let tse = canvas.tile_to_se(p);
 
             let ri: u8 = (((tn != 0) as u8) << 7)
                 + ((((self.energy_we[(tn, tne)] != 0.) & (self.energy_ns[(tne, te)] != 0.)) as u8)
@@ -283,15 +283,15 @@ impl<C: State> OldKTAM<C> {
 
         //println!("Start queue {:?}", queue);
         while let Some(p) = queue.pop_front() {
-            let t = canvas.tile_at_point(p) as usize;
+            let t = canvas.tile_at_point(p);
             let pn = canvas.move_sa_n(p);
-            let tn = canvas.v_sh(pn) as usize;
+            let tn = canvas.v_sh(pn);
             let pw = canvas.move_sa_w(p);
-            let tw = canvas.v_sh(pw) as usize;
+            let tw = canvas.v_sh(pw);
             let pe = canvas.move_sa_e(p);
-            let te = canvas.v_sh(pe) as usize;
+            let te = canvas.v_sh(pe);
             let ps = canvas.move_sa_s(p);
-            let ts = canvas.v_sh(ps) as usize;
+            let ts = canvas.v_sh(ps);
 
             if (unsafe { *self.energy_ns.uget((tn, t)) } != 0.) {
                 let pn = PointSafe2(pn.0); // FIXME

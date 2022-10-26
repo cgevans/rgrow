@@ -474,7 +474,7 @@ impl<St: State> SystemWithDimers<St> for KTAM<St> {
 
 impl<C: State> TileBondInfo for KTAM<C> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.tile_colors[tile_number as usize]
+        self.tile_colors[tile_number]
     }
 
     fn tile_name(&self, tile_number: Tile) -> &str {
@@ -582,10 +582,7 @@ impl<S: State> KTAM<S> {
 
         tile_stoics.map_inplace(|x| *x *= 1.0e9 * (-g_mc + alpha.unwrap_or(0.)).exp());
 
-        let mut ktam = Self::new_sized(
-            tile_stoics.len() as Tile - 1,
-            glue_strengths.len() as usize - 1,
-        );
+        let mut ktam = Self::new_sized(tile_stoics.len() as Tile - 1, glue_strengths.len() - 1);
 
         ktam.tile_concs = tile_stoics;
         ktam.tile_edges = tile_edges;
@@ -820,12 +817,12 @@ impl<S: State> KTAM<S> {
             } else {
                 let mut possible_starts = Vec::new();
                 let mut now_empty = Vec::new();
-                let tile = { state.tile_at_point(p) as usize };
+                let tile = { state.tile_at_point(p) };
 
-                let tn = { state.tile_to_n(p) as usize };
-                let tw = { state.tile_to_w(p) as usize };
-                let te = { state.tile_to_e(p) as usize };
-                let ts = { state.tile_to_s(p) as usize };
+                let tn = { state.tile_to_n(p) };
+                let tw = { state.tile_to_w(p) };
+                let te = { state.tile_to_e(p) };
+                let ts = { state.tile_to_s(p) };
                 // FIXME
                 if self.energy_ns[(tn, tile)] > 0. {
                     possible_starts.push(PointSafe2(state.move_sa_n(p).0))

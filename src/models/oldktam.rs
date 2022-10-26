@@ -110,11 +110,11 @@ unsafe impl<C: State> Sync for OldKTAM<C> {}
 
 impl<C: State> TileBondInfo for OldKTAM<C> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.tile_colors[tile_number as usize]
+        self.tile_colors[tile_number]
     }
 
     fn tile_name(&self, tile_number: Tile) -> &str {
-        self.tile_names[tile_number as usize].as_str()
+        self.tile_names[tile_number].as_str()
     }
 
     fn bond_name(&self, _bond_number: usize) -> &str {
@@ -162,10 +162,10 @@ impl<C: State> OldKTAM<C> {
                 let t1 = tile_edges.row(ti1);
                 let t2 = tile_edges.row(ti2);
                 if t1[2] == t2[0] {
-                    energy_ns[(ti1, ti2)] = g_se * glue_strengths[t1[2] as usize];
+                    energy_ns[(ti1, ti2)] = g_se * glue_strengths[t1[2]];
                 }
                 if t1[1] == t2[3] {
-                    energy_we[(ti1, ti2)] = g_se * glue_strengths[t1[1] as usize];
+                    energy_we[(ti1, ti2)] = g_se * glue_strengths[t1[1]];
                 }
             }
         }
@@ -336,10 +336,10 @@ impl<C: State> OldKTAM<C> {
         let te = { canvas.tile_to_e(p) };
         let ts = { canvas.tile_to_s(p) };
 
-        self.energy_ns[(tile as usize, ts as usize)]
-            + self.energy_ns[(tn as usize, tile as usize)]
-            + self.energy_we[(tile as usize, te as usize)]
-            + self.energy_we[(tw as usize, tile as usize)]
+        self.energy_ns[(tile, ts)]
+            + self.energy_ns[(tn, tile)]
+            + self.energy_we[(tile, te)]
+            + self.energy_we[(tw, tile)]
     }
 
     fn is_seed(&self, p: Point) -> bool {
@@ -361,7 +361,7 @@ impl<C: State> OldKTAM<C> {
                 self.k_f_hat()
                     * Rate::exp(
                         -ts - self.bond_strength_of_tile_at_point(canvas, PointSafe2(p2), t2) // FIXME
-                        + 2. * self.energy_ns[(t as usize, t2 as usize)],
+                        + 2. * self.energy_ns[(t, t2)],
                     )
             }
         }
@@ -378,7 +378,7 @@ impl<C: State> OldKTAM<C> {
                 self.k_f_hat()
                     * Rate::exp(
                         -ts - self.bond_strength_of_tile_at_point(canvas, PointSafe2(p2), t2) // FIXME
-                        + 2. * self.energy_we[(t as usize, t2 as usize)],
+                        + 2. * self.energy_we[(t, t2)],
                     )
             }
         }
@@ -411,27 +411,27 @@ impl<C: State> OldKTAM<C> {
                 *acc -= self.dimer_s_detach_rate(canvas, p.0, tile, ts);
                 if *acc <= 0. {
                     let p2 = PointSafe2(canvas.move_sa_s(p).0);
-                    let t2 = { canvas.tile_at_point(p2) } as usize;
+                    let t2 = { canvas.tile_at_point(p2) };
                     now_empty.push(p);
                     now_empty.push(p2);
                     // North tile adjacents
-                    if self.energy_ns[({ canvas.tile_to_n(p) } as usize, tile)] > 0. {
+                    if self.energy_ns[({ canvas.tile_to_n(p) }, tile)] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
                     };
-                    if self.energy_we[({ canvas.tile_to_w(p) } as usize, tile)] > 0. {
+                    if self.energy_we[({ canvas.tile_to_w(p) }, tile)] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_w(p).0))
                     };
-                    if self.energy_we[(tile, { canvas.tile_to_e(p) } as usize)] > 0. {
+                    if self.energy_we[(tile, { canvas.tile_to_e(p) })] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p).0))
                     };
                     // South tile adjacents
-                    if self.energy_ns[(t2, { canvas.tile_to_s(p2) } as usize)] > 0. {
+                    if self.energy_ns[(t2, { canvas.tile_to_s(p2) })] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
                     };
-                    if self.energy_we[({ canvas.tile_to_w(p2) } as usize, t2)] > 0. {
+                    if self.energy_we[({ canvas.tile_to_w(p2) }, t2)] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_w(p2).0))
                     };
-                    if self.energy_we[(t2, { canvas.tile_to_e(p2) } as usize)] > 0. {
+                    if self.energy_we[(t2, { canvas.tile_to_e(p2) })] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
                     };
                     return;
@@ -439,32 +439,32 @@ impl<C: State> OldKTAM<C> {
                 *acc -= self.dimer_e_detach_rate(canvas, p.0, tile, ts);
                 if *acc <= 0. {
                     let p2 = PointSafe2(canvas.move_sa_e(p).0);
-                    let t2 = { canvas.tile_at_point(p2) } as usize;
+                    let t2 = { canvas.tile_at_point(p2) };
                     now_empty.push(p);
                     now_empty.push(p2);
                     // West tile adjacents
-                    if self.energy_we[({ canvas.tile_to_w(p) } as usize, tile)] > 0. {
+                    if self.energy_we[({ canvas.tile_to_w(p) }, tile)] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_w(p).0))
                     };
-                    if self.energy_ns[({ canvas.tile_to_n(p) } as usize, tile)] > 0. {
+                    if self.energy_ns[({ canvas.tile_to_n(p) }, tile)] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
                     };
-                    if self.energy_ns[(tile, { canvas.tile_to_s(p) } as usize)] > 0. {
+                    if self.energy_ns[(tile, { canvas.tile_to_s(p) })] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p).0))
                     };
                     // East tile adjacents
-                    if self.energy_we[(t2, { canvas.tile_to_e(p2) } as usize)] > 0. {
+                    if self.energy_we[(t2, { canvas.tile_to_e(p2) })] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
                     };
-                    if self.energy_ns[({ canvas.tile_to_n(p2) } as usize, t2)] > 0. {
+                    if self.energy_ns[({ canvas.tile_to_n(p2) }, t2)] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_n(p2).0))
                     };
-                    if self.energy_ns[(t2, { canvas.tile_to_s(p2) } as usize)] > 0. {
+                    if self.energy_ns[(t2, { canvas.tile_to_s(p2) })] > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
                     };
                     return;
                 }
-                panic!("{:#?}", acc)
+                panic!("{acc:#?}")
             }
         }
     }
@@ -526,21 +526,21 @@ where
                     let mut friends = FnvHashSet::<Tile>::default();
 
                     if tn != 0 {
-                        friends.extend(&self.friends_s[tn as usize]);
+                        friends.extend(&self.friends_s[tn]);
                     }
                     if te != 0 {
-                        friends.extend(&self.friends_w[te as usize]);
+                        friends.extend(&self.friends_w[te]);
                     }
                     if ts != 0 {
-                        friends.extend(&self.friends_n[ts as usize]);
+                        friends.extend(&self.friends_n[ts]);
                     }
                     if tw != 0 {
-                        friends.extend(&self.friends_e[tw as usize]);
+                        friends.extend(&self.friends_e[tw]);
                     }
 
                     let mut acc = 0.;
                     for t in friends.drain() {
-                        acc += self.tile_adj_concs[t as usize];
+                        acc += self.tile_adj_concs[t];
                     }
 
                     self.insertcache
@@ -569,12 +569,12 @@ where
     }
 
     fn choose_event_at_point(&self, canvas: &S, p: PointSafe2, mut acc: Rate) -> Event {
-        let tile = { canvas.tile_at_point(p) as usize };
+        let tile = { canvas.tile_at_point(p) };
 
-        let tn = { canvas.tile_to_n(p) as usize };
-        let tw = { canvas.tile_to_w(p) as usize };
-        let te = { canvas.tile_to_e(p) as usize };
-        let ts = { canvas.tile_to_s(p) as usize };
+        let tn = { canvas.tile_to_n(p) };
+        let tw = { canvas.tile_to_w(p) };
+        let te = { canvas.tile_to_e(p) };
+        let ts = { canvas.tile_to_s(p) };
 
         if tile != 0 {
             acc -= {
@@ -624,7 +624,7 @@ where
             } else {
                 match self.chunk_handling {
                     ChunkHandling::None => {
-                        panic!("Ran out of event possibilities at {:#?}, acc={:#?}", p, acc)
+                        panic!("Ran out of event possibilities at {p:#?}, acc={acc:#?}")
                     }
                     ChunkHandling::Detach | ChunkHandling::Equilibrium => {
                         self.choose_chunk_detachment(
@@ -664,13 +664,13 @@ where
         } else {
             let mut friends = FnvHashSet::<Tile>::default();
 
-            friends.extend(&self.friends_s[tn as usize]);
-            friends.extend(&self.friends_w[te as usize]);
-            friends.extend(&self.friends_e[tw as usize]);
-            friends.extend(&self.friends_n[ts as usize]);
+            friends.extend(&self.friends_s[tn]);
+            friends.extend(&self.friends_w[te]);
+            friends.extend(&self.friends_e[tw]);
+            friends.extend(&self.friends_n[ts]);
 
             for t in friends.drain() {
-                acc -= self.k_f_hat() * self.tile_adj_concs[t as usize];
+                acc -= self.k_f_hat() * self.tile_adj_concs[t];
                 if acc <= 0. {
                     return Event::MonomerAttachment(p, t);
                 };
@@ -794,17 +794,17 @@ where
         for y in 1..(arr.nrows() - 1) {
             for x in 1..(arr.ncols() - 1) {
                 let p = PointSafe2((y, x));
-                let t = state.tile_at_point(p) as usize;
+                let t = state.tile_at_point(p);
 
                 if t == 0 {
                     arr[(y, x)] = 0;
                     continue;
                 }
 
-                let tn = state.tile_to_n(p) as usize;
-                let te = state.tile_to_e(p) as usize;
-                let ts = state.tile_to_s(p) as usize;
-                let tw = state.tile_to_w(p) as usize;
+                let tn = state.tile_to_n(p);
+                let te = state.tile_to_e(p);
+                let ts = state.tile_to_s(p);
+                let tw = state.tile_to_w(p);
 
                 let nm = ((tn != 0) & (self.energy_ns[(tn, t)] < threshold)) as usize;
                 let ne = ((te != 0) & (self.energy_we[(t, te)] < threshold)) as usize;
