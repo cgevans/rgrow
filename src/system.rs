@@ -152,18 +152,18 @@ pub trait System<S: State>: Debug {
         let start_time = bounds.wall_time.map(|_| std::time::Instant::now());
 
         loop {
-            if bounds.size_min.is_some_and(|ms| state.ntiles() <= *ms) {
+            if bounds.size_min.is_some_and(|ms| state.ntiles() <= ms) {
                 return Ok(EvolveOutcome::ReachedSizeMin);
-            } else if bounds.size_max.is_some_and(|ms| state.ntiles() >= *ms) {
+            } else if bounds.size_max.is_some_and(|ms| state.ntiles() >= ms) {
                 return Ok(EvolveOutcome::ReachedSizeMax);
             } else if rtime <= 0. {
                 return Ok(EvolveOutcome::ReachedTimeMax);
             } else if bounds
                 .wall_time
-                .is_some_and(|t| start_time.unwrap().elapsed() >= *t)
+                .is_some_and(|t| start_time.unwrap().elapsed() >= t)
             {
                 return Ok(EvolveOutcome::ReachWallTimeMax);
-            } else if bounds.events.is_some_and(|e| events >= *e) {
+            } else if bounds.events.is_some_and(|e| events >= e) {
                 return Ok(EvolveOutcome::ReachedEventsMax);
             } else if state.total_rate() == 0. {
                 return Ok(EvolveOutcome::ReachedZeroRate);
