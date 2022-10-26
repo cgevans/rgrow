@@ -4,7 +4,7 @@ use rand::prelude::SmallRng;
 
 use crate::base::GrowError;
 use crate::state::{State, StateCreate};
-use crate::system::{EvolveBounds, EvolveOutcome, System};
+use crate::system::{EvolveBounds, EvolveOutcome, System, SystemInfo};
 use crate::system::{SystemWithStateCreate, TileBondInfo};
 
 pub(crate) struct ConcreteSimulation<Sy: System<St>, St: State> {
@@ -12,7 +12,7 @@ pub(crate) struct ConcreteSimulation<Sy: System<St>, St: State> {
     pub states: Vec<St>,
     pub rng: SmallRng,
 }
-pub trait Simulation: Send + Sync {
+pub trait Simulation: Send + Sync + SystemInfo {
     fn evolve(
         &mut self,
         state_index: usize,
@@ -35,7 +35,7 @@ pub trait Simulation: Send + Sync {
 }
 
 impl<
-        Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo + Send + Sync,
+        Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo + Send + Sync + SystemInfo,
         St: State + StateCreate,
     > Simulation for ConcreteSimulation<Sy, St>
 {
@@ -72,5 +72,19 @@ impl<
             .par_iter_mut()
             .map(|state| sys.evolve(state, &mut SmallRng::from_entropy(), bounds))
             .collect()
+    }
+}
+
+impl<
+        Sy: System<St> + SystemWithStateCreate<St> + TileBondInfo + Send + Sync + SystemInfo,
+        St: State + StateCreate,
+    > SystemInfo for ConcreteSimulation<Sy, St>
+{
+    fn tile_concs(&self) -> Vec<f64> {
+        self.system.tile_concs()
+    }
+
+    fn tile_stoics(&self) -> Vec<f64> {
+        self.system.tile_stoics()
     }
 }

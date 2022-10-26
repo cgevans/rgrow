@@ -42,6 +42,8 @@ pub enum ParserError {
     RepeatedGlueDef { name: String },
     #[error("Repeated tile definition for {name}.")]
     RepeatedTileName { name: String },
+    #[error("No glues found in tileset definition.")]
+    NoGlues,
 }
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -464,18 +466,6 @@ impl ProcessedTileSet {
             }
         }
 
-        // Get the highest glue number.
-        let highglue = match gluestrengthmap.last_key_value() {
-            Some((k, _)) => *k,
-            None => panic!("No glues in tileset!"),
-        };
-
-        let mut glue_strengths = Array1::<f64>::ones(highglue + 1);
-
-        for (j, v) in &gluestrengthmap {
-            glue_strengths[*j] = *v;
-        }
-
         for tile in &tileset.tiles {
             for name in &tile.edges {
                 match &name {
@@ -506,6 +496,18 @@ impl ProcessedTileSet {
                     },
                 }
             }
+        }
+
+        // Get the highest glue number.
+        let highglue = match gluestrengthmap.last_key_value() {
+            Some((k, _)) => *k,
+            None => Err(ParserError::NoGlues)?,
+        };
+
+        let mut glue_strengths = Array1::<f64>::ones(highglue + 1);
+
+        for (j, v) in &gluestrengthmap {
+            glue_strengths[*j] = *v;
         }
 
         let mut tile_names = Vec::with_capacity(tileset.tiles.len() + 1);
@@ -575,7 +577,7 @@ impl ProcessedTileSet {
         }
 
         Ok(Self {
-            tile_edges: Array2::from_shape_vec((tile_edges.len() + 1, 4), tile_edges).unwrap(),
+            tile_edges: Array2::from_shape_vec((tile_i, 4), tile_edges).unwrap(),
             tile_stoics: Array1::from_vec(tile_stoics),
             tile_names,
             tile_colors,

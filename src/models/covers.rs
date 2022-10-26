@@ -9,7 +9,10 @@ use crate::{
     canvas::{PointSafe2, PointSafeHere},
     models::oldktam::Seed,
     state::{State, StateCreate},
-    system::{ChunkSize, DimerInfo, Event, StepOutcome, System, SystemWithDimers, TileBondInfo},
+    system::{
+        ChunkSize, DimerInfo, Event, StepOutcome, System, SystemInfo, SystemWithDimers,
+        TileBondInfo,
+    },
     tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, TileSet},
 };
 
@@ -465,5 +468,15 @@ impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
             cover_attach_info,
             composite_detach_info,
         })
+    }
+}
+
+impl<C: State> SystemInfo for StaticKTAMCover<C> {
+    fn tile_concs(&self) -> Vec<f64> {
+        todo!()
+    }
+
+    fn tile_stoics(&self) -> Vec<f64> {
+        todo!()
     }
 }

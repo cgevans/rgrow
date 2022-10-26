@@ -6,7 +6,7 @@ use crate::{
     state::{self, State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        SystemWithDimers, SystemWithStateCreate, TileBondInfo,
+        SystemInfo, SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
     tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
@@ -494,6 +494,16 @@ impl<C: State> TileBondInfo for KTAM<C> {
     }
 
     fn bond_names(&self) -> Vec<String> {
+        todo!()
+    }
+}
+
+impl<C: State> SystemInfo for KTAM<C> {
+    fn tile_concs(&self) -> Vec<f64> {
+        self.tile_concs.clone().into_raw_vec()
+    }
+
+    fn tile_stoics(&self) -> Vec<f64> {
         todo!()
     }
 }

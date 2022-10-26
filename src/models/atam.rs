@@ -3,7 +3,7 @@ use crate::{
     canvas::{Canvas, PointSafe2, PointSafeHere},
     simulation::Simulation,
     state::{self, State, StateCreate},
-    system::{Event, System, SystemWithStateCreate, TileBondInfo},
+    system::{Event, System, SystemInfo, SystemWithStateCreate, TileBondInfo},
     tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
 
@@ -859,5 +859,15 @@ impl<St: state::State + state::StateCreate> FromTileSet for ATAM<St> {
         newkt.update_system();
 
         Ok(newkt)
+    }
+}
+
+impl<C: State> SystemInfo for ATAM<C> {
+    fn tile_concs(&self) -> Vec<f64> {
+        todo!()
+    }
+
+    fn tile_stoics(&self) -> Vec<f64> {
+        self.tile_stoics.clone().into_raw_vec()
     }
 }

@@ -13,7 +13,7 @@ use crate::{
     state::{State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        SystemWithDimers, SystemWithStateCreate, TileBondInfo,
+        SystemInfo, SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
     tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
@@ -908,5 +908,15 @@ impl<St: State + StateCreate> FromTileSet for OldKTAM<St> {
             Some(proc.tile_names),
             Some(proc.tile_colors),
         ))
+    }
+}
+
+impl<C: State> SystemInfo for OldKTAM<C> {
+    fn tile_concs(&self) -> Vec<f64> {
+        todo!()
+    }
+
+    fn tile_stoics(&self) -> Vec<f64> {
+        todo!()
     }
 }

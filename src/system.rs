@@ -298,6 +298,11 @@ pub trait TileBondInfo {
     fn bond_names(&self) -> Vec<String>;
 }
 
+pub trait SystemInfo {
+    fn tile_concs(&self) -> Vec<f64>;
+    fn tile_stoics(&self) -> Vec<f64>;
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum FissionHandling {
     #[serde(alias = "off", alias = "no-fission")]
