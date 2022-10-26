@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 
 use numpy::PyArray2;
@@ -8,6 +10,7 @@ use rgrow::ffs;
 use rgrow::simulation;
 use rgrow::system::EvolveBounds;
 use rgrow::tileset;
+use rgrow::tileset::TileShape;
 
 #[derive(FromPyObject)]
 enum Ident {
@@ -42,6 +45,30 @@ impl From<Ident> for tileset::TileIdent {
     }
 }
 
+impl From<tileset::GlueIdent> for Ident {
+    fn from(ident: tileset::GlueIdent) -> Self {
+        match ident {
+            tileset::GlueIdent::Num(num) => Ident::Num(num),
+            tileset::GlueIdent::Name(name) => Ident::Name(name),
+        }
+    }
+}
+
+impl From<tileset::TileIdent> for Ident {
+    fn from(ident: tileset::TileIdent) -> Self {
+        match ident {
+            tileset::TileIdent::Num(num) => Ident::Num(num),
+            tileset::TileIdent::Name(name) => Ident::Name(name),
+        }
+    }
+}
+
+impl From<tileset::Tile> for Tile {
+    fn from(tile: tileset::Tile) -> Self {
+        Tile(tile)
+    }
+}
+
 #[pyclass]
 pub struct Tile(tileset::Tile);
 
@@ -53,6 +80,7 @@ impl Tile {
         name: Option<String>,
         stoic: Option<f64>,
         color: Option<String>,
+        _shape: Option<String>,
     ) -> Self {
         let edges: Vec<tileset::GlueIdent> = edges.into_iter().map(|e| e.into()).collect();
         let tile = tileset::Tile {
@@ -60,6 +88,7 @@ impl Tile {
             edges,
             stoic,
             color,
+            shape: Some(TileShape::Single),
         };
         Tile(tile)
     }
@@ -96,14 +125,7 @@ impl Tile {
 
     #[getter]
     fn get_edges(&self) -> Vec<Ident> {
-        self.0
-            .edges
-            .iter()
-            .map(|e| match e {
-                tileset::GlueIdent::Name(name) => Ident::Name(name.clone()),
-                tileset::GlueIdent::Num(num) => Ident::Num(*num),
-            })
-            .collect()
+        self.0.edges.iter().map(|e| e.clone().into()).collect()
     }
 
     #[setter]
@@ -117,7 +139,25 @@ impl Tile {
 }
 
 #[pyclass]
-pub struct TileSet(tileset::TileSet);
+pub struct TileSet(Arc<RwLock<tileset::TileSet>>);
+
+impl TileSet {
+    fn read(&self) -> PyResult<std::sync::RwLockReadGuard<'_, tileset::TileSet>> {
+        let x = self
+            .0
+            .read()
+            .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))?;
+        Ok(x)
+    }
+
+    fn write(&self) -> PyResult<std::sync::RwLockWriteGuard<'_, tileset::TileSet>> {
+        let x = self
+            .0
+            .write()
+            .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))?;
+        Ok(x)
+    }
+}
 
 #[pymethods]
 impl TileSet {
@@ -125,7 +165,24 @@ impl TileSet {
     fn from_json(_cls: &PyType, data: &str) -> PyResult<Self> {
         let tileset = tileset::TileSet::from_json(data);
         match tileset {
-            Ok(tileset) => Ok(TileSet(tileset)),
+            Ok(tileset) => Ok(TileSet(Arc::new(RwLock::new(tileset)))),
+            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                err.to_string(),
+            )),
+        }
+    }
+
+    /// Creates a TileSet from a dict by exporting to json, then parsing the json.
+    #[classmethod]
+    fn from_dict(_cls: &PyType, data: PyObject) -> PyResult<Self> {
+        let json: String = Python::with_gil(|py| {
+            let json = PyModule::import(py, "json")?;
+            json.call_method1("dumps", (data,))?.extract::<String>()
+        })?;
+
+        let tileset = tileset::TileSet::from_json(&json);
+        match tileset {
+            Ok(tileset) => Ok(TileSet(Arc::new(RwLock::new(tileset)))),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 err.to_string(),
             )),
@@ -137,9 +194,9 @@ impl TileSet {
     }
 
     fn to_simulation(&self) -> PyResult<Simulation> {
-        let sim = self.0.into_simulation();
+        let sim = self.write()?.into_simulation();
         match sim {
-            Ok(sim) => Ok(Simulation(sim)),
+            Ok(sim) => Ok(Simulation(RwLock::new(sim))),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 err.to_string(),
             )),
@@ -148,12 +205,22 @@ impl TileSet {
 
     #[cfg(feature = "ui")]
     fn run_window(&self) -> PyResult<Simulation> {
-        let f = self.0.clone();
+        let f = self.read()?;
         let s = rgrow::ui::run_window(&f);
 
         let s2 =
             s.map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))?;
-        Ok(Simulation(s2))
+        Ok(Simulation(RwLock::new(s2)))
+    }
+
+    #[getter]
+    fn get_tiles(&self) -> PyResult<Vec<Tile>> {
+        Ok(self
+            .read()?
+            .tiles
+            .iter()
+            .map(|t| t.clone().into())
+            .collect())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -187,7 +254,7 @@ impl TileSet {
         py: Python<'_>,
     ) -> PyResult<FFSResult> {
         let res = py.allow_threads(|| {
-            self.0.run_ffs(
+            self.0.read().unwrap().run_ffs(
                 varpermean2,
                 min_configs,
                 max_size,
@@ -212,7 +279,10 @@ impl TileSet {
 }
 
 #[pyclass]
-pub struct Simulation(Box<dyn simulation::Simulation>);
+pub struct Simulation(RwLock<Box<dyn simulation::Simulation>>);
+
+#[pyclass]
+pub struct TileColorView(Arc<RwLock<dyn simulation::Simulation>>);
 
 #[pymethods]
 impl Simulation {
@@ -254,6 +324,8 @@ impl Simulation {
 
         py.allow_threads(|| {
             self.0
+                .write()
+                .unwrap()
                 .evolve(state_index.unwrap_or(0), bounds)
                 .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
                 .map(|_x| ())
@@ -290,7 +362,7 @@ impl Simulation {
             wall_time: for_wall_time.map(Duration::from_secs_f64),
         };
 
-        py.allow_threads(|| self.0.evolve_all(bounds)); // FIXME: handle errors
+        py.allow_threads(|| self.0.write().unwrap().evolve_all(bounds)); // FIXME: handle errors
 
         Ok(())
     }
@@ -299,27 +371,43 @@ impl Simulation {
     #[pyo3(text_signature = "($self, state_index)")]
     fn canvas<'py>(&self, state_index: Option<usize>, py: Python<'py>) -> &'py PyArray2<usize> {
         self.0
+            .read()
+            .unwrap()
             .state_ref(state_index.unwrap_or(0))
             .raw_array()
             .to_pyarray(py)
     }
 
     fn state_ntiles(&self, state_index: Option<usize>) -> u32 {
-        self.0.state_ref(state_index.unwrap_or(0)).ntiles()
+        self.0
+            .read()
+            .unwrap()
+            .state_ref(state_index.unwrap_or(0))
+            .ntiles()
     }
 
     fn state_time(&self, state_index: Option<usize>) -> f64 {
-        self.0.state_ref(state_index.unwrap_or(0)).time()
+        self.0
+            .read()
+            .unwrap()
+            .state_ref(state_index.unwrap_or(0))
+            .time()
     }
 
     fn state_total_events(&self, state_index: Option<usize>) -> u64 {
-        self.0.state_ref(state_index.unwrap_or(0)).total_events()
+        self.0
+            .read()
+            .unwrap()
+            .state_ref(state_index.unwrap_or(0))
+            .total_events()
     }
 
     /// Add a new state to the simulation.
     #[pyo3(text_signature = "($self, shape)")]
     fn add_state(&mut self, shape: (usize, usize)) -> PyResult<usize> {
         self.0
+            .write()
+            .unwrap()
             .add_state(shape)
             .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
     }
@@ -327,8 +415,20 @@ impl Simulation {
     #[pyo3(text_signature = "($self, n, shape")]
     fn add_n_states(&mut self, n: usize, shape: (usize, usize)) -> PyResult<Vec<usize>> {
         self.0
+            .write()
+            .unwrap()
             .add_n_states(n, shape)
             .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
+    }
+
+    #[getter]
+    fn get_tile_concs(&self) -> PyResult<Vec<f64>> {
+        Ok(self.0.read().unwrap().tile_concs())
+    }
+
+    #[getter]
+    fn get_tile_stoics(&self) -> PyResult<Vec<f64>> {
+        Ok(self.0.read().unwrap().tile_stoics())
     }
 }
 
