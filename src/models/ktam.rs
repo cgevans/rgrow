@@ -1,6 +1,6 @@
 use super::ktam_fission::*;
 use crate::{
-    base::{GrowError, Point, RgrowError},
+    base::{Point, RgrowError},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     simulation::Simulation,
     state::{self, State, StateCreate},
@@ -8,12 +8,9 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
-    tileset::{
-        FromTileSet, GlueIdent, ParsedSeed, ParserError, ProcessedTileSet, SimFromTileSet, Size,
-        TileIdent, TileSet,
-    },
+    tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
-use bimap::BiHashMap;
+
 use fnv::{FnvHashMap, FnvHashSet};
 use ndarray::prelude::*;
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
@@ -81,6 +78,7 @@ pub struct KTAM<C: Canvas> {
     pub seed: Seed,
     pub tile_colors: Vec<[u8; 4]>,
     pub fission_handling: FissionHandling,
+    pub glue_names: Vec<String>,
 
     // End of public stuff, now moving to calculated stuff.
     pub(crate) energy_ns: Array2<Energy>,
@@ -483,8 +481,8 @@ impl<C: State> TileBondInfo for KTAM<C> {
         self.tile_names[tile_number].as_str()
     }
 
-    fn bond_name(&self, _bond_number: usize) -> &str {
-        todo!()
+    fn bond_name(&self, bond_number: usize) -> &str {
+        &self.glue_names[bond_number]
     }
 
     fn tile_colors(&self) -> &Vec<[u8; 4]> {
@@ -506,6 +504,7 @@ impl<S: State> KTAM<S> {
             tile_names: Vec::new(),
             tile_concs: Array1::zeros(ntiles + 1),
             tile_edges: Array2::zeros((ntiles + 1, 4)),
+            glue_names: Vec::new(),
             glue_strengths: Array1::zeros(nglues + 1),
             glue_links: Array2::zeros((nglues + 1, nglues + 1)),
             g_se: (9.),
@@ -553,6 +552,7 @@ impl<S: State> KTAM<S> {
         self.update_system();
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn from_ktam(
         mut tile_stoics: Array1<f64>,
         tile_edges: Array2<Glue>,
@@ -1229,6 +1229,8 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
             Some(proc.tile_names),
             Some(proc.tile_colors),
         );
+
+        newkt.glue_names = proc.glue_names;
 
         newkt.set_duples(hdoubles, vdoubles);
 

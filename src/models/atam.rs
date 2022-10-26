@@ -1,15 +1,12 @@
 use crate::{
-    base::{GrowError, Point, RgrowError},
+    base::{Point, RgrowError},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     simulation::Simulation,
     state::{self, State, StateCreate},
     system::{Event, System, SystemWithStateCreate, TileBondInfo},
-    tileset::{
-        FromTileSet, GlueIdent, ParsedSeed, ParserError, ProcessedTileSet, SimFromTileSet, Size,
-        TileIdent, TileSet,
-    },
+    tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
-use bimap::BiHashMap;
+
 use fnv::{FnvHashMap, FnvHashSet};
 use ndarray::prelude::*;
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};

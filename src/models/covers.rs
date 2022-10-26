@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ndarray::{Array1, Array2};
+use ndarray::Array2;
 use rand::{rngs::SmallRng, Rng};
 
 use super::oldktam::OldKTAM;

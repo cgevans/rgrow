@@ -4,7 +4,7 @@ use fltk::{app, prelude::*, window::Window};
 
 use pixels::{Pixels, SurfaceTexture};
 
-use crate::base::{GrowError, RgrowError};
+use crate::base::RgrowError;
 use crate::simulation::Simulation;
 use crate::system::EvolveBounds;
 thread_local! {

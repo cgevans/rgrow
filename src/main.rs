@@ -3,7 +3,7 @@ extern crate ndarray;
 
 use clap::Parser;
 
-use rgrow::base::{GrowError, RgrowError};
+use rgrow::base::RgrowError;
 use rgrow::{parser_xgrow, tileset::TileSet};
 
 use std::fs::File;

@@ -1,4 +1,4 @@
-use crate::base::{GrowError, RgrowError};
+use crate::base::RgrowError;
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube};
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
@@ -23,7 +23,6 @@ use system::{ChunkHandling, ChunkSize};
 use thiserror;
 
 type GlueNameMap = BiMap<String, Glue>;
-type GlueStrengthMap = BTreeMap<Glue, f64>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ParserError {
@@ -427,9 +426,7 @@ impl ProcessedTileSet {
                 GlueIdent::Name(n) => {
                     glue_map
                         .insert_no_overwrite(n.clone(), gluenum)
-                        .map_err(|(l, _r)| ParserError::RepeatedGlueDef {
-                            name: l.to_string(),
-                        })?;
+                        .map_err(|(l, _r)| ParserError::RepeatedGlueDef { name: l })?;
                     match gluestrengthmap.get(&gluenum) {
                         Some(s) => {
                             if *s != bond.strength {
@@ -482,15 +479,13 @@ impl ProcessedTileSet {
         for tile in &tileset.tiles {
             for name in &tile.edges {
                 match &name {
-                    GlueIdent::Name(n) => match glue_map.get_by_left(&n) {
+                    GlueIdent::Name(n) => match glue_map.get_by_left(n) {
                         Some(_) => {}
 
                         None => {
-                            glue_map.insert_no_overwrite(n.clone(), gluenum).map_err(
-                                |(l, _r)| ParserError::RepeatedGlueDef {
-                                    name: l.to_string(),
-                                },
-                            )?;
+                            glue_map
+                                .insert_no_overwrite(n.clone(), gluenum)
+                                .map_err(|(l, _r)| ParserError::RepeatedGlueDef { name: l })?;
 
                             match gluestrengthmap.get(&gluenum) {
                                 Some(_) => {}
@@ -532,7 +527,7 @@ impl ProcessedTileSet {
             // Ensure the tile name hasn't already been used.
             let tile_name: String = match &tile.name {
                 Some(name) => {
-                    if tile_names.contains(&name) {
+                    if tile_names.contains(name) {
                         return Err(ParserError::RepeatedTileName { name: name.clone() });
                     } else {
                         name.clone()
@@ -561,7 +556,7 @@ impl ProcessedTileSet {
                 TileShape::Single => {
                     for te in &tile.edges {
                         match te {
-                            GlueIdent::Name(n) => v.push(*glue_map.get_by_left(&n).unwrap()),
+                            GlueIdent::Name(n) => v.push(*glue_map.get_by_left(n).unwrap()),
                             GlueIdent::Num(i) => v.push(*i),
                         }
                     }

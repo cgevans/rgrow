@@ -7,7 +7,7 @@ use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    base::{Energy, Glue, GrowError, Point, Rate, RgrowError, Tile},
+    base::{Energy, Glue, ModelError, Point, Rate, RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     simulation::Simulation,
     state::{State, StateCreate},
@@ -15,9 +15,7 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
-    tileset::{
-        FromTileSet, ParsedSeed, ParserError, ProcessedTileSet, SimFromTileSet, Size, TileSet,
-    },
+    tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
 
 type Cache = SizedCache<(Tile, Tile, Tile, Tile), f64>;
@@ -44,14 +42,16 @@ pub enum Seed {
     MultiTile(FnvHashMap<Point, Tile>),
 }
 
+type TileHashSetVec = Vec<FnvHashSet<Tile>>;
+
 fn create_friend_data(
     energy_ns: &Array2<Energy>,
     energy_we: &Array2<Energy>,
 ) -> (
-    Vec<FnvHashSet<Tile>>,
-    Vec<FnvHashSet<Tile>>,
-    Vec<FnvHashSet<Tile>>,
-    Vec<FnvHashSet<Tile>>,
+    TileHashSetVec,
+    TileHashSetVec,
+    TileHashSetVec,
+    TileHashSetVec,
 ) {
     let mut friends_n = Vec::<FnvHashSet<Tile>>::new();
     let mut friends_e = Vec::<FnvHashSet<Tile>>::new();
@@ -86,10 +86,10 @@ pub struct OldKTAM<C: State> {
     pub tile_adj_concs: Array1<Rate>,
     pub energy_ns: Array2<Energy>,
     pub energy_we: Array2<Energy>,
-    friends_n: Vec<FnvHashSet<Tile>>,
-    friends_e: Vec<FnvHashSet<Tile>>,
-    friends_s: Vec<FnvHashSet<Tile>>,
-    friends_w: Vec<FnvHashSet<Tile>>,
+    friends_n: TileHashSetVec,
+    friends_e: TileHashSetVec,
+    friends_s: TileHashSetVec,
+    friends_w: TileHashSetVec,
     #[serde(skip)]
     insertcache: ClonableCache,
     seed: Seed,
@@ -134,6 +134,7 @@ impl<C: State> TileBondInfo for OldKTAM<C> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 impl<C: State> OldKTAM<C> {
     pub fn from_ktam(
         tile_stoics: Array1<f64>,
@@ -874,6 +875,10 @@ impl<St: State + StateCreate> SimFromTileSet for OldKTAM<St> {
 impl<St: State + StateCreate> FromTileSet for OldKTAM<St> {
     fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
+
+        if proc.has_duples {
+            return Err(ModelError::DuplesNotSupported.into());
+        }
 
         let seed = match &tileset.options.seed {
             ParsedSeed::Single(y, x, v) => Seed::SingleTile {

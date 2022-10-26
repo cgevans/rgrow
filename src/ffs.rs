@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use crate::base::{GrowError, RgrowError};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
 use crate::models::ktam::KTAM;
@@ -427,7 +429,6 @@ pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System<St>> 
 }
 
 impl<
-        'a,
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
         Sy: SystemWithDimers<St>,
     > FFSLevel<St, Sy>
