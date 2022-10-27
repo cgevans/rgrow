@@ -206,7 +206,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
         }
     }
 
-    fn set_point(&self, state: &mut S, point: Point, tile: Tile) {
+    fn set_point(&self, state: &mut S, point: Point, tile: Tile) -> &Self {
         assert!(state.inbounds(point));
 
         let point = PointSafe2(point);
@@ -216,9 +216,11 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
         let event = Event::MonomerAttachment(point, tile);
 
         self.update_after_event(state, &event);
+
+        self
     }
 
-    fn perform_event(&self, state: &mut S, event: &Event) {
+    fn perform_event(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
@@ -238,6 +240,8 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
                 }
             }
         }
+        state.add_events(1);
+        self
     }
 }
 

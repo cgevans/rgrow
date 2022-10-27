@@ -32,13 +32,25 @@ pub enum StepOutcome {
     ZeroRate,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct EvolveBounds {
     pub events: Option<NumEvents>,
     pub time: Option<f64>,
     pub size_min: Option<NumTiles>,
     pub size_max: Option<NumTiles>,
     pub wall_time: Option<Duration>,
+}
+
+impl EvolveBounds {
+    pub fn for_time(mut self, time: f64) -> Self {
+        self.time = Some(time);
+        self
+    }
+
+    pub fn for_events(mut self, events: NumEvents) -> Self {
+        self.events = Some(events);
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -213,16 +225,32 @@ pub trait System<S: State>: Debug {
         }
     }
 
-    fn set_point(&self, state: &mut S, point: Point, tile: Tile) {
+    fn set_point(&self, state: &mut S, point: Point, tile: Tile) -> &Self {
         assert!(state.inbounds(point));
 
         let point = PointSafe2(point);
 
-        state.set_sa(&point, &tile);
+        let event = Event::MonomerChange(point, tile);
 
-        let event = Event::MonomerAttachment(point, tile);
+        self.perform_event(state, &event)
+            .update_after_event(state, &event);
 
-        self.update_after_event(state, &event);
+        self
+    }
+
+    fn set_points(&self, state: &mut S, changelist: &[(Point, usize)]) -> &Self {
+        for (point, _) in changelist {
+            assert!(state.inbounds(*point))
+        }
+        let event = Event::PolymerChange(
+            changelist
+                .iter()
+                .map(|(p, t)| (PointSafe2(*p), *t))
+                .collect(),
+        );
+        self.perform_event(state, &event)
+            .update_after_event(state, &event);
+        self
     }
 
     fn insert_seed(&self, state: &mut S) {
@@ -231,7 +259,7 @@ pub trait System<S: State>: Debug {
         }
     }
 
-    fn perform_event(&self, state: &mut S, event: &Event) {
+    fn perform_event(&self, state: &mut S, event: &Event) -> &Self {
         //state.record_event(&event);
         match event {
             Event::None => panic!("Being asked to perform null event."),
@@ -251,7 +279,9 @@ pub trait System<S: State>: Debug {
                     state.set_sa(point, &0usize);
                 }
             }
-        }
+        };
+        state.add_events(1);
+        self
     }
 
     fn update_after_event(&self, state: &mut S, event: &Event);

@@ -163,65 +163,68 @@ impl<S: State> System<S> for ATAM<S> {
         }
     }
 
-    fn set_point(&self, state: &mut S, point: Point, tile: Tile) {
+    fn set_point(&self, state: &mut S, point: Point, tile: Tile) -> &Self {
         assert!(state.inbounds(point));
 
         let point = PointSafe2(point);
-        let oldt = state.tile_at_point(point);
-
-        match self.tile_shape(oldt) {
-            // Fixme: somewhat unsafe
-            TileShape::Single => (),
-            TileShape::DupleToRight(dt) => {
-                debug_assert_eq!(dt, state.tile_to_e(point));
-                state.set_sa(&PointSafe2(state.move_sa_e(point).0), &0usize)
-            }
-            TileShape::DupleToBottom(dt) => {
-                debug_assert_eq!(dt, state.tile_to_s(point));
-                state.set_sa(&PointSafe2(state.move_sa_s(point).0), &0usize)
-            }
-            TileShape::DupleToLeft(dt) => {
-                debug_assert_eq!(dt, state.tile_to_w(point));
-                state.set_sa(&PointSafe2(state.move_sa_w(point).0), &0usize)
-            }
-            TileShape::DupleToTop(dt) => {
-                debug_assert_eq!(dt, state.tile_to_n(point));
-                state.set_sa(&PointSafe2(state.move_sa_n(point).0), &0usize)
-            }
-        }
-
-        state.set_sa(&point, &tile);
-
-        match self.tile_shape(tile) {
-            TileShape::Single => (),
-            TileShape::DupleToRight(dt) => {
-                debug_assert_eq!(state.tile_to_e(point), 0);
-                state.set_sa(&PointSafe2(state.move_sa_e(point).0), &dt);
-            }
-            TileShape::DupleToBottom(dt) => {
-                debug_assert_eq!(state.tile_to_s(point), 0);
-                state.set_sa(&PointSafe2(state.move_sa_s(point).0), &dt);
-            }
-            TileShape::DupleToLeft(dt) => {
-                debug_assert_eq!(state.tile_to_w(point), 0);
-                state.set_sa(&PointSafe2(state.move_sa_w(point).0), &dt);
-            }
-            TileShape::DupleToTop(dt) => {
-                debug_assert_eq!(state.tile_to_n(point), 0);
-                state.set_sa(&PointSafe2(state.move_sa_n(point).0), &dt);
-            }
-        }
 
         let event = Event::MonomerAttachment(point, tile);
 
         self.update_after_event(state, &event);
+        self
     }
 
-    fn perform_event(&self, state: &mut S, event: &Event) {
+    fn perform_event(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
-            Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
+            Event::MonomerAttachment(point, tile) => {
                 state.set_sa(point, tile);
+                match self.tile_shape(*tile) {
+                    TileShape::Single => (),
+                    TileShape::DupleToRight(dt) => {
+                        debug_assert_eq!(state.tile_to_e(*point), 0);
+                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &dt);
+                    }
+                    TileShape::DupleToBottom(dt) => {
+                        debug_assert_eq!(state.tile_to_s(*point), 0);
+                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &dt);
+                    }
+                    TileShape::DupleToLeft(dt) => {
+                        debug_assert_eq!(state.tile_to_w(*point), 0);
+                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &dt);
+                    }
+                    TileShape::DupleToTop(dt) => {
+                        debug_assert_eq!(state.tile_to_n(*point), 0);
+                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &dt);
+                    }
+                }
+            }
+            Event::MonomerChange(point, tile) => {
+                let oldt = state.tile_at_point(*point);
+
+                match self.tile_shape(oldt) {
+                    // Fixme: somewhat unsafe
+                    TileShape::Single => (),
+                    TileShape::DupleToRight(dt) => {
+                        debug_assert_eq!(dt, state.tile_to_e(*point));
+                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &0usize)
+                    }
+                    TileShape::DupleToBottom(dt) => {
+                        debug_assert_eq!(dt, state.tile_to_s(*point));
+                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &0usize)
+                    }
+                    TileShape::DupleToLeft(dt) => {
+                        debug_assert_eq!(dt, state.tile_to_w(*point));
+                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &0usize)
+                    }
+                    TileShape::DupleToTop(dt) => {
+                        debug_assert_eq!(dt, state.tile_to_n(*point));
+                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &0usize)
+                    }
+                }
+
+                state.set_sa(point, tile);
+
                 match self.tile_shape(*tile) {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
@@ -274,7 +277,9 @@ impl<S: State> System<S> for ATAM<S> {
                     state.set_sa(point, &0usize);
                 }
             }
-        }
+        };
+        state.add_events(1);
+        self
     }
 
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)> {

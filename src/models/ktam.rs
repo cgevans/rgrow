@@ -1,6 +1,6 @@
 use super::ktam_fission::*;
 use crate::{
-    base::{Point, RgrowError},
+    base::RgrowError,
     canvas::{Canvas, PointSafe2, PointSafeHere},
     simulation::Simulation,
     state::{self, State, StateCreate},
@@ -175,97 +175,89 @@ impl<S: State> System<S> for KTAM<S> {
         }
     }
 
-    fn set_point(&self, state: &mut S, point: Point, tile: Tile) {
-        assert!(state.inbounds(point));
-
-        let point = PointSafe2(point);
-        let oldt = state.tile_at_point(point);
-
-        match self.tile_shape(oldt) {
-            // Fixme: somewhat unsafe
-            TileShape::Single => (),
-            TileShape::DupleToRight(dt) => {
-                debug_assert_eq!(dt, state.tile_to_e(point));
-                state.set_sa_countabletilearray(
-                    &PointSafe2(state.move_sa_e(point).0),
-                    &0usize,
-                    &self.should_be_counted,
-                )
-            }
-            TileShape::DupleToBottom(dt) => {
-                debug_assert_eq!(dt, state.tile_to_s(point));
-                state.set_sa_countabletilearray(
-                    &PointSafe2(state.move_sa_s(point).0),
-                    &0usize,
-                    &self.should_be_counted,
-                )
-            }
-            TileShape::DupleToLeft(dt) => {
-                debug_assert_eq!(dt, state.tile_to_w(point));
-                state.set_sa_countabletilearray(
-                    &PointSafe2(state.move_sa_w(point).0),
-                    &0usize,
-                    &self.should_be_counted,
-                )
-            }
-            TileShape::DupleToTop(dt) => {
-                debug_assert_eq!(dt, state.tile_to_n(point));
-                state.set_sa_countabletilearray(
-                    &PointSafe2(state.move_sa_n(point).0),
-                    &0usize,
-                    &self.should_be_counted,
-                )
-            }
-        }
-
-        state.set_sa_countabletilearray(&point, &tile, &self.should_be_counted);
-
-        match self.tile_shape(tile) {
-            TileShape::Single => (),
-            TileShape::DupleToRight(dt) => {
-                debug_assert_eq!(state.tile_to_e(point), 0);
-                state.set_sa_countabletilearray(
-                    &PointSafe2(state.move_sa_e(point).0),
-                    &dt,
-                    &self.should_be_counted,
-                );
-            }
-            TileShape::DupleToBottom(dt) => {
-                debug_assert_eq!(state.tile_to_s(point), 0);
-                state.set_sa_countabletilearray(
-                    &PointSafe2(state.move_sa_s(point).0),
-                    &dt,
-                    &self.should_be_counted,
-                );
-            }
-            TileShape::DupleToLeft(dt) => {
-                debug_assert_eq!(state.tile_to_w(point), 0);
-                state.set_sa_countabletilearray(
-                    &PointSafe2(state.move_sa_w(point).0),
-                    &dt,
-                    &self.should_be_counted,
-                );
-            }
-            TileShape::DupleToTop(dt) => {
-                debug_assert_eq!(state.tile_to_n(point), 0);
-                state.set_sa_countabletilearray(
-                    &PointSafe2(state.move_sa_n(point).0),
-                    &dt,
-                    &self.should_be_counted,
-                );
-            }
-        }
-
-        let event = Event::MonomerAttachment(point, tile);
-
-        self.update_after_event(state, &event);
-    }
-
-    fn perform_event(&self, state: &mut S, event: &Event) {
+    fn perform_event(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
-            Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
+            Event::MonomerAttachment(point, tile) => {
                 state.set_sa(point, tile);
+                match self.tile_shape(*tile) {
+                    TileShape::Single => (),
+                    TileShape::DupleToRight(dt) => {
+                        debug_assert_eq!(state.tile_to_e(*point), 0);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_e(*point).0),
+                            &dt,
+                            &self.should_be_counted,
+                        );
+                    }
+                    TileShape::DupleToBottom(dt) => {
+                        debug_assert_eq!(state.tile_to_s(*point), 0);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_s(*point).0),
+                            &dt,
+                            &self.should_be_counted,
+                        );
+                    }
+                    TileShape::DupleToLeft(dt) => {
+                        debug_assert_eq!(state.tile_to_w(*point), 0);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_w(*point).0),
+                            &dt,
+                            &self.should_be_counted,
+                        );
+                    }
+                    TileShape::DupleToTop(dt) => {
+                        debug_assert_eq!(state.tile_to_n(*point), 0);
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_n(*point).0),
+                            &dt,
+                            &self.should_be_counted,
+                        );
+                    }
+                }
+            }
+            Event::MonomerChange(point, tile) => {
+                let oldt = state.tile_at_point(*point);
+
+                match self.tile_shape(oldt) {
+                    // Fixme: somewhat unsafe
+                    TileShape::Single => (),
+                    TileShape::DupleToRight(dt) => {
+                        debug_assert_eq!(dt, state.tile_to_e(*point));
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_e(*point).0),
+                            &0usize,
+                            &self.should_be_counted,
+                        )
+                    }
+                    TileShape::DupleToBottom(dt) => {
+                        debug_assert_eq!(dt, state.tile_to_s(*point));
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_s(*point).0),
+                            &0usize,
+                            &self.should_be_counted,
+                        )
+                    }
+                    TileShape::DupleToLeft(dt) => {
+                        debug_assert_eq!(dt, state.tile_to_w(*point));
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_w(*point).0),
+                            &0usize,
+                            &self.should_be_counted,
+                        )
+                    }
+                    TileShape::DupleToTop(dt) => {
+                        debug_assert_eq!(dt, state.tile_to_n(*point));
+                        state.set_sa_countabletilearray(
+                            &PointSafe2(state.move_sa_n(*point).0),
+                            &0usize,
+                            &self.should_be_counted,
+                        )
+                    }
+                }
+
+                state.set_sa_countabletilearray(point, tile, &self.should_be_counted);
+
                 match self.tile_shape(*tile) {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
@@ -340,9 +332,89 @@ impl<S: State> System<S> for KTAM<S> {
                 }
                 state.set_sa_countabletilearray(point, &0usize, &self.should_be_counted);
             }
-            Event::PolymerAttachment(changelist) | Event::PolymerChange(changelist) => {
+            Event::PolymerAttachment(changelist) => {
                 for (point, tile) in changelist {
                     state.set_sa_countabletilearray(point, tile, &self.should_be_counted);
+                    match self.tile_shape(*tile) {
+                        TileShape::Single => (),
+                        TileShape::DupleToRight(dt) => {
+                            debug_assert_eq!(state.tile_to_e(*point), 0);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_e(*point).0),
+                                &dt,
+                                &self.should_be_counted,
+                            );
+                        }
+                        TileShape::DupleToBottom(dt) => {
+                            debug_assert_eq!(state.tile_to_s(*point), 0);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_s(*point).0),
+                                &dt,
+                                &self.should_be_counted,
+                            );
+                        }
+                        TileShape::DupleToLeft(dt) => {
+                            debug_assert_eq!(state.tile_to_w(*point), 0);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_w(*point).0),
+                                &dt,
+                                &self.should_be_counted,
+                            );
+                        }
+                        TileShape::DupleToTop(dt) => {
+                            debug_assert_eq!(state.tile_to_n(*point), 0);
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_n(*point).0),
+                                &dt,
+                                &self.should_be_counted,
+                            );
+                        }
+                    }
+                }
+            }
+            Event::PolymerChange(changelist) => {
+                for (point, tile) in changelist {
+                    let oldt = state.tile_at_point(*point);
+
+                    match self.tile_shape(oldt) {
+                        // Fixme: somewhat unsafe
+                        TileShape::Single => (),
+                        TileShape::DupleToRight(dt) => {
+                            debug_assert_eq!(dt, state.tile_to_e(*point));
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_e(*point).0),
+                                &0usize,
+                                &self.should_be_counted,
+                            )
+                        }
+                        TileShape::DupleToBottom(dt) => {
+                            debug_assert_eq!(dt, state.tile_to_s(*point));
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_s(*point).0),
+                                &0usize,
+                                &self.should_be_counted,
+                            )
+                        }
+                        TileShape::DupleToLeft(dt) => {
+                            debug_assert_eq!(dt, state.tile_to_w(*point));
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_w(*point).0),
+                                &0usize,
+                                &self.should_be_counted,
+                            )
+                        }
+                        TileShape::DupleToTop(dt) => {
+                            debug_assert_eq!(dt, state.tile_to_n(*point));
+                            state.set_sa_countabletilearray(
+                                &PointSafe2(state.move_sa_n(*point).0),
+                                &0usize,
+                                &self.should_be_counted,
+                            )
+                        }
+                    }
+
+                    state.set_sa_countabletilearray(point, tile, &self.should_be_counted);
+
                     match self.tile_shape(*tile) {
                         TileShape::Single => (),
                         TileShape::DupleToRight(dt) => {
@@ -423,6 +495,7 @@ impl<S: State> System<S> for KTAM<S> {
             }
         }
         state.add_events(1);
+        self
     }
 
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)> {

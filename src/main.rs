@@ -4,6 +4,7 @@ extern crate ndarray;
 use clap::Parser;
 
 use rgrow::base::RgrowError;
+use rgrow::system::EvolveBounds;
 use rgrow::{parser_xgrow, tileset::TileSet};
 
 use std::fs::File;
@@ -96,8 +97,8 @@ fn nucrate(po: FFSOptions) -> Result<(), RgrowError> {
         po.cutoff_probability,
         po.cutoff_surfaces,
         po.min_cutoff_size,
-        10_000,
-        1_000_000,
+        EvolveBounds::default().for_time(1e5),
+        EvolveBounds::default().for_time(1e5),
         2,
         1,
         false,

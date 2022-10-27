@@ -5,7 +5,7 @@ use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
-use crate::system::SystemWithDimers;
+use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, FromTileSet, Model, Size, TileSet};
 
 use super::*;
@@ -51,8 +51,8 @@ impl TileSet {
         cutoff_prob: f64,
         cutoff_number: usize,
         min_cutoff_size: NumTiles,
-        max_init_events: NumEvents,
-        max_subseq_events: NumEvents,
+        max_init_events: EvolveBounds,
+        max_subseq_events: EvolveBounds,
         start_size: NumTiles,
         size_step: NumTiles,
         keep_states: bool,
@@ -297,8 +297,8 @@ impl<
         cutoff_number: usize,
         min_cutoff_size: NumTiles,
         canvas_size: (CanvasLength, CanvasLength),
-        max_init_events: NumEvents,
-        max_subseq_events: NumEvents,
+        max_init_events: EvolveBounds,
+        max_subseq_events: EvolveBounds,
         start_size: NumTiles,
         size_step: NumTiles,
         keep_states: bool,
@@ -384,8 +384,8 @@ impl<
         cutoff_prob: f64,
         cutoff_number: usize,
         min_cutoff_size: NumTiles,
-        max_init_events: NumEvents,
-        max_subseq_events: NumEvents,
+        max_init_events: EvolveBounds,
+        max_subseq_events: EvolveBounds,
         start_size: NumTiles,
         size_step: NumTiles,
         keep_states: bool,
@@ -507,7 +507,7 @@ impl<
         cvar: f64,
         min_samples: usize,
         size_step: u32,
-        max_events: u64,
+        mut max_events: EvolveBounds,
     ) -> Self {
         let mut rng = SmallRng::from_entropy();
 
@@ -534,13 +534,10 @@ impl<
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
                 debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
 
-                system.evolve_in_size_range_events_max(
-                    &mut state,
-                    0,
-                    target_size,
-                    max_events,
-                    &mut rng,
-                );
+                max_events.size_max = Some(target_size);
+                max_events.size_min = Some(0);
+
+                system.evolve(&mut state, &mut rng, max_events).unwrap();
                 i += 1;
             }
 
@@ -653,7 +650,7 @@ impl<
         cvar: f64,
         min_samples: usize,
         canvas_size: (CanvasLength, CanvasLength),
-        max_events: u64,
+        mut max_events: EvolveBounds,
         next_size: NumTiles,
     ) -> (Self, Self) {
         let mut rng = SmallRng::from_entropy();
@@ -669,7 +666,7 @@ impl<
         let weights: Vec<_> = dimers.iter().map(|d| d.formation_rate).collect();
         let chooser = WeightedIndex::new(&weights).unwrap();
 
-        if canvas_size.0 < 2 || canvas_size.1 < 2 {
+        if canvas_size.0 < 4 || canvas_size.1 < 4 {
             panic!("Canvas size too small for dimers");
         }
         let mid = PointSafe2((canvas_size.0 / 2, canvas_size.1 / 2));
@@ -687,42 +684,29 @@ impl<
                 let i_old_state = chooser.sample(&mut rng);
                 let dimer = &dimers[i_old_state];
 
-                match dimer.orientation {
-                    Orientation::NS => {
-                        other = state.move_sa_s(mid).0;
-                        system.set_point(&mut state, mid.0, dimer.t1);
-                        system.set_point(&mut state, other, dimer.t2);
-                    }
-                    Orientation::WE => {
-                        other = state.move_sa_e(mid).0;
-                        system.set_point(&mut state, mid.0, dimer.t1);
-                        system.set_point(&mut state, other, dimer.t2);
-                    }
+                other = match dimer.orientation {
+                    Orientation::NS => state.move_sa_s(mid).0,
+                    Orientation::WE => state.move_sa_e(mid).0,
                 };
+                system.set_points(&mut state, &[(mid.0, dimer.t1), (other, dimer.t2)]);
 
                 debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
 
-                system.evolve_in_size_range_events_max(
-                    &mut state, 0, next_size, max_events, &mut rng,
-                );
+                max_events.size_min = Some(0);
+                max_events.size_max = Some(next_size);
+
+                system.evolve(&mut state, &mut rng, max_events).unwrap();
                 i += 1;
 
                 if state.ntiles() >= next_size {
-                    // FIXME: >= for duples is a hack.  Should count properly
+                    // FIXME: >= is a hack
                     // Create (retrospectively) a dimer state
                     let mut dimer_state = St::create_raw(Array2::zeros(canvas_size)).unwrap();
-                    match dimer.orientation {
-                        Orientation::NS => {
-                            other = dimer_state.move_sa_s(mid).0;
-                            system.set_point(&mut dimer_state, mid.0, dimer.t1);
-                            system.set_point(&mut dimer_state, other, dimer.t2);
-                        }
-                        Orientation::WE => {
-                            other = dimer_state.move_sa_e(mid).0;
-                            system.set_point(&mut dimer_state, mid.0, dimer.t1);
-                            system.set_point(&mut dimer_state, other, dimer.t2);
-                        }
+                    other = match dimer.orientation {
+                        Orientation::NS => dimer_state.move_sa_s(mid).0,
+                        Orientation::WE => dimer_state.move_sa_e(mid).0,
                     };
+                    system.set_points(&mut dimer_state, &[(mid.0, dimer.t1), (other, dimer.t2)]);
 
                     state_list.push(state);
 
