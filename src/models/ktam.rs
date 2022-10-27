@@ -128,8 +128,15 @@ impl<S: State> System<S> for KTAM<S> {
                 points.dedup();
                 self.update_points(state, &points);
             }
-            Event::PolymerAttachment(_) => todo!(),
-            Event::PolymerChange(_) => todo!(),
+            Event::PolymerAttachment(t) | Event::PolymerChange(t) => {
+                let mut points = Vec::new();
+                for p in t {
+                    points.extend(self.points_to_update_around(state, &p.0));
+                }
+                points.sort_unstable();
+                points.dedup();
+                self.update_points(state, &points);
+            }
         }
     }
 
