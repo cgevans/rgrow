@@ -247,6 +247,8 @@ impl TileSet {
         min_cutoff_size: u32,
         max_init_events: u64,
         max_subseq_events: u64,
+        max_init_time: Option<f64>,
+        max_subseq_time: Option<f64>,
         surface_init_size: u32,
         surface_size_step: u32,
         keep_surface_configs: bool,
@@ -256,13 +258,21 @@ impl TileSet {
         let res = py.allow_threads(|| {
             self.0.read().unwrap().run_ffs(
                 varpermean2,
-                min_configs,
+                min_configs, 
                 max_size,
                 cutoff_probability,
                 cutoff_surfaces,
                 min_cutoff_size,
-                max_init_events,
-                max_subseq_events,
+                EvolveBounds {
+                    events: Some(max_init_events),
+                    time: max_init_time,
+                    ..Default::default()
+                },
+                EvolveBounds {
+                    events: Some(max_subseq_events),
+                    time: max_subseq_time,
+                    ..Default::default()
+                },
                 surface_init_size,
                 surface_size_step,
                 keep_surface_configs,
