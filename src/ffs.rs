@@ -73,6 +73,11 @@ pub trait FFSResult: Send + Sync {
 
 pub trait FFSSurface: Send + Sync {
     fn get_config(&self, i: usize) -> ArrayView2<usize>;
+    fn configs(&self) -> Vec<ArrayView2<usize>> {
+        (0..self.num_configs())
+            .map(|i| self.get_config(i))
+            .collect()
+    }
     fn num_configs(&self) -> usize;
 }
 
