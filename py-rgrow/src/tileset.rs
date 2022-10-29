@@ -7,6 +7,7 @@ use numpy::ToPyArray;
 use pyo3::{prelude::*, types::PyType};
 
 use rgrow::ffs;
+use rgrow::ffs::FFSRunConfig;
 use rgrow::simulation;
 use rgrow::system::EvolveBounds;
 use rgrow::tileset;
@@ -255,32 +256,35 @@ impl TileSet {
         min_nuc_rate: Option<f64>,
         py: Python<'_>,
     ) -> PyResult<FFSResult> {
-        let res = py.allow_threads(|| {
-            self.0.read().unwrap().run_ffs(
-                varpermean2,
-                min_configs, 
-                max_size,
-                cutoff_probability,
-                cutoff_surfaces,
-                min_cutoff_size,
-                EvolveBounds {
-                    events: Some(max_init_events),
-                    time: max_init_time,
-                    ..Default::default()
-                },
-                EvolveBounds {
-                    events: Some(max_subseq_events),
-                    time: max_subseq_time,
-                    ..Default::default()
-                },
-                surface_init_size,
-                surface_size_step,
-                keep_surface_configs,
-                min_nuc_rate,
-            )
-        });
+        let config = FFSRunConfig {
+            constance_variance: true,
+            varpermean2: Some(varpermean2),
+            min_configs,
+            target_size: max_size,
+            early_cutoff: true,
+            cutoff_prob: Some(cutoff_probability),
+            cutoff_number: Some(cutoff_surfaces),
+            min_cutoff_size: Some(min_cutoff_size),
+            init_bound: Some(EvolveBounds {
+                events: Some(max_init_events),
+                time: max_init_time,
+                ..Default::default()
+            }),
+            subseq_bound: Some(EvolveBounds {
+                events: Some(max_subseq_events),
+                time: max_subseq_time,
+                ..Default::default()
+            }),
+            start_size: surface_init_size,
+            size_step: surface_size_step,
+            keep_configs: keep_surface_configs,
+            min_nuc_rate,
+            ..Default::default()
+        };
+
+        let res = py.allow_threads(|| self.0.read().unwrap().run_ffs(&config));
         match res {
-            Ok(res) => Ok(FFSResult(res)),
+            Ok(res) => Ok(FFSResult(res.into())),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 err.to_string(),
             )),
@@ -443,10 +447,12 @@ impl Simulation {
 }
 
 #[pyclass]
-pub struct FFSResult(Box<dyn ffs::FFSResult>);
+pub struct FFSResult(pub(crate) Arc<Box<dyn ffs::FFSResult>>);
 
 #[pymethods]
 impl FFSResult {
+    /// Nucleation rate, in M/s.  Calculated from the forward probability vector,
+    /// and dimerization rate.
     #[getter]
     fn get_nucleation_rate(&self) -> f64 {
         self.0.nucleation_rate()
@@ -457,9 +463,24 @@ impl FFSResult {
         self.0.forward_vec().clone()
     }
 
+    #[getter]
+    fn get_dimerization_rate(&self) -> f64 {
+        self.0.dimerization_rate()
+    }
+
+    #[getter]
+    fn get_surfaces(&self) -> Vec<FFSLevel> {
+        self.0
+            .surfaces()
+            .iter()
+            .enumerate()
+            .map(|(i, x)| FFSLevel {res: self.0.clone(), level: i} )
+            .collect()
+    }
+
     fn __str__(&self) -> String {
         format!(
-            "{:1.4e} {:?}",
+            "FFSResult({:1.4e} M/s, {:?})",
             self.0.nucleation_rate(),
             self.0.forward_vec()
         )
@@ -467,5 +488,22 @@ impl FFSResult {
 
     fn __repr__(&self) -> String {
         self.__str__()
+    }
+}
+
+#[pyclass]
+pub struct FFSLevel {
+    res: Arc<Box<dyn ffs::FFSResult>>,
+    level: usize,
+}
+
+#[pymethods]
+impl FFSLevel {
+    fn get_configs<'py>(&self, py: Python<'py>) -> Vec<&'py PyArray2<usize>> {
+        self.res
+            .surfaces()[self.level]
+            .configs()
+            .iter()
+            .map(|x| x.to_pyarray(py)).collect()
     }
 }

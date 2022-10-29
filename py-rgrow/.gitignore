@@ -4,6 +4,5 @@ rgrow-project
 playground/*
 venv-pyrgrow/*
 .ipynb_checkpoints/*
-*.pyi
 *.pyc
 _build/*
