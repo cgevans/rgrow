@@ -25,12 +25,12 @@ use system::{Orientation, System};
 
 const MAX_SAMPLES: usize = 100000;
 
-pub trait FFSResult: Send {
+pub trait FFSResult: Send + Sync {
     fn nucleation_rate(&self) -> f64;
     fn forward_vec(&self) -> &Vec<f64>;
 }
 
-impl<St: State + StateTracked<NullStateTracker> + Send, Sy: System<St> + Send> FFSResult
+impl<St: State + StateTracked<NullStateTracker> + Send, Sy: System<St> + Send + Sync> FFSResult
     for FFSRun<St, Sy>
 {
     fn nucleation_rate(&self) -> Rate {
@@ -185,7 +185,7 @@ pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St>> {
 
 impl<
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: SystemWithDimers<St> + FromTileSet + Send,
+        Sy: SystemWithDimers<St> + FromTileSet + Send + Sync,
     > FFSRun<St, Sy>
 {
     pub fn create(
