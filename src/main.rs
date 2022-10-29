@@ -4,7 +4,7 @@ extern crate ndarray;
 use clap::Parser;
 
 use rgrow::base::RgrowError;
-use rgrow::system::EvolveBounds;
+use rgrow::ffs;
 use rgrow::{parser_xgrow, tileset::TileSet};
 
 use std::fs::File;
@@ -48,6 +48,20 @@ struct FFSOptions {
     min_cutoff_size: u32,
 }
 
+impl From<FFSOptions> for ffs::FFSRunConfig {
+    fn from(opts: FFSOptions) -> Self {
+        Self {
+            varpermean2: Some(opts.varpermean2),
+            min_configs: opts.min_configs,
+            target_size: opts.target_size,
+            cutoff_prob: Some(opts.cutoff_probability),
+            cutoff_number: Some(opts.cutoff_surfaces),
+            min_cutoff_size: Some(opts.min_cutoff_size),
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Parser)]
 struct EO {}
 
@@ -87,23 +101,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn nucrate(po: FFSOptions) -> Result<(), RgrowError> {
     let tileset: TileSet =
-        serde_yaml::from_reader(File::open(po.input).expect("Input file not found."))
+        serde_yaml::from_reader(File::open(po.input.clone()).expect("Input file not found."))
             .expect("Input file parse erorr.");
 
-    let ffsrun = tileset.run_ffs(
-        po.varpermean2,
-        po.min_configs,
-        po.target_size,
-        po.cutoff_probability,
-        po.cutoff_surfaces,
-        po.min_cutoff_size,
-        EvolveBounds::default().for_time(1e5),
-        EvolveBounds::default().for_time(1e5),
-        2,
-        1,
-        false,
-        None,
-    )?;
+    let ffsrun = tileset.run_ffs(&po.into())?;
 
     println!("Nuc rate: {:e}", ffsrun.nucleation_rate());
     println!("Forwards: {:?}", ffsrun.forward_vec());

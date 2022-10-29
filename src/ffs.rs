@@ -6,14 +6,14 @@ use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
 use crate::system::{EvolveBounds, SystemWithDimers};
-use crate::tileset::{CanvasType, FromTileSet, Model, Size, TileSet};
+use crate::tileset::{CanvasType, FromTileSet, Model, TileSet};
 
 use super::*;
 //use ndarray::prelude::*;
 //use ndarray::Zip;
-use base::{CanvasLength, NumEvents, NumTiles, Rate};
+use base::{NumTiles, Rate};
 
-use ndarray::Array2;
+use ndarray::{Array2, ArrayView2};
 use rand::Rng;
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
 use rand::{prelude::SmallRng, SeedableRng};
@@ -23,96 +23,80 @@ use state::{DangerousStateClone, State, StateCreate};
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
 
-const MAX_SAMPLES: usize = 100000;
+pub struct FFSRunConfig {
+    pub constance_variance: bool,
+    pub varpermean2: Option<f64>,
+    pub min_configs: usize,
+    pub max_configs: usize,
+    pub early_cutoff: bool,
+    pub cutoff_prob: Option<f64>,
+    pub cutoff_number: Option<usize>,
+    pub min_cutoff_size: Option<NumTiles>,
+    pub init_bound: Option<EvolveBounds>,
+    pub subseq_bound: Option<EvolveBounds>,
+    pub start_size: NumTiles,
+    pub size_step: NumTiles,
+    pub keep_configs: bool,
+    pub min_nuc_rate: Option<Rate>,
+    pub canvas_size: (usize, usize),
+    pub target_size: NumTiles,
+}
+
+impl Default for FFSRunConfig {
+    fn default() -> Self {
+        Self {
+            constance_variance: true,
+            varpermean2: Some(0.01),
+            min_configs: 1000,
+            max_configs: 100000,
+            early_cutoff: true,
+            cutoff_prob: Some(0.99),
+            cutoff_number: Some(4),
+            min_cutoff_size: Some(30),
+            init_bound: None,
+            subseq_bound: None,
+            start_size: 0,
+            size_step: 1,
+            keep_configs: false,
+            min_nuc_rate: None,
+            canvas_size: (64, 64),
+            target_size: 100,
+        }
+    }
+}
 
 pub trait FFSResult: Send + Sync {
     fn nucleation_rate(&self) -> f64;
     fn forward_vec(&self) -> &Vec<f64>;
+    fn surfaces(&self) -> Vec<&dyn FFSSurface>;
 }
 
-impl<St: State + StateTracked<NullStateTracker> + Send, Sy: System<St> + Send + Sync> FFSResult
-    for FFSRun<St, Sy>
-{
-    fn nucleation_rate(&self) -> Rate {
-        self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
-    }
-
-    fn forward_vec(&self) -> &Vec<f64> {
-        &self.forward_prob
-    }
+pub trait FFSSurface: Send + Sync {
+    fn get_config(&self, i: usize) -> ArrayView2<usize>;
+    fn num_configs(&self) -> usize;
 }
 
 impl TileSet {
-    pub fn run_ffs(
-        &self,
-        varpermean2: f64,
-        min_states: usize,
-        target_size: NumTiles,
-        cutoff_prob: f64,
-        cutoff_number: usize,
-        min_cutoff_size: NumTiles,
-        max_init_events: EvolveBounds,
-        max_subseq_events: EvolveBounds,
-        start_size: NumTiles,
-        size_step: NumTiles,
-        keep_states: bool,
-        min_nuc_rate: Option<f64>,
-    ) -> Result<Box<dyn FFSResult>, RgrowError> {
+    pub fn run_ffs(&self, config: &FFSRunConfig) -> Result<Box<dyn FFSResult>, RgrowError> {
         match self.options.model {
             Model::KTAM => match self.options.canvas_type {
                 CanvasType::Square => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasSquare, NullStateTracker>,
                     KTAM<QuadTreeState<CanvasSquare, NullStateTracker>>,
                 >::create_from_tileset(
-                    self,
-                    varpermean2,
-                    min_states,
-                    target_size,
-                    cutoff_prob,
-                    cutoff_number,
-                    min_cutoff_size,
-                    max_init_events,
-                    max_subseq_events,
-                    start_size,
-                    size_step,
-                    keep_states,
-                    min_nuc_rate,
+                    self, config
                 )?)),
                 CanvasType::Periodic => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasPeriodic, NullStateTracker>,
                     KTAM<QuadTreeState<CanvasPeriodic, NullStateTracker>>,
                 >::create_from_tileset(
-                    self,
-                    varpermean2,
-                    min_states,
-                    target_size,
-                    cutoff_prob,
-                    cutoff_number,
-                    min_cutoff_size,
-                    max_init_events,
-                    max_subseq_events,
-                    start_size,
-                    size_step,
-                    keep_states,
-                    min_nuc_rate,
+                    self, config
                 )?)),
                 CanvasType::Tube => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasTube, NullStateTracker>,
                     KTAM<QuadTreeState<CanvasTube, NullStateTracker>>,
                 >::create_from_tileset(
-                    self,
-                    varpermean2,
-                    min_states,
-                    target_size,
-                    cutoff_prob,
-                    cutoff_number,
-                    min_cutoff_size,
-                    max_init_events,
-                    max_subseq_events,
-                    start_size,
-                    size_step,
-                    keep_states,
-                    min_nuc_rate,
+                    self, config
                 )?)),
             },
             Model::ATAM => Err(GrowError::FFSCannotRunATAM.into()),
@@ -121,55 +105,19 @@ impl TileSet {
                     QuadTreeState<CanvasSquare, NullStateTracker>,
                     OldKTAM<QuadTreeState<CanvasSquare, NullStateTracker>>,
                 >::create_from_tileset(
-                    self,
-                    varpermean2,
-                    min_states,
-                    target_size,
-                    cutoff_prob,
-                    cutoff_number,
-                    min_cutoff_size,
-                    max_init_events,
-                    max_subseq_events,
-                    start_size,
-                    size_step,
-                    keep_states,
-                    min_nuc_rate,
+                    self, config
                 )?)),
                 CanvasType::Periodic => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasPeriodic, NullStateTracker>,
                     OldKTAM<QuadTreeState<CanvasPeriodic, NullStateTracker>>,
                 >::create_from_tileset(
-                    self,
-                    varpermean2,
-                    min_states,
-                    target_size,
-                    cutoff_prob,
-                    cutoff_number,
-                    min_cutoff_size,
-                    max_init_events,
-                    max_subseq_events,
-                    start_size,
-                    size_step,
-                    keep_states,
-                    min_nuc_rate,
+                    self, config
                 )?)),
                 CanvasType::Tube => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasTube, NullStateTracker>,
                     OldKTAM<QuadTreeState<CanvasTube, NullStateTracker>>,
                 >::create_from_tileset(
-                    self,
-                    varpermean2,
-                    min_states,
-                    target_size,
-                    cutoff_prob,
-                    cutoff_number,
-                    min_cutoff_size,
-                    max_init_events,
-                    max_subseq_events,
-                    start_size,
-                    size_step,
-                    keep_states,
-                    min_nuc_rate,
+                    self, config
                 )?)),
             },
         }
@@ -183,70 +131,31 @@ pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St>> {
     pub forward_prob: Vec<f64>,
 }
 
+impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers<St> + Send + Sync> FFSResult
+    for FFSRun<St, Sy>
+{
+    fn nucleation_rate(&self) -> Rate {
+        self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
+    }
+
+    fn forward_vec(&self) -> &Vec<f64> {
+        &self.forward_prob
+    }
+
+    fn surfaces(&self) -> Vec<&dyn FFSSurface> {
+        self.level_list
+            .iter()
+            .map(|level| level as &dyn FFSSurface)
+            .collect()
+    }
+}
+
 impl<
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
         Sy: SystemWithDimers<St> + FromTileSet + Send + Sync,
     > FFSRun<St, Sy>
 {
-    pub fn create(
-        system: Sy,
-        num_states: usize,
-        target_size: NumTiles,
-        canvas_size: CanvasLength,
-        max_init_events: NumEvents,
-        max_subseq_events: NumEvents,
-        start_size: NumTiles,
-        size_step: NumTiles,
-    ) -> Self {
-        let level_list = Vec::new();
-
-        let dimerization_rate = system
-            .calc_dimers()
-            .iter()
-            .fold(0., |acc, d| acc + d.formation_rate);
-
-        let forward_prob = Vec::with_capacity((target_size / size_step) as usize);
-
-        let mut ret = Self {
-            level_list,
-            dimerization_rate,
-            system,
-            forward_prob,
-        };
-
-        ret.level_list.push(FFSLevel::nmers_from_dimers(
-            &mut ret.system,
-            num_states,
-            canvas_size,
-            max_init_events,
-            start_size,
-        ));
-
-        while ret.level_list.last().unwrap().target_size < target_size {
-            ret.level_list
-                .push(ret.level_list.last().unwrap().next_level(
-                    &mut ret.system,
-                    size_step,
-                    max_subseq_events,
-                ));
-        }
-
-        ret.forward_prob
-            .extend(ret.level_list.iter().map(|x| x.p_r));
-
-        ret
-    }
-
-    pub fn create_without_history(
-        system: Sy,
-        num_states: usize,
-        target_size: NumTiles,
-        canvas_size: CanvasLength,
-        max_init_events: NumEvents,
-        max_subseq_events: NumEvents,
-        start_size: NumTiles,
-        size_step: NumTiles,
-    ) -> Self {
+    pub fn create(system: Sy, config: &FFSRunConfig) -> Self {
         let level_list = Vec::new();
 
         let dimerization_rate = system
@@ -261,71 +170,7 @@ impl<
             forward_prob: Vec::new(),
         };
 
-        let first_level = FFSLevel::nmers_from_dimers(
-            &mut ret.system,
-            num_states,
-            canvas_size,
-            max_init_events,
-            start_size,
-        );
-        ret.forward_prob.push(first_level.p_r);
-        ret.level_list.push(first_level);
-
-        while ret.level_list.last().unwrap().target_size < target_size {
-            let next = ret.level_list.pop().unwrap().next_level(
-                &mut ret.system,
-                size_step,
-                max_subseq_events,
-            );
-            ret.forward_prob.push(next.p_r);
-            ret.level_list.push(next);
-            // println!(
-            //     "Done with target size {}.",
-            //     ret.level_list.last().unwrap().target_size
-            // );
-        }
-
-        ret
-    }
-
-    pub fn create_with_constant_variance_and_size_cutoff(
-        system: Sy,
-        varpermean2: f64,
-        min_states: usize,
-        target_size: NumTiles,
-        cutoff_prob: f64,
-        cutoff_number: usize,
-        min_cutoff_size: NumTiles,
-        canvas_size: (CanvasLength, CanvasLength),
-        max_init_events: EvolveBounds,
-        max_subseq_events: EvolveBounds,
-        start_size: NumTiles,
-        size_step: NumTiles,
-        keep_states: bool,
-        min_nuc_rate: Option<f64>,
-    ) -> Self {
-        let level_list = Vec::new();
-
-        let dimerization_rate = system
-            .calc_dimers()
-            .iter()
-            .fold(0., |acc, d| acc + d.formation_rate);
-
-        let mut ret = Self {
-            level_list,
-            dimerization_rate,
-            system,
-            forward_prob: Vec::new(),
-        };
-
-        let (first_level, dimer_level) = FFSLevel::nmers_from_dimers_cvar(
-            &mut ret.system,
-            varpermean2,
-            min_states,
-            canvas_size,
-            max_init_events,
-            start_size,
-        );
+        let (first_level, dimer_level) = FFSLevel::nmers_from_dimers(&mut ret.system, config);
 
         ret.forward_prob.push(first_level.p_r);
 
@@ -336,17 +181,11 @@ impl<
 
         let mut above_cutoff: usize = 0;
 
-        while current_size < target_size {
+        while current_size < config.target_size {
             let last = ret.level_list.last_mut().unwrap();
 
-            let next = last.next_level_cvar(
-                &mut ret.system,
-                varpermean2,
-                min_states,
-                size_step,
-                max_subseq_events,
-            );
-            if !keep_states {
+            let next = last.next_level(&mut ret.system, config);
+            if !config.keep_configs {
                 last.drop_states();
             }
             let pf = next.p_r;
@@ -357,16 +196,21 @@ impl<
             // );
             current_size = next.target_size;
             ret.level_list.push(next);
-            if pf > cutoff_prob {
-                above_cutoff += 1;
-                if (above_cutoff > cutoff_number) & (current_size >= min_cutoff_size) {
-                    break;
+
+            if config.early_cutoff {
+                if pf > config.cutoff_prob.unwrap() {
+                    above_cutoff += 1;
+                    if (above_cutoff > config.cutoff_number.unwrap())
+                        & (current_size >= config.min_cutoff_size.unwrap())
+                    {
+                        break;
+                    }
+                } else {
+                    above_cutoff = 0;
                 }
-            } else {
-                above_cutoff = 0;
             }
 
-            if let Some(min_nuc_rate) = min_nuc_rate {
+            if let Some(min_nuc_rate) = config.min_nuc_rate {
                 if ret.nucleation_rate() < min_nuc_rate {
                     break;
                 }
@@ -378,39 +222,10 @@ impl<
 
     pub fn create_from_tileset(
         tileset: &TileSet,
-        varpermean2: f64,
-        min_states: usize,
-        target_size: NumTiles,
-        cutoff_prob: f64,
-        cutoff_number: usize,
-        min_cutoff_size: NumTiles,
-        max_init_events: EvolveBounds,
-        max_subseq_events: EvolveBounds,
-        start_size: NumTiles,
-        size_step: NumTiles,
-        keep_states: bool,
-        min_nuc_rate: Option<f64>,
+        config: &FFSRunConfig,
     ) -> Result<Self, RgrowError> {
         let sys = Sy::from_tileset(tileset)?;
-        Ok(Self::create_with_constant_variance_and_size_cutoff(
-            sys,
-            varpermean2,
-            min_states,
-            target_size,
-            cutoff_prob,
-            cutoff_number,
-            min_cutoff_size,
-            match tileset.options.size {
-                Size::Single(x) => (x, x),
-                Size::Pair(p) => p,
-            },
-            max_init_events,
-            max_subseq_events,
-            start_size,
-            size_step,
-            keep_states,
-            min_nuc_rate,
-        ))
+        Ok(Self::create(sys, config))
     }
 
     pub fn dimer_conc(&self) -> f64 {
@@ -428,9 +243,21 @@ pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System<St>> 
     pub target_size: NumTiles,
 }
 
+impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers<St> + Sync + Send> FFSSurface
+    for FFSLevel<St, Sy>
+{
+    fn get_config(&self, i: usize) -> ArrayView2<usize> {
+        self.state_list[i].raw_array()
+    }
+
+    fn num_configs(&self) -> usize {
+        self.state_list.len()
+    }
+}
+
 impl<
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: SystemWithDimers<St>,
+        Sy: SystemWithDimers<St> + Sync + Send,
     > FFSLevel<St, Sy>
 {
     pub fn drop_states(&mut self) -> &Self {
@@ -438,89 +265,35 @@ impl<
         self
     }
 
-    pub fn next_level(&self, system: &mut Sy, size_step: u32, max_events: u64) -> Self {
+    pub fn next_level(&self, system: &mut Sy, config: &FFSRunConfig) -> Self {
         let mut rng = SmallRng::from_entropy();
 
         let mut state_list = Vec::new();
         let mut previous_list = Vec::new();
         let mut i = 0usize;
-        let target_size = self.target_size + size_step;
+        let target_size = self.target_size + config.size_step;
+
+        let bounds = {
+            let mut b = match config.subseq_bound {
+                Some(b) => b,
+                None => EvolveBounds::default(),
+            };
+            b.size_max = Some(target_size);
+            b.size_min = Some(0);
+            b
+        };
 
         let chooser = Uniform::new(0, self.state_list.len());
 
         let canvas_size = (self.state_list[0].nrows(), self.state_list[0].ncols());
 
-        while state_list.len() < self.state_list.len() {
-            let mut state = St::create_raw(Array2::zeros(canvas_size)).unwrap();
+        let cvar = if config.constance_variance {
+            config.varpermean2.unwrap()
+        } else {
+            0.
+        };
 
-            let mut i_old_state: usize = 0;
-
-            while state.ntiles() == 0 {
-                assert!(state.total_rate() == 0.);
-                i_old_state = chooser.sample(&mut rng);
-
-                state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
-
-                debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
-
-                system.evolve_in_size_range_events_max(
-                    &mut state,
-                    0,
-                    target_size,
-                    max_events,
-                    &mut rng,
-                );
-                i += 1;
-            }
-
-            if state.ntiles() >= target_size {
-                // duple hack >=
-                state_list.push(state);
-                previous_list.push(i_old_state);
-            } else {
-                println!(
-                    "Ran out of events: {} tiles, {} events, {} time, {} total rate.",
-                    state.ntiles(),
-                    state.total_events(),
-                    state.time(),
-                    state.total_rate(),
-                );
-            }
-        }
-        let p_r = (state_list.len() as f64) / (i as f64);
-        let num_states = state_list.len();
-
-        Self {
-            state_list,
-            previous_list,
-            p_r,
-            target_size,
-            system: std::marker::PhantomData::<Sy>,
-            num_states,
-            num_trials: i,
-        }
-    }
-
-    pub fn next_level_cvar(
-        &self,
-        system: &mut Sy,
-        cvar: f64,
-        min_samples: usize,
-        size_step: u32,
-        mut max_events: EvolveBounds,
-    ) -> Self {
-        let mut rng = SmallRng::from_entropy();
-
-        let mut state_list = Vec::new();
-        let mut previous_list = Vec::new();
-        let mut i = 0usize;
-        let target_size = self.target_size + size_step;
-
-        let chooser = Uniform::new(0, self.state_list.len());
-
-        let canvas_size = (self.state_list[0].nrows(), self.state_list[0].ncols());
-
-        while state_list.len() < MAX_SAMPLES {
+        while state_list.len() < config.max_configs {
             let mut state = St::create_raw(Array2::zeros(canvas_size)).unwrap();
 
             let mut i_old_state: usize = 0;
@@ -534,10 +307,7 @@ impl<
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
                 debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
 
-                max_events.size_max = Some(target_size);
-                max_events.size_min = Some(0);
-
-                system.evolve(&mut state, &mut rng, max_events).unwrap();
+                system.evolve(&mut state, &mut rng, bounds).unwrap();
                 i += 1;
             }
 
@@ -555,7 +325,8 @@ impl<
                 );
             }
 
-            if (variance_over_mean2(state_list.len(), i) < cvar) & (state_list.len() >= min_samples)
+            if (variance_over_mean2(state_list.len(), i) < cvar)
+                & (state_list.len() >= config.min_configs)
             {
                 break;
             }
@@ -574,111 +345,49 @@ impl<
         }
     }
 
-    pub fn nmers_from_dimers(
-        system: &mut Sy,
-        num_states: usize,
-        canvas_size: CanvasLength,
-        max_events: u64,
-        next_size: NumTiles,
-    ) -> Self {
+    pub fn nmers_from_dimers(system: &mut Sy, config: &FFSRunConfig) -> (Self, Self) {
         let mut rng = SmallRng::from_entropy();
 
         let dimers = system.calc_dimers();
 
-        let mut state_list = Vec::new();
-        let mut previous_list = Vec::new();
+        let mut state_list = Vec::with_capacity(config.min_configs);
+        let mut previous_list = Vec::with_capacity(config.min_configs);
         let mut i = 0usize;
+
+        let mut dimer_state_list = Vec::with_capacity(config.min_configs);
 
         let weights: Vec<_> = dimers.iter().map(|d| d.formation_rate).collect();
         let chooser = WeightedIndex::new(&weights).unwrap();
 
-        let mid = canvas_size / 2;
-
-        while state_list.len() < num_states {
-            let mut state = St::create_raw(Array2::zeros((canvas_size, canvas_size))).unwrap();
-
-            while state.ntiles() == 0 {
-                let i_old_state = chooser.sample(&mut rng);
-                let dimer = &dimers[i_old_state];
-
-                match dimer.orientation {
-                    Orientation::NS => {
-                        system.set_point(&mut state, (mid, mid), dimer.t1);
-                        system.set_point(&mut state, (mid + 1, mid), dimer.t2);
-                    }
-                    Orientation::WE => {
-                        system.set_point(&mut state, (mid, mid), dimer.t1);
-                        system.set_point(&mut state, (mid, mid + 1), dimer.t2);
-                    }
-                };
-
-                system.evolve_in_size_range_events_max(
-                    &mut state, 0, next_size, max_events, &mut rng,
-                );
-                i += 1;
-
-                if state.ntiles() == next_size {
-                    state_list.push(state);
-                    previous_list.push(i_old_state);
-                    break;
-                } else {
-                    if state.ntiles() != 0 {
-                        panic!("{}", state.panicinfo())
-                    }
-                    if state.total_rate() != 0. {
-                        panic!("{}", state.panicinfo())
-                    };
-                }
-            }
-        }
-
-        let p_r = (num_states as f64) / (i as f64);
-        let num_states = state_list.len();
-        Self {
-            system: std::marker::PhantomData::<Sy>,
-            state_list,
-            previous_list,
-            p_r,
-            target_size: next_size,
-            num_states,
-            num_trials: i,
-        }
-    }
-
-    pub fn nmers_from_dimers_cvar(
-        system: &mut Sy,
-        cvar: f64,
-        min_samples: usize,
-        canvas_size: (CanvasLength, CanvasLength),
-        mut max_events: EvolveBounds,
-        next_size: NumTiles,
-    ) -> (Self, Self) {
-        let mut rng = SmallRng::from_entropy();
-
-        let dimers = system.calc_dimers();
-
-        let mut state_list = Vec::with_capacity(min_samples);
-        let mut previous_list = Vec::with_capacity(min_samples);
-        let mut i = 0usize;
-
-        let mut dimer_state_list = Vec::with_capacity(min_samples);
-
-        let weights: Vec<_> = dimers.iter().map(|d| d.formation_rate).collect();
-        let chooser = WeightedIndex::new(&weights).unwrap();
-
-        if canvas_size.0 < 4 || canvas_size.1 < 4 {
+        if config.canvas_size.0 < 4 || config.canvas_size.1 < 4 {
             panic!("Canvas size too small for dimers");
         }
-        let mid = PointSafe2((canvas_size.0 / 2, canvas_size.1 / 2));
+        let mid = PointSafe2((config.canvas_size.0 / 2, config.canvas_size.1 / 2));
 
         let mut num_states = 0usize;
 
-        let mut tile_list = Vec::with_capacity(min_samples);
+        let mut tile_list = Vec::with_capacity(config.min_configs);
 
         let mut other: (usize, usize);
 
-        while state_list.len() < MAX_SAMPLES {
-            let mut state = St::create_raw(Array2::zeros(canvas_size)).unwrap();
+        let cvar = if config.constance_variance {
+            config.varpermean2.unwrap()
+        } else {
+            0.
+        };
+
+        let bounds = {
+            let mut b = match config.subseq_bound {
+                Some(b) => b,
+                None => EvolveBounds::default(),
+            };
+            b.size_max = Some(config.start_size);
+            b.size_min = Some(0);
+            b
+        };
+
+        while state_list.len() < config.max_configs {
+            let mut state = St::create_raw(Array2::zeros(config.canvas_size)).unwrap();
 
             while state.ntiles() == 0 {
                 let i_old_state = chooser.sample(&mut rng);
@@ -692,16 +401,14 @@ impl<
 
                 debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
 
-                max_events.size_min = Some(0);
-                max_events.size_max = Some(next_size);
-
-                system.evolve(&mut state, &mut rng, max_events).unwrap();
+                system.evolve(&mut state, &mut rng, bounds).unwrap();
                 i += 1;
 
-                if state.ntiles() >= next_size {
+                if state.ntiles() >= config.start_size {
                     // FIXME: >= is a hack
                     // Create (retrospectively) a dimer state
-                    let mut dimer_state = St::create_raw(Array2::zeros(canvas_size)).unwrap();
+                    let mut dimer_state =
+                        St::create_raw(Array2::zeros(config.canvas_size)).unwrap();
                     other = match dimer.orientation {
                         Orientation::NS => dimer_state.move_sa_s(mid).0,
                         Orientation::WE => dimer_state.move_sa_e(mid).0,
@@ -733,7 +440,7 @@ impl<
                 }
             }
 
-            if (variance_over_mean2(num_states, i) < cvar) & (num_states >= min_samples) {
+            if (variance_over_mean2(num_states, i) < cvar) & (num_states >= config.min_configs) {
                 break;
             }
         }
@@ -746,7 +453,7 @@ impl<
                 state_list,
                 previous_list,
                 p_r,
-                target_size: next_size,
+                target_size: config.start_size,
                 num_states,
                 num_trials: i,
             },
