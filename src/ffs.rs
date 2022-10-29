@@ -68,6 +68,7 @@ impl Default for FFSRunConfig {
 pub trait FFSResult: Send + Sync {
     fn nucleation_rate(&self) -> f64;
     fn forward_vec(&self) -> &Vec<f64>;
+    fn dimerization_rate(&self) -> f64;
     fn surfaces(&self) -> Vec<&dyn FFSSurface>;
 }
 
@@ -152,6 +153,10 @@ impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers<St> + Send
             .iter()
             .map(|level| level as &dyn FFSSurface)
             .collect()
+    }
+
+    fn dimerization_rate(&self) -> f64 {
+        self.dimerization_rate
     }
 }
 
