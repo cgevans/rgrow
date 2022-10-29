@@ -87,7 +87,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
 
         sim.evolve(state_i, bounds)?;
 
-        sim.draw(state_i, pixels.get_frame());
+        sim.draw(state_i, pixels.get_frame_mut());
         pixels.render()?;
         state = sim.state_ref(state_i);
 
