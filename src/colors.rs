@@ -9,23 +9,21 @@ pub enum ColorError {
 
 pub fn get_color(cs: &str) -> Result<[u8; 4], ColorError> {
     if let Some(c) = COLORS.get(cs) {
-        return Ok(c.clone());
-    } else if (cs.chars().nth(0) == Some('0') && cs.chars().nth(1) == Some('x'))
-        || (cs.chars().nth(0) == Some('#') && cs.len() == 7)
-    {
+        Ok(*c)
+    } else if cs.starts_with("0x") || (cs.starts_with('@') && cs.len() == 7) {
         let mut c = [0; 4];
         let mut i = 0;
-        if cs.chars().nth(0) == Some('#') {
+        if cs.starts_with('#') {
             i = 1;
         }
-        for j in 0..3 {
-            c[j] = u8::from_str_radix(&cs[i..i + 2], 16).unwrap();
+        for x in c.iter_mut().take(3) {
+            *x = u8::from_str_radix(&cs[i..i + 2], 16).unwrap();
             i += 2;
         }
         c[3] = 255;
-        return Ok(c);
+        Ok(c)
     } else {
-        return Err(ColorError::InvalidColorName(cs.to_string()));
+        Err(ColorError::InvalidColorName(cs.to_string()))
     }
 }
 

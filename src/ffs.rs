@@ -23,6 +23,7 @@ use state::{DangerousStateClone, State, StateCreate};
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
 
+#[derive(Debug, Clone)]
 pub struct FFSRunConfig {
     pub constance_variance: bool,
     pub varpermean2: Option<f64>,
@@ -235,7 +236,16 @@ impl<
         config: &FFSRunConfig,
     ) -> Result<Self, RgrowError> {
         let sys = Sy::from_tileset(tileset)?;
-        Ok(Self::create(sys, config))
+        let c = {
+            let mut c = config.clone();
+            c.canvas_size = match tileset.options.size {
+                tileset::Size::Single(x) => (x, x),
+                tileset::Size::Pair(p) => p,
+            };
+            c
+        };
+
+        Ok(Self::create(sys, &c))
     }
 
     pub fn dimer_conc(&self) -> f64 {
