@@ -1,4 +1,40 @@
 use phf::phf_map;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ColorError {
+    #[error("Invalid color name: {0}")]
+    InvalidColorName(String),
+}
+
+pub fn get_color(cs: &str) -> Result<[u8; 4], ColorError> {
+    if let Some(c) = COLORS.get(cs) {
+        return Ok(c.clone());
+    } else if (cs.chars().nth(0) == Some('0') && cs.chars().nth(1) == Some('x'))
+        || (cs.chars().nth(0) == Some('#') && cs.len() == 7)
+    {
+        let mut c = [0; 4];
+        let mut i = 0;
+        if cs.chars().nth(0) == Some('#') {
+            i = 1;
+        }
+        for j in 0..3 {
+            c[j] = u8::from_str_radix(&cs[i..i + 2], 16).unwrap();
+            i += 2;
+        }
+        c[3] = 255;
+        return Ok(c);
+    } else {
+        return Err(ColorError::InvalidColorName(cs.to_string()));
+    }
+}
+
+pub fn get_color_or_random(cs: &Option<&str>) -> Result<[u8; 4], ColorError> {
+    match cs {
+        Some(c) => get_color(c),
+        None => Ok([rand::random(), rand::random(), rand::random(), 255]),
+    }
+}
 
 pub(crate) static COLORS: phf::Map<&'static str, [u8; 4]> = phf_map! {
     "snow" => [255, 250, 250, 0xff],

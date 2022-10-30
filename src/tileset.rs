@@ -1,5 +1,6 @@
 use crate::base::RgrowError;
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube};
+use crate::colors::get_color_or_random;
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
@@ -11,7 +12,6 @@ use super::*;
 use base::{NumEvents, NumTiles};
 use bimap::BiMap;
 use ndarray::prelude::*;
-use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use simulation::Simulation;
@@ -44,6 +44,8 @@ pub enum ParserError {
     RepeatedTileName { name: String },
     #[error("No glues found in tileset definition.")]
     NoGlues,
+    #[error(transparent)]
+    ColorError(#[from] colors::ColorError),
 }
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -540,19 +542,7 @@ impl ProcessedTileSet {
 
             let tile_stoic = tile.stoic.unwrap_or(1.);
 
-            let tile_color = match &tile.color {
-                Some(tc) => *super::colors::COLORS.get(tc.as_str()).unwrap(),
-                None => {
-                    let mut rng = rand::thread_rng();
-                    let ug = rand::distributions::Uniform::new(100u8, 254);
-                    [
-                        ug.sample(&mut rng),
-                        ug.sample(&mut rng),
-                        ug.sample(&mut rng),
-                        0xffu8,
-                    ]
-                }
-            };
+            let tile_color = get_color_or_random(&tile.color.as_deref())?;
 
             match &tile.shape.as_ref().unwrap_or(&TileShape::Single) {
                 TileShape::Single => {
