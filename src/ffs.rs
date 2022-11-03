@@ -25,12 +25,14 @@ use system::{Orientation, System};
 
 #[derive(Debug, Clone)]
 pub struct FFSRunConfig {
-    pub constance_variance: bool,
-    pub varpermean2: Option<f64>,
+    /// Use constant-variance, variable-configurations-per-surface method.
+    /// If false, use max_configs for each surface.
+    pub constant_variance: bool,
+    pub var_per_mean2: Option<f64>,
     pub min_configs: usize,
     pub max_configs: usize,
     pub early_cutoff: bool,
-    pub cutoff_prob: Option<f64>,
+    pub cutoff_probability: Option<f64>,
     pub cutoff_number: Option<usize>,
     pub min_cutoff_size: Option<NumTiles>,
     pub init_bound: Option<EvolveBounds>,
@@ -46,12 +48,12 @@ pub struct FFSRunConfig {
 impl Default for FFSRunConfig {
     fn default() -> Self {
         Self {
-            constance_variance: true,
-            varpermean2: Some(0.01),
+            constant_variance: true,
+            var_per_mean2: Some(0.01),
             min_configs: 1000,
             max_configs: 100000,
             early_cutoff: true,
-            cutoff_prob: Some(0.99),
+            cutoff_probability: Some(0.99),
             cutoff_number: Some(4),
             min_cutoff_size: Some(30),
             init_bound: None,
@@ -209,7 +211,7 @@ impl<
             ret.level_list.push(next);
 
             if config.early_cutoff {
-                if pf > config.cutoff_prob.unwrap() {
+                if pf > config.cutoff_probability.unwrap() {
                     above_cutoff += 1;
                     if (above_cutoff > config.cutoff_number.unwrap())
                         & (current_size >= config.min_cutoff_size.unwrap())
@@ -307,8 +309,8 @@ impl<
 
         let canvas_size = (self.state_list[0].nrows(), self.state_list[0].ncols());
 
-        let cvar = if config.constance_variance {
-            config.varpermean2.unwrap()
+        let cvar = if config.constant_variance {
+            config.var_per_mean2.unwrap()
         } else {
             0.
         };
@@ -390,8 +392,8 @@ impl<
 
         let mut other: (usize, usize);
 
-        let cvar = if config.constance_variance {
-            config.varpermean2.unwrap()
+        let cvar = if config.constant_variance {
+            config.var_per_mean2.unwrap()
         } else {
             0.
         };

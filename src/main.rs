@@ -51,10 +51,10 @@ struct FFSOptions {
 impl From<FFSOptions> for ffs::FFSRunConfig {
     fn from(opts: FFSOptions) -> Self {
         Self {
-            varpermean2: Some(opts.varpermean2),
+            var_per_mean2: Some(opts.varpermean2),
             min_configs: opts.min_configs,
             target_size: opts.target_size,
-            cutoff_prob: Some(opts.cutoff_probability),
+            cutoff_probability: Some(opts.cutoff_probability),
             cutoff_number: Some(opts.cutoff_surfaces),
             min_cutoff_size: Some(opts.min_cutoff_size),
             ..Default::default()
