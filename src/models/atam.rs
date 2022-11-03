@@ -170,7 +170,8 @@ impl<S: State> System<S> for ATAM<S> {
 
         let event = Event::MonomerAttachment(point, tile);
 
-        self.update_after_event(state, &event);
+        self.perform_event(state, &event)
+            .update_after_event(state, &event);
         self
     }
 
@@ -765,7 +766,7 @@ impl<S: State> ATAM<S> {
 
 impl<St: State + StateCreate> SimFromTileSet for ATAM<St> {
     fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
-        let sys = Self::from_tileset(tileset).unwrap();
+        let sys = Self::from_tileset(tileset)?;
         let size = match tileset.options.size {
             Size::Single(x) => (x, x),
             Size::Pair((x, y)) => (x, y),
