@@ -34,14 +34,14 @@ tiles:
 # * doubletiles - a list of two-item lists, specifying the names of double tile pairs.
 # * vdoubletiles - the same for vertical double tiles.
 xgrowargs:
-    size: 128
+    size: 1250
     seed:
-    - [125,125,1]
+    - [1200,1200,1]
     smax: 5000000
-    update_rate: 1000
+    update_rate: 100
     Gse: 8.1
     Gmc: 16.0
     threshold: 2.
     canvas_type: Square
-    model: OldKTAM
+    model: ATAM
     fission: 'keep-seeded'

@@ -21,14 +21,9 @@ struct Opts {
 
 #[derive(Parser)]
 enum SubCommand {
-    //Run(EO),
-    //RunSubs(EO),
-    //Parse(PO),
-    //RunAtam(PO),
     Run(PO),
     NucRate(FFSOptions),
     RunXgrow(PO),
-    //FissionTest(EO)
 }
 
 #[derive(Parser)]
@@ -51,12 +46,12 @@ struct FFSOptions {
 impl From<FFSOptions> for ffs::FFSRunConfig {
     fn from(opts: FFSOptions) -> Self {
         Self {
-            var_per_mean2: Some(opts.varpermean2),
+            var_per_mean2: opts.varpermean2,
             min_configs: opts.min_configs,
             target_size: opts.target_size,
-            cutoff_probability: Some(opts.cutoff_probability),
-            cutoff_number: Some(opts.cutoff_surfaces),
-            min_cutoff_size: Some(opts.min_cutoff_size),
+            cutoff_probability: opts.cutoff_probability,
+            cutoff_number: opts.cutoff_surfaces,
+            min_cutoff_size: opts.min_cutoff_size,
             ..Default::default()
         }
     }
@@ -107,6 +102,12 @@ fn nucrate(po: FFSOptions) -> Result<(), RgrowError> {
     let ffsrun = tileset.run_ffs(&po.into())?;
 
     println!("Nuc rate: {:e}", ffsrun.nucleation_rate());
-    println!("Forwards: {:?}", ffsrun.forward_vec());
+    let forward_vec_string = ffsrun
+        .forward_vec()
+        .iter()
+        .map(|x| format!("{x:.2e}"))
+        .collect::<Vec<String>>()
+        .join(", ");
+    println!("Forward probabilities: [{forward_vec_string}]");
     Ok(())
 }

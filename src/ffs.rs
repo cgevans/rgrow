@@ -18,25 +18,31 @@ use rand::Rng;
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
 use rand::{prelude::SmallRng, SeedableRng};
 
+#[cfg(feature = "python")]
+use pyo3::exceptions::PyTypeError;
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 use state::{DangerousStateClone, State, StateCreate};
 
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass)]
 pub struct FFSRunConfig {
     /// Use constant-variance, variable-configurations-per-surface method.
     /// If false, use max_configs for each surface.
     pub constant_variance: bool,
-    pub var_per_mean2: Option<f64>,
+    pub var_per_mean2: f64,
     pub min_configs: usize,
     pub max_configs: usize,
     pub early_cutoff: bool,
-    pub cutoff_probability: Option<f64>,
-    pub cutoff_number: Option<usize>,
-    pub min_cutoff_size: Option<NumTiles>,
-    pub init_bound: Option<EvolveBounds>,
-    pub subseq_bound: Option<EvolveBounds>,
+    pub cutoff_probability: f64,
+    pub cutoff_number: usize,
+    pub min_cutoff_size: NumTiles,
+    pub init_bound: EvolveBounds,
+    pub subseq_bound: EvolveBounds,
     pub start_size: NumTiles,
     pub size_step: NumTiles,
     pub keep_configs: bool,
@@ -49,22 +55,219 @@ impl Default for FFSRunConfig {
     fn default() -> Self {
         Self {
             constant_variance: true,
-            var_per_mean2: Some(0.01),
+            var_per_mean2: 0.01,
             min_configs: 1000,
             max_configs: 100000,
             early_cutoff: true,
-            cutoff_probability: Some(0.99),
-            cutoff_number: Some(4),
-            min_cutoff_size: Some(30),
-            init_bound: None,
-            subseq_bound: None,
-            start_size: 0,
+            cutoff_probability: 0.99,
+            cutoff_number: 4,
+            min_cutoff_size: 30,
+            init_bound: EvolveBounds::default().for_time(1e7),
+            subseq_bound: EvolveBounds::default().for_time(1e7),
+            start_size: 3,
             size_step: 1,
             keep_configs: false,
             min_nuc_rate: None,
             canvas_size: (64, 64),
             target_size: 100,
         }
+    }
+}
+
+impl FFSRunConfig {
+    pub fn _py_set(&mut self, k: &str, v: &PyAny, _py: Python) -> PyResult<()> {
+        match k {
+            "constant_variance" => self.constant_variance = v.extract()?,
+            "var_per_mean2" => self.var_per_mean2 = v.extract()?,
+            "min_configs" => self.min_configs = v.extract()?,
+            "max_configs" => self.max_configs = v.extract()?,
+            "early_cutoff" => self.early_cutoff = v.extract()?,
+            "cutoff_probability" => self.cutoff_probability = v.extract()?,
+            "cutoff_number" => self.cutoff_number = v.extract()?,
+            "min_cutoff_size" => self.min_cutoff_size = v.extract()?,
+            "init_bound" => self.init_bound = v.extract()?,
+            "subseq_bound" => self.subseq_bound = v.extract()?,
+            "start_size" => self.start_size = v.extract()?,
+            "size_step" => self.size_step = v.extract()?,
+            "keep_configs" => self.keep_configs = v.extract()?,
+            "min_nuc_rate" => self.min_nuc_rate = v.extract()?,
+            "canvas_size" => self.canvas_size = v.extract()?,
+            "target_size" => self.target_size = v.extract()?,
+            _ => {
+                return Err(PyTypeError::new_err(format!(
+                    "Unknown FFSRunConfig setting: {k}"
+                )))
+            }
+        };
+        Ok(())
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl FFSRunConfig {
+    #[new]
+    fn new(
+        constant_variance: Option<bool>,
+        var_per_mean2: Option<f64>,
+        min_configs: Option<usize>,
+        max_configs: Option<usize>,
+        early_cutoff: Option<bool>,
+        cutoff_probability: Option<f64>,
+        cutoff_number: Option<usize>,
+        min_cutoff_size: Option<NumTiles>,
+        init_bound: Option<EvolveBounds>,
+        subseq_bound: Option<EvolveBounds>,
+        start_size: Option<NumTiles>,
+        size_step: Option<NumTiles>,
+        keep_configs: Option<bool>,
+        min_nuc_rate: Option<Rate>,
+        canvas_size: Option<(usize, usize)>,
+        target_size: Option<NumTiles>,
+    ) -> Self {
+        let mut rc = Self::default();
+
+        if let Some(x) = constant_variance {
+            rc.constant_variance = x;
+        }
+
+        if let Some(x) = var_per_mean2 {
+            rc.var_per_mean2 = x;
+        }
+
+        if let Some(x) = min_configs {
+            rc.min_configs = x;
+        }
+        if let Some(x) = max_configs {
+            rc.max_configs = x;
+        }
+        if let Some(x) = early_cutoff {
+            rc.early_cutoff = x;
+        }
+        if let Some(x) = cutoff_probability {
+            rc.cutoff_probability = x;
+        }
+        if let Some(x) = cutoff_number {
+            rc.cutoff_number = x;
+        }
+        if let Some(x) = min_cutoff_size {
+            rc.min_cutoff_size = x;
+        }
+        if let Some(x) = init_bound {
+            rc.init_bound = x;
+        }
+        if let Some(x) = subseq_bound {
+            rc.subseq_bound = x;
+        }
+        if let Some(x) = start_size {
+            rc.start_size = x;
+        }
+        if let Some(x) = size_step {
+            rc.size_step = x;
+        }
+        if let Some(x) = keep_configs {
+            rc.keep_configs = x;
+        }
+
+        rc.min_nuc_rate = min_nuc_rate;
+
+        if let Some(x) = canvas_size {
+            rc.canvas_size = x;
+        }
+        if let Some(x) = target_size {
+            rc.target_size = x;
+        }
+        rc
+    }
+
+    #[getter]
+    fn get_constant_variance(&self) -> bool {
+        self.constant_variance
+    }
+
+    #[setter]
+    fn set_constant_variance(&mut self, val: bool) {
+        self.constant_variance = val;
+    }
+
+    #[getter]
+    fn get_var_per_mean2(&self) -> f64 {
+        self.var_per_mean2
+    }
+
+    #[setter]
+    fn set_var_per_mean2(&mut self, val: f64) {
+        self.var_per_mean2 = val;
+    }
+
+    #[getter]
+    fn get_min_configs(&self) -> usize {
+        self.min_configs
+    }
+
+    #[setter]
+    fn set_min_configs(&mut self, val: usize) {
+        self.min_configs = val;
+    }
+
+    #[getter]
+    fn get_max_configs(&self) -> usize {
+        self.max_configs
+    }
+
+    #[setter]
+    fn set_max_configs(&mut self, val: usize) {
+        self.max_configs = val;
+    }
+
+    #[getter]
+    fn get_early_cutoff(&self) -> bool {
+        self.early_cutoff
+    }
+
+    #[setter]
+    fn set_early_cutoff(&mut self, val: bool) {
+        self.early_cutoff = val;
+    }
+
+    #[getter]
+    fn get_cutoff_probability(&self) -> f64 {
+        self.cutoff_probability
+    }
+
+    #[setter]
+    fn set_cutoff_probability(&mut self, val: f64) {
+        self.cutoff_probability = val;
+    }
+
+    #[getter]
+    fn get_cutoff_number(&self) -> usize {
+        self.cutoff_number
+    }
+
+    #[setter]
+    fn set_cutoff_number(&mut self, val: usize) {
+        self.cutoff_number = val;
+    }
+
+    #[getter]
+    fn get_min_cutoff_size(&self) -> NumTiles {
+        self.min_cutoff_size
+    }
+
+    #[setter]
+    fn set_min_cutoff_size(&mut self, val: NumTiles) {
+        self.min_cutoff_size = val;
+    }
+
+    #[getter]
+    fn get_init_bound(&self) -> EvolveBounds {
+        self.init_bound
+    }
+
+    #[setter]
+    fn set_init_bound(&mut self, val: EvolveBounds) {
+        self.init_bound = val;
     }
 }
 
@@ -82,7 +285,10 @@ pub trait FFSSurface: Send + Sync {
             .map(|i| self.get_config(i))
             .collect()
     }
+    fn previous_list(&self) -> Vec<usize>;
     fn num_configs(&self) -> usize;
+    fn num_trials(&self) -> usize;
+    fn target_size(&self) -> NumTiles;
 }
 
 impl TileSet {
@@ -211,10 +417,10 @@ impl<
             ret.level_list.push(next);
 
             if config.early_cutoff {
-                if pf > config.cutoff_probability.unwrap() {
+                if pf > config.cutoff_probability {
                     above_cutoff += 1;
-                    if (above_cutoff > config.cutoff_number.unwrap())
-                        & (current_size >= config.min_cutoff_size.unwrap())
+                    if (above_cutoff > config.cutoff_number)
+                        & (current_size >= config.min_cutoff_size)
                     {
                         break;
                     }
@@ -275,6 +481,18 @@ impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers<St> + Sync
     fn num_configs(&self) -> usize {
         self.state_list.len()
     }
+
+    fn target_size(&self) -> NumTiles {
+        self.target_size
+    }
+
+    fn num_trials(&self) -> usize {
+        self.num_trials
+    }
+
+    fn previous_list(&self) -> Vec<usize> {
+        self.previous_list.clone()
+    }
 }
 
 impl<
@@ -296,10 +514,7 @@ impl<
         let target_size = self.target_size + config.size_step;
 
         let bounds = {
-            let mut b = match config.subseq_bound {
-                Some(b) => b,
-                None => EvolveBounds::default(),
-            };
+            let mut b = config.subseq_bound;
             b.size_max = Some(target_size);
             b.size_min = Some(0);
             b
@@ -310,7 +525,7 @@ impl<
         let canvas_size = (self.state_list[0].nrows(), self.state_list[0].ncols());
 
         let cvar = if config.constant_variance {
-            config.var_per_mean2.unwrap()
+            config.var_per_mean2
         } else {
             0.
         };
@@ -393,16 +608,13 @@ impl<
         let mut other: (usize, usize);
 
         let cvar = if config.constant_variance {
-            config.var_per_mean2.unwrap()
+            config.var_per_mean2
         } else {
             0.
         };
 
         let bounds = {
-            let mut b = match config.subseq_bound {
-                Some(b) => b,
-                None => EvolveBounds::default(),
-            };
+            let mut b = config.subseq_bound;
             b.size_max = Some(config.start_size);
             b.size_min = Some(0);
             b

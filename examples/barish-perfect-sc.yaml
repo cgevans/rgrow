@@ -135,7 +135,7 @@ tiles:
   name: Z5Z6_right
 xgrowargs:
   Gmc: 16
-  Gse: 8.0
+  Gse: 8.05
   alpha: 0
   hdoubletiles:
   - [Z7Z8_left, Z7Z8_right]

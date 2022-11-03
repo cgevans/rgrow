@@ -13,6 +13,9 @@ use crate::canvas::PointSafe2;
 use std::fmt::Debug;
 use std::time::Duration;
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 #[derive(Clone, Debug)]
 pub enum Event {
     None,
@@ -33,12 +36,61 @@ pub enum StepOutcome {
 }
 
 #[derive(Debug, Copy, Clone, Default)]
+#[cfg_attr(feature = "python", pyclass)]
 pub struct EvolveBounds {
     pub events: Option<NumEvents>,
     pub time: Option<f64>,
     pub size_min: Option<NumTiles>,
     pub size_max: Option<NumTiles>,
     pub wall_time: Option<Duration>,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl EvolveBounds {
+    #[new]
+    pub fn new(
+        events: Option<NumEvents>,
+        time: Option<f64>,
+        size_min: Option<NumTiles>,
+        size_max: Option<NumTiles>,
+        wall_time: Option<f64>,
+    ) -> Self {
+        Self {
+            events,
+            time,
+            size_min,
+            size_max,
+            wall_time: wall_time.map(Duration::from_secs_f64),
+        }
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!(
+            "EvolveBounds(events={}, time={}, size_min={}, size_max={}, wall_time={})",
+            self.events.map_or("None".to_string(), |v| format!("{v:?}")),
+            self.time.map_or("None".to_string(), |v| format!("{v:?}")),
+            self.size_min
+                .map_or("None".to_string(), |v| format!("{v:?}")),
+            self.size_max
+                .map_or("None".to_string(), |v| format!("{v:?}")),
+            self.wall_time
+                .map_or("None".to_string(), |v| format!("{v:?}"))
+        )
+    }
+}
+
+#[cfg_attr(feature = "python", pymethods)]
+impl EvolveBounds {
+    /// Will the EvolveBounds actually bound anything, or is it just null, such that the simulation will continue
+    /// until a ZeroRate or an error?
+    pub fn is_bounded(&self) -> bool {
+        self.events.is_some()
+            || self.time.is_some()
+            || self.size_min.is_some()
+            || self.size_max.is_some()
+            || self.wall_time.is_some()
+    }
 }
 
 impl EvolveBounds {
