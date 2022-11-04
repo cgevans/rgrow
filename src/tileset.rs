@@ -46,6 +46,12 @@ pub enum ParserError {
     NoGlues,
     #[error(transparent)]
     ColorError(#[from] colors::ColorError),
+    #[error("Tile {name} has {num} edges, but is a {shape} tile.")]
+    WrongNumberOfEdges {
+        name: String,
+        num: usize,
+        shape: TileShape,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -55,11 +61,23 @@ pub enum GlueIdent {
     Num(Glue),
 }
 
+impl From<u32> for GlueIdent {
+    fn from(value: u32) -> Self {
+        Self::Num(value as usize)
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(untagged)]
 pub enum TileIdent {
     Name(String),
     Num(usize),
+}
+
+impl From<u32> for TileIdent {
+    fn from(value: u32) -> Self {
+        Self::Num(value as usize)
+    }
 }
 
 impl Display for GlueIdent {
@@ -93,16 +111,28 @@ impl core::fmt::Debug for TileIdent {
 #[serde(untagged)]
 pub enum ParsedSeed {
     None(),
-    Single(CanvasLength, CanvasLength, base::Tile),
-    Multi(Vec<(CanvasLength, CanvasLength, base::Tile)>),
+    Single(CanvasLength, CanvasLength, TileIdent),
+    Multi(Vec<(CanvasLength, CanvasLength, TileIdent)>),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(untagged)]
 pub enum TileShape {
+    #[serde(alias = "single", alias = "s", alias = "S")]
     Single,
+    #[serde(alias = "horizontal", alias = "h", alias = "H")]
     Horizontal,
+    #[serde(alias = "vertical", alias = "v", alias = "V")]
     Vertical,
+}
+
+impl Display for TileShape {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Single => write!(f, "single"),
+            Self::Horizontal => write!(f, "horizontal double"),
+            Self::Vertical => write!(f, "vertical double"),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -222,7 +252,7 @@ fn alpha_default() -> f64 {
     0.0
 }
 fn gse_default() -> f64 {
-    8.0
+    8.1
 }
 fn gmc_default() -> f64 {
     16.0
@@ -254,11 +284,14 @@ fn tilepairlist_default() -> Vec<(TileIdent, TileIdent)> {
     Vec::new()
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 
 pub enum CanvasType {
+    #[serde(alias = "square")]
     Square,
+    #[serde(alias = "periodic")]
     Periodic,
+    #[serde(alias = "tube")]
     Tube,
 }
 
@@ -268,8 +301,11 @@ fn canvas_type_default() -> CanvasType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Model {
+    #[serde(alias = "kTAM", alias = "ktam")]
     KTAM,
+    #[serde(alias = "aTAM", alias = "atam")]
     ATAM,
+    #[serde(alias = "OldkTAM", alias = "oldktam")]
     OldKTAM,
 }
 
@@ -409,6 +445,11 @@ pub(crate) struct ProcessedTileSet {
     pub(crate) glue_strengths: Array1<f64>,
     pub(crate) has_duples: bool,
 
+    pub(crate) hdoubletiles: Vec<(usize, usize)>,
+    pub(crate) vdoubletiles: Vec<(usize, usize)>,
+
+    pub(crate) seed: Vec<(usize, usize, usize)>,
+
     glue_map: GlueNameMap,
 }
 
@@ -517,6 +558,14 @@ impl ProcessedTileSet {
         let mut tile_stoics = Vec::with_capacity(tileset.tiles.len() + 1);
         let mut tile_edges = Vec::with_capacity((tileset.tiles.len() + 1) * 4);
 
+        let mut double_tile_edges = Vec::new();
+        let mut double_tile_colors = Vec::new();
+        let mut double_tile_names = Vec::new();
+        let mut double_tile_stoics = Vec::new();
+
+        let mut hdoubles = Vec::new();
+        let mut vdoubles = Vec::new();
+
         // Push the zero state
         tile_names.push("empty".to_string());
         tile_colors.push([0, 0, 0, 0]);
@@ -524,8 +573,7 @@ impl ProcessedTileSet {
         tile_edges.append(&mut vec![0, 0, 0, 0]);
 
         let mut tile_i = 1;
-
-        let mut v: Vec<Glue> = Vec::new();
+        let mut double_tile_i_offset = 0;
 
         for tile in &tileset.tiles {
             // Ensure the tile name hasn't already been used.
@@ -544,19 +592,76 @@ impl ProcessedTileSet {
 
             let tile_color = get_color_or_random(&tile.color.as_deref())?;
 
+            let mut v: Vec<usize> = tile
+                .edges
+                .iter()
+                .map(|te| match te {
+                    GlueIdent::Name(n) => *glue_map.get_by_left(n).unwrap(),
+                    GlueIdent::Num(i) => *i,
+                })
+                .collect();
+
             match &tile.shape.as_ref().unwrap_or(&TileShape::Single) {
                 TileShape::Single => {
-                    for te in &tile.edges {
-                        match te {
-                            GlueIdent::Name(n) => v.push(*glue_map.get_by_left(n).unwrap()),
-                            GlueIdent::Num(i) => v.push(*i),
-                        }
+                    if v.len() != 4 {
+                        return Err(ParserError::WrongNumberOfEdges {
+                            name: tile_name,
+                            shape: TileShape::Single,
+                            num: v.len(),
+                        });
                     }
-                    assert!(v.len() == 4);
                     tile_edges.append(&mut v);
                 }
-                TileShape::Horizontal => todo!(),
-                TileShape::Vertical => todo!(),
+                TileShape::Horizontal => {
+                    if v.len() != 6 {
+                        return Err(ParserError::WrongNumberOfEdges {
+                            name: tile_name,
+                            shape: TileShape::Horizontal,
+                            num: v.len(),
+                        });
+                    }
+                    tile_edges.push(v[0]);
+                    tile_edges.push(0);
+                    tile_edges.push(v[4]);
+                    tile_edges.push(v[5]);
+
+                    double_tile_edges.push(v[1]);
+                    double_tile_edges.push(v[2]);
+                    double_tile_edges.push(v[3]);
+                    double_tile_edges.push(0);
+
+                    hdoubles.push((tile_i, double_tile_i_offset));
+                    double_tile_i_offset += 1;
+
+                    double_tile_colors.push(tile_color);
+                    double_tile_stoics.push(tile_stoic);
+                    double_tile_names.push(tile_name.clone());
+                }
+                TileShape::Vertical => {
+                    if v.len() != 6 {
+                        return Err(ParserError::WrongNumberOfEdges {
+                            name: tile_name,
+                            shape: TileShape::Vertical,
+                            num: v.len(),
+                        });
+                    }
+                    tile_edges.push(v[0]);
+                    tile_edges.push(v[1]);
+                    tile_edges.push(0);
+                    tile_edges.push(v[5]);
+
+                    double_tile_edges.push(0);
+                    double_tile_edges.push(v[2]);
+                    double_tile_edges.push(v[3]);
+                    double_tile_edges.push(v[4]);
+
+                    vdoubles.push((tile_i, double_tile_i_offset));
+                    double_tile_i_offset += 1;
+
+                    double_tile_colors.push(tile_color);
+                    double_tile_stoics.push(tile_stoic);
+                    double_tile_names.push(tile_name.clone());
+                }
             }
 
             tile_names.push(tile_name);
@@ -566,16 +671,54 @@ impl ProcessedTileSet {
             tile_i += 1;
         }
 
-        Ok(Self {
-            tile_edges: Array2::from_shape_vec((tile_i, 4), tile_edges).unwrap(),
+        let has_duples = !hdoubles.is_empty() || !vdoubles.is_empty();
+
+        tile_edges.append(&mut double_tile_edges);
+        tile_colors.append(&mut double_tile_colors);
+        tile_names.append(&mut double_tile_names);
+        tile_stoics.append(&mut double_tile_stoics);
+
+        hdoubles.iter_mut().for_each(|(_, j)| *j += tile_i);
+        vdoubles.iter_mut().for_each(|(_, j)| *j += tile_i);
+
+        let mut s = Self {
+            tile_edges: Array2::from_shape_vec((tile_i + double_tile_i_offset, 4), tile_edges)
+                .unwrap(),
             tile_stoics: Array1::from_vec(tile_stoics),
             tile_names,
             tile_colors,
             glue_names: Vec::new(),
             glue_strengths,
-            has_duples: false,
+            has_duples,
             glue_map,
-        })
+            hdoubletiles: hdoubles,
+            vdoubletiles: vdoubles,
+            seed: Vec::new(),
+        };
+
+        s.seed = match &tileset.options.seed {
+            ParsedSeed::None() => Vec::new(),
+            ParsedSeed::Single(x, y, t) => vec![(*x, *y, s.tpmap(t))],
+            ParsedSeed::Multi(v) => v.iter().map(|(x, y, t)| (*x, *y, s.tpmap(t))).collect(),
+        };
+
+        let hdoubles = tileset
+            .options
+            .hdoubletiles
+            .iter()
+            .map(|(a, b)| (s.tpmap(a), s.tpmap(b)))
+            .collect::<Vec<_>>();
+        let vdoubles = tileset
+            .options
+            .vdoubletiles
+            .iter()
+            .map(|(a, b)| (s.tpmap(a), s.tpmap(b)))
+            .collect::<Vec<_>>();
+
+        s.hdoubletiles.extend(hdoubles);
+        s.vdoubletiles.extend(vdoubles);
+
+        Ok(s)
     }
 
     pub fn tpmap(&self, tp: &TileIdent) -> usize {

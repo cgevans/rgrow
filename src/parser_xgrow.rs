@@ -1,7 +1,11 @@
 //! A parser for the original Xgrow tileset files.  Note that this tries to fit Xgrow's behavior closely, so parsing is occasionally weird
 //! (eg, *no* whitespace is needed to separate things)
 
-use crate::{base::Glue, system::FissionHandling, tileset::TileShape};
+use crate::{
+    base::Glue,
+    system::FissionHandling,
+    tileset::{CanvasType, Model, Size, TileIdent, TileShape},
+};
 
 use super::tileset;
 use super::tileset::GlueIdent;
@@ -115,35 +119,47 @@ fn parse(input: &str) -> IResult<&str, tileset::TileSet> {
 
     let (input, tiles) = tilelist(input)?;
 
-    let (input, bondstrengths) = std_delim(preceded(
+    let (input, bondstrengths) = opt(std_delim(preceded(
         tag("binding strengths="),
         std_delim(delimited(tag("{"), many1(std_delim(string_f64)), tag("}"))),
-    ))(input)?;
+    )))(input)?;
+
+    let (input, (options, glues)) = xgrow_args(input)?;
 
     // todo: checks
 
     let bonds = match bondnames {
-        Some(b) => bondstrengths
-            .iter()
-            .zip(b)
-            .map(|(s, n)| tileset::Bond {
-                name: tileset::GlueIdent::Name(n.to_string()),
-                strength: *s,
-            })
-            .collect(),
-        None => bondstrengths
-            .iter()
-            .enumerate()
-            .map(|(i, s)| tileset::Bond {
-                name: tileset::GlueIdent::Num((i + 1) as Glue),
-                strength: *s,
-            })
-            .collect(),
+        Some(b) => match bondstrengths {
+            Some(bs) => bs
+                .iter()
+                .zip(b)
+                .map(|(s, n)| tileset::Bond {
+                    name: tileset::GlueIdent::Name(n.to_string()),
+                    strength: *s,
+                })
+                .collect(),
+
+            None => b
+                .iter()
+                .map(|n| tileset::Bond {
+                    name: tileset::GlueIdent::Name(n.to_string()),
+                    strength: 1.0,
+                })
+                .collect(),
+        },
+        None => match bondstrengths {
+            Some(bs) => bs
+                .iter()
+                .enumerate()
+                .map(|(i, s)| tileset::Bond {
+                    name: tileset::GlueIdent::Num((i + 1) as Glue),
+                    strength: *s,
+                })
+                .collect(),
+
+            None => Vec::new(),
+        },
     };
-
-    // Todo: glue defs go here
-
-    let (input, options) = xgrow_args(input)?;
 
     all_consuming(rsc)(input)?;
 
@@ -152,7 +168,7 @@ fn parse(input: &str) -> IResult<&str, tileset::TileSet> {
         tileset::TileSet {
             tiles,
             bonds,
-            glues: Vec::new(),
+            glues,
             options,
             cover_strands: None,
         },
@@ -169,6 +185,11 @@ enum XgrowArgs<'a> {
     UpdateRate(u64),
     Unhandled(&'a str),
     Seed(tileset::ParsedSeed),
+    T(f64),
+    GlueLink(u32, u32, f64),
+    Periodic(bool),
+    HDoubleTile(TileIdent, TileIdent),
+    VDoubleTile(TileIdent, TileIdent),
 }
 
 fn arg_block(input: &str) -> IResult<&str, XgrowArgs> {
@@ -181,6 +202,17 @@ fn arg_size(input: &str) -> IResult<&str, XgrowArgs> {
     map(preceded(tag("size="), take_u32), |x| {
         XgrowArgs::Size(x as usize)
     })(input)
+}
+
+fn arg_gluelink(input: &str) -> IResult<&str, XgrowArgs> {
+    let (input, (g1, _, g2)) = preceded(
+        tag("g"),
+        delimited(tag("("), tuple((take_u32, tag(","), take_u32)), tag(")")),
+    )(input)?;
+
+    let (input, v) = preceded(tag("="), string_f64)(input)?;
+
+    return Ok((input, XgrowArgs::GlueLink(g1, g2, v)));
 }
 
 fn arg_gse(input: &str) -> IResult<&str, XgrowArgs> {
@@ -202,20 +234,52 @@ fn arg_seed(input: &str) -> IResult<&str, XgrowArgs> {
         tag("seed="),
         map(
             tuple((take_u32, tag(","), take_u32, tag(","), take_u32)),
-            |(x, _, y, _, t)| {
+            |(y, _, x, _, t)| {
                 XgrowArgs::Seed(tileset::ParsedSeed::Single(
-                    y as usize, x as usize, t as usize,
+                    y as usize,
+                    x as usize,
+                    t.into(),
                 ))
             },
         ),
     )(input)
 }
 
+fn arg_hdoubletile(input: &str) -> IResult<&str, XgrowArgs> {
+    preceded(
+        tag("doubletile="),
+        map(tuple((take_u32, tag(","), take_u32)), |(x, _, y)| {
+            XgrowArgs::HDoubleTile(x.into(), y.into())
+        }),
+    )(input)
+}
+
+fn arg_vdoubletile(input: &str) -> IResult<&str, XgrowArgs> {
+    preceded(
+        tag("vdoubletile="),
+        map(tuple((take_u32, tag(","), take_u32)), |(x, _, y)| {
+            XgrowArgs::VDoubleTile(x.into(), y.into())
+        }),
+    )(input)
+}
+
+fn arg_periodic(input: &str) -> IResult<&str, XgrowArgs> {
+    alt((
+        map(tag("periodic=False"), |_| XgrowArgs::Periodic(false)),
+        map(tag("periodic=True"), |_| XgrowArgs::Periodic(true)),
+        map(tag("periodic"), |_| XgrowArgs::Periodic(true)),
+    ))(input)
+}
+
+fn arg_threshold(input: &str) -> IResult<&str, XgrowArgs> {
+    map(preceded(tag("T="), string_f64), XgrowArgs::T)(input)
+}
+
 fn unhandled_option(input: &str) -> IResult<&str, XgrowArgs> {
     map(is_not(" \t\r\n%"), XgrowArgs::Unhandled)(input)
 }
 
-fn xgrow_args(input: &str) -> IResult<&str, tileset::Args> {
+fn xgrow_args(input: &str) -> IResult<&str, (tileset::Args, Vec<(GlueIdent, GlueIdent, f64)>)> {
     let mut args = tileset::Args::default();
 
     let parsers = (
@@ -225,11 +289,18 @@ fn xgrow_args(input: &str) -> IResult<&str, tileset::Args> {
         arg_gse,
         arg_update_rate,
         arg_seed,
+        arg_threshold,
+        arg_gluelink,
+        arg_periodic,
+        arg_hdoubletile,
+        arg_vdoubletile,
         unhandled_option,
     );
 
     let mut i2 = input;
-    let mut size: usize = 32;
+    args.size = Size::Single(132);
+
+    let mut gluelinks = Vec::new();
 
     while let Ok((input, x)) = std_delim(alt(parsers))(i2) {
         match x {
@@ -237,7 +308,6 @@ fn xgrow_args(input: &str) -> IResult<&str, tileset::Args> {
                 args.block = Some(n);
             }
             XgrowArgs::Size(n) => {
-                size = n;
                 args.size = crate::tileset::Size::Single(n);
             }
             XgrowArgs::Gse(x) => {
@@ -255,17 +325,49 @@ fn xgrow_args(input: &str) -> IResult<&str, tileset::Args> {
             XgrowArgs::Seed(x) => {
                 args.seed = x;
             }
+            XgrowArgs::T(x) => {
+                args.model = Model::ATAM;
+                args.threshold = x;
+            }
+            XgrowArgs::GlueLink(g1, g2, v) => gluelinks.push((g1.into(), g2.into(), v)),
+            XgrowArgs::Periodic(b) => {
+                if b {
+                    args.canvas_type = CanvasType::Periodic;
+                } else {
+                    args.canvas_type = CanvasType::Square;
+                }
+            }
+            XgrowArgs::HDoubleTile(t1, t2) => {
+                args.hdoubletiles.push((t1.into(), t2.into()));
+            }
+            XgrowArgs::VDoubleTile(t1, t2) => {
+                args.vdoubletiles.push((t1.into(), t2.into()));
+            }
         }
         i2 = input;
     }
 
+    let Size::Single(size) = args.size else { panic!() };
+
     if let tileset::ParsedSeed::None() = args.seed {
-        args.seed = tileset::ParsedSeed::Single(size - 2, size - 2, 1);
+        args.seed = tileset::ParsedSeed::Single(size - 3, size - 3, 1.into());
+    }
+
+    if let tileset::ParsedSeed::Single(x, y, t) = &args.seed {
+        if ((*x > size - 3) || (*y > size - 3))
+            || (*x < 2)
+            || (*y < 2) && (args.canvas_type == CanvasType::Square)
+        {
+            let nx = (*x).clamp(2, size - 3);
+            let ny = (*y).clamp(2, size - 3);
+            println!("Warning: seed position {x}, {y} is out of bounds for rgrow.  Adjusting to {nx}, {ny}.");
+            args.seed = tileset::ParsedSeed::Single(nx, ny, t.clone());
+        }
     }
 
     args.fission = FissionHandling::NoFission;
 
-    Ok((i2, args))
+    Ok((i2, (args, gluelinks)))
 }
 
 pub fn parse_xgrow(file: String) -> Result<tileset::TileSet, Box<dyn Error>> {
@@ -274,7 +376,8 @@ pub fn parse_xgrow(file: String) -> Result<tileset::TileSet, Box<dyn Error>> {
     let mut tilestring = String::new();
     f.read_to_string(&mut tilestring)?;
 
-    let (_, parsed) = parse(tilestring.as_str()).unwrap();
-
-    Ok(parsed)
+    match parse(tilestring.as_str()) {
+        Ok((_, tileset)) => Ok(tileset),
+        Err(x) => Err(Box::new(x.to_owned())),
+    }
 }

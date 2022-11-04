@@ -74,6 +74,7 @@ impl Default for FFSRunConfig {
     }
 }
 
+#[cfg(feature = "python")]
 impl FFSRunConfig {
     pub fn _py_set(&mut self, k: &str, v: &PyAny, _py: Python) -> PyResult<()> {
         match k {

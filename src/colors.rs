@@ -816,5 +816,9 @@ pub(crate) static COLORS: phf::Map<&'static str, [u8; 4]> = phf_map! {
 "rebecca purple" => [102, 51, 153, 0xff],
 "RebeccaPurple" => [102, 51, 153, 0xff],
 "silver" => [192, 192, 192, 0xff],
-"teal" => [0, 128, 128, 0xff]
+"teal" => [0, 128, 128, 0xff],
+// Additions to fix xgrow examples
+"red5" => [73, 0, 0, 0xff],
+"lightbrown" => [0xad, 0x81, 0x50, 0xff],
+"forest" => [0x0b, 0x55, 0x09, 0xff]
 };

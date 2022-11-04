@@ -23,7 +23,7 @@ name = "rgrow-bin"
 path = "src/main.rs"
 
 [features]
-default = ["ui", "use_rayon", "python"]
+default = ["ui", "use_rayon"]
 ui = ["fltk", "pixels"]
 use_rayon = ["rayon"]
 python = ["pyo3", "numpy"]

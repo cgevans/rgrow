@@ -436,17 +436,18 @@ impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
 
         let tile_edges = proc.tile_edges;
 
-        let seed = match &tsc.options.seed {
-            ParsedSeed::Single(y, x, v) => Seed::SingleTile {
-                point: (*y, *x),
-                tile: *v,
-            },
-            ParsedSeed::None() => Seed::None(),
-            ParsedSeed::Multi(vec) => {
-                let mut hm = HashMap::default();
-                hm.extend(vec.iter().map(|(y, x, v)| ((*y, *x), *v)));
-                Seed::MultiTile(hm)
+        let seed = if proc.seed.is_empty() {
+            Seed::None()
+        } else if proc.seed.len() == 1 {
+            let (x, y, v) = proc.seed[0];
+            Seed::SingleTile {
+                point: (x, y),
+                tile: v,
             }
+        } else {
+            let mut hm = HashMap::default();
+            hm.extend(proc.seed.iter().map(|(y, x, v)| ((*y, *x), *v)));
+            Seed::MultiTile(hm)
         };
 
         let inner = OldKTAM::from_ktam(

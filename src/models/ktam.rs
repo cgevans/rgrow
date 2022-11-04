@@ -8,7 +8,7 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemInfo, SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
-    tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, SimFromTileSet, Size, TileSet},
+    tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
 
 use fnv::{FnvHashMap, FnvHashSet};
@@ -1268,32 +1268,19 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
     fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
 
-        let seed = match &tileset.options.seed {
-            ParsedSeed::Single(y, x, v) => Seed::SingleTile {
-                point: PointSafe2((*y, *x)),
-                tile: *v,
-            },
-            ParsedSeed::None() => Seed::None(),
-            ParsedSeed::Multi(vec) => {
-                let mut hm = HashMap::default();
-                hm.extend(vec.iter().map(|(y, x, v)| (PointSafe2((*y, *x)), *v)));
-                Seed::MultiTile(hm)
+        let seed = if proc.seed.len() == 0 {
+            Seed::None()
+        } else if proc.seed.len() == 1 {
+            let (x, y, v) = proc.seed[0];
+            Seed::SingleTile {
+                point: PointSafe2((x, y)),
+                tile: v,
             }
+        } else {
+            let mut hm = HashMap::default();
+            hm.extend(proc.seed.iter().map(|(y, x, v)| (PointSafe2((*y, *x)), *v)));
+            Seed::MultiTile(hm)
         };
-
-        let hdoubles: Vec<(usize, usize)> = tileset
-            .options
-            .hdoubletiles
-            .iter()
-            .map(|(a, b)| (proc.tpmap(a), proc.tpmap(b)))
-            .collect();
-
-        let vdoubles: Vec<(usize, usize)> = tileset
-            .options
-            .vdoubletiles
-            .iter()
-            .map(|(a, b)| (proc.tpmap(a), proc.tpmap(b)))
-            .collect();
 
         let gluelinks = tileset
             .glues
@@ -1319,7 +1306,7 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
 
         newkt.glue_names = proc.glue_names;
 
-        newkt.set_duples(hdoubles, vdoubles);
+        newkt.set_duples(proc.hdoubletiles, proc.vdoubletiles);
 
         for (g1, g2, s) in gluelinks {
             newkt.glue_links[(g2, g1)] = s;
