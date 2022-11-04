@@ -14,28 +14,18 @@ thread_local! {
 pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
     let mut sim = parsed.into_simulation()?;
 
-    let size1: usize;
-    let size2: usize;
-
-    match parsed.options.size {
-        crate::tileset::Size::Single(x) => {
-            size1 = x;
-            size2 = x;
-        }
-        crate::tileset::Size::Pair((x, y)) => {
-            size1 = x;
-            size2 = y;
-        }
-    }
-
-    let state_i = sim.add_state((size1, size2))?;
+    let state_i = sim.add_state()?;
     let mut state = sim.state_ref(state_i);
+
+    let (width, height) = sim.draw_size(state_i);
 
     let scale = match parsed.options.block {
         Some(i) => i,
         None => {
             let (w, h) = app::screen_size();
-            (w / (size2 as f64)).min(h / (size1 as f64)).floor() as usize
+            ((w - 50.) / (width as f64))
+                .min((h - 50.) / (height as f64))
+                .floor() as usize
         }
     };
     app::screen_size();
@@ -62,8 +52,6 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     let mut win_height = win.pixel_h() as u32;
 
     let surface_texture = SurfaceTexture::new(win_width, win_height - 30, &win);
-
-    let (width, height) = sim.draw_size(0);
 
     let mut pixels = { Pixels::new(width, height, surface_texture)? };
 

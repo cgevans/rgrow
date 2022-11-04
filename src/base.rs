@@ -17,6 +17,8 @@ pub enum GrowError {
     WrongCanvasSize(usize, usize),
     #[error("FFS is meaningless for the aTAM.")]
     FFSCannotRunATAM,
+    #[error("Point ({0}, {1}) is out of bounds.")]
+    OutOfBounds(usize, usize),
 }
 
 #[derive(Error, Debug)]
@@ -41,3 +43,7 @@ pub enum ModelError {
 pub type GrowResult<T> = Result<T, GrowError>;
 
 pub type Rate = f64;
+
+use fnv::{FnvHashMap, FnvHashSet};
+pub(crate) type HashSetType<T> = FnvHashSet<T>;
+pub(crate) type HashMapType<K, V> = FnvHashMap<K, V>;

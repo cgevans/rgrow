@@ -1,7 +1,7 @@
 use std::{collections::HashMap, marker::PhantomData, sync::RwLock};
 
+use crate::base::{HashMapType, HashSetType};
 use cached::{Cached, SizedCache};
-use fnv::{FnvHashMap, FnvHashSet};
 use ndarray::{Array1, Array2};
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ use crate::{
     state::{State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        SystemInfo, SystemWithDimers, SystemWithStateCreate, TileBondInfo,
+        SystemInfo, SystemWithDimers, TileBondInfo,
     },
     tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
@@ -39,10 +39,10 @@ impl Default for ClonableCache {
 pub enum Seed {
     None(),
     SingleTile { point: Point, tile: Tile },
-    MultiTile(FnvHashMap<Point, Tile>),
+    MultiTile(HashMapType<Point, Tile>),
 }
 
-type TileHashSetVec = Vec<FnvHashSet<Tile>>;
+type TileHashSetVec = Vec<HashSetType<Tile>>;
 
 fn create_friend_data(
     energy_ns: &Array2<Energy>,
@@ -53,16 +53,16 @@ fn create_friend_data(
     TileHashSetVec,
     TileHashSetVec,
 ) {
-    let mut friends_n = Vec::<FnvHashSet<Tile>>::new();
-    let mut friends_e = Vec::<FnvHashSet<Tile>>::new();
-    let mut friends_s = Vec::<FnvHashSet<Tile>>::new();
-    let mut friends_w = Vec::<FnvHashSet<Tile>>::new();
+    let mut friends_n = Vec::<HashSetType<Tile>>::new();
+    let mut friends_e = Vec::<HashSetType<Tile>>::new();
+    let mut friends_s = Vec::<HashSetType<Tile>>::new();
+    let mut friends_w = Vec::<HashSetType<Tile>>::new();
 
     for _t1 in 0..energy_ns.nrows() {
-        friends_n.push(FnvHashSet::default());
-        friends_e.push(FnvHashSet::default());
-        friends_s.push(FnvHashSet::default());
-        friends_w.push(FnvHashSet::default());
+        friends_n.push(HashSetType::default());
+        friends_e.push(HashSetType::default());
+        friends_s.push(HashSetType::default());
+        friends_w.push(HashSetType::default());
     }
 
     for t1 in 0..energy_ns.nrows() {
@@ -523,7 +523,7 @@ where
                 None => {
                     drop(ic);
 
-                    let mut friends = FnvHashSet::<Tile>::default();
+                    let mut friends = HashSetType::<Tile>::default();
 
                     if tn != 0 {
                         friends.extend(&self.friends_s[tn]);
@@ -662,7 +662,7 @@ where
                 }
             }
         } else {
-            let mut friends = FnvHashSet::<Tile>::default();
+            let mut friends = HashSetType::<Tile>::default();
 
             friends.extend(&self.friends_s[tn]);
             friends.extend(&self.friends_w[te]);
@@ -862,11 +862,12 @@ impl<St: State + StateCreate> SimFromTileSet for OldKTAM<St> {
             Size::Single(x) => (x, x),
             Size::Pair((x, y)) => (x, y),
         };
-        let state = sys.new_state(size)?;
+        // let state = sys.new_state(size)?;
         let sim = crate::simulation::ConcreteSimulation {
             system: sys,
-            states: vec![state],
+            states: vec![],
             rng: SmallRng::from_entropy(),
+            default_state_size: size,
         };
         Ok(Box::new(sim))
     }

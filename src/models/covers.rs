@@ -1,11 +1,9 @@
-use std::collections::HashMap;
-
 use ndarray::Array2;
 use rand::{rngs::SmallRng, Rng};
 
 use super::oldktam::OldKTAM;
 use crate::{
-    base::{NumEvents, NumTiles, Point, Rate, RgrowError, Tile},
+    base::{HashMapType, Rate, RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     models::oldktam::Seed,
     state::{State, StateCreate},
@@ -178,39 +176,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
         StepOutcome::HadEventAt(time_step)
     }
 
-    fn evolve_in_size_range_events_max(
-        &mut self,
-        state: &mut S,
-        minsize: NumTiles,
-        maxsize: NumTiles,
-        maxevents: NumEvents,
-        rng: &mut SmallRng,
-    ) {
-        let mut events: NumEvents = 0;
-
-        while (events < maxevents) & (state.ntiles() < maxsize) & (state.ntiles() > minsize) {
-            match self.state_step(state, rng, 1e100) {
-                StepOutcome::HadEventAt(_) => {
-                    events += 1;
-                }
-                StepOutcome::NoEventIn(_) => {
-                    println!("Timeout {state:?}");
-                }
-                StepOutcome::DeadEventAt(_) => {
-                    println!("Dead");
-                }
-                StepOutcome::ZeroRate => {
-                    panic!()
-                }
-            }
-        }
-    }
-
-    fn set_point(&self, state: &mut S, point: Point, tile: Tile) -> &Self {
-        assert!(state.inbounds(point));
-
-        let point = PointSafe2(point);
-
+    fn set_safe_point(&self, state: &mut S, point: PointSafe2, tile: Tile) -> &Self {
         state.set_sa(&point, &tile);
 
         let event = Event::MonomerAttachment(point, tile);
@@ -445,7 +411,7 @@ impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
                 tile: v,
             }
         } else {
-            let mut hm = HashMap::default();
+            let mut hm = HashMapType::default();
             hm.extend(proc.seed.iter().map(|(y, x, v)| ((*y, *x), *v)));
             Seed::MultiTile(hm)
         };

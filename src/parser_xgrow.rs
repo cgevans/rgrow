@@ -23,8 +23,8 @@ use nom::{
     IResult,
 };
 
+use std::fs::File;
 use std::io::prelude::*;
-use std::{error::Error, fs::File};
 
 type GlueVec = Vec<(GlueIdent, GlueIdent, f64)>;
 
@@ -372,14 +372,13 @@ fn xgrow_args(input: &str) -> IResult<&str, (tileset::Args, GlueVec)> {
     Ok((i2, (args, gluelinks)))
 }
 
-pub fn parse_xgrow(file: String) -> Result<tileset::TileSet, Box<dyn Error>> {
+pub fn parse_xgrow(file: String) -> anyhow::Result<tileset::TileSet> {
     let mut f = File::open(file)?;
 
     let mut tilestring = String::new();
     f.read_to_string(&mut tilestring)?;
 
-    match parse(tilestring.as_str()) {
-        Ok((_, tileset)) => Ok(tileset),
-        Err(x) => Err(Box::new(x.to_owned())),
-    }
+    parse(tilestring.as_str())
+        .map_err(|x| x.to_owned().into())
+        .map(|x| x.1)
 }

@@ -65,17 +65,14 @@ struct PO {
     input: String,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     let opts = Opts::parse();
 
     match opts.subcmd {
         SubCommand::Run(po) =>
         #[cfg(feature = "ui")]
         {
-            let file = match File::open(po.input) {
-                Ok(f) => f,
-                Err(e) => return Err(Box::new(rgrow::tileset::ParserError::Io { source: e })),
-            };
+            let file = File::open(po.input)?;
             let parsed: TileSet = serde_yaml::from_reader(file)?;
             run_window(&parsed)?;
             Ok(())

@@ -1,17 +1,17 @@
 use super::ktam_fission::*;
 use crate::{
-    base::RgrowError,
+    base::{GrowError, RgrowError},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     simulation::Simulation,
     state::{self, State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        SystemInfo, SystemWithDimers, SystemWithStateCreate, TileBondInfo,
+        SystemInfo, SystemWithDimers, TileBondInfo,
     },
     tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
 
-use fnv::{FnvHashMap, FnvHashSet};
+use crate::base::{HashMapType, HashSetType};
 use ndarray::prelude::*;
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -45,7 +45,7 @@ fn energy_exp_times_u0(x: f64) -> Conc {
 pub enum Seed {
     None(),
     SingleTile { point: PointSafe2, tile: Tile },
-    MultiTile(FnvHashMap<PointSafe2, Tile>),
+    MultiTile(HashMapType<PointSafe2, Tile>),
 }
 
 enum TileShape {
@@ -88,15 +88,15 @@ pub struct KTAM<C: Canvas> {
     /// at point P if tile T is in that direction.  Eg, friends_e[T]
     /// is a set of tiles that might attach at point P if T is east of
     /// point P.  The ones other than NESW are only for duples.
-    friends_n: Vec<FnvHashSet<Tile>>,
-    friends_e: Vec<FnvHashSet<Tile>>,
-    friends_s: Vec<FnvHashSet<Tile>>,
-    friends_w: Vec<FnvHashSet<Tile>>,
-    friends_ne: Vec<FnvHashSet<Tile>>,
-    friends_ee: Vec<FnvHashSet<Tile>>,
-    friends_se: Vec<FnvHashSet<Tile>>,
-    friends_ss: Vec<FnvHashSet<Tile>>,
-    friends_sw: Vec<FnvHashSet<Tile>>,
+    friends_n: Vec<HashSetType<Tile>>,
+    friends_e: Vec<HashSetType<Tile>>,
+    friends_s: Vec<HashSetType<Tile>>,
+    friends_w: Vec<HashSetType<Tile>>,
+    friends_ne: Vec<HashSetType<Tile>>,
+    friends_ee: Vec<HashSetType<Tile>>,
+    friends_se: Vec<HashSetType<Tile>>,
+    friends_ss: Vec<HashSetType<Tile>>,
+    friends_sw: Vec<HashSetType<Tile>>,
 
     has_duples: bool,
     double_to_left: Array1<Tile>,
@@ -752,15 +752,15 @@ impl<S: State> KTAM<S> {
         self.friends_ss.drain(..);
         self.friends_sw.drain(..);
         for _ in 0..ntiles {
-            self.friends_n.push(FnvHashSet::default());
-            self.friends_e.push(FnvHashSet::default());
-            self.friends_s.push(FnvHashSet::default());
-            self.friends_w.push(FnvHashSet::default());
-            self.friends_ne.push(FnvHashSet::default());
-            self.friends_ee.push(FnvHashSet::default());
-            self.friends_se.push(FnvHashSet::default());
-            self.friends_ss.push(FnvHashSet::default());
-            self.friends_sw.push(FnvHashSet::default());
+            self.friends_n.push(HashSetType::default());
+            self.friends_e.push(HashSetType::default());
+            self.friends_s.push(HashSetType::default());
+            self.friends_w.push(HashSetType::default());
+            self.friends_ne.push(HashSetType::default());
+            self.friends_ee.push(HashSetType::default());
+            self.friends_se.push(HashSetType::default());
+            self.friends_ss.push(HashSetType::default());
+            self.friends_sw.push(HashSetType::default());
         }
         for t1 in 0..ntiles {
             for t2 in 0..ntiles {
@@ -980,10 +980,11 @@ impl<S: State> KTAM<S> {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
-    pub fn setup_state(&self, state: &mut S) {
+    pub fn setup_state(&self, state: &mut S) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
-            self.set_point(state, p.0, t);
+            self.set_point(state, p.0, t)?;
         }
+        Ok(())
     }
 
     fn _find_monomer_attachment_possibilities_at_point(
@@ -998,7 +999,7 @@ impl<S: State> KTAM<S> {
         let te = state.tile_to_e(p);
         let ts = state.tile_to_s(p);
 
-        let mut friends = FnvHashSet::<Tile>::default();
+        let mut friends = HashSetType::<Tile>::default();
 
         if tn.nonzero() {
             friends.extend(&self.friends_n[tn]);
@@ -1254,11 +1255,12 @@ impl<St: State + StateCreate> SimFromTileSet for KTAM<St> {
             Size::Single(x) => (x, x),
             Size::Pair((x, y)) => (x, y),
         };
-        let state = sys.new_state(size)?;
+        // let state = sys.new_state(size)?;
         let sim = crate::simulation::ConcreteSimulation {
             system: sys,
-            states: vec![state],
+            states: vec![],
             rng: SmallRng::from_entropy(),
+            default_state_size: size,
         };
         Ok(Box::new(sim))
     }

@@ -150,7 +150,7 @@ pub enum ChunkSize {
 pub trait SystemWithStateCreate<S: State + StateCreate>: System<S> {
     fn new_state(&self, shape: (usize, usize)) -> Result<S, GrowError> {
         let mut new_state = S::empty(shape)?;
-        self.insert_seed(&mut new_state);
+        self.insert_seed(&mut new_state)?;
         Ok(new_state)
     }
 
@@ -158,9 +158,9 @@ pub trait SystemWithStateCreate<S: State + StateCreate>: System<S> {
         assert!(size > 8);
         let mut ret = S::empty((size, size))?;
         let mid = size / 2;
-        self.insert_seed(&mut ret);
-        self.set_point(&mut ret, (mid, mid), w);
-        self.set_point(&mut ret, (mid, mid + 1), e);
+        // self.insert_seed(&mut ret);
+        self.set_point(&mut ret, (mid, mid), w)?;
+        self.set_point(&mut ret, (mid, mid + 1), e)?;
         Ok(ret)
     }
 
@@ -168,9 +168,9 @@ pub trait SystemWithStateCreate<S: State + StateCreate>: System<S> {
         assert!(size > 8);
         let mut ret = S::empty((size, size))?;
         let mid = size / 2;
-        self.insert_seed(&mut ret);
-        self.set_point(&mut ret, (mid, mid), n);
-        self.set_point(&mut ret, (mid + 1, mid), s);
+        // self.insert_seed(&mut ret);
+        self.set_point(&mut ret, (mid, mid), n)?;
+        self.set_point(&mut ret, (mid + 1, mid), s)?;
         Ok(ret)
     }
 }
@@ -277,11 +277,15 @@ pub trait System<S: State>: Debug {
         }
     }
 
-    fn set_point(&self, state: &mut S, point: Point, tile: Tile) -> &Self {
-        assert!(state.inbounds(point));
+    fn set_point(&self, state: &mut S, point: Point, tile: Tile) -> Result<&Self, GrowError> {
+        if !state.inbounds(point) {
+            Err(GrowError::OutOfBounds(point.0, point.1))
+        } else {
+            Ok(self.set_safe_point(state, PointSafe2(point), tile))
+        }
+    }
 
-        let point = PointSafe2(point);
-
+    fn set_safe_point(&self, state: &mut S, point: PointSafe2, tile: Tile) -> &Self {
         let event = Event::MonomerChange(point, tile);
 
         self.perform_event(state, &event)
@@ -305,10 +309,11 @@ pub trait System<S: State>: Debug {
         self
     }
 
-    fn insert_seed(&self, state: &mut S) {
+    fn insert_seed(&self, state: &mut S) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
-            self.set_point(state, p.0, t);
+            self.set_point(state, p.0, t)?;
         }
+        Ok(())
     }
 
     fn perform_event(&self, state: &mut S, event: &Event) -> &Self {

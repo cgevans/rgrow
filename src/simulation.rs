@@ -10,6 +10,7 @@ use crate::system::{SystemWithStateCreate, TileBondInfo};
 pub(crate) struct ConcreteSimulation<Sy: System<St>, St: State> {
     pub system: Sy,
     pub states: Vec<St>,
+    pub default_state_size: (usize, usize),
     pub rng: SmallRng,
 }
 pub trait Simulation: Send + Sync + SystemInfo {
@@ -19,11 +20,11 @@ pub trait Simulation: Send + Sync + SystemInfo {
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError>;
     fn state_ref(&self, state_index: usize) -> &dyn State;
-    fn add_state(&mut self, shape: (usize, usize)) -> Result<usize, GrowError>;
-    fn add_n_states(&mut self, n: usize, shape: (usize, usize)) -> Result<Vec<usize>, GrowError> {
+    fn add_state(&mut self) -> Result<usize, GrowError>;
+    fn add_n_states(&mut self, n: usize) -> Result<Vec<usize>, GrowError> {
         let mut indices = Vec::with_capacity(n);
         for _ in 0..n {
-            indices.push(self.add_state(shape)?);
+            indices.push(self.add_state()?);
         }
         Ok(indices)
     }
@@ -58,8 +59,9 @@ impl<
         state.draw(frame, self.system.tile_colors());
     }
 
-    fn add_state(&mut self, shape: (usize, usize)) -> Result<usize, GrowError> {
-        self.states.push(self.system.new_state(shape)?);
+    fn add_state(&mut self) -> Result<usize, GrowError> {
+        self.states
+            .push(self.system.new_state(self.default_state_size)?);
         Ok(self.states.len() - 1)
     }
 

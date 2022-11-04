@@ -1,8 +1,8 @@
 use super::ktam::KTAM;
+use crate::base::HashMapType;
 use crate::base::Tile;
 use crate::canvas::Canvas;
 use crate::canvas::PointSafe2;
-use fnv::FnvHashMap;
 use rand::{distributions::weighted::WeightedIndex, distributions::Distribution};
 use std::collections::VecDeque;
 
@@ -52,7 +52,7 @@ type GroupNum = usize;
 #[derive(Debug)]
 pub struct GroupInfo {
     /// Contains mappings of point -> (unmerged) group number.
-    pub map: FnvHashMap<PointSafe2, GroupNum>,
+    pub map: HashMapType<PointSafe2, GroupNum>,
     /// Contains mappings of unmerged group number to merged group number.
     groupmerges: Vec<GroupNum>,
     /// Contains lists of points in each (unmerged) group number.
@@ -63,7 +63,7 @@ impl GroupInfo {
     fn new(start_points: &Vec<&PointSafe2>, now_empty: &[PointSafe2]) -> Self {
         let groupmerges = (0usize..=start_points.len()).collect();
 
-        let mut map = FnvHashMap::default();
+        let mut map = HashMapType::default();
 
         let mut pointlist = Vec::new();
 
@@ -191,7 +191,7 @@ impl GroupInfo {
     }
 
     pub fn merged_pointlist(&self) -> Vec<Vec<PointSafe2>> {
-        let mut mergedpointhash = FnvHashMap::<usize, Vec<PointSafe2>>::default();
+        let mut mergedpointhash = HashMapType::<usize, Vec<PointSafe2>>::default();
         for (pointvec, i) in self.pointlist.iter().zip(&self.groupmerges) {
             // Exclude deletion group
             if *i == 0 {
