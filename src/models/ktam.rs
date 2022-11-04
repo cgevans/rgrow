@@ -1268,7 +1268,7 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
     fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
 
-        let seed = if proc.seed.len() == 0 {
+        let seed = if proc.seed.is_empty() {
             Seed::None()
         } else if proc.seed.len() == 1 {
             let (x, y, v) = proc.seed[0];

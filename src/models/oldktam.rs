@@ -15,7 +15,7 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemInfo, SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
-    tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, SimFromTileSet, Size, TileSet},
+    tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
 
 type Cache = SizedCache<(Tile, Tile, Tile, Tile), f64>;
@@ -880,7 +880,7 @@ impl<St: State + StateCreate> FromTileSet for OldKTAM<St> {
             return Err(ModelError::DuplesNotSupported.into());
         }
 
-        let seed = if proc.seed.len() == 0 {
+        let seed = if proc.seed.is_empty() {
             Seed::None()
         } else if proc.seed.len() == 1 {
             let (x, y, v) = proc.seed[0];

@@ -13,7 +13,7 @@ use crate::{
         ChunkSize, DimerInfo, Event, StepOutcome, System, SystemInfo, SystemWithDimers,
         TileBondInfo,
     },
-    tileset::{FromTileSet, ParsedSeed, ProcessedTileSet, TileSet},
+    tileset::{FromTileSet, ProcessedTileSet, TileSet},
 };
 
 #[derive(Debug, Clone)]

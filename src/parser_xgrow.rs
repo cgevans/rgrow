@@ -26,6 +26,8 @@ use nom::{
 use std::io::prelude::*;
 use std::{error::Error, fs::File};
 
+type GlueVec = Vec<(GlueIdent, GlueIdent, f64)>;
+
 fn std_delim<'a, P, O, E: ParseError<&'a str>>(
     parser: P,
 ) -> impl Fn(&'a str) -> IResult<&'a str, O, E>
@@ -279,7 +281,7 @@ fn unhandled_option(input: &str) -> IResult<&str, XgrowArgs> {
     map(is_not(" \t\r\n%"), XgrowArgs::Unhandled)(input)
 }
 
-fn xgrow_args(input: &str) -> IResult<&str, (tileset::Args, Vec<(GlueIdent, GlueIdent, f64)>)> {
+fn xgrow_args(input: &str) -> IResult<&str, (tileset::Args, GlueVec)> {
     let mut args = tileset::Args::default();
 
     let parsers = (
@@ -338,10 +340,10 @@ fn xgrow_args(input: &str) -> IResult<&str, (tileset::Args, Vec<(GlueIdent, Glue
                 }
             }
             XgrowArgs::HDoubleTile(t1, t2) => {
-                args.hdoubletiles.push((t1.into(), t2.into()));
+                args.hdoubletiles.push((t1, t2));
             }
             XgrowArgs::VDoubleTile(t1, t2) => {
-                args.vdoubletiles.push((t1.into(), t2.into()));
+                args.vdoubletiles.push((t1, t2));
             }
         }
         i2 = input;
