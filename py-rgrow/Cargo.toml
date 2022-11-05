@@ -1,12 +1,11 @@
 [package]
 name = "pyrgrow"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Constantine Evans <cevans@costi.eu>"]
 edition = "2021"
 description = "Python interface to rgrow."
 repository = "https://github.com/evansfmm/pyrgrow"
 license = "BSD-3-Clause"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 default = ["use_rayon", "ui"]
@@ -27,10 +26,10 @@ bincode = "^1"
 
 [dependencies.rgrow]
 git = "https://github.com/evansfmm/rgrow.git"
-version = "^0.6.0"
+version = "^0.7.0"
 #path = "../rgrow"
-default-features = false  # Manylinux1 doesn't support X11 such that the UI works...
+features = ["python"]
 
 [dependencies.pyo3]
-version = "^0.17.2"
+version = "^0.17.3"
 features = ["extension-module"]

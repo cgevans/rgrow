@@ -10,5 +10,8 @@ fn pyrgrow(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<tileset::FFSLevel>()?;
     m.add_class::<tileset::Simulation>()?;
 
+    m.add_class::<rgrow::ffs::FFSRunConfig>()?;
+    m.add_class::<rgrow::system::EvolveBounds>()?;
+
     Ok(())
 }

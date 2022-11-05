@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use numpy::PyArray2;
 use numpy::ToPyArray;
+use pyo3::types::PyDict;
 use pyo3::{prelude::*, types::PyType};
 
 use rgrow::ffs;
@@ -225,64 +226,22 @@ impl TileSet {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[args(
-        varpermean2 = "1e-4",
-        min_configs = "1_000",
-        max_size = "200",
-        cutoff_probability = "0.99",
-        cutoff_surfaces = "4",
-        min_cutoff_size = "30",
-        surface_size_step = "1",
-        surface_init_size = "3",
-        max_init_events = "10_000",
-        max_subseq_events = "1_000_000",
-        keep_surface_configs = "false"
-    )]
+    #[args(config = "FFSRunConfig::default()", kwargs = "**")]
     fn run_ffs(
         &self,
-        varpermean2: f64,
-        min_configs: usize,
-        max_size: u32,
-        cutoff_probability: f64,
-        cutoff_surfaces: usize,
-        min_cutoff_size: u32,
-        max_init_events: u64,
-        max_subseq_events: u64,
-        max_init_time: Option<f64>,
-        max_subseq_time: Option<f64>,
-        surface_init_size: u32,
-        surface_size_step: u32,
-        keep_surface_configs: bool,
-        min_nuc_rate: Option<f64>,
+        config: FFSRunConfig,
+        kwargs: Option<&PyDict>,
         py: Python<'_>,
     ) -> PyResult<FFSResult> {
-        let config = FFSRunConfig {
-            constance_variance: true,
-            varpermean2: Some(varpermean2),
-            min_configs,
-            target_size: max_size,
-            early_cutoff: true,
-            cutoff_prob: Some(cutoff_probability),
-            cutoff_number: Some(cutoff_surfaces),
-            min_cutoff_size: Some(min_cutoff_size),
-            init_bound: Some(EvolveBounds {
-                events: Some(max_init_events),
-                time: max_init_time,
-                ..Default::default()
-            }),
-            subseq_bound: Some(EvolveBounds {
-                events: Some(max_subseq_events),
-                time: max_subseq_time,
-                ..Default::default()
-            }),
-            start_size: surface_init_size,
-            size_step: surface_size_step,
-            keep_configs: keep_surface_configs,
-            min_nuc_rate,
-            ..Default::default()
-        };
+        let mut c = config;
 
-        let res = py.allow_threads(|| self.0.read().unwrap().run_ffs(&config));
+        if let Some(dict) = kwargs {
+            for (k, v) in dict.iter() {
+                c._py_set(&k.extract::<String>()?, v, py)?;
+            }
+        }
+
+        let res = py.allow_threads(|| self.0.read().unwrap().run_ffs(&c));
         match res {
             Ok(res) => Ok(FFSResult(res.into())),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -309,32 +268,37 @@ impl Simulation {
         &mut self,
         state_index: Option<usize>,
         for_events: Option<u64>,
+        total_events: Option<u64>,
         for_time: Option<f64>,
+        total_time: Option<f64>,
         size_min: Option<u32>,
         size_max: Option<u32>,
         for_wall_time: Option<f64>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        // If all bounds are none, raise an error.
-        if state_index.is_none()
-            && for_events.is_none()
-            && for_time.is_none()
-            && size_min.is_none()
-            && size_max.is_none()
-            && for_wall_time.is_none()
-        {
+        if self.0.read().unwrap().n_states() == 0 {
+            self.0
+                .write()
+                .unwrap()
+                .add_state()
+                .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))?;
+        }
+
+        let bounds = EvolveBounds {
+            for_events,
+            for_time,
+            total_events,
+            total_time,
+            size_min,
+            size_max,
+            for_wall_time: for_wall_time.map(Duration::from_secs_f64),
+        };
+
+        if !bounds.is_weakly_bounded() {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 "No bounds specified.",
             ));
         }
-
-        let bounds = EvolveBounds {
-            events: for_events,
-            time: for_time,
-            size_min,
-            size_max,
-            wall_time: for_wall_time.map(Duration::from_secs_f64),
-        };
 
         py.allow_threads(|| {
             self.0
@@ -346,35 +310,34 @@ impl Simulation {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "use_rayon")]
     fn evolve_all(
         &mut self,
         for_events: Option<u64>,
+        total_events: Option<u64>,
         for_time: Option<f64>,
+        total_time: Option<f64>,
         size_min: Option<u32>,
         size_max: Option<u32>,
         for_wall_time: Option<f64>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        // If all bounds are none, raise an error.
-        if for_events.is_none()
-            && for_time.is_none()
-            && size_min.is_none()
-            && size_max.is_none()
-            && for_wall_time.is_none()
-        {
+        let bounds = EvolveBounds {
+            for_events,
+            for_time,
+            total_events,
+            total_time,
+            size_min,
+            size_max,
+            for_wall_time: for_wall_time.map(Duration::from_secs_f64),
+        };
+
+        if !bounds.is_weakly_bounded() {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 "No bounds specified.",
             ));
         }
-
-        let bounds = EvolveBounds {
-            events: for_events,
-            time: for_time,
-            size_min,
-            size_max,
-            wall_time: for_wall_time.map(Duration::from_secs_f64),
-        };
 
         py.allow_threads(|| self.0.write().unwrap().evolve_all(bounds)); // FIXME: handle errors
 
@@ -418,22 +381,31 @@ impl Simulation {
 
     /// Add a new state to the simulation.
     #[pyo3(text_signature = "($self, shape)")]
-    fn add_state(&mut self, shape: (usize, usize)) -> PyResult<usize> {
+    fn add_state(&mut self) -> PyResult<usize> {
         self.0
             .write()
             .unwrap()
-            .add_state(shape)
+            .add_state()
             .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
     }
 
     #[pyo3(text_signature = "($self, n, shape")]
-    fn add_n_states(&mut self, n: usize, shape: (usize, usize)) -> PyResult<Vec<usize>> {
+    fn add_n_states(&mut self, n: usize) -> PyResult<Vec<usize>> {
         self.0
             .write()
             .unwrap()
-            .add_n_states(n, shape)
+            .add_n_states(n)
             .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
     }
+
+    // fn erase_states(&mut self, state_index: Option<usize>) -> PyResult<()> {
+    //     self.0
+    //         .write()
+    //         .unwrap()
+    //         .erase_states(state_index.unwrap_or(0))
+    //         .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
+    //         .map(|_x| ())
+    // }
 
     #[getter]
     fn get_tile_concs(&self) -> PyResult<Vec<f64>> {
@@ -474,7 +446,10 @@ impl FFSResult {
             .surfaces()
             .iter()
             .enumerate()
-            .map(|(i, x)| FFSLevel {res: self.0.clone(), level: i} )
+            .map(|(i, _)| FFSLevel {
+                res: self.0.clone(),
+                level: i,
+            })
             .collect()
     }
 
@@ -489,6 +464,14 @@ impl FFSResult {
     fn __repr__(&self) -> String {
         self.__str__()
     }
+
+    #[getter]
+    fn previous_indices(&self) -> Vec<Vec<usize>> {
+        self.get_surfaces()
+            .iter()
+            .map(|x| x.get_previous_indices())
+            .collect()
+    }
 }
 
 #[pyclass]
@@ -499,11 +482,17 @@ pub struct FFSLevel {
 
 #[pymethods]
 impl FFSLevel {
+    #[getter]
     fn get_configs<'py>(&self, py: Python<'py>) -> Vec<&'py PyArray2<usize>> {
-        self.res
-            .surfaces()[self.level]
+        self.res.surfaces()[self.level]
             .configs()
             .iter()
-            .map(|x| x.to_pyarray(py)).collect()
+            .map(|x| x.to_pyarray(py))
+            .collect()
+    }
+
+    #[getter]
+    fn get_previous_indices(&self) -> Vec<usize> {
+        self.res.surfaces()[self.level].previous_list()
     }
 }

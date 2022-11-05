@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple, Union, cast, Callable
 from numpy.core.fromnumeric import var
-import statsmodels
-import statsmodels.stats.proportion
+# import statsmodels
+# import statsmodels.stats.proportion
 from numpy import isin, ndarray
 import numpy as np
 import pandas as pd
@@ -9,6 +9,7 @@ import rgrow.rgrow as rg
 import dataclasses
 import multiprocessing
 import multiprocessing.pool
+from . import rgrow
 
 
 def _ffs_extract_trajectories(backlist: List[List[int]]) -> ndarray:
@@ -27,20 +28,18 @@ def _ffs_extract_trajectories(backlist: List[List[int]]) -> ndarray:
     return trajs
 
 
-@dataclasses.dataclass
-class FFSResult:
-    nucleation_rate: float
-    dimerization_rate: float
-    forward_probability: ndarray
-    assemblies: List[ndarray]
-    num_configs_per_surface: ndarray
-    num_trials_per_surface: ndarray
-    assembly_size_per_surface: ndarray
-    previous_configs: List[List[int]]
-    system: Optional[rg.StaticKTAMPeriodic]
-    aligned_configs: bool = False
-    _saved_trajectory_configs: Optional[ndarray] = None
-    _saved_trajectory_indices: Optional[ndarray] = None
+class FFSResult(rgrow.FFSResult):
+    # nucleation_rate: float
+    # dimerization_rate: float
+    # forward_probability: ndarray
+    # assemblies: List[ndarray]
+    # num_configs_per_surface: ndarray
+    # num_trials_per_surface: ndarray
+    # assembly_size_per_surface: ndarray
+    # previous_configs: List[List[int]]
+    # aligned_configs: bool = False
+    # _saved_trajectory_configs: Optional[ndarray] = None
+    # _saved_trajectory_indices: Optional[ndarray] = None
 
     def align_configs(self,
                       alignment_function: Callable[
@@ -56,7 +55,7 @@ class FFSResult:
         if self._saved_trajectory_indices is not None:
             return self._saved_trajectory_indices
         else:
-            return _ffs_extract_trajectories(self.previous_configs)
+            return _ffs_extract_trajectories(self.previous_indices)
 
     def save_trajectories_and_delete_assemblies(self):
         self._saved_trajectory_configs = self.trajectory_configs
@@ -94,14 +93,13 @@ class FFSResult:
     def has_all_configs(self) -> bool:
         return len(self.assemblies) > 1
 
-    def seeds_of_trajectories(self, system: Optional[rg.StaticKTAMPeriodic] = None,
+    def seeds_of_trajectories(self, ts: rgrow.TileSet,
                               pool: Optional[multiprocessing.pool.Pool]
                               = None, proppool=False, ci_width=0.1,
                               min=0.4, max=0.6, ci_pct=0.95, max_events=10_000_000) -> pd.DataFrame:
         trajs = self.trajectory_configs
 
-        if system is None:
-            system = self.system
+        sim = ts.to_simulation()
 
         if proppool or (pool is None):
             seeds = []
@@ -144,28 +142,28 @@ class FFSResult:
         return (f"FFSResult(nucrate={self.nucleation_rate:.4g} M/s, " +
                 f"has_all_configs={self.has_all_configs}, " +
                 f"num_surfaces={len(self.assembly_size_per_surface)}, " +
-                f"num_trajectories={len(self.previous_configs[-1])}"
+                f"num_trajectories={len(self.previous_indices[-1])}"
                 ")")
 
     def __str__(self) -> str:
         return repr(self)
 
 
-def trajectory_seed(system, trajectory,
+def trajectory_seed(sim, trajectory,
                     ci_width=0.1,
                     min=0.4, max=0.6, ci_pct=0.95, max_events=10_000_000,
                     pool: multiprocessing.pool.Pool = None,) -> Tuple[ndarray, pd.Series]:
-    """Given a system and trajectory (of configurations), find the seed
+    """Given a sim and trajectory (of configurations), find the seed
     (committor closest to 0.5)"""
 
     if pool is None:
-        trajs = pd.DataFrame([committor_mid(system, config, ci_width=0.10)
+        trajs = pd.DataFrame([committor_mid(sim, config, ci_width=0.10)
                               for config in trajectory],
                              columns=[
             "in", "side", "c", "clow", "chigh", "succ", "trials"])
     else:
         trres = pool.starmap(
-            committor_mid, [(system, config, ci_width, min, max, ci_pct, rg.StaticKTAMPeriodic, max_events) for config in trajectory])
+            committor_mid, [(sim, config, ci_width, min, max, ci_pct, rg.StaticKTAMPeriodic, max_events) for config in trajectory])
         trajs = pd.DataFrame(trres, columns=[
             "in", "side", "c", "clow", "chigh", "succ", "trials"])
 
@@ -174,7 +172,7 @@ def trajectory_seed(system, trajectory,
     return (trajectory[seed_idx], trajs.loc[seed_idx, :])
 
 
-def committor(system, config, ci_width: float = 0.05, state_type=rg.StateKTAMPeriodic,
+def committor(sim: rgrow.Simulation, config, ci_width: float = 0.05, state_type=rg.StateKTAMPeriodic,
               ci_pct: float = 0.95, min_trials: float = 10) -> Tuple[float, float,
                                                                      float, int, int]:
     trials = 0
@@ -198,7 +196,7 @@ def committor(system, config, ci_width: float = 0.05, state_type=rg.StateKTAMPer
             return (successes/trials, ci[0], ci[1], successes, trials)
 
 
-def committor_mid(system, config, ci_width=0.05,
+def committor_mid(sim: rgrow.Simulation, config, ci_width=0.05,
                   min=0.4, max=0.6, ci_pct=0.95,
                   state_type=rg.StateKTAMPeriodic,
                   max_events=10_000_000) -> Tuple[bool,
