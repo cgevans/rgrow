@@ -5,32 +5,66 @@ use thiserror::Error;
 pub enum ColorError {
     #[error("Invalid color name: {0}")]
     InvalidColorName(String),
+    #[error(transparent)]
+    ParseIntError(#[from] std::num::ParseIntError),
 }
 
 pub fn get_color(cs: &str) -> Result<[u8; 4], ColorError> {
     if let Some(c) = COLORS.get(cs) {
-        Ok(*c)
-    } else if cs.starts_with("0x") || (cs.starts_with('@') && cs.len() == 7) {
-        let mut c = [0; 4];
-        let mut i = 0;
-        if cs.starts_with('#') {
-            i = 1;
-        }
-        for x in c.iter_mut().take(3) {
-            *x = u8::from_str_radix(&cs[i..i + 2], 16).unwrap();
-            i += 2;
-        }
-        c[3] = 255;
-        Ok(c)
-    } else {
-        Err(ColorError::InvalidColorName(cs.to_string()))
+        return Ok(*c);
     }
+
+    let mut i: usize;
+    if cs.starts_with("0x") {
+        i = 2
+    } else if cs.starts_with('@') || cs.starts_with('#') {
+        i = 1
+    } else {
+        return Err(ColorError::InvalidColorName(cs.to_owned()));
+    }
+
+    let mut c = [0; 4];
+
+    for x in c.iter_mut().take(3) {
+        *x = u8::from_str_radix(&cs[i..i + 2], 16)
+            .map_err(|_e| ColorError::InvalidColorName(cs.to_owned()))?;
+        i += 2;
+    }
+
+    c[3] = 255;
+
+    Ok(c)
 }
 
 pub fn get_color_or_random(cs: &Option<&str>) -> Result<[u8; 4], ColorError> {
     match cs {
         Some(c) => get_color(c),
         None => Ok([rand::random(), rand::random(), rand::random(), 255]),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_color_styles() -> anyhow::Result<()> {
+        assert_eq!(super::get_color("red")?, [255, 0, 0, 255]);
+        assert_eq!(super::get_color("0xff0000")?, [255, 0, 0, 255]);
+        assert_eq!(super::get_color("#ff0000")?, [255, 0, 0, 255]);
+        assert_eq!(super::get_color("@ff0000")?, [255, 0, 0, 255]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_color_or_random() -> anyhow::Result<()> {
+        assert_eq!(super::get_color_or_random(&Some("red"))?, [255, 0, 0, 255]);
+        assert_eq!(super::get_color_or_random(&None)?.len(), 4);
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_color() -> anyhow::Result<()> {
+        assert!(super::get_color("invalid").is_err());
+        Ok(())
     }
 }
 
@@ -820,5 +854,7 @@ pub(crate) static COLORS: phf::Map<&'static str, [u8; 4]> = phf_map! {
 // Additions to fix xgrow examples
 "red5" => [73, 0, 0, 0xff],
 "lightbrown" => [0xad, 0x81, 0x50, 0xff],
-"forest" => [0x0b, 0x55, 0x09, 0xff]
+"forest" => [0x0b, 0x55, 0x09, 0xff],
+"darkcyan" => [0, 139, 139, 0xff],
+"lightgreen" => [0x90, 0xee, 0x90, 0xff],
 };

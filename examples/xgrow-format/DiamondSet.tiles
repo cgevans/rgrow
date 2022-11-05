@@ -1,0 +1,36 @@
+tile edges matches {{N E S W}*}
+num tile types=25
+num binding types=23
+tile edges={
+{0 1 0 0}(pink)         % d 
+{2 3 4 1}(pink1)        % a
+{5 3 6 3}(pink2)        % b
+{7 0 8 3}[.1](pink3)    % c
+{0 9 2 0}(red)          % up
+{2 10 5 9}(red2)        % A
+{5 10 5 10}(green)      % B
+{7 11 7 10}(magenta)    % C
+{15 16 7 9}(cyan)       % X
+{0 0 15 0}(cyan)        % Y
+{4 12 0 0}(red)         % down
+{6 13 4 12}(red2)       % A'
+{6 13 6 13}(green)      % B'
+{8 14 8 13}(magenta)    % C'
+{8 17 18 12}(cyan)      % X'
+{18 0 0 0}(cyan)        % Y'
+{0 0 19 16}(blue)       % right
+{19 16 20 11}(blue2)    % L
+{20 11 20 11}(gold)     % F
+{21 0 0 17}(blue)       % right'
+{22 17 21 14}(blue2)    % L'
+{22 14 22 14}(gold)     % F'
+{20 0 22 0}(purple)     % M
+{19 23 21 0}(orange)    % N
+{0 0 0 23}(orange2)     % O
+}
+binding strengths={2 2 2 2 1 1 1 1 1 1   1 1 1 1 2 2 2 2 1 1   1 1 2}
+seed=32,3,1
+size=64
+block=10
+T=2
+update_rate=1000

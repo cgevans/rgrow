@@ -1,0 +1,20 @@
+% reversibleXOR.tiles
+% {x y x+y y}
+% This tileset is reversible -- it can grow (heal?) in any direction.
+% The input border is random, so we can see the informational structure.
+% Perhaps more interesting reversible tile sets could be investigated.
+tile edges matches {{N E S W}*}
+num tile types=9
+num binding types=3
+tile edges={
+{1 0 0 1}[.1]   % Corner
+{1 0 1 2}[.1]   % Bright (vertical)
+{1 0 1 3}[.4]   % Bright (vertical)
+{2 1 0 1}[.1]   % Bleft  (horizontal)
+{3 1 0 1}[.4]   % Bleft  (horizontal)
+{3 3 3 3}       
+{3 2 2 2}       
+{2 3 2 3}       
+{2 2 3 2}}      
+binding strengths=
+{2 1 1}

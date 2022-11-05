@@ -1,0 +1,10 @@
+tile edges matches {{N E S W}*}
+num tile types=1
+num binding types=1
+tile edges={
+{1 0 1 0}}
+binding strengths=
+{1}
+seed=130,130,1
+Gse=10
+Gmc=10

@@ -32,6 +32,8 @@ pub enum RgrowError {
     #[cfg(feature = "ui")]
     #[error(transparent)]
     Pixel(#[from] pixels::Error),
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
 }
 
 #[derive(Error, Debug)]

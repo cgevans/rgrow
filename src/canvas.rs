@@ -289,6 +289,10 @@ pub trait Canvas: std::fmt::Debug + Sync + Send + 'static {
     fn draw_size(&self) -> (u32, u32) {
         (self.ncols() as u32, self.nrows() as u32)
     }
+
+    fn center(&self) -> PointSafe2 {
+        PointSafe2((self.nrows() / 2, self.ncols() / 2))
+    }
 }
 
 pub trait CanvasSquarable: Canvas {
@@ -577,5 +581,9 @@ impl Canvas for CanvasTube {
             pos = 4 * (px * s + py);
             frame[pos..pos + 4].copy_from_slice(&colors[*t])
         }
+    }
+
+    fn center(&self) -> PointSafe2 {
+        PointSafe2((self.nrows() / 2, self.ncols() / 2))
     }
 }

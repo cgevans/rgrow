@@ -9,6 +9,7 @@ use crate::state::{NullStateTracker, QuadTreeState};
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;
 use super::*;
+use anyhow::Context;
 use base::{NumEvents, NumTiles};
 use bimap::BiMap;
 use ndarray::prelude::*;
@@ -17,7 +18,8 @@ use serde_json;
 use simulation::Simulation;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
-use std::io;
+use std::io::{self, Read};
+use std::path::Path;
 use system::{ChunkHandling, ChunkSize};
 
 use thiserror;
@@ -390,6 +392,32 @@ impl TileSet {
 
     pub fn from_yaml(data: &str) -> Result<Self, serde_yaml::Error> {
         serde_yaml::from_str(data)
+    }
+
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, anyhow::Error> {
+        let mut file = std::fs::File::open(path)?;
+
+        let mut s = String::new();
+        file.read_to_string(&mut s)?;
+
+        let res: Result<TileSet, _> = serde_yaml::from_str(&s);
+
+        if let Ok(ts) = res {
+            return Ok(ts);
+        }
+
+        let res2 = parser_xgrow::parse_xgrow_string(&s);
+
+        if let Ok(ts) = res2 {
+            return Ok(ts);
+        }
+
+        // We've failed on both.  Do we look like an xgrow file?
+        if s.contains("tile edges={") {
+            res2.context("Failed to parse xgrow file")
+        } else {
+            res.context("Failed to parse yaml file")
+        }
     }
 
     pub fn into_simulation(&self) -> Result<Box<dyn Simulation>, RgrowError> {

@@ -1,0 +1,52 @@
+% BinaryCounterSquare.tiles
+%  This is the original binary-counter-based NxN square 
+%  construction from Rothemund & Winfree, STOC 2000. It
+%  works fine at T=2, but under kTAM it grows and grows and 
+%  grows... due to facet roughening.  Also, seems cancerous: a blank
+%  tile is used both below the seed row and above it -- 
+%  growing in different directions.  This allows an error mode
+%  where above the diagonal, seed tiles attach to the blank
+%  row and start a new counter --- ack!  Cancer!
+tile edges matches {{N E S W}*}
+num tile types=28
+num binding types=23
+tile edges={
+{15 1 8 0} (red)
+{6 2 8 1}   (red4)
+{5 3 8 2}   (red3)
+{5 4 17 3}  (red2)
+{19 7 7 4}  (red1)
+{17 7 7 9}
+{8 9 17 8}
+{7 7 7 7}[2] (pink1)
+{8 8 8 8}[2] (pink2)
+{9 7 7 18}
+{8 18 9 8}
+{5 12 5 12} (blue3)
+{6 12 6 12} (green)
+{5 10 6 10} (blue2)
+{6 10 5 11} (green2)
+{6 11 6 11} (green3)
+{5 11 5 11} (blue1)
+{20 8 13 12}(blue4)
+{21 8 14 12}(green4)
+{13 18 19 10}(blue4)
+{13 8 21 10}(blue4)
+{14 8 20 11}(green4)
+{15 12 22 0} (darkcyan)
+{16 12 23 0} (lightgreen)
+{0 10 16 0}
+{23 10 15 0} (lime)
+{22 11 15 0} (blue3)
+{23 11 16 0} (yellow)
+}
+binding strengths=
+{2  2  2  2  1   1 1 1 1 1  1 1 1 1 1  1 2  2  2  2   2  2  2 }
+%translated from tiles.el using:
+%12 23 34 45 0   1 o p b c  n x r R l  L AA aa ZZ rr  RR ll LL
+size=64
+block=10
+seed=53,5,1 
+update_rate=5000
+Gse=12.2
+Gmc=24

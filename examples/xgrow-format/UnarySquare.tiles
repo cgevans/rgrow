@@ -1,0 +1,22 @@
+tile edges matches {{N E S W}*}
+num tile types=9
+num binding types=8
+tile edges={
+{0 1 8 0}(pink1)
+{0 2 8 1}(pink2)
+{0 3 8 2}(pink3)
+{0 4 6 3}(pink4)
+{0 0 5 4}(pink)
+{5 5 5 5}(green)
+{8 8 8 8}(red)
+{6 5 5 7}(tan)
+{8 7 6 8}(blue)
+}
+binding strengths=
+{2 2 2 2 1 2 1 1}
+seed=15,15,1
+size=32
+block=20
+Gse=10
+Gmc=19
+update_rate=10

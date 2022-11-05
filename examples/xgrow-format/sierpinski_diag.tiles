@@ -1,0 +1,25 @@
+% sierpinski_diag.tiles
+% This tileset contains the 7 tiles corresponding to a DAE-E tile set
+% RE-01, SE-10, UE-11, VE-00 and with 
+% three diagonal boundary tiles used to simulate the assembly-PCR border
+tile edges matches {{N E S W}*}
+num tile types=7
+num binding types=3
+tile edges={
+{3 1 1 2}[.01] (red)     % Dseed at 1/100
+{3 1 1 3}[.5]  (magenta) % Dtop             % it is interesting to decrease these
+{1 0 0 1}[.5]  (purple)  % Dbottom
+{3 3 3 3}    (blue3)    % VE-00
+{3 2 2 3}    (green)    % UE-11 
+{2 3 2 2}    (yellow)   % SE-10
+{2 2 3 2}    (tan)      % RE-01
+}
+%
+%  VE-00    UE-11    SE-10    RE-01    Dbottom  Dtop     Dseed
+%    3        3        2        2        1        3        3 
+%  3   3    3   2    2   3    2   2    1   0    3   1    2   1
+%    3        2        2        3        0        1        1
+%
+binding strengths={2 1 1}
+%
+seed=129,129,1

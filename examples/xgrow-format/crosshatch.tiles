@@ -1,0 +1,29 @@
+% crosshatch.tiles
+% A test tile set to see if modulated strengths work.
+% In the first test, we have one corner tile, a seed tile
+% the corner tile can attach tiles by strength 1.9 vertically, and horizontally
+% by strength 2.0.  These should attach at different rates.
+% ie we have
+%g(1,1)=1.9
+%g(2,2)=2.0
+% In practice we see the blues always fill in the horizontal side
+% faster than the reds.
+% In the second test, we add some attachment between the red and blue tiles
+% in a single direction. ie.
+% g(1,1)=2.0
+% g(1,2)=1.0
+% g(2,2)=2.0
+% Here we see as we raise the attachment of 1 and 2 more and more
+% outgrowths of red and blues.
+tile edges matches {{N E S W}*}
+num tile types=3
+num binding types=3
+tile edges={
+{1 0 0 2}(white)	% Corner
+{1 0 1 1}(red)		% Vertical tiles
+{2 2 0 2}(blue)		% Horizontal tiles
+}
+g(1,1)=2.0
+g(1,2)=1.0
+g(2,2)=2.0
+

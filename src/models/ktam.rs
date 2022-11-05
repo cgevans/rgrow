@@ -1320,3 +1320,44 @@ impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
         Ok(newkt)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Context;
+
+    use crate::{
+        canvas::{CanvasPeriodic, CanvasSquare, CanvasTube},
+        state::{NullStateTracker, QuadTreeState},
+        system::SystemWithStateCreate,
+    };
+
+    use super::*;
+
+    fn test_set_point_newktam<St: StateCreate + State>() -> Result<(), anyhow::Error> {
+        let mut system = KTAM::new_sized(5, 5);
+
+        system.update_system();
+
+        let mut state: St = system.new_state((8, 32))?;
+        let point = state.center();
+        system.set_safe_point(&mut state, point, 1);
+        assert_eq!(state.tile_at_point(point), 1);
+
+        let p2 = state.move_sa_e(point);
+        system.set_point(&mut state, p2.0, 2)?;
+        assert_eq!(state.v_sh(p2), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_set_point_for_canvases() -> Result<(), anyhow::Error> {
+        test_set_point_newktam::<QuadTreeState<CanvasSquare, NullStateTracker>>()
+            .context("CanvasSquare")?;
+        test_set_point_newktam::<QuadTreeState<CanvasPeriodic, NullStateTracker>>()
+            .context("CanvasPeriodic")?;
+        test_set_point_newktam::<QuadTreeState<CanvasTube, NullStateTracker>>()
+            .context("CanvasTube")?;
+        Ok(())
+    }
+}

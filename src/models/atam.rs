@@ -429,7 +429,7 @@ impl<S: State> ATAM<S> {
                     }
                 }
             }
-            if self.bond_energy_of_tile_type_at_point(state, p, t) < self.threshold {
+            if self.bond_energy_of_tile_type_at_point_hypothetical(state, p, t) < self.threshold {
                 continue;
             }
             acc -= self.tile_stoics[t];
@@ -440,7 +440,12 @@ impl<S: State> ATAM<S> {
         (false, acc, Event::None)
     }
 
-    pub fn bond_energy_of_tile_type_at_point(&self, state: &S, p: PointSafe2, t: Tile) -> Energy {
+    pub fn bond_energy_of_tile_type_at_point_hypothetical(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        t: Tile,
+    ) -> Energy {
         let tn = state.tile_to_n(p);
         let tw = state.tile_to_w(p);
         let te = state.tile_to_e(p);
@@ -458,7 +463,7 @@ impl<S: State> ATAM<S> {
         match self.tile_shape(t) {
             TileShape::Single => (),
             TileShape::DupleToRight(tright) => {
-                debug_assert_eq!(tright, te);
+                debug_assert!((tright == te) | (te == 0));
                 let tne = state.tile_to_ne(p);
                 let tee = state.tile_to_ee(p);
                 let tse = state.tile_to_se(p);
@@ -467,7 +472,7 @@ impl<S: State> ATAM<S> {
                     + self.get_energy_ns(tright, tse);
             }
             TileShape::DupleToBottom(tbottom) => {
-                debug_assert_eq!(tbottom, ts);
+                debug_assert!((tbottom == ts) | (ts == 0));
                 let tse = state.tile_to_se(p);
                 let tss = state.tile_to_ss(p);
                 let tsw = state.tile_to_sw(p);

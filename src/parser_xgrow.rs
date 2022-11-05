@@ -372,13 +372,17 @@ fn xgrow_args(input: &str) -> IResult<&str, (tileset::Args, GlueVec)> {
     Ok((i2, (args, gluelinks)))
 }
 
-pub fn parse_xgrow(file: String) -> anyhow::Result<tileset::TileSet> {
-    let mut f = File::open(file)?;
+pub fn parse_xgrow<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<tileset::TileSet> {
+    let mut f = File::open(path)?;
 
     let mut tilestring = String::new();
     f.read_to_string(&mut tilestring)?;
 
-    parse(tilestring.as_str())
+    parse_xgrow_string(&tilestring)
+}
+
+pub fn parse_xgrow_string(tilestring: &str) -> anyhow::Result<tileset::TileSet> {
+    parse(tilestring)
         .map_err(|x| x.to_owned().into())
         .map(|x| x.1)
 }

@@ -1,0 +1,22 @@
+% chunk-test.tiles
+% shows that without chunk_fission, a weak tile with another tile strongly attached to it only
+% can get "stuck" on an assembly.  Bad news.
+tile edges matches {{N E S W}*}
+num tile types=7
+num binding types=3
+tile edges={
+{1 0 0 1}(white)	% corner
+{2 1 0 1}(green)	% bottom row
+{1 0 1 2}(green)	% right row
+{3 0 2 0}(red)		% weak vert link
+{0 2 0 3}(red)          % weak hori link
+{0 0 3 0}(blue)		% vert cap
+{0 3 0 0}(blue)		% hori cap
+}
+binding strengths=
+{2 1 4}
+block=5
+size=64
+seed=60,60,1
+Gmc=17
+Gse=8.6

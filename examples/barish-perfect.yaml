@@ -228,8 +228,9 @@ tiles:
   edges: [black2, pink1, hp2, Z5Z6_db]
   name: Z5Z6_right
 xgrowargs:
-  Gmc: 16.0
-  Gse: 8.2
+  Gmc: 9.7
+  Gse: 5.5
+  alpha: -7.1
   doubletiles:
   - [Z7Z8_left, Z7Z8_right]
   - [Z5Z6_left, Z5Z6_right]
@@ -251,4 +252,4 @@ xgrowargs:
   - [15,2,16]
   - [16,1,17]
   size: [32, 128]
-  model: ATAM
+  model: KTAM
