@@ -1,9 +1,8 @@
 extern crate rgrow;
 
 use anyhow::{Context, Result};
-use fltk::group::Tile;
 use rand::SeedableRng;
-use std::{fs::File, io::Read, os::unix::prelude::PermissionsExt};
+use std::fs::File;
 
 use rgrow::{
     canvas::{CanvasPeriodic, PointSafe2},
@@ -18,7 +17,7 @@ fn test_sim(ts: &TileSet) -> Result<()> {
     sim.evolve(
         0,
         EvolveBounds {
-            events: Some(10),
+            for_events: Some(10),
             ..Default::default()
         },
     )?;
@@ -74,7 +73,7 @@ fn atam_test() -> Result<()> {
         0,
         EvolveBounds {
             size_max: Some(500),
-            events: Some(2000),
+            for_events: Some(2000),
             ..Default::default()
         },
     )?;
@@ -113,7 +112,7 @@ fn ktam_test() -> Result<()> {
         &mut st,
         &mut rng,
         EvolveBounds {
-            events: Some(20000),
+            for_events: Some(20000),
             size_max: Some(210),
             ..Default::default()
         },
@@ -128,7 +127,7 @@ fn ktam_test() -> Result<()> {
         &mut st,
         &mut rng,
         EvolveBounds {
-            events: Some(100000),
+            for_events: Some(100000),
             size_min: Some(10),
             ..Default::default()
         },
@@ -151,7 +150,7 @@ fn simple_fission_test() -> Result<()> {
     sim.evolve(
         0,
         EvolveBounds {
-            time: Some(1000.),
+            for_time: Some(1000.),
             ..Default::default()
         },
     )?;
@@ -164,7 +163,7 @@ fn simple_fission_test() -> Result<()> {
     sim.evolve(
         0,
         EvolveBounds {
-            time: Some(1000.),
+            for_time: Some(1000.),
             ..Default::default()
         },
     )?;

@@ -56,11 +56,8 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     let mut pixels = { Pixels::new(width, height, surface_texture)? };
 
     let bounds = EvolveBounds {
-        events: None,
-        time: None,
-        size_min: None,
-        size_max: None,
-        wall_time: Some(Duration::from_millis(16)),
+        for_wall_time: Some(Duration::from_millis(16)),
+        ..Default::default()
     };
 
     while app::wait() {

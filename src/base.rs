@@ -19,6 +19,8 @@ pub enum GrowError {
     FFSCannotRunATAM,
     #[error("Point ({0}, {1}) is out of bounds.")]
     OutOfBounds(usize, usize),
+    #[error("{0}")]
+    NotImplemented(String),
 }
 
 #[derive(Error, Debug)]

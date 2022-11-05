@@ -38,11 +38,20 @@ pub enum StepOutcome {
 #[derive(Debug, Copy, Clone, Default)]
 #[cfg_attr(feature = "python", pyclass)]
 pub struct EvolveBounds {
-    pub events: Option<NumEvents>,
-    pub time: Option<f64>,
+    /// Stop if this number of events has taken place during this evolve call.
+    pub for_events: Option<NumEvents>,
+    /// Stop if this number of events has been reached in total for the state.
+    pub total_events: Option<NumEvents>,
+    /// Stop if this amount of (simulated) time has passed during this evolve call.
+    pub for_time: Option<f64>,
+    /// Stop if this amount of (simulated) time has passed in total for the state.
+    pub total_time: Option<f64>,
+    /// Stop if the number of tiles is equal to or less than this number.
     pub size_min: Option<NumTiles>,
+    /// Stop if the number of tiles is equal to or greater than this number.
     pub size_max: Option<NumTiles>,
-    pub wall_time: Option<Duration>,
+    /// Stop after this amount of (real) time has passed.
+    pub for_wall_time: Option<Duration>,
 }
 
 #[cfg(feature = "python")]
@@ -85,22 +94,22 @@ impl EvolveBounds {
     /// Will the EvolveBounds actually bound anything, or is it just null, such that the simulation will continue
     /// until a ZeroRate or an error?
     pub fn is_bounded(&self) -> bool {
-        self.events.is_some()
-            || self.time.is_some()
+        self.for_events.is_some()
+            || self.for_time.is_some()
             || self.size_min.is_some()
             || self.size_max.is_some()
-            || self.wall_time.is_some()
+            || self.for_wall_time.is_some()
     }
 }
 
 impl EvolveBounds {
     pub fn for_time(mut self, time: f64) -> Self {
-        self.time = Some(time);
+        self.for_time = Some(time);
         self
     }
 
     pub fn for_events(mut self, events: NumEvents) -> Self {
-        self.events = Some(events);
+        self.for_events = Some(events);
         self
     }
 }
@@ -207,13 +216,23 @@ pub trait System<S: State>: Debug {
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError> {
         let mut events = 0;
-        let mut rtime = match bounds.time {
+
+        if bounds.total_events.is_some() {
+            return Err(GrowError::NotImplemented(
+                "Total events bound is not implemented".to_string(),
+            ));
+        }
+
+        let mut rtime = match bounds.for_time {
             Some(t) => t,
             None => f64::INFINITY,
         };
+        if let Some(t) = bounds.total_time {
+            rtime = rtime.min(t - state.time());
+        }
 
         // If we have a for_wall_time, get an instant to compare to
-        let start_time = bounds.wall_time.map(|_| std::time::Instant::now());
+        let start_time = bounds.for_wall_time.map(|_| std::time::Instant::now());
 
         loop {
             if bounds.size_min.is_some_and(|ms| state.ntiles() <= ms) {
@@ -223,11 +242,11 @@ pub trait System<S: State>: Debug {
             } else if rtime <= 0. {
                 return Ok(EvolveOutcome::ReachedTimeMax);
             } else if bounds
-                .wall_time
+                .for_wall_time
                 .is_some_and(|t| start_time.unwrap().elapsed() >= t)
             {
                 return Ok(EvolveOutcome::ReachWallTimeMax);
-            } else if bounds.events.is_some_and(|e| events >= e) {
+            } else if bounds.for_events.is_some_and(|e| events >= e) {
                 return Ok(EvolveOutcome::ReachedEventsMax);
             } else if state.total_rate() == 0. {
                 return Ok(EvolveOutcome::ReachedZeroRate);
@@ -244,34 +263,6 @@ pub trait System<S: State>: Debug {
                 }
                 StepOutcome::ZeroRate => {
                     return Ok(EvolveOutcome::ReachedZeroRate);
-                }
-            }
-        }
-    }
-
-    fn evolve_in_size_range_events_max(
-        &mut self,
-        state: &mut S,
-        minsize: NumTiles,
-        maxsize: NumTiles,
-        maxevents: NumEvents,
-        rng: &mut SmallRng,
-    ) {
-        let mut events: NumEvents = 0;
-
-        while (events < maxevents) & (state.ntiles() < maxsize) & (state.ntiles() > minsize) {
-            match self.state_step(state, rng, 1e100) {
-                StepOutcome::HadEventAt(_) => {
-                    events += 1;
-                }
-                StepOutcome::NoEventIn(_) => {
-                    println!("Timeout {state:?}");
-                }
-                StepOutcome::DeadEventAt(_) => {
-                    println!("Dead");
-                }
-                StepOutcome::ZeroRate => {
-                    panic!()
                 }
             }
         }
