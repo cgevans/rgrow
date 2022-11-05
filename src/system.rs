@@ -59,31 +59,34 @@ pub struct EvolveBounds {
 impl EvolveBounds {
     #[new]
     pub fn new(
-        events: Option<NumEvents>,
-        time: Option<f64>,
+        for_events: Option<NumEvents>,
+        for_time: Option<f64>,
         size_min: Option<NumTiles>,
         size_max: Option<NumTiles>,
-        wall_time: Option<f64>,
+        for_wall_time: Option<f64>,
     ) -> Self {
         Self {
-            events,
-            time,
+            for_events,
+            for_time,
             size_min,
             size_max,
-            wall_time: wall_time.map(Duration::from_secs_f64),
+            for_wall_time: for_wall_time.map(Duration::from_secs_f64),
+            ..Default::default()
         }
     }
 
     pub fn __repr__(&self) -> String {
         format!(
             "EvolveBounds(events={}, time={}, size_min={}, size_max={}, wall_time={})",
-            self.events.map_or("None".to_string(), |v| format!("{v:?}")),
-            self.time.map_or("None".to_string(), |v| format!("{v:?}")),
+            self.for_events
+                .map_or("None".to_string(), |v| format!("{v:?}")),
+            self.for_time
+                .map_or("None".to_string(), |v| format!("{v:?}")),
             self.size_min
                 .map_or("None".to_string(), |v| format!("{v:?}")),
             self.size_max
                 .map_or("None".to_string(), |v| format!("{v:?}")),
-            self.wall_time
+            self.for_wall_time
                 .map_or("None".to_string(), |v| format!("{v:?}"))
         )
     }
@@ -92,12 +95,22 @@ impl EvolveBounds {
 #[cfg_attr(feature = "python", pymethods)]
 impl EvolveBounds {
     /// Will the EvolveBounds actually bound anything, or is it just null, such that the simulation will continue
-    /// until a ZeroRate or an error?
-    pub fn is_bounded(&self) -> bool {
+    /// until a ZeroRate or an error?  Note that this includes weak bounds (size minimum and maximum) that may
+    /// never be reached.
+    pub fn is_weakly_bounded(&self) -> bool {
         self.for_events.is_some()
+            || self.total_events.is_some()
             || self.for_time.is_some()
+            || self.total_time.is_some()
             || self.size_min.is_some()
             || self.size_max.is_some()
+            || self.for_wall_time.is_some()
+    }
+    pub fn is_strongly_bounded(&self) -> bool {
+        self.for_events.is_some()
+            || self.total_events.is_some()
+            || self.for_time.is_some()
+            || self.total_time.is_some()
             || self.for_wall_time.is_some()
     }
 }
