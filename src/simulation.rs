@@ -20,6 +20,7 @@ pub trait Simulation: Send + Sync + SystemInfo {
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError>;
     fn state_ref(&self, state_index: usize) -> &dyn State;
+    fn n_states(&self) -> usize;
     fn add_state(&mut self) -> Result<usize, GrowError>;
     fn add_n_states(&mut self, n: usize) -> Result<Vec<usize>, GrowError> {
         let mut indices = Vec::with_capacity(n);
@@ -47,6 +48,9 @@ impl<
     ) -> Result<EvolveOutcome, GrowError> {
         self.system
             .evolve(&mut self.states[state_index], &mut self.rng, bounds)
+    }
+    fn n_states(&self) -> usize {
+        self.states.len()
     }
     fn state_ref(&self, state_index: usize) -> &dyn State {
         &self.states[state_index]
