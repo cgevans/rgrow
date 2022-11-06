@@ -21,6 +21,8 @@ pub enum GrowError {
     OutOfBounds(usize, usize),
     #[error("{0}")]
     NotImplemented(String),
+    #[error(transparent)]
+    PoisonError(#[from] std::sync::PoisonError<()>),
 }
 
 #[derive(Error, Debug)]

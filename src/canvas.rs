@@ -15,7 +15,7 @@ pub struct PointSafe2(pub Point);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
 pub struct PointSafeHere(pub Point);
 
-pub trait Canvas: std::fmt::Debug + Sync + Send + 'static {
+pub trait Canvas: std::fmt::Debug + Sync + Send {
     /// # Safety
     /// Assumes that the point is inbounds.  Should not normally be used unwrapped.
     unsafe fn uv_p(&self, p: Point) -> Tile {

@@ -30,13 +30,15 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     };
     app::screen_size();
 
-    //let app = app::App::default();
+    let sr = state.lock().unwrap();
     let mut win = Window::default()
         .with_size(
-            (scale * state.ncols()) as i32,
-            ((scale * state.nrows()) + 30) as i32,
+            (scale * sr.ncols()) as i32,
+            ((scale * sr.nrows()) + 30) as i32,
         )
         .with_label("rgrow!");
+
+    drop(sr);
 
     win.make_resizable(true);
 
@@ -74,15 +76,16 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
 
         sim.draw(state_i, pixels.get_frame_mut());
         pixels.render()?;
-        state = sim.state_ref(state_i);
 
+        let sr = state.lock().unwrap();
         // Update text with the simulation time, events, and tiles
         frame.set_label(&format!(
             "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}",
-            state.time(),
-            state.total_events(),
-            state.ntiles()
+            sr.time(),
+            sr.total_events(),
+            sr.ntiles()
         ));
+        drop(sr);
 
         app::flush();
         app::awake();

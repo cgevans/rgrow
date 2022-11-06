@@ -5,7 +5,7 @@ use clap::Parser;
 
 use rgrow::base::RgrowError;
 use rgrow::ffs;
-use rgrow::{parser_xgrow, tileset::TileSet};
+use rgrow::tileset::TileSet;
 
 use std::fs::File;
 
@@ -23,7 +23,6 @@ struct Opts {
 enum SubCommand {
     Run(PO),
     NucRate(FFSOptions),
-    RunXgrow(PO),
 }
 
 #[derive(Parser)]
@@ -72,20 +71,12 @@ fn main() -> anyhow::Result<()> {
         SubCommand::Run(po) =>
         #[cfg(feature = "ui")]
         {
-            let file = File::open(po.input)?;
-            let parsed: TileSet = serde_yaml::from_reader(file)?;
+            let parsed = TileSet::from_file(po.input)?;
             run_window(&parsed)?;
             Ok(())
         }
         SubCommand::NucRate(po) => {
             nucrate(po)?;
-            Ok(())
-        }
-        SubCommand::RunXgrow(po) =>
-        #[cfg(feature = "ui")]
-        {
-            let parsed = parser_xgrow::parse_xgrow(po.input)?;
-            run_window(&parsed)?;
             Ok(())
         }
     }

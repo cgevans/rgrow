@@ -1,7 +1,7 @@
 use crate::{
     base::RgrowError,
     canvas::{Canvas, PointSafe2, PointSafeHere},
-    simulation::Simulation,
+    simulation::{ConcreteSimulation, Simulation},
     state::{self, State, StateCreate},
     system::{Event, System, SystemInfo, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
@@ -90,10 +90,15 @@ pub struct ATAM<C: Canvas> {
 
     /// We need to store the type of canvas we're using so we know
     /// how to move around.
-    _canvas: PhantomData<C>,
+    _canvas: PhantomData<fn(C) -> ()>,
 }
 
-impl<S: State> System<S> for ATAM<S> {
+unsafe impl<C: Canvas> Send for ATAM<C> {}
+unsafe impl<C: Canvas> Sync for ATAM<C> {}
+
+impl<S: State> System for ATAM<S> {
+    type S = S;
+
     fn update_after_event(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => todo!(),
@@ -765,7 +770,7 @@ impl<S: State> ATAM<S> {
     }
 }
 
-impl<St: State + StateCreate> SimFromTileSet for ATAM<St> {
+impl<St: State + StateCreate + 'static> SimFromTileSet for ATAM<St> {
     fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
         let sys = Self::from_tileset(tileset)?;
         let size = match tileset.options.size {

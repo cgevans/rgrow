@@ -53,7 +53,7 @@ pub trait RateStoreP {
     fn update_multiple(&mut self, points: &[(PointSafeHere, Rate)]);
     fn total_rate(&self) -> Rate;
 }
-impl<C: CanvasSquarable, T: StateTracker> State for QuadTreeState<C, T> {
+impl<C: CanvasSquarable + CanvasCreate, T: StateTracker> State for QuadTreeState<C, T> {
     fn panicinfo(&self) -> String {
         format!(
             "{:?} {:?} {}={}",
@@ -317,7 +317,7 @@ where
         self
     }
 }
-pub trait StateTracker: Clone + Debug + Sync + Send + 'static {
+pub trait StateTracker: Clone + Debug + Sync + Send {
     fn default(canvas: &dyn Canvas) -> Self;
 
     fn record_single_event(&mut self, event: &system::Event) -> &mut Self;

@@ -340,14 +340,14 @@ impl TileSet {
     }
 }
 
-pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System<St>> {
+pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System> {
     pub system: Sy,
     pub level_list: Vec<FFSLevel<St, Sy>>,
     pub dimerization_rate: f64,
     pub forward_prob: Vec<f64>,
 }
 
-impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers<St> + Send + Sync> FFSResult
+impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers> FFSResult
     for FFSRun<St, Sy>
 {
     fn nucleation_rate(&self) -> Rate {
@@ -372,7 +372,7 @@ impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers<St> + Send
 
 impl<
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: SystemWithDimers<St> + FromTileSet + Send + Sync,
+        Sy: SystemWithDimers + FromTileSet + System<S = St>,
     > FFSRun<St, Sy>
 {
     pub fn create(system: Sy, config: &FFSRunConfig) -> Self {
@@ -462,7 +462,7 @@ impl<
     }
 }
 
-pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System<St>> {
+pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System> {
     pub system: std::marker::PhantomData<Sy>,
     pub state_list: Vec<St>,
     pub previous_list: Vec<usize>,
@@ -472,7 +472,7 @@ pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System<St>> 
     pub target_size: NumTiles,
 }
 
-impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers<St> + Sync + Send> FFSSurface
+impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers + Sync + Send> FFSSurface
     for FFSLevel<St, Sy>
 {
     fn get_config(&self, i: usize) -> ArrayView2<usize> {
@@ -498,7 +498,7 @@ impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers<St> + Sync
 
 impl<
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: SystemWithDimers<St> + Sync + Send,
+        Sy: SystemWithDimers + System<S = St>,
     > FFSLevel<St, Sy>
 {
     pub fn drop_states(&mut self) -> &Self {

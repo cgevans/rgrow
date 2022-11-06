@@ -46,7 +46,9 @@ pub struct StaticKTAMCover<S: State> {
     pub(crate) composite_detach_info: Vec<Vec<CompositeDetach>>,
 }
 
-impl<S: State> System<S> for StaticKTAMCover<S> {
+impl<S: State> System for StaticKTAMCover<S> {
+    type S = S;
+
     fn update_after_event(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => {
@@ -211,7 +213,7 @@ impl<S: State> System<S> for StaticKTAMCover<S> {
     }
 }
 
-impl<S: State> SystemWithDimers<S> for StaticKTAMCover<S> {
+impl<S: State> SystemWithDimers for StaticKTAMCover<S> {
     fn calc_dimers(&self) -> Vec<DimerInfo> {
         self.inner.calc_dimers()
     }

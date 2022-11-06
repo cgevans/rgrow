@@ -1,6 +1,9 @@
 use std::{collections::HashMap, marker::PhantomData, sync::RwLock};
 
-use crate::base::{HashMapType, HashSetType};
+use crate::{
+    base::{HashMapType, HashSetType},
+    simulation::ConcreteSimulation,
+};
 use cached::{Cached, SizedCache};
 use ndarray::{Array1, Array2};
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
@@ -470,10 +473,9 @@ impl<C: State> OldKTAM<C> {
     }
 }
 
-impl<S> System<S> for OldKTAM<S>
-where
-    S: State,
-{
+impl<S: State> System for OldKTAM<S> {
+    type S = S;
+
     fn event_rate_at_point(&self, canvas: &S, point: PointSafeHere) -> Rate {
         let p = if canvas.inbounds(point.0) {
             PointSafe2(point.0)
@@ -648,7 +650,7 @@ where
                             FissionHandling::NoFission => Event::None,
                             FissionHandling::JustDetach => Event::PolymerDetachment(now_empty),
                             FissionHandling::KeepSeeded => {
-                                let sl = System::<S>::seed_locs(self);
+                                let sl = System::seed_locs(self);
                                 Event::PolymerDetachment(g.choose_deletions_seed_unattached(sl))
                             }
                             FissionHandling::KeepLargest => {
@@ -819,7 +821,7 @@ where
     }
 }
 
-impl<St: State> SystemWithDimers<St> for OldKTAM<St> {
+impl<St: State> SystemWithDimers for OldKTAM<St> {
     fn calc_dimers(&self) -> Vec<DimerInfo> {
         let mut dvec = Vec::new();
 
@@ -855,7 +857,7 @@ impl<St: State> SystemWithDimers<St> for OldKTAM<St> {
     }
 }
 
-impl<St: State + StateCreate> SimFromTileSet for OldKTAM<St> {
+impl<St: State + StateCreate + 'static> SimFromTileSet for OldKTAM<St> {
     fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
         let sys = Self::from_tileset(tileset)?;
         let size = match tileset.options.size {

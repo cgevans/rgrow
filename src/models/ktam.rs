@@ -2,7 +2,7 @@ use super::ktam_fission::*;
 use crate::{
     base::{GrowError, RgrowError},
     canvas::{Canvas, PointSafe2, PointSafeHere},
-    simulation::Simulation,
+    simulation::{ConcreteSimulation, Simulation},
     state::{self, State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
@@ -105,12 +105,15 @@ pub struct KTAM<C: Canvas> {
 
     /// We need to store the type of canvas we're using so we know
     /// how to move around.
-    _canvas: PhantomData<C>,
+    _canvas: PhantomData<*const C>,
 }
 
-unsafe impl<C: State> Send for KTAM<C> {}
+unsafe impl<C: Canvas> Send for KTAM<C> {}
+unsafe impl<C: Canvas> Sync for KTAM<C> {}
 
-impl<S: State> System<S> for KTAM<S> {
+impl<S: State> System for KTAM<S> {
+    type S = S;
+
     fn update_after_event(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => todo!(),
@@ -514,7 +517,7 @@ impl<S: State> System<S> for KTAM<S> {
     }
 }
 
-impl<St: State> SystemWithDimers<St> for KTAM<St> {
+impl<St: State> SystemWithDimers for KTAM<St> {
     fn calc_dimers(&self) -> Vec<DimerInfo> {
         // It is (reasonably) safe for us to use the same code that we used in the old StaticKTAM, despite duples being
         // here, because our EW/NS energies include the right/bottom tiles.  However, (FIXME), we need to think about
@@ -1248,7 +1251,7 @@ impl<S: State> KTAM<S> {
     }
 }
 
-impl<St: State + StateCreate> SimFromTileSet for KTAM<St> {
+impl<St: State + StateCreate + 'static> SimFromTileSet for KTAM<St> {
     fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
         let sys = Self::from_tileset(tileset)?;
         let size = match tileset.options.size {

@@ -80,10 +80,12 @@ fn atam_test() -> Result<()> {
 
     let state = at.state_ref(0);
 
-    assert!(state.ntiles() == 500);
+    let sr = state.lock().unwrap();
 
-    assert!(state.tile_at_point(PointSafe2((p.0 .0 - 7, p.0 .1 - 7))) == 4);
-    assert!(state.tile_at_point(PointSafe2((p.0 .0 - 8, p.0 .1 - 8))) == 5);
+    assert!(sr.ntiles() == 500);
+
+    assert!(sr.tile_at_point(PointSafe2((p.0 .0 - 7, p.0 .1 - 7))) == 4);
+    assert!(sr.tile_at_point(PointSafe2((p.0 .0 - 8, p.0 .1 - 8))) == 5);
 
     Ok(())
 }
@@ -155,7 +157,7 @@ fn simple_fission_test() -> Result<()> {
         },
     )?;
     let state = sim.state_ref(0);
-    assert!(state.ntiles() > 800);
+    assert!(state.lock().unwrap().ntiles() > 800);
 
     ts.options.fission = FissionHandling::KeepSeeded;
     let mut sim = ts.into_simulation()?;
@@ -168,7 +170,7 @@ fn simple_fission_test() -> Result<()> {
         },
     )?;
     let state = sim.state_ref(0);
-    assert!(state.ntiles() < 500);
+    assert!(state.lock().unwrap().ntiles() < 500);
     Ok(())
 }
 
