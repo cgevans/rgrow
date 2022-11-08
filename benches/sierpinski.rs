@@ -32,11 +32,11 @@ fn raw_sim_run(c: &mut Criterion) {
     let mut rng = rand::rngs::SmallRng::from_entropy();
 
     c.bench_function("evolve 10000 sys", |b| {
-        b.iter(|| sys.evolve(&mut st, &mut rng, BOUNDS10K))
+        b.iter(|| sys.evolve(&mut st, BOUNDS10K))
     });
 
     c.bench_function("evolve unistep", |b| {
-        b.iter(|| sys.state_step(&mut st, &mut rng, 1000000.))
+        b.iter(|| sys.state_step(&mut st, 1000000.))
     });
 }
 

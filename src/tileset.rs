@@ -5,7 +5,7 @@ use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, State, StateCreate};
-use crate::system::EvolveBounds;
+use crate::system::{EvolveBounds, System};
 
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;

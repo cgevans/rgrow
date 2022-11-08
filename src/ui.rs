@@ -16,7 +16,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     let mut sim = parsed.into_simulation()?;
 
     let state_i = sim.add_state()?;
-    // let state = sim.state_ref(state_i);
+    let state = sim.state_ref(state_i);
 
     let (width, height) = sim.draw_size(state_i);
 
@@ -34,9 +34,8 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     // let sr = state.read().unwrap();
     let mut win = Window::default()
         .with_size(
-            100,
-            100, // (scale * sr.ncols()) as i32,
-                // ((scale * sr.nrows()) + 30) as i32,
+            (scale * state.ncols()) as i32,
+            ((scale * state.nrows()) + 30) as i32,
         )
         .with_label("rgrow!");
 
@@ -60,7 +59,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     let mut bounds = parsed.get_bounds();
 
     bounds.for_wall_time = Some(Duration::from_millis(16));
-    // drop(sr);
+
     while app::wait() {
         // Check if window was resized
         if win.w() != win_width as i32 || win.h() != win_height as i32 {
@@ -76,15 +75,14 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
         sim.draw(state_i, pixels.get_frame_mut());
         pixels.render()?;
 
-        // let sr = state.read().unwrap();
+        let state = sim.state_ref(state_i);
         // Update text with the simulation time, events, and tiles
-        // frame.set_label(&format!(
-        //     "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}",
-        //     sr.time(),
-        //     sr.total_events(),
-        //     sr.ntiles()
-        // ));
-        // drop(sr);
+        frame.set_label(&format!(
+            "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}",
+            state.time(),
+            state.total_events(),
+            state.ntiles()
+        ));
 
         app::flush();
         app::awake();

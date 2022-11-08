@@ -1,7 +1,9 @@
 use ndarray::prelude::*;
+use rand::thread_rng;
 use rand::{prelude::SmallRng, Rng};
 use serde::{Deserialize, Serialize};
 
+use crate::models::ktam::KTAM;
 use crate::state::State;
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateCreate,
@@ -212,18 +214,13 @@ pub trait System: Debug + Sync + Send {
         state.calc_ntiles()
     }
 
-    fn state_step<St: State>(
-        &self,
-        state: &mut St,
-        rng: &mut SmallRng,
-        max_time_step: f64,
-    ) -> StepOutcome {
-        let time_step = -f64::ln(rng.gen()) / state.total_rate();
+    fn state_step<St: State>(&self, state: &mut St, max_time_step: f64) -> StepOutcome {
+        let time_step = -f64::ln(thread_rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
             return StepOutcome::NoEventIn(max_time_step);
         }
-        let (point, remainder) = state.choose_point(rng); // todo: resultify
+        let (point, remainder) = state.choose_point(); // todo: resultify
         let event = self.choose_event_at_point(state, PointSafe2(point), remainder); // FIXME
         if let Event::None = event {
             return StepOutcome::DeadEventAt(time_step);
@@ -238,7 +235,6 @@ pub trait System: Debug + Sync + Send {
     fn evolve<St: State>(
         &self,
         state: &mut St,
-        rng: &mut SmallRng,
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError> {
         let mut events = 0;
@@ -277,7 +273,7 @@ pub trait System: Debug + Sync + Send {
             } else if state.total_rate() == 0. {
                 return Ok(EvolveOutcome::ReachedZeroRate);
             }
-            let out = self.state_step(state, rng, rtime);
+            let out = self.state_step(state, rtime);
             match out {
                 StepOutcome::HadEventAt(t) => {
                     events += 1;

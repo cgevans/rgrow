@@ -791,7 +791,6 @@ impl SimFromTileSet for ATAM {
         let sim = crate::simulation::ConcreteSimulation::<Self, S> {
             system: sys,
             states: vec![],
-            rng: SmallRng::from_entropy(),
             default_state_size: size,
         };
         Ok(Box::new(sim))

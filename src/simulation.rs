@@ -34,7 +34,6 @@ pub(crate) struct ConcreteSimulation<Sy: System, St: State> {
     pub system: Sy,
     pub states: Vec<St>,
     pub default_state_size: (usize, usize),
-    pub rng: SmallRng,
 }
 
 impl<Sy: SystemWithStateCreate + TileBondInfo + SystemInfo, St: State + StateCreate + 'static>
@@ -46,7 +45,7 @@ impl<Sy: SystemWithStateCreate + TileBondInfo + SystemInfo, St: State + StateCre
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError> {
         let state = self.states.get_mut(state_index).unwrap(); //.lock().unwrap();
-        self.system.evolve(state, &mut self.rng, bounds)
+        self.system.evolve(state, bounds)
     }
     fn n_states(&self) -> usize {
         self.states.len()

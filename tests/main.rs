@@ -102,14 +102,11 @@ fn ktam_test() -> Result<()> {
 
     let mut st = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((64, 64))?;
 
-    let mut rng = rand::rngs::SmallRng::from_entropy();
-
     sys.g_se = 8.1;
     sys.update_system();
 
     sys.evolve(
         &mut st,
-        &mut rng,
         EvolveBounds {
             for_events: Some(20000),
             size_max: Some(210),
@@ -124,7 +121,6 @@ fn ktam_test() -> Result<()> {
 
     sys.evolve(
         &mut st,
-        &mut rng,
         EvolveBounds {
             for_events: Some(100000),
             size_min: Some(10),

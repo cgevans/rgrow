@@ -1,5 +1,6 @@
 use ndarray::Array2;
-use rand::{prelude::SmallRng, Rng};
+use rand::thread_rng;
+use rand::Rng;
 
 use crate::base::{Point, Rate};
 use crate::canvas::PointSafeHere;
@@ -8,7 +9,7 @@ use crate::canvas::PointSafeHere;
 // points, beyond the points being defined by two integer coordinates; eg, they do not need to be a
 // rectilinear grid.
 pub trait RateStore {
-    fn choose_point(&self, rng: &mut SmallRng) -> (Point, Rate);
+    fn choose_point(&self) -> (Point, Rate);
     fn update_point(&mut self, point: Point, new_rate: Rate);
     fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]);
     fn total_rate(&self) -> Rate;
@@ -41,8 +42,8 @@ impl CreateSizedRateStore for QuadTreeSquareArray<Rate> {
 }
 
 impl RateStore for QuadTreeSquareArray<Rate> {
-    fn choose_point(&self, rng: &mut SmallRng) -> (Point, Rate) {
-        let mut threshold = self.1 * rng.gen::<f64>();
+    fn choose_point(&self) -> (Point, Rate) {
+        let mut threshold = self.1 * thread_rng().gen::<f64>();
 
         let mut x: usize = 0;
         let mut y: usize = 0;

@@ -1,5 +1,5 @@
 use ndarray::Array2;
-use rand::{rngs::SmallRng, Rng};
+use rand::{rngs::SmallRng, thread_rng, Rng};
 
 use super::oldktam::OldKTAM;
 use crate::{
@@ -157,18 +157,13 @@ impl System for StaticKTAMCover {
         self.inner.calc_mismatch_locations(state)
     }
 
-    fn state_step<S: State>(
-        &self,
-        state: &mut S,
-        rng: &mut SmallRng,
-        max_time_step: f64,
-    ) -> StepOutcome {
-        let time_step = -f64::ln(rng.gen()) / state.total_rate();
+    fn state_step<S: State>(&self, state: &mut S, max_time_step: f64) -> StepOutcome {
+        let time_step = -f64::ln(thread_rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
             return StepOutcome::NoEventIn(max_time_step);
         }
-        let (point, remainder) = state.choose_point(rng); // todo: resultify
+        let (point, remainder) = state.choose_point(); // todo: resultify
         let event = self.choose_event_at_point(state, PointSafe2(point), remainder); // FIXME
         if let Event::None = event {
             state.add_time(time_step);

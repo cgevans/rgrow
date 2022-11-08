@@ -14,9 +14,9 @@ use super::*;
 use base::{NumTiles, Rate};
 
 use ndarray::{Array2, ArrayView2};
-use rand::Rng;
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
 use rand::{prelude::SmallRng, SeedableRng};
+use rand::{thread_rng, Rng};
 
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
@@ -507,7 +507,7 @@ impl<
     }
 
     pub fn next_level(&self, system: &mut Sy, config: &FFSRunConfig) -> Self {
-        let mut rng = SmallRng::from_entropy();
+        let mut rng = thread_rng();
 
         let mut state_list = Vec::new();
         let mut previous_list = Vec::new();
@@ -545,7 +545,7 @@ impl<
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
                 debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
 
-                system.evolve(&mut state, &mut rng, bounds).unwrap();
+                system.evolve(&mut state, bounds).unwrap();
                 i += 1;
             }
 
@@ -636,7 +636,7 @@ impl<
 
                 debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
 
-                system.evolve(&mut state, &mut rng, bounds).unwrap();
+                system.evolve(&mut state, bounds).unwrap();
                 i += 1;
 
                 if state.ntiles() >= config.start_size {

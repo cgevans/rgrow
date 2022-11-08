@@ -50,7 +50,7 @@ impl<C: CanvasSquarable, T: StateTracker> QuadTreeState<C, T> {
 
 // Storage for event rates,
 pub trait RateStoreP {
-    fn choose_point(&self, rng: &mut SmallRng) -> (Point, Rate);
+    fn choose_point(&self) -> (Point, Rate);
     fn update_point(&mut self, point: PointSafeHere, new_rate: Rate);
     fn update_multiple(&mut self, points: &[(PointSafeHere, Rate)]);
     fn total_rate(&self) -> Rate;
@@ -68,8 +68,8 @@ impl<C: CanvasSquarable + CanvasCreate, T: StateTracker> State for QuadTreeState
 }
 
 impl<C: CanvasSquarable, T: StateTracker> RateStoreP for QuadTreeState<C, T> {
-    fn choose_point(&self, rng: &mut SmallRng) -> (Point, Rate) {
-        self.rates.choose_point(rng)
+    fn choose_point(&self) -> (Point, Rate) {
+        self.rates.choose_point()
     }
 
     fn update_point(&mut self, point: PointSafeHere, new_rate: Rate) {
