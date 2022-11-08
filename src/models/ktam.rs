@@ -3,10 +3,10 @@ use crate::{
     base::{GrowError, RgrowError},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     simulation::Simulation,
-    state::{self, State, StateCreate},
+    state::{State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        SystemInfo, SystemWithDimers, TileBondInfo,
+        SystemInfo, SystemWithDimers, SystemWithStateCreate, TileBondInfo,
     },
     tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
@@ -57,7 +57,7 @@ enum TileShape {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KTAM<C: Canvas> {
+pub struct KTAM {
     /// Tile names, as strings.  Only used for reference.
     pub tile_names: Vec<String>,
     /// Tile concentrations, actual (not modified by alpha/Gse/etc) in nM.
@@ -102,19 +102,10 @@ pub struct KTAM<C: Canvas> {
     double_to_left: Array1<Tile>,
     double_to_top: Array1<Tile>,
     should_be_counted: Array1<bool>,
-
-    /// We need to store the type of canvas we're using so we know
-    /// how to move around.
-    _canvas: PhantomData<*const C>,
 }
 
-unsafe impl<C: Canvas> Send for KTAM<C> {}
-unsafe impl<C: Canvas> Sync for KTAM<C> {}
-
-impl<S: State> System for KTAM<S> {
-    type S = S;
-
-    fn update_after_event(&self, state: &mut S, event: &Event) {
+impl System for KTAM {
+    fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => todo!(),
             Event::MonomerAttachment(p, _)
@@ -143,11 +134,15 @@ impl<S: State> System for KTAM<S> {
         }
     }
 
-    fn calc_ntiles(&self, state: &S) -> crate::base::NumTiles {
+    fn calc_ntiles<S: State>(&self, state: &S) -> crate::base::NumTiles {
         state.calc_ntiles_with_tilearray(&self.should_be_counted)
     }
 
-    fn event_rate_at_point(&self, state: &S, p: crate::canvas::PointSafeHere) -> crate::base::Rate {
+    fn event_rate_at_point<S: State>(
+        &self,
+        state: &S,
+        p: crate::canvas::PointSafeHere,
+    ) -> crate::base::Rate {
         if !state.inbounds(p.0) {
             return 0.;
         }
@@ -160,7 +155,12 @@ impl<S: State> System for KTAM<S> {
         }
     }
 
-    fn choose_event_at_point(&self, state: &S, p: PointSafe2, acc: crate::base::Rate) -> Event {
+    fn choose_event_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        acc: crate::base::Rate,
+    ) -> Event {
         // println!("{:?}", acc);
         match self.choose_detachment_at_point(state, p, acc) {
             (true, _, event) => {
@@ -185,7 +185,7 @@ impl<S: State> System for KTAM<S> {
         }
     }
 
-    fn perform_event(&self, state: &mut S, event: &Event) -> &Self {
+    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) => {
@@ -512,12 +512,12 @@ impl<S: State> System for KTAM<S> {
         self._seed_locs()
     }
 
-    fn calc_mismatch_locations(&self, _state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations<S: State>(&self, _state: &S) -> Array2<usize> {
         todo!()
     }
 }
 
-impl<St: State> SystemWithDimers for KTAM<St> {
+impl SystemWithDimers for KTAM {
     fn calc_dimers(&self) -> Vec<DimerInfo> {
         // It is (reasonably) safe for us to use the same code that we used in the old StaticKTAM, despite duples being
         // here, because our EW/NS energies include the right/bottom tiles.  However, (FIXME), we need to think about
@@ -555,7 +555,7 @@ impl<St: State> SystemWithDimers for KTAM<St> {
     }
 }
 
-impl<C: State> TileBondInfo for KTAM<C> {
+impl TileBondInfo for KTAM {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
         self.tile_colors[tile_number]
     }
@@ -581,7 +581,7 @@ impl<C: State> TileBondInfo for KTAM<C> {
     }
 }
 
-impl<C: State> SystemInfo for KTAM<C> {
+impl SystemInfo for KTAM {
     fn tile_concs(&self) -> Vec<f64> {
         self.tile_concs.clone().into_raw_vec()
     }
@@ -591,7 +591,7 @@ impl<C: State> SystemInfo for KTAM<C> {
     }
 }
 
-impl<S: State> KTAM<S> {
+impl KTAM {
     pub fn new_sized(ntiles: Tile, nglues: usize) -> Self {
         Self {
             tile_names: Vec::new(),
@@ -623,7 +623,6 @@ impl<S: State> KTAM<S> {
             double_to_left: Array1::zeros(ntiles + 1),
             double_to_top: Array1::zeros(ntiles + 1),
             should_be_counted: Array1::default(ntiles + 1),
-            _canvas: PhantomData,
         }
     }
 
@@ -846,7 +845,7 @@ impl<S: State> KTAM<S> {
         }
     }
 
-    pub fn monomer_detachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
+    pub fn monomer_detachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
         // If the point is a seed, then there is no detachment rate.
         // ODD HACK: we set a very low detachment rate for seeds and duple bottom/right, to allow
         // rate-based copying.  We ignore these below.
@@ -882,7 +881,7 @@ impl<S: State> KTAM<S> {
         v
     }
 
-    pub fn choose_detachment_at_point(
+    pub fn choose_detachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -958,14 +957,18 @@ impl<S: State> KTAM<S> {
         }
     }
 
-    pub fn total_monomer_attachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
+    pub fn total_monomer_attachment_rate_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+    ) -> Rate {
         match self._find_monomer_attachment_possibilities_at_point(state, p, 0., true) {
             (false, acc, _) => -acc,
             _ => panic!(),
         }
     }
 
-    pub fn choose_attachment_at_point(
+    pub fn choose_attachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -974,7 +977,7 @@ impl<S: State> KTAM<S> {
         self.choose_monomer_attachment_at_point(state, p, acc)
     }
 
-    pub fn choose_monomer_attachment_at_point(
+    pub fn choose_monomer_attachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -983,14 +986,14 @@ impl<S: State> KTAM<S> {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
-    pub fn setup_state(&self, state: &mut S) -> Result<(), GrowError> {
+    pub fn setup_state<S: State>(&self, state: &mut S) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;
         }
         Ok(())
     }
 
-    fn _find_monomer_attachment_possibilities_at_point(
+    fn _find_monomer_attachment_possibilities_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1072,7 +1075,12 @@ impl<S: State> KTAM<S> {
         (false, acc, Event::None)
     }
 
-    pub fn bond_energy_of_tile_type_at_point(&self, state: &S, p: PointSafe2, t: Tile) -> Energy {
+    pub fn bond_energy_of_tile_type_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        t: Tile,
+    ) -> Energy {
         let tn = state.tile_to_n(p);
         let tw = state.tile_to_w(p);
         let te = state.tile_to_e(p);
@@ -1144,7 +1152,7 @@ impl<S: State> KTAM<S> {
         TileShape::Single
     }
 
-    fn _update_monomer_points(&self, state: &mut S, p: &PointSafe2) {
+    fn _update_monomer_points<S: State>(&self, state: &mut S, p: &PointSafe2) {
         let points = [
             (
                 state.move_sa_n(*p),
@@ -1202,7 +1210,7 @@ impl<S: State> KTAM<S> {
         state.update_multiple(&points);
     }
 
-    fn points_to_update_around(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
+    fn points_to_update_around<S: State>(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
         // match self.chunk_size {
         // ChunkSize::Single => {
         let mut points = Vec::with_capacity(13);
@@ -1251,15 +1259,19 @@ impl<S: State> KTAM<S> {
     }
 }
 
-impl<St: State + StateCreate + 'static> SimFromTileSet for KTAM<St> {
-    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
+impl SystemWithStateCreate for KTAM {}
+
+impl SimFromTileSet for KTAM {
+    fn sim_from_tileset<S: StateCreate + State + 'static>(
+        tileset: &TileSet,
+    ) -> Result<Box<dyn Simulation>, RgrowError> {
         let sys = Self::from_tileset(tileset)?;
         let size = match tileset.options.size {
             Size::Single(x) => (x, x),
             Size::Pair((x, y)) => (x, y),
         };
         // let state = sys.new_state(size)?;
-        let sim = crate::simulation::ConcreteSimulation {
+        let sim = crate::simulation::ConcreteSimulation::<Self, S> {
             system: sys,
             states: vec![],
             rng: SmallRng::from_entropy(),
@@ -1269,7 +1281,7 @@ impl<St: State + StateCreate + 'static> SimFromTileSet for KTAM<St> {
     }
 }
 
-impl<St: state::State + state::StateCreate> FromTileSet for KTAM<St> {
+impl FromTileSet for KTAM {
     fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
 
@@ -1330,7 +1342,7 @@ mod tests {
 
     use crate::{
         canvas::{CanvasPeriodic, CanvasSquare, CanvasTube},
-        state::{NullStateTracker, QuadTreeState},
+        state::{NullStateTracker, QuadTreeState, State, StateCreate},
         system::SystemWithStateCreate,
     };
 

@@ -71,7 +71,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
             frame.set_size(win_width as i32, 30);
         }
 
-        let evres = sim.evolve(state_i, bounds)?;
+        // let evres = sim.evolve(state_i, bounds)?;
 
         sim.draw(state_i, pixels.get_frame_mut());
         pixels.render()?;
@@ -89,12 +89,12 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
         app::flush();
         app::awake();
 
-        match evres {
-            EvolveOutcome::ReachWallTimeMax => {}
-            _ => {
-                break;
-            }
-        }
+        // match evres {
+        //     EvolveOutcome::ReachWallTimeMax => {}
+        //     _ => {
+        //         break;
+        //     }
+        // }
     }
 
     // Close window.

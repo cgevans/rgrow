@@ -298,19 +298,19 @@ impl TileSet {
             Model::KTAM => match self.options.canvas_type {
                 CanvasType::Square => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasSquare, NullStateTracker>,
-                    KTAM<QuadTreeState<CanvasSquare, NullStateTracker>>,
+                    KTAM,
                 >::create_from_tileset(
                     self, config
                 )?)),
                 CanvasType::Periodic => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasPeriodic, NullStateTracker>,
-                    KTAM<QuadTreeState<CanvasPeriodic, NullStateTracker>>,
+                    KTAM,
                 >::create_from_tileset(
                     self, config
                 )?)),
                 CanvasType::Tube => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasTube, NullStateTracker>,
-                    KTAM<QuadTreeState<CanvasTube, NullStateTracker>>,
+                    KTAM,
                 >::create_from_tileset(
                     self, config
                 )?)),
@@ -319,19 +319,19 @@ impl TileSet {
             Model::OldKTAM => match self.options.canvas_type {
                 CanvasType::Square => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasSquare, NullStateTracker>,
-                    OldKTAM<QuadTreeState<CanvasSquare, NullStateTracker>>,
+                    OldKTAM,
                 >::create_from_tileset(
                     self, config
                 )?)),
                 CanvasType::Periodic => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasPeriodic, NullStateTracker>,
-                    OldKTAM<QuadTreeState<CanvasPeriodic, NullStateTracker>>,
+                    OldKTAM,
                 >::create_from_tileset(
                     self, config
                 )?)),
                 CanvasType::Tube => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasTube, NullStateTracker>,
-                    OldKTAM<QuadTreeState<CanvasTube, NullStateTracker>>,
+                    OldKTAM,
                 >::create_from_tileset(
                     self, config
                 )?)),
@@ -372,7 +372,7 @@ impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers> FFSResult
 
 impl<
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: SystemWithDimers + FromTileSet + System<S = St>,
+        Sy: SystemWithDimers + FromTileSet + System,
     > FFSRun<St, Sy>
 {
     pub fn create(system: Sy, config: &FFSRunConfig) -> Self {
@@ -498,7 +498,7 @@ impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers + Sync + S
 
 impl<
         St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: SystemWithDimers + System<S = St>,
+        Sy: SystemWithDimers + System,
     > FFSLevel<St, Sy>
 {
     pub fn drop_states(&mut self) -> &Self {

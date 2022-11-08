@@ -4,7 +4,7 @@ use crate::colors::get_color_or_random;
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
-use crate::state::{NullStateTracker, QuadTreeState};
+use crate::state::{NullStateTracker, QuadTreeState, State, StateCreate};
 use crate::system::EvolveBounds;
 
 use super::base::{CanvasLength, Glue};
@@ -383,7 +383,9 @@ pub trait FromTileSet: Sized {
 }
 
 pub trait SimFromTileSet {
-    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError>;
+    fn sim_from_tileset<S: State + StateCreate + 'static>(
+        tileset: &TileSet,
+    ) -> Result<Box<dyn Simulation>, RgrowError>;
 }
 
 impl TileSet {
@@ -432,37 +434,35 @@ impl TileSet {
         match self.options.model {
             Model::KTAM => match self.options.canvas_type {
                 CanvasType::Square => {
-                    KTAM::<QuadTreeState<CanvasSquare, NullStateTracker>>::sim_from_tileset(self)
+                    KTAM::sim_from_tileset::<QuadTreeState<CanvasSquare, NullStateTracker>>(self)
                 }
                 CanvasType::Periodic => {
-                    KTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::sim_from_tileset(self)
+                    KTAM::sim_from_tileset::<QuadTreeState<CanvasPeriodic, NullStateTracker>>(self)
                 }
                 CanvasType::Tube => {
-                    KTAM::<QuadTreeState<CanvasTube, NullStateTracker>>::sim_from_tileset(self)
+                    KTAM::sim_from_tileset::<QuadTreeState<CanvasTube, NullStateTracker>>(self)
                 }
             },
             Model::ATAM => match self.options.canvas_type {
                 CanvasType::Square => {
-                    ATAM::<QuadTreeState<CanvasSquare, NullStateTracker>>::sim_from_tileset(self)
+                    ATAM::sim_from_tileset::<QuadTreeState<CanvasSquare, NullStateTracker>>(self)
                 }
                 CanvasType::Periodic => {
-                    ATAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::sim_from_tileset(self)
+                    ATAM::sim_from_tileset::<QuadTreeState<CanvasPeriodic, NullStateTracker>>(self)
                 }
                 CanvasType::Tube => {
-                    ATAM::<QuadTreeState<CanvasTube, NullStateTracker>>::sim_from_tileset(self)
+                    ATAM::sim_from_tileset::<QuadTreeState<CanvasTube, NullStateTracker>>(self)
                 }
             },
             Model::OldKTAM => match self.options.canvas_type {
                 CanvasType::Square => {
-                    OldKTAM::<QuadTreeState<CanvasSquare, NullStateTracker>>::sim_from_tileset(self)
+                    OldKTAM::sim_from_tileset::<QuadTreeState<CanvasSquare, NullStateTracker>>(self)
                 }
-                CanvasType::Periodic => {
-                    OldKTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::sim_from_tileset(
-                        self,
-                    )
-                }
+                CanvasType::Periodic => OldKTAM::sim_from_tileset::<
+                    QuadTreeState<CanvasPeriodic, NullStateTracker>,
+                >(self),
                 CanvasType::Tube => {
-                    OldKTAM::<QuadTreeState<CanvasTube, NullStateTracker>>::sim_from_tileset(self)
+                    OldKTAM::sim_from_tileset::<QuadTreeState<CanvasTube, NullStateTracker>>(self)
                 }
             },
         }

@@ -2,14 +2,13 @@ use ndarray::prelude::*;
 use rand::{prelude::SmallRng, Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::state::{RateStoreP, StateStatus};
+use crate::state::State;
 use crate::{
-    base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::State,
-    state::StateCreate,
+    base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateCreate,
 };
 
 use super::base::{Point, Rate, Tile};
-use crate::canvas::{Canvas, PointSafe2};
+use crate::canvas::PointSafe2;
 
 use std::fmt::Debug;
 use std::time::Duration;
@@ -170,16 +169,21 @@ pub enum ChunkSize {
     Dimer,
 }
 
-pub trait SystemWithStateCreate: System<S: StateCreate> {
-    fn new_state(&self, shape: (usize, usize)) -> Result<Self::S, GrowError> {
-        let mut new_state = Self::S::empty(shape)?;
+pub trait SystemWithStateCreate: System {
+    fn new_state<St: StateCreate + State>(&self, shape: (usize, usize)) -> Result<St, GrowError> {
+        let mut new_state = St::empty(shape)?;
         self.insert_seed(&mut new_state)?;
         Ok(new_state)
     }
 
-    fn create_we_pair(&mut self, w: Tile, e: Tile, size: usize) -> Result<Self::S, GrowError> {
+    fn create_we_pair<St: StateCreate + State>(
+        &mut self,
+        w: Tile,
+        e: Tile,
+        size: usize,
+    ) -> Result<St, GrowError> {
         assert!(size > 8);
-        let mut ret = Self::S::empty((size, size))?;
+        let mut ret = St::empty((size, size))?;
         let mid = size / 2;
         // self.insert_seed(&mut ret);
         self.set_point(&mut ret, (mid, mid), w)?;
@@ -187,9 +191,14 @@ pub trait SystemWithStateCreate: System<S: StateCreate> {
         Ok(ret)
     }
 
-    fn create_ns_pair(&mut self, n: Tile, s: Tile, size: usize) -> Result<Self::S, GrowError> {
+    fn create_ns_pair<St: StateCreate + State>(
+        &mut self,
+        n: Tile,
+        s: Tile,
+        size: usize,
+    ) -> Result<St, GrowError> {
         assert!(size > 8);
-        let mut ret = Self::S::empty((size, size))?;
+        let mut ret = St::empty((size, size))?;
         let mid = size / 2;
         // self.insert_seed(&mut ret);
         self.set_point(&mut ret, (mid, mid), n)?;
@@ -198,18 +207,14 @@ pub trait SystemWithStateCreate: System<S: StateCreate> {
     }
 }
 
-impl<Sy: System> SystemWithStateCreate for Sy where <Sy as System>::S: StateCreate {}
-
 pub trait System: Debug + Sync + Send {
-    type S: State;
-
-    fn calc_ntiles(&self, state: &Self::S) -> NumTiles {
+    fn calc_ntiles<St: State>(&self, state: &St) -> NumTiles {
         state.calc_ntiles()
     }
 
-    fn state_step(
+    fn state_step<St: State>(
         &self,
-        state: &mut Self::S,
+        state: &mut St,
         rng: &mut SmallRng,
         max_time_step: f64,
     ) -> StepOutcome {
@@ -230,9 +235,9 @@ pub trait System: Debug + Sync + Send {
         StepOutcome::HadEventAt(time_step)
     }
 
-    fn evolve(
+    fn evolve<St: State>(
         &self,
-        state: &mut Self::S,
+        state: &mut St,
         rng: &mut SmallRng,
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError> {
@@ -289,7 +294,12 @@ pub trait System: Debug + Sync + Send {
         }
     }
 
-    fn set_point(&self, state: &mut Self::S, point: Point, tile: Tile) -> Result<&Self, GrowError> {
+    fn set_point<St: State>(
+        &self,
+        state: &mut St,
+        point: Point,
+        tile: Tile,
+    ) -> Result<&Self, GrowError> {
         if !state.inbounds(point) {
             Err(GrowError::OutOfBounds(point.0, point.1))
         } else {
@@ -297,7 +307,7 @@ pub trait System: Debug + Sync + Send {
         }
     }
 
-    fn set_safe_point(&self, state: &mut Self::S, point: PointSafe2, tile: Tile) -> &Self {
+    fn set_safe_point<St: State>(&self, state: &mut St, point: PointSafe2, tile: Tile) -> &Self {
         let event = Event::MonomerChange(point, tile);
 
         self.perform_event(state, &event)
@@ -306,7 +316,7 @@ pub trait System: Debug + Sync + Send {
         self
     }
 
-    fn set_points(&self, state: &mut Self::S, changelist: &[(Point, usize)]) -> &Self {
+    fn set_points<St: State>(&self, state: &mut St, changelist: &[(Point, usize)]) -> &Self {
         for (point, _) in changelist {
             assert!(state.inbounds(*point))
         }
@@ -321,14 +331,14 @@ pub trait System: Debug + Sync + Send {
         self
     }
 
-    fn insert_seed(&self, state: &mut Self::S) -> Result<(), GrowError> {
+    fn insert_seed<St: State>(&self, state: &mut St) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;
         }
         Ok(())
     }
 
-    fn perform_event(&self, state: &mut Self::S, event: &Event) -> &Self {
+    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
         //state.record_event(&event);
         match event {
             Event::None => panic!("Being asked to perform null event."),
@@ -353,26 +363,26 @@ pub trait System: Debug + Sync + Send {
         self
     }
 
-    fn update_after_event(&self, state: &mut Self::S, event: &Event);
+    fn update_after_event<St: State>(&self, state: &mut St, event: &Event);
 
     /// Returns the total event rate at a given point.  These should correspond with the events chosen by `choose_event_at_point`.
-    fn event_rate_at_point(&self, state: &Self::S, p: PointSafeHere) -> Rate;
+    fn event_rate_at_point<St: State>(&self, state: &St, p: PointSafeHere) -> Rate;
 
     /// Given a point, and an accumulated random rate choice `acc` (which should be less than the total rate at the point),
     /// return the event that should take place.
-    fn choose_event_at_point(&self, state: &Self::S, p: PointSafe2, acc: Rate) -> Event;
+    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: Rate) -> Event;
 
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;
 
-    fn calc_mismatch_locations(&self, state: &Self::S) -> Array2<usize>;
+    fn calc_mismatch_locations<St: State>(&self, state: &St) -> Array2<usize>;
 
-    fn calc_mismatches(&self, state: &Self::S) -> NumTiles {
+    fn calc_mismatches<St: State>(&self, state: &St) -> NumTiles {
         let arr = self.calc_mismatch_locations(state);
         arr.sum() as u32 / 2
     }
 
-    fn update_points(&self, state: &mut Self::S, points: &[PointSafeHere]) {
+    fn update_points<St: State>(&self, state: &mut St, points: &[PointSafeHere]) {
         let p = points
             .iter()
             .map(|p| (*p, self.event_rate_at_point(state, *p)))

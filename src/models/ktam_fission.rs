@@ -3,6 +3,7 @@ use crate::base::HashMapType;
 use crate::base::Tile;
 use crate::canvas::Canvas;
 use crate::canvas::PointSafe2;
+use crate::state::State;
 use rand::{distributions::weighted::WeightedIndex, distributions::Distribution};
 use std::collections::VecDeque;
 
@@ -223,8 +224,8 @@ pub enum FissionResult {
     FissionGroups(GroupInfo),
 }
 
-impl<S: Canvas> KTAM<S> {
-    pub fn determine_fission(
+impl KTAM {
+    pub fn determine_fission<S: State>(
         &self,
         canvas: &S,
         possible_start_points: &[PointSafe2],

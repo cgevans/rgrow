@@ -223,8 +223,8 @@ pub enum FissionResult {
     FissionGroups(GroupInfo),
 }
 
-impl<C: State> OldKTAM<C> {
-    pub fn determine_fission(
+impl OldKTAM {
+    pub fn determine_fission<C: State>(
         &self,
         canvas: &C,
         possible_start_points: &[PointSafe2],

@@ -2,8 +2,8 @@ use crate::{
     base::RgrowError,
     canvas::{Canvas, PointSafe2, PointSafeHere},
     simulation::Simulation,
-    state::{self, State, StateCreate},
-    system::{Event, System, SystemInfo, TileBondInfo},
+    state::{State, StateCreate},
+    system::{Event, System, SystemInfo, SystemWithStateCreate, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
 };
 
@@ -11,7 +11,7 @@ use crate::base::{HashMapType, HashSetType};
 use ndarray::prelude::*;
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, marker::PhantomData};
+use std::collections::HashMap;
 
 type Conc = f64;
 type Glue = usize;
@@ -46,7 +46,7 @@ enum TileShape {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ATAM<C: Canvas + 'static> {
+pub struct ATAM {
     /// Tile names, as strings.  Only used for reference.
     pub tile_names: Vec<String>,
     /// Tile concentrations, actual (not modified by alpha/Gse/etc) in nM.
@@ -87,19 +87,13 @@ pub struct ATAM<C: Canvas + 'static> {
     double_to_left: Array1<Tile>,
     double_to_top: Array1<Tile>,
     should_be_counted: Array1<bool>,
-
-    /// We need to store the type of canvas we're using so we know
-    /// how to move around.
-    _canvas: PhantomData<*const C>,
 }
 
-unsafe impl<C: Canvas> Send for ATAM<C> {}
-unsafe impl<C: Canvas> Sync for ATAM<C> {}
+unsafe impl Send for ATAM {}
+unsafe impl Sync for ATAM {}
 
-impl<S: State> System for ATAM<S> {
-    type S = S;
-
-    fn update_after_event(&self, state: &mut S, event: &Event) {
+impl System for ATAM {
+    fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => todo!(),
             Event::MonomerAttachment(p, _)
@@ -137,7 +131,11 @@ impl<S: State> System for ATAM<S> {
         }
     }
 
-    fn event_rate_at_point(&self, state: &S, p: crate::canvas::PointSafeHere) -> crate::base::Rate {
+    fn event_rate_at_point<S: State>(
+        &self,
+        state: &S,
+        p: crate::canvas::PointSafeHere,
+    ) -> crate::base::Rate {
         if !state.inbounds(p.0) {
             return 0.;
         }
@@ -150,7 +148,12 @@ impl<S: State> System for ATAM<S> {
         }
     }
 
-    fn choose_event_at_point(&self, state: &S, p: PointSafe2, acc: crate::base::Rate) -> Event {
+    fn choose_event_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        acc: crate::base::Rate,
+    ) -> Event {
         match self.choose_attachment_at_point(state, p, acc) {
             (true, _, event) => {
                 // println!("{:?} {:?}", acc, event);
@@ -168,7 +171,7 @@ impl<S: State> System for ATAM<S> {
         }
     }
 
-    fn set_safe_point(&self, state: &mut S, point: PointSafe2, tile: Tile) -> &Self {
+    fn set_safe_point<S: State>(&self, state: &mut S, point: PointSafe2, tile: Tile) -> &Self {
         let event = Event::MonomerAttachment(point, tile);
 
         self.perform_event(state, &event)
@@ -176,7 +179,7 @@ impl<S: State> System for ATAM<S> {
         self
     }
 
-    fn perform_event(&self, state: &mut S, event: &Event) -> &Self {
+    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) => {
@@ -301,12 +304,12 @@ impl<S: State> System for ATAM<S> {
         v
     }
 
-    fn calc_mismatch_locations(&self, _state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations<S: State>(&self, _state: &S) -> Array2<usize> {
         todo!()
     }
 }
 
-impl<S: State> ATAM<S> {
+impl ATAM {
     fn get_energy_ns(&self, tn: Tile, ts: Tile) -> Energy {
         self.energy_ns[(tn, ts)]
     }
@@ -335,14 +338,18 @@ impl<S: State> ATAM<S> {
         TileShape::Single
     }
 
-    pub fn total_monomer_attachment_rate_at_point(&self, state: &S, p: PointSafe2) -> Rate {
+    pub fn total_monomer_attachment_rate_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+    ) -> Rate {
         match self._find_monomer_attachment_possibilities_at_point(state, p, 0., true) {
             (false, acc, _) => -acc,
             _ => panic!(),
         }
     }
 
-    pub fn choose_attachment_at_point(
+    pub fn choose_attachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -351,7 +358,7 @@ impl<S: State> ATAM<S> {
         self.choose_monomer_attachment_at_point(state, p, acc)
     }
 
-    pub fn choose_monomer_attachment_at_point(
+    pub fn choose_monomer_attachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -360,7 +367,7 @@ impl<S: State> ATAM<S> {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
-    fn _find_monomer_attachment_possibilities_at_point(
+    fn _find_monomer_attachment_possibilities_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -445,7 +452,7 @@ impl<S: State> ATAM<S> {
         (false, acc, Event::None)
     }
 
-    pub fn bond_energy_of_tile_type_at_point_hypothetical(
+    pub fn bond_energy_of_tile_type_at_point_hypothetical<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -493,7 +500,7 @@ impl<S: State> ATAM<S> {
         energy
     }
 
-    fn points_to_update_around(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
+    fn points_to_update_around<S: State>(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
         // match self.chunk_size {
         // ChunkSize::Single => {
         let mut points = Vec::with_capacity(13);
@@ -567,7 +574,6 @@ impl<S: State> ATAM<S> {
             double_to_left: Array1::zeros(ntiles + 1),
             double_to_top: Array1::zeros(ntiles + 1),
             should_be_counted: Array1::default(ntiles + 1),
-            _canvas: PhantomData,
             threshold: 2.,
         }
     }
@@ -770,15 +776,19 @@ impl<S: State> ATAM<S> {
     }
 }
 
-impl<St: State + StateCreate + 'static> SimFromTileSet for ATAM<St> {
-    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
+impl SystemWithStateCreate for ATAM {}
+
+impl SimFromTileSet for ATAM {
+    fn sim_from_tileset<S: State + StateCreate + 'static>(
+        tileset: &TileSet,
+    ) -> Result<Box<dyn Simulation>, RgrowError> {
         let sys = Self::from_tileset(tileset)?;
         let size = match tileset.options.size {
             Size::Single(x) => (x, x),
             Size::Pair((x, y)) => (x, y),
         };
         // let state = sys.new_state(size)?;
-        let sim = crate::simulation::ConcreteSimulation {
+        let sim = crate::simulation::ConcreteSimulation::<Self, S> {
             system: sys,
             states: vec![],
             rng: SmallRng::from_entropy(),
@@ -788,7 +798,7 @@ impl<St: State + StateCreate + 'static> SimFromTileSet for ATAM<St> {
     }
 }
 
-impl<C: State> TileBondInfo for ATAM<C> {
+impl TileBondInfo for ATAM {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
         self.tile_colors[tile_number]
     }
@@ -814,7 +824,7 @@ impl<C: State> TileBondInfo for ATAM<C> {
     }
 }
 
-impl<St: state::State + state::StateCreate> FromTileSet for ATAM<St> {
+impl FromTileSet for ATAM {
     fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
         let seed = if proc.seed.is_empty() {
@@ -859,7 +869,7 @@ impl<St: state::State + state::StateCreate> FromTileSet for ATAM<St> {
     }
 }
 
-impl<C: State> SystemInfo for ATAM<C> {
+impl SystemInfo for ATAM {
     fn tile_concs(&self) -> Vec<f64> {
         todo!()
     }

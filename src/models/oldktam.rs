@@ -1,6 +1,9 @@
-use std::{collections::HashMap, marker::PhantomData, sync::RwLock};
+use std::{collections::HashMap, sync::RwLock};
 
-use crate::base::{HashMapType, HashSetType};
+use crate::{
+    base::{HashMapType, HashSetType},
+    system::SystemWithStateCreate,
+};
 use cached::{Cached, SizedCache};
 use ndarray::{Array1, Array2};
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
@@ -82,7 +85,7 @@ fn create_friend_data(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OldKTAM<C: State> {
+pub struct OldKTAM {
     pub tile_adj_concs: Array1<Rate>,
     pub energy_ns: Array2<Energy>,
     pub energy_we: Array2<Energy>,
@@ -102,13 +105,9 @@ pub struct OldKTAM<C: State> {
     pub(crate) chunk_size: ChunkSize,
     pub(crate) tile_names: Vec<String>,
     pub(crate) tile_colors: Vec<[u8; 4]>,
-    _canvas: PhantomData<*const C>,
 }
 
-unsafe impl<C: State> Send for OldKTAM<C> {}
-unsafe impl<C: State> Sync for OldKTAM<C> {}
-
-impl<C: State> TileBondInfo for OldKTAM<C> {
+impl TileBondInfo for OldKTAM {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
         self.tile_colors[tile_number]
     }
@@ -135,7 +134,7 @@ impl<C: State> TileBondInfo for OldKTAM<C> {
 }
 
 #[allow(clippy::too_many_arguments)]
-impl<C: State> OldKTAM<C> {
+impl OldKTAM {
     pub fn from_ktam(
         tile_stoics: Array1<f64>,
         tile_edges: Array2<Glue>,
@@ -215,11 +214,14 @@ impl<C: State> OldKTAM<C> {
             tile_colors: tile_colors_processed,
             chunk_handling: chunk_handling.unwrap_or(ChunkHandling::None),
             chunk_size: chunk_size.unwrap_or(ChunkSize::Single),
-            _canvas: PhantomData,
         }
     }
 
-    pub(crate) fn points_to_update_around(&self, state: &C, p: &PointSafe2) -> Vec<PointSafeHere> {
+    pub(crate) fn points_to_update_around<C: State>(
+        &self,
+        state: &C,
+        p: &PointSafe2,
+    ) -> Vec<PointSafeHere> {
         match self.chunk_size {
             ChunkSize::Single => {
                 let mut points = Vec::with_capacity(5);
@@ -319,13 +321,12 @@ impl<C: State> OldKTAM<C> {
             tile_colors,
             chunk_handling: chunk_handling.unwrap_or(ChunkHandling::None),
             chunk_size: chunk_size.unwrap_or(ChunkSize::Single),
-            _canvas: PhantomData,
         }
     }
 
     /// Unsafe because does not check bounds of p: assumes inbounds (with border if applicable).
     /// This requires the tile to be specified because it is likely you've already accessed it.
-    pub(crate) fn bond_strength_of_tile_at_point(
+    pub(crate) fn bond_strength_of_tile_at_point<C: State>(
         &self,
         canvas: &C,
         p: PointSafe2,
@@ -351,7 +352,7 @@ impl<C: State> OldKTAM<C> {
     }
 
     // Dimer detachment rates are written manually.
-    fn dimer_s_detach_rate(&self, canvas: &C, p: Point, t: Tile, ts: Energy) -> Rate {
+    fn dimer_s_detach_rate<C: State>(&self, canvas: &C, p: Point, t: Tile, ts: Energy) -> Rate {
         let p2 = canvas.u_move_point_s(p);
         if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 }) | self.is_seed(p2) {
             0.0
@@ -368,7 +369,7 @@ impl<C: State> OldKTAM<C> {
     }
 
     // Dimer detachment rates are written manually.
-    fn dimer_e_detach_rate(&self, canvas: &C, p: Point, t: Tile, ts: Energy) -> Rate {
+    fn dimer_e_detach_rate<C: State>(&self, canvas: &C, p: Point, t: Tile, ts: Energy) -> Rate {
         let p2 = canvas.u_move_point_e(p);
         if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 } | self.is_seed(p2)) {
             0.0
@@ -384,7 +385,7 @@ impl<C: State> OldKTAM<C> {
         }
     }
 
-    fn chunk_detach_rate(&self, canvas: &C, p: Point, t: Tile) -> Rate {
+    fn chunk_detach_rate<C: State>(&self, canvas: &C, p: Point, t: Tile) -> Rate {
         match self.chunk_size {
             ChunkSize::Single => 0.0,
             ChunkSize::Dimer => {
@@ -395,7 +396,7 @@ impl<C: State> OldKTAM<C> {
         }
     }
 
-    fn choose_chunk_detachment(
+    fn choose_chunk_detachment<C: State>(
         &self,
         canvas: &C,
         p: PointSafe2,
@@ -470,10 +471,8 @@ impl<C: State> OldKTAM<C> {
     }
 }
 
-impl<S: State> System for OldKTAM<S> {
-    type S = S;
-
-    fn event_rate_at_point(&self, canvas: &S, point: PointSafeHere) -> Rate {
+impl System for OldKTAM {
+    fn event_rate_at_point<S: State>(&self, canvas: &S, point: PointSafeHere) -> Rate {
         let p = if canvas.inbounds(point.0) {
             PointSafe2(point.0)
         } else {
@@ -567,7 +566,7 @@ impl<S: State> System for OldKTAM<S> {
         }
     }
 
-    fn choose_event_at_point(&self, canvas: &S, p: PointSafe2, mut acc: Rate) -> Event {
+    fn choose_event_at_point<S: State>(&self, canvas: &S, p: PointSafe2, mut acc: Rate) -> Event {
         let tile = { canvas.tile_at_point(p) };
 
         let tn = { canvas.tile_to_n(p) };
@@ -721,7 +720,7 @@ impl<S: State> System for OldKTAM<S> {
         v
     }
 
-    fn update_after_event(&self, state: &mut S, event: &Event) {
+    fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => {
                 panic!("Being asked to update after a dead event.")
@@ -786,7 +785,7 @@ impl<S: State> System for OldKTAM<S> {
         }
     }
 
-    fn calc_mismatch_locations(&self, state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations<S: State>(&self, state: &S) -> Array2<usize> {
         let threshold = 0.1;
         let mut arr = Array2::zeros(state.raw_array().raw_dim());
 
@@ -818,7 +817,7 @@ impl<S: State> System for OldKTAM<S> {
     }
 }
 
-impl<St: State> SystemWithDimers for OldKTAM<St> {
+impl SystemWithDimers for OldKTAM {
     fn calc_dimers(&self) -> Vec<DimerInfo> {
         let mut dvec = Vec::new();
 
@@ -854,15 +853,19 @@ impl<St: State> SystemWithDimers for OldKTAM<St> {
     }
 }
 
-impl<St: State + StateCreate + 'static> SimFromTileSet for OldKTAM<St> {
-    fn sim_from_tileset(tileset: &TileSet) -> Result<Box<dyn Simulation>, RgrowError> {
+impl SystemWithStateCreate for OldKTAM {}
+
+impl SimFromTileSet for OldKTAM {
+    fn sim_from_tileset<S: State + StateCreate + 'static>(
+        tileset: &TileSet,
+    ) -> Result<Box<dyn Simulation>, RgrowError> {
         let sys = Self::from_tileset(tileset)?;
         let size = match tileset.options.size {
             Size::Single(x) => (x, x),
             Size::Pair((x, y)) => (x, y),
         };
         // let state = sys.new_state(size)?;
-        let sim = crate::simulation::ConcreteSimulation {
+        let sim = crate::simulation::ConcreteSimulation::<Self, S> {
             system: sys,
             states: vec![],
             rng: SmallRng::from_entropy(),
@@ -872,7 +875,7 @@ impl<St: State + StateCreate + 'static> SimFromTileSet for OldKTAM<St> {
     }
 }
 
-impl<St: State + StateCreate> FromTileSet for OldKTAM<St> {
+impl FromTileSet for OldKTAM {
     fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
 
@@ -912,7 +915,7 @@ impl<St: State + StateCreate> FromTileSet for OldKTAM<St> {
     }
 }
 
-impl<C: State> SystemInfo for OldKTAM<C> {
+impl SystemInfo for OldKTAM {
     fn tile_concs(&self) -> Vec<f64> {
         todo!()
     }

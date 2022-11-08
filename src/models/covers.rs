@@ -39,17 +39,15 @@ enum PossibleChoice {
 }
 
 #[derive(Debug, Clone)]
-pub struct StaticKTAMCover<S: State> {
-    pub inner: OldKTAM<S>,
+pub struct StaticKTAMCover {
+    pub inner: OldKTAM,
     pub(crate) tile_is_cover: Vec<CoverType>,
     pub(crate) cover_attach_info: Vec<Vec<CoverAttach>>,
     pub(crate) composite_detach_info: Vec<Vec<CompositeDetach>>,
 }
 
-impl<S: State> System for StaticKTAMCover<S> {
-    type S = S;
-
-    fn update_after_event(&self, state: &mut S, event: &Event) {
+impl System for StaticKTAMCover {
+    fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => {
                 panic!("Being asked to update after a dead event.")
@@ -114,7 +112,7 @@ impl<S: State> System for StaticKTAMCover<S> {
         }
     }
 
-    fn event_rate_at_point(&self, state: &S, p: PointSafeHere) -> Rate {
+    fn event_rate_at_point<S: State>(&self, state: &S, p: PointSafeHere) -> Rate {
         let t = state.v_sh(p);
 
         if !state.inbounds(p.0) {
@@ -133,7 +131,7 @@ impl<S: State> System for StaticKTAMCover<S> {
         }
     }
 
-    fn choose_event_at_point(&self, state: &S, p: PointSafe2, acc: Rate) -> Event {
+    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: Rate) -> Event {
         let t = state.tile_at_point(p);
 
         match self.tile_is_cover[t] {
@@ -155,11 +153,16 @@ impl<S: State> System for StaticKTAMCover<S> {
         self.inner.seed_locs()
     }
 
-    fn calc_mismatch_locations(&self, state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations<S: State>(&self, state: &S) -> Array2<usize> {
         self.inner.calc_mismatch_locations(state)
     }
 
-    fn state_step(&self, state: &mut S, rng: &mut SmallRng, max_time_step: f64) -> StepOutcome {
+    fn state_step<S: State>(
+        &self,
+        state: &mut S,
+        rng: &mut SmallRng,
+        max_time_step: f64,
+    ) -> StepOutcome {
         let time_step = -f64::ln(rng.gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
@@ -178,7 +181,7 @@ impl<S: State> System for StaticKTAMCover<S> {
         StepOutcome::HadEventAt(time_step)
     }
 
-    fn set_safe_point(&self, state: &mut S, point: PointSafe2, tile: Tile) -> &Self {
+    fn set_safe_point<S: State>(&self, state: &mut S, point: PointSafe2, tile: Tile) -> &Self {
         state.set_sa(&point, &tile);
 
         let event = Event::MonomerAttachment(point, tile);
@@ -188,7 +191,7 @@ impl<S: State> System for StaticKTAMCover<S> {
         self
     }
 
-    fn perform_event(&self, state: &mut S, event: &Event) -> &Self {
+    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
@@ -213,14 +216,14 @@ impl<S: State> System for StaticKTAMCover<S> {
     }
 }
 
-impl<S: State> SystemWithDimers for StaticKTAMCover<S> {
+impl SystemWithDimers for StaticKTAMCover {
     fn calc_dimers(&self) -> Vec<DimerInfo> {
         self.inner.calc_dimers()
     }
 }
 
-impl<S: State> StaticKTAMCover<S> {
-    fn cover_to_composite_rate(&self, state: &S, p: PointSafe2, t: usize) -> Rate {
+impl StaticKTAMCover {
+    fn cover_to_composite_rate<S: State>(&self, state: &S, p: PointSafe2, t: usize) -> Rate {
         let cc = &self.cover_attach_info[t];
 
         let mut total_rate = 0.;
@@ -236,7 +239,7 @@ impl<S: State> StaticKTAMCover<S> {
 
         total_rate
     }
-    fn choose_cover_to_composite(
+    fn choose_cover_to_composite<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -260,7 +263,7 @@ impl<S: State> StaticKTAMCover<S> {
 
         PossibleChoice::Remainder(acc)
     }
-    fn composite_to_cover_rate(&self, state: &S, p: PointSafe2, t: usize) -> Rate {
+    fn composite_to_cover_rate<S: State>(&self, state: &S, p: PointSafe2, t: usize) -> Rate {
         let cc = &self.composite_detach_info[t];
 
         let mut total_rate = 0.;
@@ -275,7 +278,7 @@ impl<S: State> StaticKTAMCover<S> {
 
         total_rate
     }
-    fn choose_composite_to_cover(
+    fn choose_composite_to_cover<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -300,7 +303,7 @@ impl<S: State> StaticKTAMCover<S> {
     }
 }
 
-impl<C: State> TileBondInfo for StaticKTAMCover<C> {
+impl TileBondInfo for StaticKTAMCover {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
         self.inner.tile_colors[tile_number]
     }
@@ -326,7 +329,7 @@ impl<C: State> TileBondInfo for StaticKTAMCover<C> {
     }
 }
 
-impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
+impl FromTileSet for StaticKTAMCover {
     fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
         let mut tsc: TileSet = (*tileset).to_owned();
 
@@ -443,7 +446,7 @@ impl<St: State + StateCreate> FromTileSet for StaticKTAMCover<St> {
     }
 }
 
-impl<C: State> SystemInfo for StaticKTAMCover<C> {
+impl SystemInfo for StaticKTAMCover {
     fn tile_concs(&self) -> Vec<f64> {
         todo!()
     }
