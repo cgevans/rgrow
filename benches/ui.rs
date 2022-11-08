@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use criterion::Criterion;
 use rgrow::tileset::{ParsedSeed, TileSet};
 

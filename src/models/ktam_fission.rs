@@ -1,7 +1,6 @@
 use super::ktam::KTAM;
 use crate::base::HashMapType;
 use crate::base::Tile;
-use crate::canvas::Canvas;
 use crate::canvas::PointSafe2;
 use crate::state::State;
 use rand::{distributions::weighted::WeightedIndex, distributions::Distribution};

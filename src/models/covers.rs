@@ -6,7 +6,7 @@ use crate::{
     base::{HashMapType, Rate, RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     models::oldktam::Seed,
-    state::{State, StateCreate},
+    state::State,
     system::{
         ChunkSize, DimerInfo, Event, StepOutcome, System, SystemInfo, SystemWithDimers,
         TileBondInfo,

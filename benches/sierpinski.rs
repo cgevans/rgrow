@@ -23,9 +23,11 @@ fn raw_sim_run(c: &mut Criterion) {
 
     ts.options.seed = ParsedSeed::Single(2045, 2045, 1.into());
 
-    let sys = KTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::from_tileset(&ts).unwrap();
+    let sys = KTAM::from_tileset(&ts).unwrap();
 
-    let mut st = sys.new_state((2048, 2048)).unwrap();
+    let mut st = sys
+        .new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((2048, 2048))
+        .unwrap();
 
     let mut rng = rand::rngs::SmallRng::from_entropy();
 

@@ -80,7 +80,7 @@ fn atam_test() -> Result<()> {
 
     let state = at.state_ref(0);
 
-    let sr = state.read().unwrap();
+    let sr = state; //.read().unwrap();
 
     assert!(sr.ntiles() == 500);
 
@@ -98,12 +98,9 @@ fn ktam_test() -> Result<()> {
     ts.options.size = Size::Single(64);
     ts.options.seed = ParsedSeed::Single(60, 60, 1.into());
 
-    let mut sys =
-        rgrow::models::ktam::KTAM::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::from_tileset(
-            &ts,
-        )?;
+    let mut sys = rgrow::models::ktam::KTAM::from_tileset(&ts)?;
 
-    let mut st = sys.new_state((64, 64))?;
+    let mut st = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((64, 64))?;
 
     let mut rng = rand::rngs::SmallRng::from_entropy();
 
@@ -157,7 +154,7 @@ fn simple_fission_test() -> Result<()> {
         },
     )?;
     let state = sim.state_ref(0);
-    assert!(state.read().unwrap().ntiles() > 800);
+    assert!(state.ntiles() > 800); //.read().unwrap()
 
     ts.options.fission = FissionHandling::KeepSeeded;
     let mut sim = ts.into_simulation()?;
@@ -170,7 +167,7 @@ fn simple_fission_test() -> Result<()> {
         },
     )?;
     let state = sim.state_ref(0);
-    assert!(state.read().unwrap().ntiles() < 500);
+    assert!(state.ntiles() < 500); // .read().unwrap()
     Ok(())
 }
 

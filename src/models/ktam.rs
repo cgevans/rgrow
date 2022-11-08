@@ -15,7 +15,7 @@ use crate::base::{HashMapType, HashSetType};
 use ndarray::prelude::*;
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, marker::PhantomData};
+use std::collections::HashMap;
 
 type Conc = f64;
 type Glue = usize;
@@ -1335,6 +1335,18 @@ impl FromTileSet for KTAM {
         Ok(newkt)
     }
 }
+
+// #[cfg(feature = "python")]
+// use pyo3::prelude::*;
+
+// #[cfg(feature = "python")]
+// #[pymethods]
+// impl KTAM {
+//     #[pyfunction]
+//     fn py_take_step(&mut self, state: &mut Box<dyn State>) {
+//         (self as System).state_step(state, rng, max_time_step);
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

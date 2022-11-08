@@ -10,6 +10,8 @@ use ndarray::prelude::*;
 use rand::prelude::SmallRng;
 use std::fmt::Debug;
 
+type BoxedState = Box<dyn State>;
+
 pub trait State: RateStoreP + Canvas + StateStatus + Sync + Send {
     fn panicinfo(&self) -> String;
 }

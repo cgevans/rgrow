@@ -4,11 +4,10 @@ use fltk::{app, prelude::*, window::Window};
 
 use pixels::{Pixels, SurfaceTexture};
 
-use std::thread;
-
 use crate::base::RgrowError;
 use crate::simulation::Simulation;
-use crate::system::{EvolveBounds, EvolveOutcome};
+use crate::system::EvolveOutcome;
+
 thread_local! {
     pub static APP: fltk::app::App = app::App::default()
 }
@@ -17,7 +16,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     let mut sim = parsed.into_simulation()?;
 
     let state_i = sim.add_state()?;
-    let state = sim.state_ref(state_i);
+    // let state = sim.state_ref(state_i);
 
     let (width, height) = sim.draw_size(state_i);
 
@@ -32,11 +31,12 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     };
     app::screen_size();
 
-    let sr = state.read().unwrap();
+    // let sr = state.read().unwrap();
     let mut win = Window::default()
         .with_size(
-            (scale * sr.ncols()) as i32,
-            ((scale * sr.nrows()) + 30) as i32,
+            100,
+            100, // (scale * sr.ncols()) as i32,
+                // ((scale * sr.nrows()) + 30) as i32,
         )
         .with_label("rgrow!");
 
@@ -60,7 +60,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
     let mut bounds = parsed.get_bounds();
 
     bounds.for_wall_time = Some(Duration::from_millis(16));
-    drop(sr);
+    // drop(sr);
     while app::wait() {
         // Check if window was resized
         if win.w() != win_width as i32 || win.h() != win_height as i32 {
@@ -71,30 +71,30 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
             frame.set_size(win_width as i32, 30);
         }
 
-        // let evres = sim.evolve(state_i, bounds)?;
+        let evres = sim.evolve(state_i, bounds)?;
 
         sim.draw(state_i, pixels.get_frame_mut());
         pixels.render()?;
 
-        let sr = state.read().unwrap();
+        // let sr = state.read().unwrap();
         // Update text with the simulation time, events, and tiles
-        frame.set_label(&format!(
-            "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}",
-            sr.time(),
-            sr.total_events(),
-            sr.ntiles()
-        ));
-        drop(sr);
+        // frame.set_label(&format!(
+        //     "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}",
+        //     sr.time(),
+        //     sr.total_events(),
+        //     sr.ntiles()
+        // ));
+        // drop(sr);
 
         app::flush();
         app::awake();
 
-        // match evres {
-        //     EvolveOutcome::ReachWallTimeMax => {}
-        //     _ => {
-        //         break;
-        //     }
-        // }
+        match evres {
+            EvolveOutcome::ReachWallTimeMax => {}
+            _ => {
+                break;
+            }
+        }
     }
 
     // Close window.
