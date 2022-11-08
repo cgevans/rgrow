@@ -80,7 +80,7 @@ fn atam_test() -> Result<()> {
 
     let state = at.state_ref(0);
 
-    let sr = state.lock().unwrap();
+    let sr = state.read().unwrap();
 
     assert!(sr.ntiles() == 500);
 
@@ -157,7 +157,7 @@ fn simple_fission_test() -> Result<()> {
         },
     )?;
     let state = sim.state_ref(0);
-    assert!(state.lock().unwrap().ntiles() > 800);
+    assert!(state.read().unwrap().ntiles() > 800);
 
     ts.options.fission = FissionHandling::KeepSeeded;
     let mut sim = ts.into_simulation()?;
@@ -170,7 +170,7 @@ fn simple_fission_test() -> Result<()> {
         },
     )?;
     let state = sim.state_ref(0);
-    assert!(state.lock().unwrap().ntiles() < 500);
+    assert!(state.read().unwrap().ntiles() < 500);
     Ok(())
 }
 

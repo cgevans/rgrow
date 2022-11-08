@@ -2,7 +2,7 @@ use super::ktam_fission::*;
 use crate::{
     base::{GrowError, RgrowError},
     canvas::{Canvas, PointSafe2, PointSafeHere},
-    simulation::{ConcreteSimulation, Simulation},
+    simulation::Simulation,
     state::{self, State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,

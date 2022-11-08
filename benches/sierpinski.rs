@@ -1,10 +1,8 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use fltk::group::Tile;
+use criterion::{criterion_group, criterion_main, Criterion};
 use rand::SeedableRng;
 use rgrow::{
     canvas::CanvasPeriodic,
     models::ktam::KTAM,
-    simulation::Simulation,
     state::{NullStateTracker, QuadTreeState},
     system::{EvolveBounds, System, SystemWithStateCreate},
     tileset::{FromTileSet, ParsedSeed, TileSet},

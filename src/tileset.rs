@@ -5,6 +5,7 @@ use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
+use crate::system::EvolveBounds;
 
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;
@@ -386,6 +387,13 @@ pub trait SimFromTileSet {
 }
 
 impl TileSet {
+    pub fn get_bounds(&self) -> EvolveBounds {
+        EvolveBounds {
+            size_max: self.options.smax,
+            ..Default::default()
+        }
+    }
+
     pub fn from_json(data: &str) -> serde_json::Result<Self> {
         serde_json::from_str(data)
     }

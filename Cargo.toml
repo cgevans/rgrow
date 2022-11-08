@@ -18,6 +18,10 @@ criterion = "0.3"
 name = "sierpinski"
 harness = false
 
+[[bench]]
+name = "ui"
+harness = false
+
 [profile.release]
 debug = 1
 

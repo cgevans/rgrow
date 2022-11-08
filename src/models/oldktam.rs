@@ -1,9 +1,6 @@
 use std::{collections::HashMap, marker::PhantomData, sync::RwLock};
 
-use crate::{
-    base::{HashMapType, HashSetType},
-    simulation::ConcreteSimulation,
-};
+use crate::base::{HashMapType, HashSetType};
 use cached::{Cached, SizedCache};
 use ndarray::{Array1, Array2};
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};

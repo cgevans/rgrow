@@ -1,7 +1,7 @@
 use crate::{
     base::RgrowError,
     canvas::{Canvas, PointSafe2, PointSafeHere},
-    simulation::{ConcreteSimulation, Simulation},
+    simulation::Simulation,
     state::{self, State, StateCreate},
     system::{Event, System, SystemInfo, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
@@ -46,7 +46,7 @@ enum TileShape {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ATAM<C: Canvas> {
+pub struct ATAM<C: Canvas + 'static> {
     /// Tile names, as strings.  Only used for reference.
     pub tile_names: Vec<String>,
     /// Tile concentrations, actual (not modified by alpha/Gse/etc) in nM.
@@ -90,7 +90,7 @@ pub struct ATAM<C: Canvas> {
 
     /// We need to store the type of canvas we're using so we know
     /// how to move around.
-    _canvas: PhantomData<fn(C) -> ()>,
+    _canvas: PhantomData<*const C>,
 }
 
 unsafe impl<C: Canvas> Send for ATAM<C> {}
