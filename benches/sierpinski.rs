@@ -4,7 +4,7 @@ use rgrow::{
     canvas::CanvasPeriodic,
     models::ktam::KTAM,
     state::{NullStateTracker, QuadTreeState},
-    system::{EvolveBounds, System, SystemWithStateCreate},
+    system::{EvolveBounds, System},
     tileset::{FromTileSet, ParsedSeed, TileSet},
 };
 

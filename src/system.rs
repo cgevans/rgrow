@@ -171,7 +171,7 @@ pub enum ChunkSize {
     Dimer,
 }
 
-pub trait SystemWithStateCreate: System {
+pub trait System: Debug + Sync + Send {
     fn new_state<St: StateCreate + State>(&self, shape: (usize, usize)) -> Result<St, GrowError> {
         let mut new_state = St::empty(shape)?;
         self.insert_seed(&mut new_state)?;
@@ -207,9 +207,7 @@ pub trait SystemWithStateCreate: System {
         self.set_point(&mut ret, (mid + 1, mid), s)?;
         Ok(ret)
     }
-}
 
-pub trait System: Debug + Sync + Send {
     fn calc_ntiles<St: State>(&self, state: &St) -> NumTiles {
         state.calc_ntiles()
     }

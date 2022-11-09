@@ -3,8 +3,8 @@ use crate::{
     canvas::{Canvas, PointSafe2, PointSafeHere},
     simulation::Simulation,
     state::{State, StateCreate},
-    system::{Event, System, SystemInfo, SystemWithStateCreate, TileBondInfo},
-    tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
+    system::{Event, System, SystemInfo, TileBondInfo},
+    tileset::{FromTileSet, ProcessedTileSet, Size, TileSet},
 };
 
 use crate::base::{HashMapType, HashSetType};
@@ -773,27 +773,6 @@ impl ATAM {
         }
 
         self.update_system();
-    }
-}
-
-impl SystemWithStateCreate for ATAM {}
-
-impl SimFromTileSet for ATAM {
-    fn sim_from_tileset<S: State + StateCreate + 'static>(
-        tileset: &TileSet,
-    ) -> Result<Box<dyn Simulation>, RgrowError> {
-        let sys = Self::from_tileset(tileset)?;
-        let size = match tileset.options.size {
-            Size::Single(x) => (x, x),
-            Size::Pair((x, y)) => (x, y),
-        };
-        // let state = sys.new_state(size)?;
-        let sim = crate::simulation::ConcreteSimulation::<Self, S> {
-            system: sys,
-            states: vec![],
-            default_state_size: size,
-        };
-        Ok(Box::new(sim))
     }
 }
 

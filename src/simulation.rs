@@ -1,11 +1,9 @@
 //$ Simulations hold both a model and a state, so that they can be handled without knowing the specific model, state, or canvas being used.
 
-use rand::prelude::SmallRng;
-
-use crate::base::GrowError;
+use crate::base::{GrowError, Tile};
 use crate::state::{State, StateCreate};
+use crate::system::TileBondInfo;
 use crate::system::{EvolveBounds, EvolveOutcome, System, SystemInfo};
-use crate::system::{SystemWithStateCreate, TileBondInfo};
 
 pub trait Simulation: Send + Sync + SystemInfo {
     fn evolve(
@@ -26,8 +24,8 @@ pub trait Simulation: Send + Sync + SystemInfo {
     fn draw_size(&self, state_index: usize) -> (u32, u32);
     fn draw(&self, state_index: usize, frame: &mut [u8]);
 
-    // #[cfg(feature = "use_rayon")]
-    // fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>>;
+    #[cfg(feature = "use_rayon")]
+    fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>>;
 }
 
 pub(crate) struct ConcreteSimulation<Sy: System, St: State> {
@@ -36,8 +34,8 @@ pub(crate) struct ConcreteSimulation<Sy: System, St: State> {
     pub default_state_size: (usize, usize),
 }
 
-impl<Sy: SystemWithStateCreate + TileBondInfo + SystemInfo, St: State + StateCreate + 'static>
-    Simulation for ConcreteSimulation<Sy, St>
+impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> Simulation
+    for ConcreteSimulation<Sy, St>
 {
     fn evolve(
         &mut self,
@@ -71,28 +69,18 @@ impl<Sy: SystemWithStateCreate + TileBondInfo + SystemInfo, St: State + StateCre
         Ok(self.states.len() - 1)
     }
 
-    // #[cfg(feature = "use_rayon")]
-    // fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>> {
-
-    //     use rand::SeedableRng;
-    //     use rayon::prelude::*;
-    //     let sys = &self.system;
-    //     self.states
-    //         .par_iter_mut()
-    //         .map(|state| {
-    //             sys.evolve(
-    //                 &mut state.write().unwrap(),
-    //                 &mut SmallRng::from_entropy(),
-    //                 bounds,
-    //             )
-    //         })
-    //         .collect()
-    // }
+    #[cfg(feature = "use_rayon")]
+    fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>> {
+        use rayon::prelude::*;
+        let sys = &self.system;
+        self.states
+            .par_iter_mut()
+            .map(|state| sys.evolve(state, bounds))
+            .collect()
+    }
 }
 
-impl<Sy: System + SystemWithStateCreate + TileBondInfo + SystemInfo, St: State> SystemInfo
-    for ConcreteSimulation<Sy, St>
-{
+impl<Sy: System + TileBondInfo + SystemInfo, St: State> SystemInfo for ConcreteSimulation<Sy, St> {
     fn tile_concs(&self) -> Vec<f64> {
         self.system.tile_concs()
     }

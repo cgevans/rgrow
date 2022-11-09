@@ -1,9 +1,6 @@
 use std::{collections::HashMap, sync::RwLock};
 
-use crate::{
-    base::{HashMapType, HashSetType},
-    system::SystemWithStateCreate,
-};
+use crate::base::{HashMapType, HashSetType};
 use cached::{Cached, SizedCache};
 use ndarray::{Array1, Array2};
 use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
@@ -18,7 +15,7 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
+    tileset::{FromTileSet, ProcessedTileSet, Size, TileSet},
 };
 
 type Cache = SizedCache<(Tile, Tile, Tile, Tile), f64>;
@@ -850,27 +847,6 @@ impl SystemWithDimers for OldKTAM {
         }
 
         dvec
-    }
-}
-
-impl SystemWithStateCreate for OldKTAM {}
-
-impl SimFromTileSet for OldKTAM {
-    fn sim_from_tileset<S: State + StateCreate + 'static>(
-        tileset: &TileSet,
-    ) -> Result<Box<dyn Simulation>, RgrowError> {
-        let sys = Self::from_tileset(tileset)?;
-        let size = match tileset.options.size {
-            Size::Single(x) => (x, x),
-            Size::Pair((x, y)) => (x, y),
-        };
-        // let state = sys.new_state(size)?;
-        let sim = crate::simulation::ConcreteSimulation::<Self, S> {
-            system: sys,
-            states: vec![],
-            default_state_size: size,
-        };
-        Ok(Box::new(sim))
     }
 }
 

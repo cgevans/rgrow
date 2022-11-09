@@ -6,9 +6,9 @@ use crate::{
     state::{State, StateCreate},
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        SystemInfo, SystemWithDimers, SystemWithStateCreate, TileBondInfo,
+        SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{FromTileSet, ProcessedTileSet, SimFromTileSet, Size, TileSet},
+    tileset::{FromTileSet, ProcessedTileSet, Size, TileSet},
 };
 
 use crate::base::{HashMapType, HashSetType};
@@ -1259,27 +1259,6 @@ impl KTAM {
     }
 }
 
-impl SystemWithStateCreate for KTAM {}
-
-impl SimFromTileSet for KTAM {
-    fn sim_from_tileset<S: StateCreate + State + 'static>(
-        tileset: &TileSet,
-    ) -> Result<Box<dyn Simulation>, RgrowError> {
-        let sys = Self::from_tileset(tileset)?;
-        let size = match tileset.options.size {
-            Size::Single(x) => (x, x),
-            Size::Pair((x, y)) => (x, y),
-        };
-        // let state = sys.new_state(size)?;
-        let sim = crate::simulation::ConcreteSimulation::<Self, S> {
-            system: sys,
-            states: vec![],
-            default_state_size: size,
-        };
-        Ok(Box::new(sim))
-    }
-}
-
 impl FromTileSet for KTAM {
     fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
@@ -1354,7 +1333,6 @@ mod tests {
     use crate::{
         canvas::{CanvasPeriodic, CanvasSquare, CanvasTube},
         state::{NullStateTracker, QuadTreeState, State, StateCreate},
-        system::SystemWithStateCreate,
     };
 
     use super::*;
