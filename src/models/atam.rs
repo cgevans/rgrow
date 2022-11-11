@@ -1,15 +1,14 @@
 use crate::{
     base::RgrowError,
     canvas::{Canvas, PointSafe2, PointSafeHere},
-    simulation::Simulation,
-    state::{State, StateCreate},
+    state::State,
     system::{Event, System, SystemInfo, TileBondInfo},
-    tileset::{FromTileSet, ProcessedTileSet, Size, TileSet},
+    tileset::{FromTileSet, ProcessedTileSet, TileSet},
 };
 
 use crate::base::{HashMapType, HashSetType};
 use ndarray::prelude::*;
-use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
+use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -7,10 +7,8 @@ use crate::{
     system,
 };
 use ndarray::prelude::*;
-use rand::prelude::SmallRng;
-use std::fmt::Debug;
 
-type BoxedState = Box<dyn State>;
+use std::fmt::Debug;
 
 pub trait State: RateStoreP + Canvas + StateStatus + Sync + Send {
     fn panicinfo(&self) -> String;

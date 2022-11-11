@@ -3,19 +3,18 @@ use std::{collections::HashMap, sync::RwLock};
 use crate::base::{HashMapType, HashSetType};
 use cached::{Cached, SizedCache};
 use ndarray::{Array1, Array2};
-use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
+use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     base::{Energy, Glue, ModelError, Point, Rate, RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
-    simulation::Simulation,
-    state::{State, StateCreate},
+    state::State,
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{FromTileSet, ProcessedTileSet, Size, TileSet},
+    tileset::{FromTileSet, ProcessedTileSet, TileSet},
 };
 
 type Cache = SizedCache<(Tile, Tile, Tile, Tile), f64>;

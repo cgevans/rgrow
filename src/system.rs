@@ -1,9 +1,8 @@
 use ndarray::prelude::*;
 use rand::thread_rng;
-use rand::{prelude::SmallRng, Rng};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::models::ktam::KTAM;
 use crate::state::State;
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateCreate,
@@ -130,6 +129,7 @@ impl EvolveBounds {
 }
 
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub enum EvolveOutcome {
     ReachedEventsMax,
     ReachedTimeMax,

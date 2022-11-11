@@ -1,5 +1,5 @@
 use ndarray::Array2;
-use rand::{rngs::SmallRng, thread_rng, Rng};
+use rand::{thread_rng, Rng};
 
 use super::oldktam::OldKTAM;
 use crate::{

@@ -2,18 +2,17 @@ use super::ktam_fission::*;
 use crate::{
     base::{GrowError, RgrowError},
     canvas::{Canvas, PointSafe2, PointSafeHere},
-    simulation::Simulation,
-    state::{State, StateCreate},
+    state::State,
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{FromTileSet, ProcessedTileSet, Size, TileSet},
+    tileset::{FromTileSet, ProcessedTileSet, TileSet},
 };
 
 use crate::base::{HashMapType, HashSetType};
 use ndarray::prelude::*;
-use rand::{prelude::Distribution, rngs::SmallRng, SeedableRng};
+use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

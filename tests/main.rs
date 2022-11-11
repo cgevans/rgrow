@@ -1,7 +1,7 @@
 extern crate rgrow;
 
 use anyhow::{Context, Result};
-use rand::SeedableRng;
+
 use std::fs::File;
 
 use rgrow::{

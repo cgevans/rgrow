@@ -29,7 +29,7 @@ fn raw_sim_run(c: &mut Criterion) {
         .new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((2048, 2048))
         .unwrap();
 
-    let mut rng = rand::rngs::SmallRng::from_entropy();
+    let _rng = rand::rngs::SmallRng::from_entropy();
 
     c.bench_function("evolve 10000 sys", |b| {
         b.iter(|| sys.evolve(&mut st, BOUNDS10K))

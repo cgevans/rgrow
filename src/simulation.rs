@@ -1,6 +1,7 @@
 //$ Simulations hold both a model and a state, so that they can be handled without knowing the specific model, state, or canvas being used.
 
-use crate::base::{GrowError, Tile};
+use crate::base::GrowError;
+
 use crate::state::{State, StateCreate};
 use crate::system::TileBondInfo;
 use crate::system::{EvolveBounds, EvolveOutcome, System, SystemInfo};
@@ -12,6 +13,7 @@ pub trait Simulation: Send + Sync + SystemInfo {
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError>;
     fn state_ref(&self, state_index: usize) -> &dyn State; //std::sync::Arc<RwLock<dyn State>>;
+    fn state_mut_ref(&mut self, state_index: usize) -> &mut dyn State; //std::sync::Arc<RwLock<dyn State>>;
     fn n_states(&self) -> usize;
     fn add_state(&mut self) -> Result<usize, GrowError>;
     fn add_n_states(&mut self, n: usize) -> Result<Vec<usize>, GrowError> {
@@ -51,6 +53,10 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
     fn state_ref(&self, state_index: usize) -> &dyn State {
         //std::sync::Arc<RwLock<dyn State>> {
         &self.states[state_index] //.clone()
+    }
+    fn state_mut_ref(&mut self, state_index: usize) -> &mut dyn State {
+        //std::sync::Arc<RwLock<dyn State>> {
+        &mut self.states[state_index] //.clone()
     }
     fn draw_size(&self, state_index: usize) -> (u32, u32) {
         self.states[state_index].draw_size() //.read().unwrap().draw_size()
