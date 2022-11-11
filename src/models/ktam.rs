@@ -1,7 +1,7 @@
 use super::ktam_fission::*;
 use crate::{
     base::{GrowError, RgrowError},
-    canvas::{Canvas, PointSafe2, PointSafeHere},
+    canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,

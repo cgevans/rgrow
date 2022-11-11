@@ -328,14 +328,6 @@ impl OldKTAM {
         self.energy_we[(t1 as usize, t2 as usize)]
     }
 
-    pub(crate) fn get_mut_energy_ns(&mut self, t1: Tile, t2: Tile) -> &mut f64 {
-        self.energy_ns.get_mut((t1 as usize, t2 as usize)).unwrap()
-    }
-
-    pub(crate) fn get_mut_energy_we(&mut self, t1: Tile, t2: Tile) -> &mut f64 {
-        self.energy_we.get_mut((t1 as usize, t2 as usize)).unwrap()
-    }
-
     /// Unsafe because does not check bounds of p: assumes inbounds (with border if applicable).
     /// This requires the tile to be specified because it is likely you've already accessed it.
     pub(crate) fn bond_strength_of_tile_at_point<C: State>(
@@ -428,23 +420,23 @@ impl OldKTAM {
                     now_empty.push(p);
                     now_empty.push(p2);
                     // North tile adjacents
-                    if self.get_energy_ns({ canvas.tile_to_n(p) }, tile) > 0. {
+                    if self.get_energy_ns(canvas.tile_to_n(p), tile) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
                     };
-                    if self.get_energy_we({ canvas.tile_to_w(p) }, tile) > 0. {
+                    if self.get_energy_we(canvas.tile_to_w(p), tile) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_w(p).0))
                     };
-                    if self.get_energy_we(tile, { canvas.tile_to_e(p) }) > 0. {
+                    if self.get_energy_we(tile, canvas.tile_to_e(p)) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p).0))
                     };
                     // South tile adjacents
-                    if self.get_energy_ns(t2, { canvas.tile_to_s(p2) }) > 0. {
+                    if self.get_energy_ns(t2, canvas.tile_to_s(p2)) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
                     };
-                    if self.get_energy_we({ canvas.tile_to_w(p2) }, t2) > 0. {
+                    if self.get_energy_we(canvas.tile_to_w(p2), t2) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_w(p2).0))
                     };
-                    if self.get_energy_we(t2, { canvas.tile_to_e(p2) }) > 0. {
+                    if self.get_energy_we(t2, canvas.tile_to_e(p2)) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
                     };
                     return;
@@ -456,23 +448,23 @@ impl OldKTAM {
                     now_empty.push(p);
                     now_empty.push(p2);
                     // West tile adjacents
-                    if self.get_energy_we({ canvas.tile_to_w(p) }, tile) > 0. {
+                    if self.get_energy_we(canvas.tile_to_w(p), tile) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_w(p).0))
                     };
-                    if self.get_energy_ns({ canvas.tile_to_n(p) }, tile) > 0. {
+                    if self.get_energy_ns(canvas.tile_to_n(p), tile) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
                     };
-                    if self.get_energy_ns(tile, { canvas.tile_to_s(p) }) > 0. {
+                    if self.get_energy_ns(tile, canvas.tile_to_s(p)) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p).0))
                     };
                     // East tile adjacents
-                    if self.get_energy_we(t2, { canvas.tile_to_e(p2) }) > 0. {
+                    if self.get_energy_we(t2, canvas.tile_to_e(p2)) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
                     };
-                    if self.get_energy_ns({ canvas.tile_to_n(p2) }, t2) > 0. {
+                    if self.get_energy_ns(canvas.tile_to_n(p2), t2) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_n(p2).0))
                     };
-                    if self.get_energy_ns(t2, { canvas.tile_to_s(p2) }) > 0. {
+                    if self.get_energy_ns(t2, canvas.tile_to_s(p2)) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
                     };
                     return;

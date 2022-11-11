@@ -1,6 +1,6 @@
 use crate::{
     base::{RgrowError, Tile},
-    canvas::{Canvas, PointSafe2, PointSafeHere},
+    canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{Event, System, SystemInfo, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, TileSet},
@@ -657,7 +657,7 @@ impl ATAM {
             for (t1, t2) in self.double_to_bottom.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
                     self.double_to_top[*t2 as usize] = t1 as Tile;
-                    self.energy_ns[(t1 as usize, *t2 as usize)] = 0.0;
+                    self.energy_ns[(t1, *t2 as usize)] = 0.0;
                     self.should_be_counted[*t2 as usize] = false;
                 }
             }
