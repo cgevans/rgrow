@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
-use crate::base::{GrowError, RgrowError};
+use crate::base::{GrowError, RgrowError, Tile};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
@@ -280,8 +280,8 @@ pub trait FFSResult: Send + Sync {
 }
 
 pub trait FFSSurface: Send + Sync {
-    fn get_config(&self, i: usize) -> ArrayView2<usize>;
-    fn configs(&self) -> Vec<ArrayView2<usize>> {
+    fn get_config(&self, i: usize) -> ArrayView2<Tile>;
+    fn configs(&self) -> Vec<ArrayView2<Tile>> {
         (0..self.num_configs())
             .map(|i| self.get_config(i))
             .collect()
@@ -475,7 +475,7 @@ pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System> {
 impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers + Sync + Send> FFSSurface
     for FFSLevel<St, Sy>
 {
-    fn get_config(&self, i: usize) -> ArrayView2<usize> {
+    fn get_config(&self, i: usize) -> ArrayView2<Tile> {
         self.state_list[i].raw_array()
     }
 
@@ -695,7 +695,7 @@ impl<
             Self {
                 system: std::marker::PhantomData::<Sy>,
                 state_list: dimer_state_list,
-                previous_list: tile_list,
+                previous_list: tile_list.into_iter().map(|x| x as usize).collect(),
                 p_r: 1.0,
                 target_size: 2,
                 num_states,

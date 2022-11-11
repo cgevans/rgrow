@@ -244,24 +244,28 @@ impl KTAM {
             let tse = canvas.tile_to_se(p);
 
             let ri: u8 = (((tn != 0) as u8) << 7)
-                + (((((self.energy_we[(tn, tne)] != 0.) || (self.double_to_right[tn] > 0))
-                    & ((self.energy_ns[(tne, te)] != 0.) || (self.double_to_bottom[tne] > 0)))
-                    as u8)
+                + (((((self.get_energy_we(tn, tne) != 0.)
+                    || (self.double_to_right[tn as usize] > 0))
+                    & ((self.get_energy_ns(tne, te) != 0.)
+                        || (self.double_to_bottom[tne as usize] > 0))) as u8)
                     << 6)
                 + (((te != 0) as u8) << 5)
-                + (((((self.energy_ns[(te, tse)] != 0.) || (self.double_to_bottom[te] > 0))
-                    & ((self.energy_we[(ts, tse)] != 0.) || (self.double_to_right[ts] > 0)))
-                    as u8)
+                + (((((self.get_energy_ns(te, tse) != 0.)
+                    || (self.double_to_bottom[te as usize] > 0))
+                    & ((self.get_energy_we(ts, tse) != 0.)
+                        || (self.double_to_right[ts as usize] > 0))) as u8)
                     << 4)
                 + (((ts != 0) as u8) << 3)
-                + (((((self.energy_we[(tsw, ts)] != 0.) || (self.double_to_right[tsw] > 0))
-                    & ((self.energy_ns[(tw, tsw)] != 0.) || (self.double_to_bottom[tw] > 0)))
-                    as u8)
+                + (((((self.get_energy_we(tsw, ts) != 0.)
+                    || (self.double_to_right[tsw as usize] > 0))
+                    & ((self.get_energy_ns(tw, tsw) != 0.)
+                        || (self.double_to_bottom[tw as usize] > 0))) as u8)
                     << 2)
                 + (((tw != 0) as u8) << 1)
-                + ((((self.energy_ns[(tnw, tw)] != 0.) || (self.double_to_bottom[tnw] > 0))
-                    & ((self.energy_we[(tnw, tn)] != 0.) || (self.double_to_right[tnw] > 0)))
-                    as u8);
+                + ((((self.get_energy_ns(tnw, tw) != 0.)
+                    || (self.double_to_bottom[tnw as usize] > 0))
+                    & ((self.get_energy_we(tnw, tn) != 0.)
+                        || (self.double_to_right[tnw as usize] > 0))) as u8);
 
             if CONNECTED_RING[ri as usize] {
                 return FissionResult::NoFission;
@@ -301,7 +305,9 @@ impl KTAM {
             let ps = canvas.move_sa_s(p);
             let ts = canvas.v_sh(ps);
 
-            if (unsafe { *self.energy_ns.uget((tn, t)) } != 0.) || (self.double_to_bottom[tn] > 0) {
+            if (unsafe { *self.energy_ns.uget((tn as usize, t as usize)) } != 0.)
+                || (self.double_to_bottom[tn as usize] > 0)
+            {
                 let pn = PointSafe2(pn.0); // FIXME
                 match groupinfo.merge_or_add(&p, &pn) {
                     true => {}
@@ -311,7 +317,9 @@ impl KTAM {
                 }
             }
 
-            if (unsafe { *self.energy_we.uget((t, te)) } != 0.) || (self.double_to_right[t] > 0) {
+            if (unsafe { *self.energy_we.uget((t as usize, te as usize)) } != 0.)
+                || (self.double_to_right[t as usize] > 0)
+            {
                 let pe = PointSafe2(pe.0); // FIXME
                 match groupinfo.merge_or_add(&p, &pe) {
                     true => {}
@@ -321,7 +329,9 @@ impl KTAM {
                 }
             }
 
-            if (unsafe { *self.energy_ns.uget((t, ts)) } != 0.) || (self.double_to_bottom[t] > 0) {
+            if (unsafe { *self.energy_ns.uget((t as usize, ts as usize)) } != 0.)
+                || (self.double_to_bottom[t as usize] > 0)
+            {
                 let ps = PointSafe2(ps.0); // FIXME
                 match groupinfo.merge_or_add(&p, &ps) {
                     true => {}
@@ -331,7 +341,9 @@ impl KTAM {
                 }
             }
 
-            if (unsafe { *self.energy_we.uget((tw, t)) } != 0.) || (self.double_to_right[tw] > 0) {
+            if (unsafe { *self.energy_we.uget((tw as usize, t as usize)) } != 0.)
+                || (self.double_to_right[tw as usize] > 0)
+            {
                 let pw = PointSafe2(pw.0); // FIXME
                 match groupinfo.merge_or_add(&p, &pw) {
                     true => {}

@@ -105,11 +105,11 @@ pub struct OldKTAM {
 
 impl TileBondInfo for OldKTAM {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.tile_colors[tile_number]
+        self.tile_colors[tile_number as usize]
     }
 
     fn tile_name(&self, tile_number: Tile) -> &str {
-        self.tile_names[tile_number].as_str()
+        self.tile_names[tile_number as usize].as_str()
     }
 
     fn bond_name(&self, _bond_number: usize) -> &str {
@@ -320,6 +320,22 @@ impl OldKTAM {
         }
     }
 
+    pub(crate) fn get_energy_ns(&self, t1: Tile, t2: Tile) -> f64 {
+        self.energy_ns[(t1 as usize, t2 as usize)]
+    }
+
+    pub(crate) fn get_energy_we(&self, t1: Tile, t2: Tile) -> f64 {
+        self.energy_we[(t1 as usize, t2 as usize)]
+    }
+
+    pub(crate) fn get_mut_energy_ns(&mut self, t1: Tile, t2: Tile) -> &mut f64 {
+        self.energy_ns.get_mut((t1 as usize, t2 as usize)).unwrap()
+    }
+
+    pub(crate) fn get_mut_energy_we(&mut self, t1: Tile, t2: Tile) -> &mut f64 {
+        self.energy_we.get_mut((t1 as usize, t2 as usize)).unwrap()
+    }
+
     /// Unsafe because does not check bounds of p: assumes inbounds (with border if applicable).
     /// This requires the tile to be specified because it is likely you've already accessed it.
     pub(crate) fn bond_strength_of_tile_at_point<C: State>(
@@ -333,10 +349,10 @@ impl OldKTAM {
         let te = { canvas.tile_to_e(p) };
         let ts = { canvas.tile_to_s(p) };
 
-        self.energy_ns[(tile, ts)]
-            + self.energy_ns[(tn, tile)]
-            + self.energy_we[(tile, te)]
-            + self.energy_we[(tw, tile)]
+        self.get_energy_ns(tile, ts)
+            + self.get_energy_ns(tn, tile)
+            + self.get_energy_we(tile, te)
+            + self.get_energy_we(tw, tile)
     }
 
     fn is_seed(&self, p: Point) -> bool {
@@ -358,7 +374,7 @@ impl OldKTAM {
                 self.k_f_hat()
                     * Rate::exp(
                         -ts - self.bond_strength_of_tile_at_point(canvas, PointSafe2(p2), t2) // FIXME
-                        + 2. * self.energy_ns[(t, t2)],
+                        + 2. * self.get_energy_ns(t, t2),
                     )
             }
         }
@@ -375,7 +391,7 @@ impl OldKTAM {
                 self.k_f_hat()
                     * Rate::exp(
                         -ts - self.bond_strength_of_tile_at_point(canvas, PointSafe2(p2), t2) // FIXME
-                        + 2. * self.energy_we[(t, t2)],
+                        + 2. * self.get_energy_we(t, t2),
                     )
             }
         }
@@ -396,7 +412,7 @@ impl OldKTAM {
         &self,
         canvas: &C,
         p: PointSafe2,
-        tile: usize,
+        tile: Tile,
         acc: &mut Rate,
         now_empty: &mut Vec<PointSafe2>,
         possible_starts: &mut Vec<PointSafe2>,
@@ -412,23 +428,23 @@ impl OldKTAM {
                     now_empty.push(p);
                     now_empty.push(p2);
                     // North tile adjacents
-                    if self.energy_ns[({ canvas.tile_to_n(p) }, tile)] > 0. {
+                    if self.get_energy_ns({ canvas.tile_to_n(p) }, tile) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
                     };
-                    if self.energy_we[({ canvas.tile_to_w(p) }, tile)] > 0. {
+                    if self.get_energy_we({ canvas.tile_to_w(p) }, tile) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_w(p).0))
                     };
-                    if self.energy_we[(tile, { canvas.tile_to_e(p) })] > 0. {
+                    if self.get_energy_we(tile, { canvas.tile_to_e(p) }) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p).0))
                     };
                     // South tile adjacents
-                    if self.energy_ns[(t2, { canvas.tile_to_s(p2) })] > 0. {
+                    if self.get_energy_ns(t2, { canvas.tile_to_s(p2) }) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
                     };
-                    if self.energy_we[({ canvas.tile_to_w(p2) }, t2)] > 0. {
+                    if self.get_energy_we({ canvas.tile_to_w(p2) }, t2) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_w(p2).0))
                     };
-                    if self.energy_we[(t2, { canvas.tile_to_e(p2) })] > 0. {
+                    if self.get_energy_we(t2, { canvas.tile_to_e(p2) }) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
                     };
                     return;
@@ -440,23 +456,23 @@ impl OldKTAM {
                     now_empty.push(p);
                     now_empty.push(p2);
                     // West tile adjacents
-                    if self.energy_we[({ canvas.tile_to_w(p) }, tile)] > 0. {
+                    if self.get_energy_we({ canvas.tile_to_w(p) }, tile) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_w(p).0))
                     };
-                    if self.energy_ns[({ canvas.tile_to_n(p) }, tile)] > 0. {
+                    if self.get_energy_ns({ canvas.tile_to_n(p) }, tile) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
                     };
-                    if self.energy_ns[(tile, { canvas.tile_to_s(p) })] > 0. {
+                    if self.get_energy_ns(tile, { canvas.tile_to_s(p) }) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p).0))
                     };
                     // East tile adjacents
-                    if self.energy_we[(t2, { canvas.tile_to_e(p2) })] > 0. {
+                    if self.get_energy_we(t2, { canvas.tile_to_e(p2) }) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
                     };
-                    if self.energy_ns[({ canvas.tile_to_n(p2) }, t2)] > 0. {
+                    if self.get_energy_ns({ canvas.tile_to_n(p2) }, t2) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_n(p2).0))
                     };
-                    if self.energy_ns[(t2, { canvas.tile_to_s(p2) })] > 0. {
+                    if self.get_energy_ns(t2, { canvas.tile_to_s(p2) }) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
                     };
                     return;
@@ -520,21 +536,21 @@ impl System for OldKTAM {
                     let mut friends = HashSetType::<Tile>::default();
 
                     if tn != 0 {
-                        friends.extend(&self.friends_s[tn]);
+                        friends.extend(&self.friends_s[tn as usize]);
                     }
                     if te != 0 {
-                        friends.extend(&self.friends_w[te]);
+                        friends.extend(&self.friends_w[te as usize]);
                     }
                     if ts != 0 {
-                        friends.extend(&self.friends_n[ts]);
+                        friends.extend(&self.friends_n[ts as usize]);
                     }
                     if tw != 0 {
-                        friends.extend(&self.friends_e[tw]);
+                        friends.extend(&self.friends_e[tw as usize]);
                     }
 
                     let mut acc = 0.;
                     for t in friends.drain() {
-                        acc += self.tile_adj_concs[t];
+                        acc += self.tile_adj_concs[t as usize];
                     }
 
                     self.insertcache
@@ -580,16 +596,16 @@ impl System for OldKTAM {
 
             if acc <= 0. {
                 // FIXME
-                if self.energy_ns[(tn, tile)] > 0. {
+                if self.get_energy_ns(tn, tile) > 0. {
                     possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
                 };
-                if self.energy_we[(tw, tile)] > 0. {
+                if self.get_energy_we(tw, tile) > 0. {
                     possible_starts.push(PointSafe2(canvas.move_sa_w(p).0))
                 };
-                if self.energy_ns[(tile, ts)] > 0. {
+                if self.get_energy_ns(tile, ts) > 0. {
                     possible_starts.push(PointSafe2(canvas.move_sa_s(p).0))
                 };
-                if self.energy_we[(tile, te)] > 0. {
+                if self.get_energy_we(tile, te) > 0. {
                     possible_starts.push(PointSafe2(canvas.move_sa_e(p).0))
                 };
 
@@ -658,13 +674,13 @@ impl System for OldKTAM {
         } else {
             let mut friends = HashSetType::<Tile>::default();
 
-            friends.extend(&self.friends_s[tn]);
-            friends.extend(&self.friends_w[te]);
-            friends.extend(&self.friends_e[tw]);
-            friends.extend(&self.friends_n[ts]);
+            friends.extend(&self.friends_s[tn as usize]);
+            friends.extend(&self.friends_w[te as usize]);
+            friends.extend(&self.friends_e[tw as usize]);
+            friends.extend(&self.friends_n[ts as usize]);
 
             for t in friends.drain() {
-                acc -= self.k_f_hat() * self.tile_adj_concs[t];
+                acc -= self.k_f_hat() * self.tile_adj_concs[t as usize];
                 if acc <= 0. {
                     return Event::MonomerAttachment(p, t);
                 };
@@ -800,10 +816,10 @@ impl System for OldKTAM {
                 let ts = state.tile_to_s(p);
                 let tw = state.tile_to_w(p);
 
-                let nm = ((tn != 0) & (self.energy_ns[(tn, t)] < threshold)) as usize;
-                let ne = ((te != 0) & (self.energy_we[(t, te)] < threshold)) as usize;
-                let ns = ((ts != 0) & (self.energy_ns[(t, ts)] < threshold)) as usize;
-                let nw = ((tw != 0) & (self.energy_we[(tw, t)] < threshold)) as usize;
+                let nm = ((tn != 0) & (self.get_energy_ns(tn, t) < threshold)) as usize;
+                let ne = ((te != 0) & (self.get_energy_we(t, te) < threshold)) as usize;
+                let ns = ((ts != 0) & (self.get_energy_ns(t, ts) < threshold)) as usize;
+                let nw = ((tw != 0) & (self.get_energy_we(tw, t) < threshold)) as usize;
 
                 arr[(y, x)] = nm + ne + ns + nw;
             }

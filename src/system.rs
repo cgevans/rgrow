@@ -3,6 +3,7 @@ use rand::thread_rng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
+use crate::base::CanvasLength;
 use crate::state::State;
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateCreate,
@@ -172,7 +173,10 @@ pub enum ChunkSize {
 }
 
 pub trait System: Debug + Sync + Send {
-    fn new_state<St: StateCreate + State>(&self, shape: (usize, usize)) -> Result<St, GrowError> {
+    fn new_state<St: StateCreate + State>(
+        &self,
+        shape: (CanvasLength, CanvasLength),
+    ) -> Result<St, GrowError> {
         let mut new_state = St::empty(shape)?;
         self.insert_seed(&mut new_state)?;
         Ok(new_state)
@@ -310,7 +314,7 @@ pub trait System: Debug + Sync + Send {
         self
     }
 
-    fn set_points<St: State>(&self, state: &mut St, changelist: &[(Point, usize)]) -> &Self {
+    fn set_points<St: State>(&self, state: &mut St, changelist: &[(Point, Tile)]) -> &Self {
         for (point, _) in changelist {
             assert!(state.inbounds(*point))
         }
@@ -340,7 +344,7 @@ pub trait System: Debug + Sync + Send {
                 state.set_sa(point, tile);
             }
             Event::MonomerDetachment(point) => {
-                state.set_sa(point, &0usize);
+                state.set_sa(point, &0);
             }
             Event::PolymerAttachment(changelist) | Event::PolymerChange(changelist) => {
                 for (point, tile) in changelist {
@@ -349,7 +353,7 @@ pub trait System: Debug + Sync + Send {
             }
             Event::PolymerDetachment(changelist) => {
                 for point in changelist {
-                    state.set_sa(point, &0usize);
+                    state.set_sa(point, &0);
                 }
             }
         };

@@ -281,7 +281,7 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
 
     fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
         for (p, v) in Iterator::zip(frame.chunks_exact_mut(4), self.raw_array().iter()) {
-            let color = colors[*v];
+            let color = colors[*v as usize];
             p.copy_from_slice(&color);
         }
     }
@@ -393,7 +393,7 @@ impl Canvas for CanvasSquare {
 
     fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
         self.values
-            .fold(0, |x, y| x + u32::from(should_be_counted[*y]))
+            .fold(0, |x, y| x + u32::from(should_be_counted[*y as usize]))
     }
 }
 
@@ -458,7 +458,7 @@ impl Canvas for CanvasPeriodic {
 
     fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
         self.values
-            .fold(0, |x, y| x + u32::from(should_be_counted[*y]))
+            .fold(0, |x, y| x + u32::from(should_be_counted[*y as usize]))
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {
@@ -549,7 +549,7 @@ impl Canvas for CanvasTube {
 
     fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
         self.values
-            .fold(0, |x, y| x + u32::from(should_be_counted[*y]))
+            .fold(0, |x, y| x + u32::from(should_be_counted[*y as usize]))
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {
@@ -579,7 +579,7 @@ impl Canvas for CanvasTube {
             py = y;
             px = x + y;
             pos = 4 * (px * s + py);
-            frame[pos..pos + 4].copy_from_slice(&colors[*t])
+            frame[pos..pos + 4].copy_from_slice(&colors[*t as usize])
         }
     }
 

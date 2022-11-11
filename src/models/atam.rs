@@ -1,5 +1,5 @@
 use crate::{
-    base::RgrowError,
+    base::{RgrowError, Tile},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     state::State,
     system::{Event, System, SystemInfo, TileBondInfo},
@@ -14,7 +14,6 @@ use std::collections::HashMap;
 
 type Conc = f64;
 type Glue = usize;
-type Tile = usize;
 type Strength = f64;
 type Energy = f64;
 type Rate = f64;
@@ -211,19 +210,19 @@ impl System for ATAM {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(dt, state.tile_to_e(*point));
-                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &0usize)
+                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &0)
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(dt, state.tile_to_s(*point));
-                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &0usize)
+                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &0)
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(dt, state.tile_to_w(*point));
-                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &0usize)
+                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &0)
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(dt, state.tile_to_n(*point));
-                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &0usize)
+                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &0)
                     }
                 }
 
@@ -254,22 +253,22 @@ impl System for ATAM {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(state.tile_to_e(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &0usize);
+                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &0);
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(state.tile_to_s(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &0usize);
+                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &0);
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(state.tile_to_w(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &0usize);
+                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &0);
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(state.tile_to_n(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &0usize);
+                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &0);
                     }
                 }
-                state.set_sa(point, &0usize);
+                state.set_sa(point, &0);
             }
             Event::PolymerAttachment(changelist) | Event::PolymerChange(changelist) => {
                 for (point, tile) in changelist {
@@ -278,7 +277,7 @@ impl System for ATAM {
             }
             Event::PolymerDetachment(changelist) => {
                 for point in changelist {
-                    state.set_sa(point, &0usize);
+                    state.set_sa(point, &0);
                 }
             }
         };
@@ -310,27 +309,27 @@ impl System for ATAM {
 
 impl ATAM {
     fn get_energy_ns(&self, tn: Tile, ts: Tile) -> Energy {
-        self.energy_ns[(tn, ts)]
+        self.energy_ns[(tn as usize, ts as usize)]
     }
 
     fn get_energy_we(&self, tw: Tile, te: Tile) -> Energy {
-        self.energy_we[(tw, te)]
+        self.energy_we[(tw as usize, te as usize)]
     }
 
     fn tile_shape(&self, t: Tile) -> TileShape {
-        let dr = self.double_to_right[t];
+        let dr = self.double_to_right[t as usize];
         if dr.nonzero() {
             return TileShape::DupleToRight(dr);
         }
-        let db = self.double_to_bottom[t];
+        let db = self.double_to_bottom[t as usize];
         if db.nonzero() {
             return TileShape::DupleToBottom(db);
         }
-        let dl = self.double_to_left[t];
+        let dl = self.double_to_left[t as usize];
         if dl.nonzero() {
             return TileShape::DupleToLeft(dl);
         }
-        let dt = self.double_to_top[t];
+        let dt = self.double_to_top[t as usize];
         if dt.nonzero() {
             return TileShape::DupleToTop(dt);
         }
@@ -381,16 +380,16 @@ impl ATAM {
         let mut friends = HashSetType::<Tile>::default();
 
         if tn.nonzero() {
-            friends.extend(&self.friends_n[tn]);
+            friends.extend(&self.friends_n[tn as usize]);
         }
         if te.nonzero() {
-            friends.extend(&self.friends_e[te]);
+            friends.extend(&self.friends_e[te as usize]);
         }
         if ts.nonzero() {
-            friends.extend(&self.friends_s[ts]);
+            friends.extend(&self.friends_s[ts as usize]);
         }
         if tw.nonzero() {
-            friends.extend(&self.friends_w[tw]);
+            friends.extend(&self.friends_w[tw as usize]);
         }
 
         if self.has_duples {
@@ -400,16 +399,16 @@ impl ATAM {
             let tse = state.tile_to_se(p);
 
             if tss.nonzero() {
-                friends.extend(&self.friends_ss[tss])
+                friends.extend(&self.friends_ss[tss as usize])
             }
             if tne.nonzero() {
-                friends.extend(&self.friends_ne[tne])
+                friends.extend(&self.friends_ne[tne as usize])
             }
             if tee.nonzero() {
-                friends.extend(&self.friends_ee[tee])
+                friends.extend(&self.friends_ee[tee as usize])
             }
             if tse.nonzero() {
-                friends.extend(&self.friends_se[tse])
+                friends.extend(&self.friends_se[tse as usize])
             }
         }
 
@@ -443,7 +442,7 @@ impl ATAM {
             if self.bond_energy_of_tile_type_at_point_hypothetical(state, p, t) < self.threshold {
                 continue;
             }
-            acc -= self.tile_stoics[t];
+            acc -= self.tile_stoics[t as usize];
             if !just_calc & (acc <= (0.)) {
                 return (true, acc, Event::MonomerAttachment(p, t));
             }
@@ -547,7 +546,7 @@ impl ATAM {
         // }
     }
 
-    pub fn new_sized(ntiles: Tile, nglues: usize) -> Self {
+    pub fn new_sized(ntiles: usize, nglues: usize) -> Self {
         Self {
             tile_names: Vec::new(),
             tile_stoics: Array1::zeros(ntiles + 1),
@@ -588,7 +587,7 @@ impl ATAM {
     ) -> Self {
         let ntiles = tile_stoics.len() as Tile;
 
-        let mut atam = Self::new_sized(tile_stoics.len() as Tile - 1, glue_strengths.len() - 1);
+        let mut atam = Self::new_sized(tile_stoics.len() - 1, glue_strengths.len() - 1);
 
         atam.tile_stoics = tile_stoics;
         atam.tile_edges = tile_edges;
@@ -624,25 +623,25 @@ impl ATAM {
     }
 
     pub fn update_system(&mut self) {
-        let ntiles = self.tile_stoics.len();
+        let ntiles: u32 = self.tile_stoics.len() as u32;
 
         for t1 in 0..ntiles {
             for t2 in 0..ntiles {
-                let t1r = self.tile_edges.row(t1);
-                let t2r = self.tile_edges.row(t2);
-                self.energy_ns[(t1, t2)] = self.glue_links[(t1r[2], t2r[0])];
+                let t1r = self.tile_edges.row(t1 as usize);
+                let t2r = self.tile_edges.row(t2 as usize);
+                self.energy_ns[(t1 as usize, t2 as usize)] = self.glue_links[(t1r[2], t2r[0])];
                 if t1r[2] == t2r[0] {
-                    self.energy_ns[(t1, t2)] = self.glue_strengths[t1r[2]]
+                    self.energy_ns[(t1 as usize, t2 as usize)] = self.glue_strengths[t1r[2]]
                 }
-                self.energy_we[(t1, t2)] = self.glue_links[(t1r[1], t2r[3])];
+                self.energy_we[(t1 as usize, t2 as usize)] = self.glue_links[(t1r[1], t2r[3])];
                 if t1r[1] == t2r[3] {
-                    self.energy_we[(t1, t2)] = self.glue_strengths[t1r[1]]
+                    self.energy_we[(t1 as usize, t2 as usize)] = self.glue_strengths[t1r[1]]
                 }
             }
-            if (t1 > 0) && (self.tile_stoics[t1] > 0.) {
-                self.should_be_counted[t1] = true;
+            if (t1 > 0) && (self.tile_stoics[t1 as usize] > 0.) {
+                self.should_be_counted[t1 as usize] = true;
             } else {
-                self.should_be_counted[t1] = false;
+                self.should_be_counted[t1 as usize] = false;
             }
         }
 
@@ -650,16 +649,16 @@ impl ATAM {
             self.has_duples = true;
             for (t1, t2) in self.double_to_right.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
-                    self.double_to_left[*t2] = t1;
-                    self.energy_we[(t1, *t2)] = 0.0;
-                    self.should_be_counted[*t2] = false;
+                    self.double_to_left[*t2 as usize] = t1 as Tile;
+                    self.energy_we[(t1, *t2 as usize)] = 0.0;
+                    self.should_be_counted[*t2 as usize] = false;
                 }
             }
             for (t1, t2) in self.double_to_bottom.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
-                    self.double_to_top[*t2] = t1;
-                    self.energy_ns[(t1, *t2)] = 0.0;
-                    self.should_be_counted[*t2] = false;
+                    self.double_to_top[*t2 as usize] = t1 as Tile;
+                    self.energy_ns[(t1 as usize, *t2 as usize)] = 0.0;
+                    self.should_be_counted[*t2 as usize] = false;
                 }
             }
         } else {
@@ -690,63 +689,63 @@ impl ATAM {
             for t2 in 0..ntiles {
                 match self.tile_shape(t1) {
                     TileShape::Single => {
-                        if self.energy_ns[(t2, t1)] != 0. {
-                            self.friends_n[t2].insert(t1);
+                        if self.get_energy_ns(t2, t1) != 0. {
+                            self.friends_n[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t2, t1)] != 0. {
-                            self.friends_w[t2].insert(t1);
+                        if self.get_energy_we(t2, t1) != 0. {
+                            self.friends_w[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(t1, t2)] != 0. {
-                            self.friends_s[t2].insert(t1);
+                        if self.get_energy_ns(t1, t2) != 0. {
+                            self.friends_s[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t1, t2)] != 0. {
-                            self.friends_e[t2].insert(t1);
+                        if self.get_energy_we(t1, t2) != 0. {
+                            self.friends_e[t2 as usize].insert(t1);
                         }
                     }
                     TileShape::DupleToRight(td) => {
-                        if self.energy_ns[(t2, td)] != 0. {
-                            self.friends_ne[t2].insert(t1);
+                        if self.get_energy_ns(t2, td) != 0. {
+                            self.friends_ne[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(td, t2)] != 0. {
-                            self.friends_se[t2].insert(t1);
+                        if self.get_energy_ns(td, t2) != 0. {
+                            self.friends_se[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(td, t2)] != 0. {
-                            self.friends_ee[t2].insert(t1);
+                        if self.get_energy_we(td, t2) != 0. {
+                            self.friends_ee[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(t2, t1)] != 0. {
-                            self.friends_n[t2].insert(t1);
+                        if self.get_energy_ns(t2, t1) != 0. {
+                            self.friends_n[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t2, t1)] != 0. {
-                            self.friends_w[t2].insert(t1);
+                        if self.get_energy_we(t2, t1) != 0. {
+                            self.friends_w[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(t1, t2)] != 0. {
-                            self.friends_s[t2].insert(t1);
+                        if self.get_energy_ns(t1, t2) != 0. {
+                            self.friends_s[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t1, t2)] != 0. {
-                            self.friends_e[t2].insert(t1);
+                        if self.get_energy_we(t1, t2) != 0. {
+                            self.friends_e[t2 as usize].insert(t1);
                         }
                     }
                     TileShape::DupleToBottom(td) => {
-                        if self.energy_we[(t2, td)] != 0. {
-                            self.friends_sw[t2].insert(t1);
+                        if self.get_energy_we(t2, td) != 0. {
+                            self.friends_sw[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(td, t2)] != 0. {
-                            self.friends_se[t2].insert(t1);
+                        if self.get_energy_we(td, t2) != 0. {
+                            self.friends_se[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(td, t2)] != 0. {
-                            self.friends_ss[t2].insert(t1);
+                        if self.get_energy_ns(td, t2) != 0. {
+                            self.friends_ss[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(t2, t1)] != 0. {
-                            self.friends_n[t2].insert(t1);
+                        if self.get_energy_ns(t2, t1) != 0. {
+                            self.friends_n[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t2, t1)] != 0. {
-                            self.friends_w[t2].insert(t1);
+                        if self.get_energy_we(t2, t1) != 0. {
+                            self.friends_w[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(t1, t2)] != 0. {
-                            self.friends_s[t2].insert(t1);
+                        if self.get_energy_ns(t1, t2) != 0. {
+                            self.friends_s[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t1, t2)] != 0. {
-                            self.friends_e[t2].insert(t1);
+                        if self.get_energy_we(t1, t2) != 0. {
+                            self.friends_e[t2 as usize].insert(t1);
                         }
                     }
                     TileShape::DupleToLeft(_) => (),
@@ -756,19 +755,19 @@ impl ATAM {
         }
     }
 
-    pub fn set_duples(&mut self, hduples: Vec<(usize, usize)>, vduples: Vec<(usize, usize)>) {
+    pub fn set_duples(&mut self, hduples: Vec<(Tile, Tile)>, vduples: Vec<(Tile, Tile)>) {
         // Reset double_to_right and double_to_bottom to zeros
         self.double_to_right.fill(0);
         self.double_to_bottom.fill(0);
 
         // For each hduple, set the first index to the second value
         for (i, j) in hduples {
-            self.double_to_right[i] = j;
+            self.double_to_right[i as usize] = j;
         }
 
         // For each vduples, set the first index to the second value
         for (i, j) in vduples {
-            self.double_to_bottom[i] = j;
+            self.double_to_bottom[i as usize] = j;
         }
 
         self.update_system();
@@ -777,11 +776,11 @@ impl ATAM {
 
 impl TileBondInfo for ATAM {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.tile_colors[tile_number]
+        self.tile_colors[tile_number as usize]
     }
 
     fn tile_name(&self, tile_number: Tile) -> &str {
-        self.tile_names[tile_number].as_str()
+        self.tile_names[tile_number as usize].as_str()
     }
 
     fn bond_name(&self, _bond_number: usize) -> &str {

@@ -61,7 +61,7 @@ pub enum ParserError {
 #[serde(untagged)]
 pub enum GlueIdent {
     Name(String),
-    Num(Glue),
+    Num(base::Glue),
 }
 
 impl From<u32> for GlueIdent {
@@ -74,12 +74,12 @@ impl From<u32> for GlueIdent {
 #[serde(untagged)]
 pub enum TileIdent {
     Name(String),
-    Num(usize),
+    Num(base::Tile),
 }
 
 impl From<u32> for TileIdent {
     fn from(value: u32) -> Self {
-        Self::Num(value as usize)
+        Self::Num(value as base::Tile)
     }
 }
 
@@ -493,10 +493,10 @@ pub(crate) struct ProcessedTileSet {
     pub(crate) glue_strengths: Array1<f64>,
     pub(crate) has_duples: bool,
 
-    pub(crate) hdoubletiles: Vec<(usize, usize)>,
-    pub(crate) vdoubletiles: Vec<(usize, usize)>,
+    pub(crate) hdoubletiles: Vec<(base::Tile, base::Tile)>,
+    pub(crate) vdoubletiles: Vec<(base::Tile, base::Tile)>,
 
-    pub(crate) seed: Vec<(usize, usize, usize)>,
+    pub(crate) seed: Vec<(base::CanvasLength, base::CanvasLength, base::Tile)>,
 
     glue_map: GlueNameMap,
 }
@@ -620,8 +620,8 @@ impl ProcessedTileSet {
         tile_stoics.push(0.);
         tile_edges.append(&mut vec![0, 0, 0, 0]);
 
-        let mut tile_i = 1;
-        let mut double_tile_i_offset = 0;
+        let mut tile_i: base::Tile = 1;
+        let mut double_tile_i_offset: base::Tile = 0;
 
         for tile in &tileset.tiles {
             // Ensure the tile name hasn't already been used.
@@ -730,8 +730,11 @@ impl ProcessedTileSet {
         vdoubles.iter_mut().for_each(|(_, j)| *j += tile_i);
 
         let mut s = Self {
-            tile_edges: Array2::from_shape_vec((tile_i + double_tile_i_offset, 4), tile_edges)
-                .unwrap(),
+            tile_edges: Array2::from_shape_vec(
+                ((tile_i + double_tile_i_offset) as usize, 4),
+                tile_edges,
+            )
+            .unwrap(),
             tile_stoics: Array1::from_vec(tile_stoics),
             tile_names,
             tile_colors,
@@ -747,7 +750,16 @@ impl ProcessedTileSet {
         s.seed = match &tileset.options.seed {
             ParsedSeed::None() => Vec::new(),
             ParsedSeed::Single(x, y, t) => vec![(*x, *y, s.tpmap(t))],
-            ParsedSeed::Multi(v) => v.iter().map(|(x, y, t)| (*x, *y, s.tpmap(t))).collect(),
+            ParsedSeed::Multi(v) => v
+                .iter()
+                .map(|(x, y, t)| {
+                    (
+                        *x as base::CanvasLength,
+                        *y as base::CanvasLength,
+                        s.tpmap(t),
+                    )
+                })
+                .collect(),
         };
 
         let hdoubles = tileset
@@ -769,16 +781,18 @@ impl ProcessedTileSet {
         Ok(s)
     }
 
-    pub fn tpmap(&self, tp: &TileIdent) -> usize {
+    pub fn tpmap(&self, tp: &TileIdent) -> base::Tile {
         match tp {
-            TileIdent::Name(x) => self.tile_names.iter().position(|y| *y == *x).unwrap(),
+            TileIdent::Name(x) => {
+                self.tile_names.iter().position(|y| *y == *x).unwrap() as base::Tile
+            }
             TileIdent::Num(x) => *x,
         }
     }
 
-    pub fn gpmap(&self, gp: &GlueIdent) -> usize {
+    pub fn gpmap(&self, gp: &GlueIdent) -> base::Glue {
         match gp {
-            GlueIdent::Name(x) => *self.glue_map.get_by_left(x).unwrap(),
+            GlueIdent::Name(x) => *self.glue_map.get_by_left(x).unwrap() as base::Glue,
             GlueIdent::Num(x) => *x,
         }
     }

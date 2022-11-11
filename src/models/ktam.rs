@@ -16,9 +16,9 @@ use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::base::{Glue, Tile};
+
 type Conc = f64;
-type Glue = usize;
-type Tile = usize;
 type Strength = f64;
 type RatePerConc = f64;
 type Energy = f64;
@@ -235,7 +235,7 @@ impl System for KTAM {
                         debug_assert_eq!(dt, state.tile_to_e(*point));
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_e(*point).0),
-                            &0usize,
+                            &0,
                             &self.should_be_counted,
                         )
                     }
@@ -243,7 +243,7 @@ impl System for KTAM {
                         debug_assert_eq!(dt, state.tile_to_s(*point));
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_s(*point).0),
-                            &0usize,
+                            &0,
                             &self.should_be_counted,
                         )
                     }
@@ -251,7 +251,7 @@ impl System for KTAM {
                         debug_assert_eq!(dt, state.tile_to_w(*point));
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_w(*point).0),
-                            &0usize,
+                            &0,
                             &self.should_be_counted,
                         )
                     }
@@ -259,7 +259,7 @@ impl System for KTAM {
                         debug_assert_eq!(dt, state.tile_to_n(*point));
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_n(*point).0),
-                            &0usize,
+                            &0,
                             &self.should_be_counted,
                         )
                     }
@@ -310,7 +310,7 @@ impl System for KTAM {
                         debug_assert_eq!(state.tile_to_e(*point), dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_e(*point).0),
-                            &0usize,
+                            &0,
                             &self.should_be_counted,
                         );
                     }
@@ -318,7 +318,7 @@ impl System for KTAM {
                         debug_assert_eq!(state.tile_to_s(*point), dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_s(*point).0),
-                            &0usize,
+                            &0,
                             &self.should_be_counted,
                         );
                     }
@@ -326,7 +326,7 @@ impl System for KTAM {
                         debug_assert_eq!(state.tile_to_w(*point), dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_w(*point).0),
-                            &0usize,
+                            &0,
                             &self.should_be_counted,
                         );
                     }
@@ -334,12 +334,12 @@ impl System for KTAM {
                         debug_assert_eq!(state.tile_to_n(*point), dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_n(*point).0),
-                            &0usize,
+                            &0,
                             &self.should_be_counted,
                         );
                     }
                 }
-                state.set_sa_countabletilearray(point, &0usize, &self.should_be_counted);
+                state.set_sa_countabletilearray(point, &0, &self.should_be_counted);
             }
             Event::PolymerAttachment(changelist) => {
                 for (point, tile) in changelist {
@@ -392,7 +392,7 @@ impl System for KTAM {
                             debug_assert_eq!(dt, state.tile_to_e(*point));
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_e(*point).0),
-                                &0usize,
+                                &0,
                                 &self.should_be_counted,
                             )
                         }
@@ -400,7 +400,7 @@ impl System for KTAM {
                             debug_assert_eq!(dt, state.tile_to_s(*point));
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_s(*point).0),
-                                &0usize,
+                                &0,
                                 &self.should_be_counted,
                             )
                         }
@@ -408,7 +408,7 @@ impl System for KTAM {
                             debug_assert_eq!(dt, state.tile_to_w(*point));
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_w(*point).0),
-                                &0usize,
+                                &0,
                                 &self.should_be_counted,
                             )
                         }
@@ -416,7 +416,7 @@ impl System for KTAM {
                             debug_assert_eq!(dt, state.tile_to_n(*point));
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_n(*point).0),
-                                &0usize,
+                                &0,
                                 &self.should_be_counted,
                             )
                         }
@@ -469,7 +469,7 @@ impl System for KTAM {
                             debug_assert_eq!(state.tile_to_e(*point), dt);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_e(*point).0),
-                                &0usize,
+                                &0,
                                 &self.should_be_counted,
                             );
                         }
@@ -477,7 +477,7 @@ impl System for KTAM {
                             debug_assert_eq!(state.tile_to_s(*point), dt);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_s(*point).0),
-                                &0usize,
+                                &0,
                                 &self.should_be_counted,
                             );
                         }
@@ -485,7 +485,7 @@ impl System for KTAM {
                             debug_assert_eq!(state.tile_to_w(*point), dt);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_w(*point).0),
-                                &0usize,
+                                &0,
                                 &self.should_be_counted,
                             );
                         }
@@ -493,13 +493,13 @@ impl System for KTAM {
                             debug_assert_eq!(state.tile_to_n(*point), dt);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_n(*point).0),
-                                &0usize,
+                                &0,
                                 &self.should_be_counted,
                             );
                         }
                     }
 
-                    state.set_sa_countabletilearray(point, &0usize, &self.should_be_counted);
+                    state.set_sa_countabletilearray(point, &0, &self.should_be_counted);
                 }
             }
         }
@@ -556,11 +556,11 @@ impl SystemWithDimers for KTAM {
 
 impl TileBondInfo for KTAM {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.tile_colors[tile_number]
+        self.tile_colors[tile_number as usize]
     }
 
     fn tile_name(&self, tile_number: Tile) -> &str {
-        self.tile_names[tile_number].as_str()
+        self.tile_names[tile_number as usize].as_str()
     }
 
     fn bond_name(&self, bond_number: usize) -> &str {
@@ -591,7 +591,8 @@ impl SystemInfo for KTAM {
 }
 
 impl KTAM {
-    pub fn new_sized(ntiles: Tile, nglues: usize) -> Self {
+    pub fn new_sized(ntiles: Tile, nglues: Glue) -> Self {
+        let ntiles: usize = ntiles as usize;
         Self {
             tile_names: Vec::new(),
             tile_concs: Array1::zeros(ntiles + 1),
@@ -625,19 +626,19 @@ impl KTAM {
         }
     }
 
-    pub fn set_duples(&mut self, hduples: Vec<(usize, usize)>, vduples: Vec<(usize, usize)>) {
+    pub fn set_duples(&mut self, hduples: Vec<(Tile, Tile)>, vduples: Vec<(Tile, Tile)>) {
         // Reset double_to_right and double_to_bottom to zeros
         self.double_to_right.fill(0);
         self.double_to_bottom.fill(0);
 
         // For each hduple, set the first index to the second value
         for (i, j) in hduples {
-            self.double_to_right[i] = j;
+            self.double_to_right[i as usize] = j;
         }
 
         // For each vduples, set the first index to the second value
         for (i, j) in vduples {
-            self.double_to_bottom[i] = j;
+            self.double_to_bottom[i as usize] = j;
         }
 
         self.update_system();
@@ -701,10 +702,10 @@ impl KTAM {
     }
 
     pub fn update_system(&mut self) {
-        let ntiles = self.tile_concs.len();
+        let ntiles = self.tile_concs.len() as Tile;
 
-        for t1 in 0..ntiles {
-            for t2 in 0..ntiles {
+        for t1 in 0..(ntiles as usize) {
+            for t2 in 0..(ntiles as usize) {
                 let t1r = self.tile_edges.row(t1);
                 let t2r = self.tile_edges.row(t2);
                 self.energy_ns[(t1, t2)] = self.g_se * self.glue_links[(t1r[2], t2r[0])];
@@ -727,16 +728,18 @@ impl KTAM {
             self.has_duples = true;
             for (t1, t2) in self.double_to_right.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
-                    self.double_to_left[*t2] = t1;
-                    self.should_be_counted[*t2] = false;
-                    self.energy_we[(t1, *t2)] = 0.0;
+                    let t2 = *t2 as usize;
+                    self.double_to_left[t2] = t1 as Tile;
+                    self.should_be_counted[t2] = false;
+                    self.energy_we[(t1, t2)] = 0.0;
                 }
             }
             for (t1, t2) in self.double_to_bottom.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
-                    self.double_to_top[*t2] = t1;
-                    self.should_be_counted[*t2] = false;
-                    self.energy_ns[(t1, *t2)] = 0.0;
+                    let t2 = *t2 as usize;
+                    self.double_to_top[t2] = t1 as Tile;
+                    self.should_be_counted[t2] = false;
+                    self.energy_ns[(t1, t2)] = 0.0;
                 }
             }
         } else {
@@ -763,67 +766,68 @@ impl KTAM {
             self.friends_ss.push(HashSetType::default());
             self.friends_sw.push(HashSetType::default());
         }
-        for t1 in 0..ntiles {
-            for t2 in 0..ntiles {
-                match self.tile_shape(t1) {
+        for t1 in 0..(ntiles) {
+            for t2 in 0..(ntiles) {
+                let t1t = t1 as Tile;
+                match self.tile_shape(t1t) {
                     TileShape::Single => {
-                        if self.energy_ns[(t2, t1)] != 0. {
-                            self.friends_n[t2].insert(t1);
+                        if self.get_energy_ns(t2, t1) != 0. {
+                            self.friends_n[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t2, t1)] != 0. {
-                            self.friends_w[t2].insert(t1);
+                        if self.get_energy_we(t2, t1) != 0. {
+                            self.friends_w[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(t1, t2)] != 0. {
-                            self.friends_s[t2].insert(t1);
+                        if self.get_energy_ns(t1, t2) != 0. {
+                            self.friends_s[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t1, t2)] != 0. {
-                            self.friends_e[t2].insert(t1);
+                        if self.get_energy_we(t1, t2) != 0. {
+                            self.friends_e[t2 as usize].insert(t1);
                         }
                     }
                     TileShape::DupleToRight(td) => {
-                        if self.energy_ns[(t2, td)] != 0. {
-                            self.friends_ne[t2].insert(t1);
+                        if self.get_energy_ns(t2, td) != 0. {
+                            self.friends_ne[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(td, t2)] != 0. {
-                            self.friends_se[t2].insert(t1);
+                        if self.get_energy_ns(td, t2) != 0. {
+                            self.friends_se[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(td, t2)] != 0. {
-                            self.friends_ee[t2].insert(t1);
+                        if self.get_energy_we(td, t2) != 0. {
+                            self.friends_ee[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(t2, t1)] != 0. {
-                            self.friends_n[t2].insert(t1);
+                        if self.get_energy_ns(t2, t1) != 0. {
+                            self.friends_n[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t2, t1)] != 0. {
-                            self.friends_w[t2].insert(t1);
+                        if self.get_energy_we(t2, t1) != 0. {
+                            self.friends_w[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(t1, t2)] != 0. {
-                            self.friends_s[t2].insert(t1);
+                        if self.get_energy_ns(t1, t2) != 0. {
+                            self.friends_s[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t1, t2)] != 0. {
-                            self.friends_e[t2].insert(t1);
+                        if self.get_energy_we(t1, t2) != 0. {
+                            self.friends_e[t2 as usize].insert(t1);
                         }
                     }
                     TileShape::DupleToBottom(td) => {
-                        if self.energy_we[(t2, td)] != 0. {
-                            self.friends_sw[t2].insert(t1);
+                        if self.get_energy_we(t2, td) != 0. {
+                            self.friends_sw[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(td, t2)] != 0. {
-                            self.friends_se[t2].insert(t1);
+                        if self.get_energy_we(td, t2) != 0. {
+                            self.friends_se[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(td, t2)] != 0. {
-                            self.friends_ss[t2].insert(t1);
+                        if self.get_energy_ns(td, t2) != 0. {
+                            self.friends_ss[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(t2, t1)] != 0. {
-                            self.friends_n[t2].insert(t1);
+                        if self.get_energy_ns(t2, t1) != 0. {
+                            self.friends_n[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t2, t1)] != 0. {
-                            self.friends_w[t2].insert(t1);
+                        if self.get_energy_we(t2, t1) != 0. {
+                            self.friends_w[t2 as usize].insert(t1);
                         }
-                        if self.energy_ns[(t1, t2)] != 0. {
-                            self.friends_s[t2].insert(t1);
+                        if self.get_energy_ns(t1, t2) != 0. {
+                            self.friends_s[t2 as usize].insert(t1);
                         }
-                        if self.energy_we[(t1, t2)] != 0. {
-                            self.friends_e[t2].insert(t1);
+                        if self.get_energy_we(t1, t2) != 0. {
+                            self.friends_e[t2 as usize].insert(t1);
                         }
                     }
                     TileShape::DupleToLeft(_) => (),
@@ -856,7 +860,9 @@ impl KTAM {
         if t == 0 {
             return 0.;
         }
-        if (self.has_duples) && ((self.double_to_left[t] > 0) || (self.double_to_top[t] > 0)) {
+        if (self.has_duples)
+            && ((self.double_to_left[t as usize] > 0) || (self.double_to_top[t as usize] > 0))
+        {
             return FAKE_EVENT_RATE;
         }
         self.kf
@@ -891,8 +897,8 @@ impl KTAM {
             // FIXME: may slow things down
             if self.is_seed(p)
                 || ((self.has_duples)
-                    && ((self.double_to_left[state.tile_at_point(p)] > 0)
-                        || (self.double_to_top[state.tile_at_point(p)] > 0)))
+                    && ((self.double_to_left[state.tile_at_point(p) as usize] > 0)
+                        || (self.double_to_top[state.tile_at_point(p) as usize] > 0)))
             {
                 (true, acc, Event::None)
             } else {
@@ -905,16 +911,16 @@ impl KTAM {
                 let te = { state.tile_to_e(p) };
                 let ts = { state.tile_to_s(p) };
                 // FIXME
-                if self.energy_ns[(tn, tile)] > 0. {
+                if self.get_energy_ns(tn, tile) > 0. {
                     possible_starts.push(PointSafe2(state.move_sa_n(p).0))
                 };
-                if self.energy_we[(tw, tile)] > 0. {
+                if self.get_energy_we(tw, tile) > 0. {
                     possible_starts.push(PointSafe2(state.move_sa_w(p).0))
                 };
-                if self.energy_ns[(tile, ts)] > 0. {
+                if self.get_energy_ns(tile, ts) > 0. {
                     possible_starts.push(PointSafe2(state.move_sa_s(p).0))
                 };
-                if self.energy_we[(tile, te)] > 0. {
+                if self.get_energy_we(tile, te) > 0. {
                     possible_starts.push(PointSafe2(state.move_sa_e(p).0))
                 };
 
@@ -1007,16 +1013,16 @@ impl KTAM {
         let mut friends = HashSetType::<Tile>::default();
 
         if tn.nonzero() {
-            friends.extend(&self.friends_n[tn]);
+            friends.extend(&self.friends_n[tn as usize]);
         }
         if te.nonzero() {
-            friends.extend(&self.friends_e[te]);
+            friends.extend(&self.friends_e[te as usize]);
         }
         if ts.nonzero() {
-            friends.extend(&self.friends_s[ts]);
+            friends.extend(&self.friends_s[ts as usize]);
         }
         if tw.nonzero() {
-            friends.extend(&self.friends_w[tw]);
+            friends.extend(&self.friends_w[tw as usize]);
         }
 
         if self.has_duples {
@@ -1026,16 +1032,16 @@ impl KTAM {
             let tse = state.tile_to_se(p);
 
             if tss.nonzero() {
-                friends.extend(&self.friends_ss[tss])
+                friends.extend(&self.friends_ss[tss as usize])
             }
             if tne.nonzero() {
-                friends.extend(&self.friends_ne[tne])
+                friends.extend(&self.friends_ne[tne as usize])
             }
             if tee.nonzero() {
-                friends.extend(&self.friends_ee[tee])
+                friends.extend(&self.friends_ee[tee as usize])
             }
             if tse.nonzero() {
-                friends.extend(&self.friends_se[tse])
+                friends.extend(&self.friends_se[tse as usize])
             }
         }
 
@@ -1066,7 +1072,7 @@ impl KTAM {
                     }
                 }
             }
-            acc -= self.kf * self.tile_concs[t];
+            acc -= self.kf * self.tile_concs[t as usize];
             if !just_calc & (acc <= (0.)) {
                 return (true, acc, Event::MonomerAttachment(p, t));
             }
@@ -1122,29 +1128,33 @@ impl KTAM {
         energy
     }
 
-    fn get_energy_ns(&self, tn: Tile, ts: Tile) -> Energy {
-        self.energy_ns[(tn, ts)]
+    pub(crate) fn get_energy_ns(&self, tn: Tile, ts: Tile) -> Energy {
+        {
+            *self.energy_ns.get((tn as usize, ts as usize)).unwrap()
+        }
     }
 
-    fn get_energy_we(&self, tw: Tile, te: Tile) -> Energy {
-        self.energy_we[(tw, te)]
+    pub(crate) fn get_energy_we(&self, tw: Tile, te: Tile) -> Energy {
+        {
+            *self.energy_we.get((tw as usize, te as usize)).unwrap()
+        }
     }
 
     #[inline(always)]
     fn tile_shape(&self, t: Tile) -> TileShape {
-        let dr = self.double_to_right[t];
+        let dr = self.double_to_right[t as usize];
         if dr.nonzero() {
             return TileShape::DupleToRight(dr);
         }
-        let db = self.double_to_bottom[t];
+        let db = self.double_to_bottom[t as usize];
         if db.nonzero() {
             return TileShape::DupleToBottom(db);
         }
-        let dl = self.double_to_left[t];
+        let dl = self.double_to_left[t as usize];
         if dl.nonzero() {
             return TileShape::DupleToLeft(dl);
         }
-        let dt = self.double_to_top[t];
+        let dt = self.double_to_top[t as usize];
         if dt.nonzero() {
             return TileShape::DupleToTop(dt);
         }

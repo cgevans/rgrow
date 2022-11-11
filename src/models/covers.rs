@@ -121,7 +121,7 @@ impl System for StaticKTAMCover {
 
         let sp = PointSafe2(p.0);
 
-        match self.tile_is_cover[t] {
+        match self.tile_is_cover[t as usize] {
             CoverType::NonCover => self.inner.event_rate_at_point(state, p),
             CoverType::Cover => {
                 self.inner.event_rate_at_point(state, p)
@@ -134,7 +134,7 @@ impl System for StaticKTAMCover {
     fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: Rate) -> Event {
         let t = state.tile_at_point(p);
 
-        match self.tile_is_cover[t] {
+        match self.tile_is_cover[t as usize] {
             CoverType::NonCover => self.inner.choose_event_at_point(state, p, acc),
             CoverType::Cover => match self.choose_cover_to_composite(state, p, t, acc) {
                 PossibleChoice::Remainder(acc) => self.inner.choose_event_at_point(state, p, acc),
@@ -193,7 +193,7 @@ impl System for StaticKTAMCover {
                 state.set_sa(point, tile);
             }
             Event::MonomerDetachment(point) => {
-                state.set_sa(point, &0usize);
+                state.set_sa(point, &0);
             }
             Event::PolymerAttachment(changelist) | Event::PolymerChange(changelist) => {
                 for (point, tile) in changelist {
@@ -202,7 +202,7 @@ impl System for StaticKTAMCover {
             }
             Event::PolymerDetachment(changelist) => {
                 for point in changelist {
-                    state.set_sa(point, &0usize);
+                    state.set_sa(point, &0);
                 }
             }
         }
@@ -218,8 +218,8 @@ impl SystemWithDimers for StaticKTAMCover {
 }
 
 impl StaticKTAMCover {
-    fn cover_to_composite_rate<S: State>(&self, state: &S, p: PointSafe2, t: usize) -> Rate {
-        let cc = &self.cover_attach_info[t];
+    fn cover_to_composite_rate<S: State>(&self, state: &S, p: PointSafe2, t: Tile) -> Rate {
+        let cc = &self.cover_attach_info[t as usize];
 
         let mut total_rate = 0.;
         for c in cc {
@@ -228,7 +228,8 @@ impl StaticKTAMCover {
                 .bond_strength_of_tile_at_point(state, p, c.like_tile)
                 > 0.
             {
-                total_rate += self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile];
+                total_rate +=
+                    self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile as usize];
             }
         }
 
@@ -238,10 +239,10 @@ impl StaticKTAMCover {
         &self,
         state: &S,
         p: PointSafe2,
-        t: usize,
+        t: Tile,
         mut acc: Rate,
     ) -> PossibleChoice {
-        let cc = &self.cover_attach_info[t];
+        let cc = &self.cover_attach_info[t as usize];
 
         for c in cc {
             if self
@@ -249,7 +250,7 @@ impl StaticKTAMCover {
                 .bond_strength_of_tile_at_point(state, p, c.like_tile)
                 > 0.
             {
-                acc -= self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile];
+                acc -= self.inner.k_f_hat() * self.inner.tile_adj_concs[c.like_tile as usize];
                 if acc <= 0. {
                     return PossibleChoice::Event(Event::MonomerChange(p, c.new_tile));
                 }
@@ -258,8 +259,8 @@ impl StaticKTAMCover {
 
         PossibleChoice::Remainder(acc)
     }
-    fn composite_to_cover_rate<S: State>(&self, state: &S, p: PointSafe2, t: usize) -> Rate {
-        let cc = &self.composite_detach_info[t];
+    fn composite_to_cover_rate<S: State>(&self, state: &S, p: PointSafe2, t: Tile) -> Rate {
+        let cc = &self.composite_detach_info[t as usize];
 
         let mut total_rate = 0.;
         for c in cc {
@@ -277,10 +278,10 @@ impl StaticKTAMCover {
         &self,
         state: &S,
         p: PointSafe2,
-        t: usize,
+        t: Tile,
         mut acc: Rate,
     ) -> PossibleChoice {
-        let cc = &self.composite_detach_info[t];
+        let cc = &self.composite_detach_info[t as usize];
 
         for c in cc {
             acc -= self.inner.k_f_hat()
@@ -300,11 +301,11 @@ impl StaticKTAMCover {
 
 impl TileBondInfo for StaticKTAMCover {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.inner.tile_colors[tile_number]
+        self.inner.tile_colors[tile_number as usize]
     }
 
     fn tile_name(&self, tile_number: Tile) -> &str {
-        self.inner.tile_names[tile_number].as_str()
+        self.inner.tile_names[tile_number as usize].as_str()
     }
 
     fn bond_name(&self, _bond_number: usize) -> &str {
@@ -352,24 +353,24 @@ impl FromTileSet for StaticKTAMCover {
             extratiles.push(c.to_tile());
         }
 
-        let coverbegin = tsc.tiles.len() + 1;
-        let mut comp = coverbegin + cs.len();
+        let coverbegin = (tsc.tiles.len() + 1) as Tile;
+        let mut comp = coverbegin + cs.len() as Tile;
 
-        for i in 0..cs.len() {
-            for j in i..cs.len() {
+        for i in 0..(cs.len() as Tile) {
+            for j in i..(cs.len() as Tile) {
                 // Same direction: can't attach at the same place at the same time.
-                if cs[i].dir == cs[j].dir {
+                if cs[i as usize].dir == cs[j as usize].dir {
                     continue;
                 }
 
-                assert!(comp == coverbegin + extratiles.len());
-                extratiles.push(cs[i].make_composite(&cs[j]));
+                assert!(comp == coverbegin + extratiles.len() as u32);
+                extratiles.push(cs[i as usize].make_composite(&cs[j as usize]));
 
-                cover_attach_info[coverbegin + i].push(CoverAttach {
+                cover_attach_info[(coverbegin + i) as usize].push(CoverAttach {
                     like_tile: (coverbegin + i),
                     new_tile: comp,
                 });
-                cover_attach_info[coverbegin + j].push(CoverAttach {
+                cover_attach_info[(coverbegin + j) as usize].push(CoverAttach {
                     like_tile: (coverbegin + j),
                     new_tile: comp,
                 });
@@ -396,7 +397,7 @@ impl FromTileSet for StaticKTAMCover {
             println!("{tile:?}");
         }
 
-        assert!(comp == tsc.tiles.len() + 1);
+        assert!(comp == tsc.tiles.len() as u32 + 1);
 
         let proc = ProcessedTileSet::from_tileset(&tsc)?;
 
