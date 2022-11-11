@@ -1,3 +1,11 @@
+# 0.7.1
+
+- Type improvements.
+- Optimizations. 
+- thread_rng instead of SmallRng (easier code, no major performance change)
+- Tiles as u32.
+- Initial cffi interface.
+
 # 0.7.0
 
 - Improved UI.

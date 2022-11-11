@@ -23,6 +23,9 @@ use std::io::{self, Read};
 use std::path::Path;
 use system::{ChunkHandling, ChunkSize};
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 use thiserror;
 
 type GlueNameMap = BiMap<String, Glue>;
@@ -139,11 +142,23 @@ impl Display for TileShape {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass)]
 pub struct Tile {
+    /// The name of the tile.  If unset, the eventual
+    /// number of the tile will be used.
     pub name: Option<String>,
+    /// Glues on each edge of the tile, arranged clockwise
+    /// from the north (or north-west) edge.  Should be either
+    /// four (for a single tile) or six elements.  A 0 is interpreted
+    /// as being a null glue.
     pub edges: Vec<GlueIdent>,
+    /// Stoichiometric ratio to the default concentration.  Defaults to 1.0.
     pub stoic: Option<f64>,
+    /// Color of the tile, as a string.  Either an X11-like name (see colors.rs),
+    /// or a #/@ hex string of three u8 values, as often used elsewhere.
     pub color: Option<String>,
+    /// The tile shape: whether the tile is a single, horizontal duple, or
+    /// vertical duple.
     pub shape: Option<TileShape>,
 }
 
@@ -498,6 +513,8 @@ pub(crate) struct ProcessedTileSet {
 
     pub(crate) seed: Vec<(base::CanvasLength, base::CanvasLength, base::Tile)>,
 
+    pub(crate) gluelinks: Vec<(Glue, Glue, f64)>,
+
     glue_map: GlueNameMap,
 }
 
@@ -742,10 +759,17 @@ impl ProcessedTileSet {
             glue_strengths,
             has_duples,
             glue_map,
+            gluelinks: Vec::new(),
             hdoubletiles: hdoubles,
             vdoubletiles: vdoubles,
             seed: Vec::new(),
         };
+
+        s.gluelinks = tileset
+            .glues
+            .iter()
+            .map(|(g1, g2, st)| (s.gpmap(g1), s.gpmap(g2), *st))
+            .collect::<Vec<_>>();
 
         s.seed = match &tileset.options.seed {
             ParsedSeed::None() => Vec::new(),

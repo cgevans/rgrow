@@ -1,6 +1,6 @@
 [package]
 name = "rgrow"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Constantine Evans <const@costi.eu>"]
 edition = "2021"
 description = "A modular Tile Assembly Model simulator, inspired by Xgrow."

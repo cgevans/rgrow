@@ -1,3 +1,12 @@
+/// A revised kTAM implementation with duples and fission, and the intention to eventually
+/// add dimer detachment and attachment.
+///
+/// Implementation notes:
+///
+/// - Concentration is stored *in nM*, as this is most likely to result in reasonable values.
+/// - Concentration, rather than stoichiometry and $G_{mc}$ values, are stored internally.
+/// - As with Xgrow, duples are treated as two tiles, where the right/bottom tile is "fake".
+/// - Unlike Xgrow, there is no *requirement* that there be a seed.
 use super::ktam_fission::*;
 use crate::{
     base::{GrowError, RgrowError},
@@ -1285,12 +1294,6 @@ impl FromTileSet for KTAM {
             Seed::MultiTile(hm)
         };
 
-        let gluelinks = tileset
-            .glues
-            .iter()
-            .map(|(g1, g2, s)| (proc.gpmap(g1), proc.gpmap(g2), *s))
-            .collect::<Vec<_>>();
-
         let mut newkt = Self::from_ktam(
             proc.tile_stoics,
             proc.tile_edges,
@@ -1311,7 +1314,7 @@ impl FromTileSet for KTAM {
 
         newkt.set_duples(proc.hdoubletiles, proc.vdoubletiles);
 
-        for (g1, g2, s) in gluelinks {
+        for (g1, g2, s) in proc.gluelinks {
             newkt.glue_links[(g2, g1)] = s;
             newkt.glue_links[(g1, g2)] = s;
         }

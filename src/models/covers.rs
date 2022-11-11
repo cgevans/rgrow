@@ -421,6 +421,7 @@ impl FromTileSet for StaticKTAMCover {
             proc.tile_stoics,
             tile_edges,
             proc.glue_strengths,
+            proc.gluelinks,
             tsc.options.gse,
             tsc.options.gmc,
             Some(tsc.options.alpha),
@@ -429,8 +430,8 @@ impl FromTileSet for StaticKTAMCover {
             Some(tsc.options.fission),
             tsc.options.chunk_handling,
             tsc.options.chunk_size,
-            Some(proc.tile_names),
-            Some(proc.tile_colors),
+            proc.tile_names,
+            proc.tile_colors,
         );
 
         Ok(StaticKTAMCover {

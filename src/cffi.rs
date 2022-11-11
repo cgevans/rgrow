@@ -115,6 +115,18 @@ pub unsafe extern "C" fn new_state(sim: *mut c_void) -> usize {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn drop_simulation(sim: *mut c_void) {
+    let sim = Box::from_raw(sim.cast::<Box<dyn Simulation>>());
+    drop(sim);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn drop_tileset(ts: *mut TileSet) {
+    let ts = Box::from_raw(ts);
+    drop(ts);
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn evolve_index(
     sim: *mut c_void,
     state: u64,

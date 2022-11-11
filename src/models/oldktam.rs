@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::RwLock};
 
 use crate::base::{HashMapType, HashSetType};
 use cached::{Cached, SizedCache};
+use fnv::FnvHashMap;
 use ndarray::{Array1, Array2};
 use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
@@ -135,6 +136,7 @@ impl OldKTAM {
         tile_stoics: Array1<f64>,
         tile_edges: Array2<Glue>,
         glue_strengths: Array1<f64>,
+        glue_links: Vec<(Glue, Glue, f64)>,
         g_se: f64,
         g_mc: f64,
         alpha: Option<f64>,
@@ -143,14 +145,20 @@ impl OldKTAM {
         fission_handling: Option<FissionHandling>,
         chunk_handling: Option<ChunkHandling>,
         chunk_size: Option<ChunkSize>,
-        tile_names: Option<Vec<String>>,
-        tile_colors: Option<Vec<[u8; 4]>>,
+        tile_names: Vec<String>,
+        tile_colors: Vec<[u8; 4]>,
     ) -> Self {
         let ntiles = tile_stoics.len();
         assert!(ntiles == tile_edges.nrows());
 
         let mut energy_we: Array2<Energy> = Array2::zeros((ntiles, ntiles));
         let mut energy_ns: Array2<Energy> = Array2::zeros((ntiles, ntiles));
+
+        let mut gsmap = FnvHashMap::<(Glue, Glue), f64>::default();
+        for (g1, g2, v) in glue_links {
+            gsmap.insert((g1, g2), v);
+            gsmap.insert((g2, g1), v);
+        }
 
         for ti1 in 0..ntiles {
             for ti2 in 0..ntiles {
@@ -162,32 +170,14 @@ impl OldKTAM {
                 if t1[1] == t2[3] {
                     energy_we[(ti1, ti2)] = g_se * glue_strengths[t1[1]];
                 }
+                if let Some(v) = gsmap.get(&(t1[2], t2[0])) {
+                    energy_ns[(ti1, ti2)] += g_se * (*v);
+                }
+                if let Some(v) = gsmap.get(&(t1[1], t2[3])) {
+                    energy_we[(ti1, ti2)] += g_se * (*v);
+                }
             }
         }
-
-        let tile_names_processed = match tile_names {
-            Some(tn) => tn,
-            None => (0..ntiles).into_iter().map(|x| x.to_string()).collect(),
-        };
-
-        let tile_colors_processed = match tile_colors {
-            Some(tc) => tc,
-            None => {
-                let mut rng = rand::thread_rng();
-                let ug = rand::distributions::Uniform::new(100u8, 254);
-                (0..ntiles)
-                    .into_iter()
-                    .map(|_x| {
-                        [
-                            ug.sample(&mut rng),
-                            ug.sample(&mut rng),
-                            ug.sample(&mut rng),
-                            0xffu8,
-                        ]
-                    })
-                    .collect()
-            }
-        };
 
         let (friends_n, friends_e, friends_s, friends_w) =
             create_friend_data(&energy_ns, &energy_we);
@@ -206,8 +196,8 @@ impl OldKTAM {
             g_se: Some(g_se),
             k_f: k_f.unwrap_or(1e6),
             fission_handling: fission_handling.unwrap_or(FissionHandling::NoFission),
-            tile_names: tile_names_processed,
-            tile_colors: tile_colors_processed,
+            tile_names: tile_names,
+            tile_colors: tile_colors,
             chunk_handling: chunk_handling.unwrap_or(ChunkHandling::None),
             chunk_size: chunk_size.unwrap_or(ChunkSize::Single),
         }
@@ -879,10 +869,11 @@ impl FromTileSet for OldKTAM {
             Seed::MultiTile(hm)
         };
 
-        Ok(OldKTAM::from_ktam(
+        let s = OldKTAM::from_ktam(
             proc.tile_stoics,
             proc.tile_edges,
             proc.glue_strengths,
+            proc.gluelinks,
             tileset.options.gse,
             tileset.options.gmc,
             Some(tileset.options.alpha),
@@ -891,9 +882,11 @@ impl FromTileSet for OldKTAM {
             Some(tileset.options.fission),
             tileset.options.chunk_handling,
             tileset.options.chunk_size,
-            Some(proc.tile_names),
-            Some(proc.tile_colors),
-        ))
+            proc.tile_names,
+            proc.tile_colors,
+        );
+
+        Ok(s)
     }
 }
 
