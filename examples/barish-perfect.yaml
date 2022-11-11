@@ -228,8 +228,8 @@ tiles:
   edges: [black2, pink1, hp2, Z5Z6_db]
   name: Z5Z6_right
 xgrowargs:
-  Gmc: 9.7
-  Gse: 5.5
+  Gmc: 10.0
+  Gse: 5.05
   alpha: -7.1
   doubletiles:
   - [Z7Z8_left, Z7Z8_right]

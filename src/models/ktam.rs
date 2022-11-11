@@ -47,12 +47,19 @@ pub enum Seed {
     MultiTile(HashMapType<PointSafe2, Tile>),
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 enum TileShape {
     Single,
     DupleToRight(Tile),
     DupleToBottom(Tile),
     DupleToLeft(Tile),
     DupleToTop(Tile),
+}
+
+impl Default for TileShape {
+    fn default() -> Self {
+        Self::Single
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,8 +105,7 @@ pub struct KTAM {
     friends_sw: Vec<HashSetType<Tile>>,
 
     has_duples: bool,
-    double_to_left: Array1<Tile>,
-    double_to_top: Array1<Tile>,
+    duple_info: Array1<TileShape>,
     should_be_counted: Array1<bool>,
 }
 
@@ -620,8 +626,7 @@ impl KTAM {
             friends_ss: Vec::new(),
             friends_sw: Vec::new(),
             has_duples: false,
-            double_to_left: Array1::zeros(ntiles + 1),
-            double_to_top: Array1::zeros(ntiles + 1),
+            duple_info: Array1::default(ntiles + 1),
             should_be_counted: Array1::default(ntiles + 1),
         }
     }
@@ -729,7 +734,8 @@ impl KTAM {
             for (t1, t2) in self.double_to_right.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
                     let t2 = *t2 as usize;
-                    self.double_to_left[t2] = t1 as Tile;
+                    self.duple_info[t2] = TileShape::DupleToLeft(t1 as Tile);
+                    self.duple_info[t1] = TileShape::DupleToRight(t2 as Tile);
                     self.should_be_counted[t2] = false;
                     self.energy_we[(t1, t2)] = 0.0;
                 }
@@ -737,7 +743,8 @@ impl KTAM {
             for (t1, t2) in self.double_to_bottom.indexed_iter() {
                 if (t1 > 0) & (t2 > &0) {
                     let t2 = *t2 as usize;
-                    self.double_to_top[t2] = t1 as Tile;
+                    self.duple_info[t2] = TileShape::DupleToTop(t1 as Tile);
+                    self.duple_info[t1] = TileShape::DupleToBottom(t2 as Tile);
                     self.should_be_counted[t2] = false;
                     self.energy_ns[(t1, t2)] = 0.0;
                 }
@@ -848,6 +855,13 @@ impl KTAM {
         }
     }
 
+    fn is_fake_duple(&self, t: Tile) -> bool {
+        match self.duple_info[t as usize] {
+            TileShape::Single | TileShape::DupleToRight(_) | TileShape::DupleToBottom(_) => false,
+            TileShape::DupleToLeft(_) | TileShape::DupleToTop(_) => true,
+        }
+    }
+
     pub fn monomer_detachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
         // If the point is a seed, then there is no detachment rate.
         // ODD HACK: we set a very low detachment rate for seeds and duple bottom/right, to allow
@@ -860,9 +874,7 @@ impl KTAM {
         if t == 0 {
             return 0.;
         }
-        if (self.has_duples)
-            && ((self.double_to_left[t as usize] > 0) || (self.double_to_top[t as usize] > 0))
-        {
+        if (self.has_duples) && (self.is_fake_duple(t)) {
             return FAKE_EVENT_RATE;
         }
         self.kf
@@ -895,10 +907,7 @@ impl KTAM {
         acc -= self.monomer_detachment_rate_at_point(state, p);
         if acc <= 0. {
             // FIXME: may slow things down
-            if self.is_seed(p)
-                || ((self.has_duples)
-                    && ((self.double_to_left[state.tile_at_point(p) as usize] > 0)
-                        || (self.double_to_top[state.tile_at_point(p) as usize] > 0)))
+            if self.is_seed(p) || ((self.has_duples) && self.is_fake_duple(state.tile_at_point(p)))
             {
                 (true, acc, Event::None)
             } else {
@@ -1128,12 +1137,14 @@ impl KTAM {
         energy
     }
 
+    #[inline(always)]
     pub(crate) fn get_energy_ns(&self, tn: Tile, ts: Tile) -> Energy {
         {
             *self.energy_ns.get((tn as usize, ts as usize)).unwrap()
         }
     }
 
+    #[inline(always)]
     pub(crate) fn get_energy_we(&self, tw: Tile, te: Tile) -> Energy {
         {
             *self.energy_we.get((tw as usize, te as usize)).unwrap()
@@ -1142,23 +1153,11 @@ impl KTAM {
 
     #[inline(always)]
     fn tile_shape(&self, t: Tile) -> TileShape {
-        let dr = self.double_to_right[t as usize];
-        if dr.nonzero() {
-            return TileShape::DupleToRight(dr);
+        if self.has_duples {
+            unsafe { *self.duple_info.uget(t as usize) }
+        } else {
+            TileShape::Single
         }
-        let db = self.double_to_bottom[t as usize];
-        if db.nonzero() {
-            return TileShape::DupleToBottom(db);
-        }
-        let dl = self.double_to_left[t as usize];
-        if dl.nonzero() {
-            return TileShape::DupleToLeft(dl);
-        }
-        let dt = self.double_to_top[t as usize];
-        if dt.nonzero() {
-            return TileShape::DupleToTop(dt);
-        }
-        TileShape::Single
     }
 
     fn _update_monomer_points<S: State>(&self, state: &mut S, p: &PointSafe2) {
