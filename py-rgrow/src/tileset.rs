@@ -1,9 +1,12 @@
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::sync::RwLockReadGuard;
+use std::sync::RwLockWriteGuard;
 use std::time::Duration;
 
 use numpy::PyArray2;
 use numpy::ToPyArray;
+use pyo3::exceptions::PyValueError;
 use pyo3::types::PyDict;
 use pyo3::{prelude::*, types::PyType};
 
@@ -11,6 +14,7 @@ use rgrow::ffs;
 use rgrow::ffs::FFSRunConfig;
 use rgrow::simulation;
 use rgrow::system::EvolveBounds;
+use rgrow::system::EvolveOutcome;
 use rgrow::tileset;
 use rgrow::tileset::TileShape;
 
@@ -41,7 +45,7 @@ impl From<Ident> for tileset::GlueIdent {
 impl From<Ident> for tileset::TileIdent {
     fn from(ident: Ident) -> Self {
         match ident {
-            Ident::Num(num) => tileset::TileIdent::Num(num),
+            Ident::Num(num) => tileset::TileIdent::Num(num as u32),
             Ident::Name(name) => tileset::TileIdent::Name(name),
         }
     }
@@ -59,7 +63,7 @@ impl From<tileset::GlueIdent> for Ident {
 impl From<tileset::TileIdent> for Ident {
     fn from(ident: tileset::TileIdent) -> Self {
         match ident {
-            tileset::TileIdent::Num(num) => Ident::Num(num),
+            tileset::TileIdent::Num(num) => Ident::Num(num as usize),
             tileset::TileIdent::Name(name) => Ident::Name(name),
         }
     }
@@ -191,6 +195,13 @@ impl TileSet {
         }
     }
 
+    #[classmethod]
+    fn from_file(_cls: &PyType, path: &str) -> PyResult<Self> {
+        let ts = tileset::TileSet::from_file(path)
+            .map_err(|err| PyErr::new::<PyValueError, _>(err.to_string()))?;
+        Ok(TileSet(Arc::new(RwLock::new(ts))))
+    }
+
     fn __repr__(&self) -> String {
         format!("{:?}", self.0)
     }
@@ -241,7 +252,7 @@ impl TileSet {
             }
         }
 
-        let res = py.allow_threads(|| self.0.read().unwrap().run_ffs(&c));
+        let res = py.allow_threads(|| self.read().unwrap().run_ffs(&c));
         match res {
             Ok(res) => Ok(FFSResult(res.into())),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -256,6 +267,59 @@ pub struct Simulation(RwLock<Box<dyn simulation::Simulation>>);
 
 #[pyclass]
 pub struct TileColorView(Arc<RwLock<dyn simulation::Simulation>>);
+
+impl Simulation {
+    fn ensure_state(&mut self, state_index: Option<usize>) -> PyResult<usize> {
+        let sim = self.read()?;
+
+        match state_index {
+            Some(x) => {
+                if sim.n_states() <= x {
+                    Err(PyValueError::new_err(format!(
+                        "State index {x} is out of bounds."
+                    )))
+                } else {
+                    Ok(x)
+                }
+            }
+            None => {
+                if sim.n_states() > 0 {
+                    return Ok(0);
+                }
+                drop(sim);
+                let mut sim = self.0.write().unwrap();
+                sim.add_state()
+                    .map_err(|x| PyValueError::new_err(x.to_string()))
+            }
+        }
+    }
+    fn check_state(&self, state_index: Option<usize>) -> PyResult<usize> {
+        let state_index = state_index.unwrap_or(0);
+        let sim = self.read()?;
+
+        if sim.n_states() <= state_index {
+            Err(PyValueError::new_err(format!(
+                "State index {state_index} is out of bounds."
+            )))
+        } else {
+            Ok(state_index)
+        }
+    }
+    fn read(
+        &self,
+    ) -> Result<RwLockReadGuard<'_, Box<dyn rgrow::simulation::Simulation>>, pyo3::PyErr> {
+        self.0
+            .try_read()
+            .map_err(|_| PyValueError::new_err("lock failure"))
+    }
+    fn write(
+        &self,
+    ) -> Result<RwLockWriteGuard<'_, Box<dyn rgrow::simulation::Simulation>>, pyo3::PyErr> {
+        self.0
+            .try_write()
+            .map_err(|_| PyValueError::new_err("lock failure"))
+    }
+}
 
 #[pymethods]
 impl Simulation {
@@ -274,15 +338,10 @@ impl Simulation {
         size_min: Option<u32>,
         size_max: Option<u32>,
         for_wall_time: Option<f64>,
+        require_strong_bound: Option<bool>,
         py: Python<'_>,
-    ) -> PyResult<()> {
-        if self.0.read().unwrap().n_states() == 0 {
-            self.0
-                .write()
-                .unwrap()
-                .add_state()
-                .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))?;
-        }
+    ) -> PyResult<EvolveOutcome> {
+        let state_index = self.ensure_state(state_index)?;
 
         let bounds = EvolveBounds {
             for_events,
@@ -294,19 +353,24 @@ impl Simulation {
             for_wall_time: for_wall_time.map(Duration::from_secs_f64),
         };
 
+        let require_strong_bound = require_strong_bound.unwrap_or(false);
+
+        if require_strong_bound & !bounds.is_strongly_bounded() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No strong bounds specified.",
+            ));
+        }
+
         if !bounds.is_weakly_bounded() {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "No bounds specified.",
+                "No weak bounds specified.",
             ));
         }
 
         py.allow_threads(|| {
-            self.0
-                .write()
-                .unwrap()
-                .evolve(state_index.unwrap_or(0), bounds)
+            self.write()?
+                .evolve(state_index, bounds)
                 .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
-                .map(|_x| ())
         })
     }
 
@@ -321,8 +385,9 @@ impl Simulation {
         size_min: Option<u32>,
         size_max: Option<u32>,
         for_wall_time: Option<f64>,
+        require_strong_bound: Option<bool>,
         py: Python<'_>,
-    ) -> PyResult<()> {
+    ) -> PyResult<Vec<EvolveOutcome>> {
         let bounds = EvolveBounds {
             for_events,
             for_time,
@@ -333,88 +398,95 @@ impl Simulation {
             for_wall_time: for_wall_time.map(Duration::from_secs_f64),
         };
 
-        if !bounds.is_weakly_bounded() {
+        let require_strong_bound = require_strong_bound.unwrap_or(false);
+
+        if require_strong_bound & !bounds.is_strongly_bounded() {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "No bounds specified.",
+                "No strong bounds specified.",
             ));
         }
 
-        py.allow_threads(|| self.0.write().unwrap().evolve_all(bounds)); // FIXME: handle errors
+        if !bounds.is_weakly_bounded() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No weak bounds specified.",
+            ));
+        }
 
-        Ok(())
+        let res = py.allow_threads(|| self.write().unwrap().evolve_all(bounds));
+
+        res.into_iter()
+            .map(|x| x.map_err(|y| PyValueError::new_err(y.to_string())))
+            .collect()
     }
 
     /// Returns the current canvas for state_index (default 0), as an array copy.
     #[pyo3(text_signature = "($self, state_index)")]
-    fn canvas<'py>(&self, state_index: Option<usize>, py: Python<'py>) -> &'py PyArray2<usize> {
-        self.0
-            .read()
-            .unwrap()
-            .state_ref(state_index.unwrap_or(0))
+    fn canvas_copy<'py>(
+        &self,
+        state_index: Option<usize>,
+        py: Python<'py>,
+    ) -> PyResult<&'py PyArray2<rgrow::base::Tile>> {
+        let state_index = self.check_state(state_index)?;
+        Ok(self
+            .read()?
+            .state_ref(state_index)
             .raw_array()
-            .to_pyarray(py)
+            .to_pyarray(py))
     }
 
-    fn state_ntiles(&self, state_index: Option<usize>) -> u32 {
-        self.0
-            .read()
-            .unwrap()
-            .state_ref(state_index.unwrap_or(0))
-            .ntiles()
+    #[pyo3(text_signature = "($self, state_index)")]
+    fn canvas_view<'py>(
+        this: &'py PyCell<Self>,
+        state_index: Option<usize>,
+        _py: Python<'py>,
+    ) -> PyResult<&'py PyArray2<rgrow::base::Tile>> {
+        let sim = this.borrow();
+        let state_index = sim.check_state(state_index)?;
+        let sim = sim.read()?;
+
+        let ra = sim.state_ref(state_index).raw_array();
+
+        unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
     }
 
-    fn state_time(&self, state_index: Option<usize>) -> f64 {
-        self.0
-            .read()
-            .unwrap()
-            .state_ref(state_index.unwrap_or(0))
-            .time()
+    fn state_ntiles(&self, state_index: Option<usize>) -> PyResult<u32> {
+        let state_index = self.check_state(state_index)?;
+        Ok(self.read()?.state_ref(state_index).ntiles())
     }
 
-    fn state_total_events(&self, state_index: Option<usize>) -> u64 {
-        self.0
-            .read()
-            .unwrap()
-            .state_ref(state_index.unwrap_or(0))
-            .total_events()
+    fn state_time(&self, state_index: Option<usize>) -> PyResult<f64> {
+        let state_index = self.check_state(state_index)?;
+        Ok(self.read()?.state_ref(state_index).time())
+    }
+
+    fn state_events(&self, state_index: Option<usize>) -> PyResult<u64> {
+        let state_index = self.check_state(state_index)?;
+        Ok(self.read()?.state_ref(state_index).total_events())
     }
 
     /// Add a new state to the simulation.
     #[pyo3(text_signature = "($self, shape)")]
     fn add_state(&mut self) -> PyResult<usize> {
-        self.0
-            .write()
-            .unwrap()
+        self.write()?
             .add_state()
             .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
     }
 
     #[pyo3(text_signature = "($self, n, shape")]
     fn add_n_states(&mut self, n: usize) -> PyResult<Vec<usize>> {
-        self.0
-            .write()
-            .unwrap()
+        self.write()?
             .add_n_states(n)
             .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
     }
 
-    // fn erase_states(&mut self, state_index: Option<usize>) -> PyResult<()> {
-    //     self.0
-    //         .write()
-    //         .unwrap()
-    //         .erase_states(state_index.unwrap_or(0))
-    //         .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
-    //         .map(|_x| ())
-    // }
-
     #[getter]
     fn get_tile_concs(&self) -> PyResult<Vec<f64>> {
-        Ok(self.0.read().unwrap().tile_concs())
+        Ok(self.read()?.tile_concs())
     }
 
     #[getter]
     fn get_tile_stoics(&self) -> PyResult<Vec<f64>> {
-        Ok(self.0.read().unwrap().tile_stoics())
+        Ok(self.read()?.tile_stoics())
     }
 }
 
@@ -483,7 +555,7 @@ pub struct FFSLevel {
 #[pymethods]
 impl FFSLevel {
     #[getter]
-    fn get_configs<'py>(&self, py: Python<'py>) -> Vec<&'py PyArray2<usize>> {
+    fn get_configs<'py>(&self, py: Python<'py>) -> Vec<&'py PyArray2<rgrow::base::Tile>> {
         self.res.surfaces()[self.level]
             .configs()
             .iter()

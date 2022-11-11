@@ -12,6 +12,7 @@ fn pyrgrow(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<rgrow::ffs::FFSRunConfig>()?;
     m.add_class::<rgrow::system::EvolveBounds>()?;
+    m.add_class::<rgrow::system::EvolveOutcome>()?;
 
     Ok(())
 }
