@@ -15,6 +15,9 @@ pub trait Simulation: Send + Sync + SystemInfo {
     fn state_ref(&self, state_index: usize) -> &dyn State; //std::sync::Arc<RwLock<dyn State>>;
     fn state_mut_ref(&mut self, state_index: usize) -> &mut dyn State; //std::sync::Arc<RwLock<dyn State>>;
     fn n_states(&self) -> usize;
+
+    fn state_keys(&self) -> Vec<usize>;
+
     fn add_state(&mut self) -> Result<usize, GrowError>;
     fn add_n_states(&mut self, n: usize) -> Result<Vec<usize>, GrowError> {
         let mut indices = Vec::with_capacity(n);
@@ -83,6 +86,10 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
             .par_iter_mut()
             .map(|state| sys.evolve(state, bounds))
             .collect()
+    }
+
+    fn state_keys(&self) -> Vec<usize> {
+        return (0..self.states.len()).into_iter().collect();
     }
 }
 

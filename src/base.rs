@@ -23,6 +23,8 @@ pub enum GrowError {
     NotImplemented(String),
     #[error(transparent)]
     PoisonError(#[from] std::sync::PoisonError<()>),
+    #[error("There is no state with key {0}")]
+    NoState(usize),
 }
 
 #[derive(Error, Debug)]
