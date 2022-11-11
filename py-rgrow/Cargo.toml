@@ -27,7 +27,7 @@ bincode = "^1"
 [dependencies.rgrow]
 #git = "https://github.com/evansfmm/rgrow.git"
 version = "^0.7.1"
-path = "../rgrow"
+#path = "../rgrow"
 features = ["python"]
 
 [dependencies.pyo3]
