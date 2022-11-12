@@ -116,7 +116,7 @@ fn ktam_test() -> Result<()> {
 
     assert!(st.ntiles() > 200);
 
-    sys.g_se = 7.9;
+    sys.g_se = 7.8;
     sys.update_system();
 
     sys.evolve(
@@ -128,7 +128,76 @@ fn ktam_test() -> Result<()> {
         },
     )?;
 
-    assert!(st.ntiles() < 40);
+    assert!(st.ntiles() < 100);
+
+    // let state = at.state_ref(0);
+
+    Ok(())
+}
+
+#[test]
+fn ktam_barish_test() -> Result<()> {
+    let mut ts = TileSet::from_file("examples/barish-perfect.yaml")?;
+
+    ts.options.model = rgrow::tileset::Model::KTAM;
+    ts.options.gse = 8.5;
+    ts.options.gmc = 16.0;
+
+    let mut sim = ts.into_simulation()?;
+
+    let si = sim.add_state()?;
+
+    sim.evolve(
+        si,
+        EvolveBounds {
+            for_events: Some(20000),
+            size_max: Some(220),
+            ..Default::default()
+        },
+    )?;
+
+    assert!(sim.state_ref(si).ntiles() > 200);
+
+    Ok(())
+}
+
+#[test]
+fn oldktam_test() -> Result<()> {
+    let mut ts = get_sierpinski()?;
+
+    ts.options.model = rgrow::tileset::Model::OldKTAM;
+    ts.options.size = Size::Single(64);
+    ts.options.seed = ParsedSeed::Single(60, 60, 1.into());
+    ts.options.gse = 8.1;
+
+    let sys = rgrow::models::oldktam::OldKTAM::from_tileset(&ts)?;
+
+    let mut st = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((64, 64))?;
+
+    sys.evolve(
+        &mut st,
+        EvolveBounds {
+            for_events: Some(20000),
+            size_max: Some(210),
+            ..Default::default()
+        },
+    )?;
+
+    assert!(st.ntiles() > 200);
+
+    ts.options.gse = 7.8;
+    let sys = rgrow::models::oldktam::OldKTAM::from_tileset(&ts)?;
+
+    sys.evolve(
+        &mut st,
+        EvolveBounds {
+            for_events: Some(100000),
+            size_min: Some(10),
+            ..Default::default()
+        },
+    )?;
+
+    assert!(st.ntiles() < 100);
 
     // let state = at.state_ref(0);
 

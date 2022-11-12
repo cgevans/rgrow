@@ -129,6 +129,7 @@ impl EvolveBounds {
     }
 }
 
+#[cfg_attr(feature = "python", pyclass)]
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub enum EvolveOutcome {
