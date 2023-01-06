@@ -1,12 +1,12 @@
 //$ Simulations hold both a model and a state, so that they can be handled without knowing the specific model, state, or canvas being used.
 
-use crate::base::GrowError;
+use crate::base::{GrowError, Tile};
 
 use crate::state::{State, StateCreate};
 use crate::system::TileBondInfo;
 use crate::system::{EvolveBounds, EvolveOutcome, System, SystemInfo};
 
-pub trait Simulation: Send + Sync + SystemInfo {
+pub trait Simulation: Send + Sync + SystemInfo + TileBondInfo {
     fn evolve(
         &mut self,
         state_index: usize,
@@ -100,5 +100,31 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State> SystemInfo for ConcreteS
 
     fn tile_stoics(&self) -> Vec<f64> {
         self.system.tile_stoics()
+    }
+}
+
+impl<Sy: System + TileBondInfo + System, St: State> TileBondInfo for ConcreteSimulation<Sy, St> {
+    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
+        self.system.tile_color(tile_number)
+    }
+
+    fn tile_name(&self, tile_number: Tile) -> &str {
+        self.system.tile_name(tile_number)
+    }
+
+    fn bond_name(&self, bond_number: usize) -> &str {
+        self.system.bond_name(bond_number)
+    }
+
+    fn tile_colors(&self) -> &Vec<[u8; 4]> {
+        self.system.tile_colors()
+    }
+
+    fn tile_names(&self) -> Vec<String> {
+        self.system.tile_names()
+    }
+
+    fn bond_names(&self) -> Vec<String> {
+        self.system.bond_names()
     }
 }
