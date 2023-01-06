@@ -135,7 +135,7 @@ impl EvolveBounds {
 pub enum EvolveOutcome {
     ReachedEventsMax,
     ReachedTimeMax,
-    ReachWallTimeMax,
+    ReachedWallTimeMax,
     ReachedSizeMin,
     ReachedSizeMax,
     ReachedZeroRate,
@@ -270,7 +270,7 @@ pub trait System: Debug + Sync + Send {
                 .for_wall_time
                 .is_some_and(|t| start_time.unwrap().elapsed() >= t)
             {
-                return Ok(EvolveOutcome::ReachWallTimeMax);
+                return Ok(EvolveOutcome::ReachedWallTimeMax);
             } else if bounds.for_events.is_some_and(|e| events >= e) {
                 return Ok(EvolveOutcome::ReachedEventsMax);
             } else if state.total_rate() == 0. {

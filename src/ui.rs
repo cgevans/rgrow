@@ -88,7 +88,8 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
         app::awake();
 
         match evres {
-            EvolveOutcome::ReachWallTimeMax => {}
+            EvolveOutcome::ReachedWallTimeMax => {}
+            EvolveOutcome::ReachedZeroRate => {}
             _ => {
                 break;
             }
