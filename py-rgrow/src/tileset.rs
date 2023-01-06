@@ -488,6 +488,11 @@ impl Simulation {
     fn get_tile_stoics(&self) -> PyResult<Vec<f64>> {
         Ok(self.read()?.tile_stoics())
     }
+
+    #[getter]
+    fn get_tile_names(&self) -> PyResult<Vec<String>> {
+        Ok(self.read()?.tile_names())
+    }
 }
 
 #[pyclass]
