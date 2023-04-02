@@ -25,6 +25,10 @@ pub enum GrowError {
     PoisonError(#[from] std::sync::PoisonError<()>),
     #[error("There is no state with key {0}")]
     NoState(usize),
+    #[error("There is no modifiable parameter with name {0}")]
+    NoParameter(String),
+    #[error("Parameter type is wrong for {0}")]
+    WrongParameterType(String),
 }
 
 #[derive(Error, Debug)]

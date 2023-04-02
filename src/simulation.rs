@@ -1,5 +1,7 @@
 //$ Simulations hold both a model and a state, so that they can be handled without knowing the specific model, state, or canvas being used.
 
+use std::any::Any;
+
 use crate::base::{GrowError, Tile};
 
 use crate::state::{State, StateCreate};
@@ -31,6 +33,14 @@ pub trait Simulation: Send + Sync + SystemInfo + TileBondInfo {
 
     #[cfg(feature = "use_rayon")]
     fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>>;
+
+    fn set_system_param(&mut self, param_name: &str, value: Box<dyn Any>) -> Result<(), GrowError> {
+        Err(GrowError::NoParameter(param_name.to_string()))
+    }
+
+    fn get_system_param(&self, param_name: &str) -> Result<Box<dyn Any>, GrowError> {
+        Err(GrowError::NoParameter(param_name.to_string()))
+    }
 }
 
 pub(crate) struct ConcreteSimulation<Sy: System, St: State> {
@@ -90,6 +100,14 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
 
     fn state_keys(&self) -> Vec<usize> {
         return (0..self.states.len()).into_iter().collect();
+    }
+
+    fn set_system_param(&mut self, param_name: &str, value: Box<dyn Any>) -> Result<(), GrowError> {
+        self.system.set_param(param_name, value)
+    }
+
+    fn get_system_param(&self, param_name: &str) -> Result<Box<dyn Any>, GrowError> {
+        self.system.get_param(param_name)
     }
 }
 

@@ -529,6 +529,27 @@ impl System for KTAM {
     fn calc_mismatch_locations<S: State>(&self, _state: &S) -> Array2<usize> {
         todo!()
     }
+
+    fn set_param(&mut self, name: &str, value: Box<dyn std::any::Any>) -> Result<(), GrowError> {
+        match name {
+            "g_se" => {
+                let g_se = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.g_se = *g_se;
+                self.update_system();
+                Ok(())
+            }
+            _ => Err(GrowError::NoParameter(name.to_string())),
+        }
+    }
+
+    fn get_param(&self, name: &str) -> Result<Box<dyn std::any::Any>, GrowError> {
+        match name {
+            "g_se" => Ok(Box::new(self.g_se)),
+            _ => Err(GrowError::NoParameter(name.to_string())),
+        }
+    }
 }
 
 impl SystemWithDimers for KTAM {

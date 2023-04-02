@@ -12,6 +12,7 @@ use crate::{
 use super::base::{Point, Rate, Tile};
 use crate::canvas::PointSafe2;
 
+use std::any::Any;
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -388,6 +389,14 @@ pub trait System: Debug + Sync + Send {
             .collect::<Vec<_>>();
 
         state.update_multiple(&p);
+    }
+
+    fn set_param(&mut self, name: &str, value: Box<dyn Any>) -> Result<(), GrowError> {
+        todo!();
+    }
+
+    fn get_param(&self, name: &str) -> Result<Box<dyn Any>, GrowError> {
+        todo!();
     }
 }
 
