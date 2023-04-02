@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
@@ -492,6 +493,48 @@ impl Simulation {
     #[getter]
     fn get_tile_names(&self) -> PyResult<Vec<String>> {
         Ok(self.read()?.tile_names())
+    }
+
+    fn set_system_param(&self, name: &str, value: &PyAny) {
+        let val = convert_pyany_to_any(value);
+        self.write().unwrap().set_system_param(name, val).unwrap();
+    }
+
+    fn get_system_param(&self, name: &str, py: Python) -> PyResult<Py<PyAny>> {
+        let val = self.read().unwrap().get_system_param(name).unwrap();
+        convert_any_to_pyany(&val, py)
+    }
+}
+
+fn convert_pyany_to_any(value: &PyAny) -> Box<dyn Any> {
+    if let Ok(val) = value.extract::<f64>() {
+        Box::new(val)
+    } else if let Ok(val) = value.extract::<u64>() {
+        Box::new(val)
+    } else if let Ok(val) = value.extract::<i64>() {
+        Box::new(val)
+    } else if let Ok(val) = value.extract::<bool>() {
+        Box::new(val)
+    } else if let Ok(val) = value.extract::<String>() {
+        Box::new(val)
+    } else {
+        panic!("Cannot convert PyAny to Any");
+    }
+}
+
+fn convert_any_to_pyany(value: &Box<dyn Any>, py: Python) -> PyResult<Py<PyAny>> {
+    if let Some(val) = value.downcast_ref::<f64>() {
+        Ok(val.into_py(py))
+    } else if let Some(val) = value.downcast_ref::<u64>() {
+        Ok(val.into_py(py))
+    } else if let Some(val) = value.downcast_ref::<i64>() {
+        Ok(val.into_py(py))
+    } else if let Some(val) = value.downcast_ref::<bool>() {
+        Ok(val.into_py(py))
+    } else if let Some(val) = value.downcast_ref::<String>() {
+        Ok(val.into_py(py))
+    } else {
+        panic!("Cannot convert Any to PyAny");
     }
 }
 
