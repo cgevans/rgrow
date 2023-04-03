@@ -14,7 +14,7 @@ use crate::{
     state::State,
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        SystemInfo, SystemWithDimers, TileBondInfo,
+        SystemInfo, SystemWithDimers, TileBondInfo, NeededUpdate,
     },
     tileset::{FromTileSet, ProcessedTileSet, TileSet},
 };
@@ -530,7 +530,7 @@ impl System for KTAM {
         todo!()
     }
 
-    fn set_param(&mut self, name: &str, value: Box<dyn std::any::Any>) -> Result<(), GrowError> {
+    fn set_param(&mut self, name: &str, value: Box<dyn std::any::Any>) -> Result<NeededUpdate, GrowError> {
         match name {
             "g_se" => {
                 let g_se = value
@@ -538,7 +538,7 @@ impl System for KTAM {
                     .ok_or(GrowError::WrongParameterType(name.to_string()))?;
                 self.g_se = *g_se;
                 self.update_system();
-                Ok(())
+                Ok(NeededUpdate::NonZero)
             }
             _ => Err(GrowError::NoParameter(name.to_string())),
         }

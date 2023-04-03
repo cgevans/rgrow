@@ -19,6 +19,10 @@ name = "sierpinski"
 harness = false
 
 [[bench]]
+name = "ratestore"
+harness = false
+
+[[bench]]
 name = "ui"
 harness = false
 

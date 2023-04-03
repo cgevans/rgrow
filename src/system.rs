@@ -38,6 +38,13 @@ pub enum StepOutcome {
     ZeroRate,
 }
 
+#[derive(Debug)]
+pub enum NeededUpdate {
+    None,
+    NonZero,
+    All,
+}
+
 #[derive(Debug, Copy, Clone, Default)]
 #[cfg_attr(feature = "python", pyclass)]
 pub struct EvolveBounds {
@@ -391,21 +398,29 @@ pub trait System: Debug + Sync + Send {
         state.update_multiple(&p);
     }
 
-    fn update_all<St: State>(&self, state: &mut St) {
+    fn update_all<St: State>(&self, state: &mut St, needed: &NeededUpdate) {
         let ncols = state.ncols();
         let nrows = state.nrows();
 
-        let all_points = (0..nrows)
-            .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))));
+        let all_points = match needed {
+            NeededUpdate::None => todo!(),
+            NeededUpdate::NonZero => (0..nrows)
+                .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))))
+                .filter(|p| state.rate_at_point(*p) > 0.)
+                .collect::<Vec<_>>(), 
+            NeededUpdate::All => (0..nrows)
+                .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))))
+                .collect::<Vec<_>>(),
+        };
 
-        self.update_points(state, &all_points.collect::<Vec<_>>());
+        self.update_points(state, &all_points);
     }
 
-    fn set_param(&mut self, name: &str, value: Box<dyn Any>) -> Result<(), GrowError> {
+    fn set_param(&mut self, _name: &str, _value: Box<dyn Any>) -> Result<NeededUpdate, GrowError> {
         todo!();
     }
 
-    fn get_param(&self, name: &str) -> Result<Box<dyn Any>, GrowError> {
+    fn get_param(&self, _name: &str) -> Result<Box<dyn Any>, GrowError> {
         todo!();
     }
 }

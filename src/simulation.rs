@@ -34,7 +34,7 @@ pub trait Simulation: Send + Sync + SystemInfo + TileBondInfo {
     #[cfg(feature = "use_rayon")]
     fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>>;
 
-    fn set_system_param(&mut self, param_name: &str, value: Box<dyn Any>) -> Result<(), GrowError> {
+    fn set_system_param(&mut self, param_name: &str, _value: Box<dyn Any>) -> Result<(), GrowError> {
         Err(GrowError::NoParameter(param_name.to_string()))
     }
 
@@ -103,9 +103,20 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
     }
 
     fn set_system_param(&mut self, param_name: &str, value: Box<dyn Any>) -> Result<(), GrowError> {
-        self.system.set_param(param_name, value)?;
-        for state in self.states.iter_mut() {
-            self.system.update_all(state);
+        let needed_update = self.system.set_param(param_name, value)?;
+
+        #[cfg(feature = "use_rayon")]
+        {
+            use rayon::prelude::*;
+            self.states.par_iter_mut().for_each(|state| {
+                self.system.update_all(state, &needed_update);
+            });
+        }
+        #[cfg(not(feature = "use_rayon"))]
+        {
+            for state in self.states.iter_mut() {
+                self.system.update_all(state);
+            }
         }
         Ok(())
     }

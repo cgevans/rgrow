@@ -1,6 +1,7 @@
 # 0.8.0 (dev)
 
 - Initial support for mid-simulation system parameter changes.
+- RateStore multi-update optimizations.
 
 # 0.7.1
 

@@ -51,6 +51,7 @@ pub trait RateStoreP {
     fn choose_point(&self) -> (Point, Rate);
     fn update_point(&mut self, point: PointSafeHere, new_rate: Rate);
     fn update_multiple(&mut self, points: &[(PointSafeHere, Rate)]);
+    fn rate_at_point(&self, point: PointSafeHere) -> Rate;
     fn total_rate(&self) -> Rate;
 }
 impl<C: CanvasSquarable + CanvasCreate, T: StateTracker> State for QuadTreeState<C, T> {
@@ -68,6 +69,10 @@ impl<C: CanvasSquarable + CanvasCreate, T: StateTracker> State for QuadTreeState
 impl<C: CanvasSquarable, T: StateTracker> RateStoreP for QuadTreeState<C, T> {
     fn choose_point(&self) -> (Point, Rate) {
         self.rates.choose_point()
+    }
+
+    fn rate_at_point(&self, point: PointSafeHere) -> Rate {
+        self.rates.rate_at_point(point)
     }
 
     fn update_point(&mut self, point: PointSafeHere, new_rate: Rate) {
