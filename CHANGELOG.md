@@ -1,3 +1,7 @@
+# 0.8.0 (dev)
+
+- Initial support for mid-simulation system parameter changes.
+
 # 0.7.1
 
 - Type improvements.

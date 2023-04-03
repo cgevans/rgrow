@@ -103,7 +103,11 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
     }
 
     fn set_system_param(&mut self, param_name: &str, value: Box<dyn Any>) -> Result<(), GrowError> {
-        self.system.set_param(param_name, value)
+        self.system.set_param(param_name, value)?;
+        for state in self.states.iter_mut() {
+            self.system.update_all(state);
+        }
+        Ok(())
     }
 
     fn get_system_param(&self, param_name: &str) -> Result<Box<dyn Any>, GrowError> {

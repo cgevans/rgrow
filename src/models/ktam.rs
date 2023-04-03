@@ -1049,6 +1049,34 @@ impl KTAM {
         let te = state.tile_to_e(p);
         let ts = state.tile_to_s(p);
 
+        let tss: u32;
+        let tne: u32;
+        let tee: u32;
+        let tse: u32;
+
+        if self.has_duples {
+            tss = state.tile_to_ss(p);
+            tne = state.tile_to_ne(p);
+            tee = state.tile_to_ee(p);
+            tse = state.tile_to_se(p);
+        } else {
+            tss = 0;
+            tne = 0;
+            tee = 0;
+            tse = 0;
+        }
+
+        // Optimization: if all neighbors are empty, then there is no attachment rate
+        if tn == 0 && tw == 0 && te == 0 && ts == 0 {
+            if self.has_duples {
+                if tss == 0 && tne == 0 && tee == 0 && tse == 0 {
+                    return (false, acc, Event::None);
+                }
+            } else {
+                return (false, acc, Event::None);
+            }
+        }
+
         let mut friends = HashSetType::<Tile>::default();
 
         if tn.nonzero() {
@@ -1065,11 +1093,6 @@ impl KTAM {
         }
 
         if self.has_duples {
-            let tss = state.tile_to_ss(p);
-            let tne = state.tile_to_ne(p);
-            let tee = state.tile_to_ee(p);
-            let tse = state.tile_to_se(p);
-
             if tss.nonzero() {
                 friends.extend(&self.friends_ss[tss as usize])
             }

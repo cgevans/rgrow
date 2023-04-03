@@ -391,6 +391,16 @@ pub trait System: Debug + Sync + Send {
         state.update_multiple(&p);
     }
 
+    fn update_all<St: State>(&self, state: &mut St) {
+        let ncols = state.ncols();
+        let nrows = state.nrows();
+
+        let all_points = (0..nrows)
+            .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))));
+
+        self.update_points(state, &all_points.collect::<Vec<_>>());
+    }
+
     fn set_param(&mut self, name: &str, value: Box<dyn Any>) -> Result<(), GrowError> {
         todo!();
     }
