@@ -1,3 +1,5 @@
+use std::borrow::BorrowMut;
+
 use fnv::FnvHashSet;
 use ndarray::Array2;
 use rand::thread_rng;
@@ -153,26 +155,27 @@ impl QuadTreeSquareArray<Rate> {
     }
 
     pub fn _update_multiple_large(&mut self, to_update: &[(PointSafeHere, Rate)]) {
-        let mut todo = FnvHashSet::<Point>::default();
-        let mut next_todo: FnvHashSet<Point>;
+        let mut h1 = FnvHashSet::<Point>::default();
+        let mut h2 = FnvHashSet::<Point>::default();
 
         let mut rtiter = self.0.iter_mut();
         let mut r_prev = rtiter.next().unwrap();
 
+        let mut todo = h1.borrow_mut();
         for (p, r) in to_update {
             r_prev[p.0] = *r;
             let n = (p.0 .0 / 2, p.0 .1 / 2);
             todo.insert(n);
         }
 
+        let mut next_todo = h2.borrow_mut();
         for r_next in rtiter {
-            next_todo = FnvHashSet::<Point>::default();
-            for p in todo.iter() {
-                qt_update_level(r_next, r_prev, *p);
+            for p in todo.drain() {
+                qt_update_level(r_next, r_prev, p);
                 next_todo.insert((p.0 / 2, p.1 / 2));
             }
             r_prev = r_next;
-            todo = next_todo;
+            (todo, next_todo) = (next_todo, todo);
         }
 
         self.1 = r_prev.sum();

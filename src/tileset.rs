@@ -807,7 +807,7 @@ impl ProcessedTileSet {
 
     pub fn tpmap(&self, tp: &TileIdent) -> base::Tile {
         match tp {
-            TileIdent::Name(x) => {
+            TileIdent::Name(x) => {  // FIXME: fail gracefully
                 self.tile_names.iter().position(|y| *y == *x).unwrap() as base::Tile
             }
             TileIdent::Num(x) => *x,
