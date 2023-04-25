@@ -540,6 +540,22 @@ impl System for KTAM {
                 self.update_system();
                 Ok(NeededUpdate::NonZero)
             }
+            "alpha" => {
+                let alpha = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.alpha = *alpha;
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
+            "kf" => {
+                let kf = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.kf = *kf;
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }
@@ -547,6 +563,8 @@ impl System for KTAM {
     fn get_param(&self, name: &str) -> Result<Box<dyn std::any::Any>, GrowError> {
         match name {
             "g_se" => Ok(Box::new(self.g_se)),
+            "alpha" => Ok(Box::new(self.alpha)),
+            "kf" => Ok(Box::new(self.kf)),
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }
