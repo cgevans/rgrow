@@ -19,7 +19,7 @@ use rgrow::system::EvolveOutcome;
 use rgrow::tileset;
 use rgrow::tileset::TileShape;
 
-#[derive(FromPyObject)]
+#[derive(FromPyObject, Clone)]
 enum Ident {
     Num(usize),
     Name(String),
@@ -70,17 +70,19 @@ impl From<tileset::TileIdent> for Ident {
     }
 }
 
-impl From<tileset::Tile> for Tile {
+impl From<tileset::Tile> for PyTile {
     fn from(tile: tileset::Tile) -> Self {
-        Tile(tile)
+        PyTile(tile)
     }
 }
 
 #[pyclass]
-pub struct Tile(tileset::Tile);
+#[derive(FromPyObject)]
+#[repr(transparent)]
+pub struct PyTile(tileset::Tile);
 
 #[pymethods]
-impl Tile {
+impl PyTile {
     #[new]
     fn new(
         edges: Vec<Ident>,
@@ -97,7 +99,7 @@ impl Tile {
             color,
             shape: Some(TileShape::Single),
         };
-        Tile(tile)
+        Self(tile)
     }
 
     #[getter]
@@ -139,16 +141,13 @@ impl Tile {
     fn set_edges(&mut self, edges: Vec<Ident>) {
         self.0.edges = edges.into_iter().map(|e| e.into()).collect();
     }
-
-    fn __repr__(&self) -> String {
-        format!("{:?}", self.0)
-    }
 }
 
 #[pyclass]
-pub struct TileSet(Arc<RwLock<tileset::TileSet>>);
+#[repr(transparent)]
+pub struct PyTileSet(Arc<RwLock<tileset::TileSet>>);
 
-impl TileSet {
+impl PyTileSet {
     fn read(&self) -> PyResult<std::sync::RwLockReadGuard<'_, tileset::TileSet>> {
         let x = self
             .0
@@ -167,12 +166,31 @@ impl TileSet {
 }
 
 #[pymethods]
-impl TileSet {
+impl PyTileSet {
+    #[new]
+    fn new(tiles: Vec<PyTile>, 
+        bonds: Vec<(Ident, f64)>, 
+        glues: Vec<(Ident, Ident, f64)>, 
+        options: PyObject) -> PyResult<PyTileSet> {
+            let tileset = tileset::TileSet {
+                tiles: tiles.iter().map(|x| x.0.clone()).collect(),
+                bonds: bonds.iter().map(|x| {
+                    tileset::Bond {name: x.0.clone().into(), strength: x.1}
+                }).collect(),
+                glues: glues.iter().map(|x| {
+                    (x.0.clone().into(), x.1.clone().into(), x.2)
+                }).collect(),
+                options: tileset::Args::default(),
+                cover_strands: None
+            };
+            Ok(Self(Arc::new(RwLock::new(tileset))))
+    }
+
     #[classmethod]
     fn from_json(_cls: &PyType, data: &str) -> PyResult<Self> {
         let tileset = tileset::TileSet::from_json(data);
         match tileset {
-            Ok(tileset) => Ok(TileSet(Arc::new(RwLock::new(tileset)))),
+            Ok(tileset) => Ok(PyTileSet(Arc::new(RwLock::new(tileset)))),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 err.to_string(),
             )),
@@ -189,7 +207,7 @@ impl TileSet {
 
         let tileset = tileset::TileSet::from_json(&json);
         match tileset {
-            Ok(tileset) => Ok(TileSet(Arc::new(RwLock::new(tileset)))),
+            Ok(tileset) => Ok(PyTileSet(Arc::new(RwLock::new(tileset)))),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 err.to_string(),
             )),
@@ -200,7 +218,7 @@ impl TileSet {
     fn from_file(_cls: &PyType, path: &str) -> PyResult<Self> {
         let ts = tileset::TileSet::from_file(path)
             .map_err(|err| PyErr::new::<PyValueError, _>(err.to_string()))?;
-        Ok(TileSet(Arc::new(RwLock::new(ts))))
+        Ok(PyTileSet(Arc::new(RwLock::new(ts))))
     }
 
     fn __repr__(&self) -> String {
@@ -228,7 +246,7 @@ impl TileSet {
     }
 
     #[getter]
-    fn get_tiles(&self) -> PyResult<Vec<Tile>> {
+    fn get_tiles(&self) -> PyResult<Vec<PyTile>> {
         Ok(self
             .read()?
             .tiles

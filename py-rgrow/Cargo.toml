@@ -25,7 +25,7 @@ serde = "^1"
 bincode = "^1"
 
 [dependencies.rgrow]
-path = ".."
+path = "../rgrow"
 features = ["python"]
 
 [dependencies.pyo3]
