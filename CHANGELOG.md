@@ -2,6 +2,7 @@
 
 - Initial support for mid-simulation system parameter changes.
 - RateStore multi-update optimizations.
+- Combined the pyrgrow and rgrow repositories, to ease development and ensure version matching.
 
 # 0.7.1
 

@@ -25,10 +25,7 @@ serde = "^1"
 bincode = "^1"
 
 [dependencies.rgrow]
-git = "https://github.com/evansfmm/rgrow.git"
-branch = "paramsetting"
-version = "^0.7.1"
-#path = "../rgrow"
+path = ".."
 features = ["python"]
 
 [dependencies.pyo3]

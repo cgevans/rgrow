@@ -32,7 +32,7 @@ debug = 1
 [lib]
 name = "rgrow"
 path = "src/lib.rs"
-crate_type = ["rlib", "cdylib"]
+#crate_type = ["rlib", "cdylib"]
 
 [[bin]]
 name = "rgrow"

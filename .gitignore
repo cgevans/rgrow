@@ -14,3 +14,11 @@ sham.yaml
 sierpinski.stxg
 test
 test.xgrowtest
+py-rgrow/target
+py-rgrow/Cargo.lock
+py-rgrow/playground/*
+py-rgrow/venv-pyrgrow/*
+py-rgrow/.ipynb_checkpoints/*
+py-rgrow/*.pyc
+py-rgrow/_build/*
+py-rgrow/rgrow/*.so

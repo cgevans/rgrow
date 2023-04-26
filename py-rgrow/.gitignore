@@ -1,8 +1,0 @@
-/target
-Cargo.lock
-rgrow-project
-playground/*
-venv-pyrgrow/*
-.ipynb_checkpoints/*
-*.pyc
-_build/*
