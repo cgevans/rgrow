@@ -1,5 +1,8 @@
 import numpy as np
 
+class EvolveOutcome(object):
+    ...
+
 class FFSLevel(object):
     @property
     def configs(self) -> list[np.ndarray]:
@@ -23,7 +26,7 @@ class Simulation(object):
         size_max: float | None = None,
         for_wall_time: float | None = None,
         require_strong_bound: bool = True
-    ) -> None: 
+    ) -> EvolveOutcome: 
         """Evolve a particular state, with index `state_index`,
         subject to some bounds.  Runs state 0 by default.
 
@@ -45,7 +48,7 @@ class Simulation(object):
         size_max: float | None = None,
         for_wall_time: float | None = None,
         require_strong_bound: bool = True
-    ):
+    ) -> list[EvolveOutcome]:
         """Evolve *all* states, stopping each as they reach the
         boundary conditions.  Runs multithreaded using available
         cores.  Runs state 0 by default.

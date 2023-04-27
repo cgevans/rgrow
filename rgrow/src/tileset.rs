@@ -17,7 +17,9 @@ use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use simulation::Simulation;
-use std::collections::BTreeMap;
+use core::fmt;
+use std::any::Any;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter};
 use std::io::{self, Read};
 use std::path::Path;
@@ -60,12 +62,33 @@ pub enum ParserError {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
+
+#[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(untagged)]
-pub enum GlueIdent {
+#[cfg_attr(feature = "python", derive(FromPyObject))]
+pub enum Ident {
+    Num(usize),
     Name(String),
-    Num(base::Glue),
 }
+
+#[cfg(feature = "python")]
+impl IntoPy<PyObject> for Ident {
+    fn into_py(self, py: Python) -> PyObject {
+        match self {
+            Ident::Num(num) => num.into_py(py),
+            Ident::Name(name) => name.into_py(py),
+        }
+    }
+}
+
+pub type GlueIdent = Ident;
+
+// #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
+// #[serde(untagged)]
+// pub enum GlueIdent {
+//     Name(String),
+//     Num(base::Glue),
+// }
 
 impl From<u32> for GlueIdent {
     fn from(value: u32) -> Self {
@@ -73,18 +96,20 @@ impl From<u32> for GlueIdent {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
-#[serde(untagged)]
-pub enum TileIdent {
-    Name(String),
-    Num(base::Tile),
-}
+pub type TileIdent = Ident;
 
-impl From<u32> for TileIdent {
-    fn from(value: u32) -> Self {
-        Self::Num(value as base::Tile)
-    }
-}
+// #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
+// #[serde(untagged)]
+// pub enum TileIdent {
+//     Name(String),
+//     Num(base::Tile),
+// }
+
+// impl From<u32> for TileIdent {
+//     fn from(value: u32) -> Self {
+//         Self::Num(value as base::Tile)
+//     }
+// }
 
 impl Display for GlueIdent {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -104,14 +129,23 @@ impl core::fmt::Debug for GlueIdent {
     }
 }
 
-impl core::fmt::Debug for TileIdent {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Name(s) => write!(f, "\"{s}\""),
-            Self::Num(n) => write!(f, "{n}"),
-        }
-    }
-}
+// impl core::fmt::Debug for TileIdent {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             Self::Name(s) => write!(f, "\"{s}\""),
+//             Self::Num(n) => write!(f, "{n}"),
+//         }
+//     }
+// }
+
+// impl Display for TileIdent {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             Self::Name(s) => write!(f, "\"{s}\""),
+//             Self::Num(n) => write!(f, "{n}"),
+//         }
+//     }
+// }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
@@ -119,6 +153,39 @@ pub enum ParsedSeed {
     None(),
     Single(CanvasLength, CanvasLength, TileIdent),
     Multi(Vec<(CanvasLength, CanvasLength, TileIdent)>),
+}
+
+
+impl Display for ParsedSeed {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None() => write!(f, "None"),
+            Self::Single(x, y, tile) => write!(f, "Single({},{},{})", x, y, tile),
+            Self::Multi(v) => {
+                write!(f, "Multi(")?;
+                for (x, y, tile) in v {
+                    write!(f, "({},{},{})", x, y, tile)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+impl TryFrom<&Box<dyn Any>> for ParsedSeed {
+    type Error = RgrowError;
+
+    fn try_from(value: &Box<dyn Any>) -> Result<Self, Self::Error> {
+        if let Some((x, y, tile)) = value.downcast_ref::<(CanvasLength, CanvasLength, TileIdent)>()
+        {
+            Ok(Self::Single(*x, *y, tile.clone()))
+        } else if let Some(v) = value.downcast_ref::<Vec<(CanvasLength, CanvasLength, TileIdent)>>()
+        {
+            Ok(Self::Multi(v.clone()))
+        } else {
+            panic!("Invalid seed type")
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -160,6 +227,30 @@ pub struct Tile {
     /// The tile shape: whether the tile is a single, horizontal duple, or
     /// vertical duple.
     pub shape: Option<TileShape>,
+}
+
+impl Display for Tile {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Tile {{ ")?;
+        if let Some(name) = &self.name {
+            write!(f, "name: \"{}\", ", name)?;
+        }
+        write!(f, "edges: [")?;
+        for edge in &self.edges {
+            write!(f, "{}, ", edge)?;
+        }
+        write!(f, "], ")?;
+        if let Some(stoic) = self.stoic {
+            write!(f, "stoic: {}, ", stoic)?;
+        }
+        if let Some(color) = &self.color {
+            write!(f, "color: {}, ", color)?;
+        }
+        if let Some(shape) = &self.shape {
+            write!(f, "shape: {}, ", shape)?;
+        }
+        write!(f, "}}")
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
@@ -276,11 +367,39 @@ fn gmc_default() -> f64 {
     16.0
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(untagged)]
 pub enum Size {
     Single(CanvasLength),
     Pair((CanvasLength, CanvasLength)),
+}
+
+impl From<CanvasLength> for Size {
+    fn from(cl: CanvasLength) -> Self {
+        Size::Single(cl)
+    }
+}
+
+impl From<(CanvasLength, CanvasLength)> for Size {
+    fn from((cl1, cl2): (CanvasLength, CanvasLength)) -> Self {
+        Size::Pair((cl1, cl2))
+    }
+}
+
+impl From<&Box<dyn Any>> for Size {
+    fn from(b: &Box<dyn Any>) -> Self {
+        if let Some(cl) = b.downcast_ref::<CanvasLength>() {
+            Size::Single(*cl)
+        } else if let Some((cl1, cl2)) = b.downcast_ref::<(CanvasLength, CanvasLength)>() {
+            Size::Pair((*cl1, *cl2)) 
+        } else if let Some(cl) = b.downcast_ref::<u64>() {
+            Size::Single(*cl as usize)
+        } else if let Some((cl1, cl2)) = b.downcast_ref::<(u64, u64)>() {
+            Size::Pair((*cl1 as usize, *cl2 as usize)) 
+        }  else {
+            panic!("Size::from::<Box<dyn Any>>: unknown type")
+        }
+    }
 }
 
 fn size_default() -> Size {
@@ -303,7 +422,6 @@ fn tilepairlist_default() -> Vec<(TileIdent, TileIdent)> {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-
 pub enum CanvasType {
     #[serde(alias = "square")]
     Square,
@@ -311,6 +429,17 @@ pub enum CanvasType {
     Periodic,
     #[serde(alias = "tube")]
     Tube,
+}
+
+impl From<&str> for CanvasType {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "square" => CanvasType::Square,
+            "periodic" => CanvasType::Periodic,
+            "tube" => CanvasType::Tube,
+            _ => panic!("Unknown canvas type {}", s),
+        }
+    }
 }
 
 fn canvas_type_default() -> CanvasType {
@@ -325,6 +454,17 @@ pub enum Model {
     ATAM,
     #[serde(alias = "OldkTAM", alias = "oldktam")]
     OldKTAM,
+}
+
+impl From<&str> for Model {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "kTAM" | "ktam" => Model::KTAM,
+            "aTAM" | "atam" => Model::ATAM,
+            "OldkTAM" | "oldktam" => Model::OldKTAM,
+            _ => panic!("Unknown model {}", s),
+        }
+    }
 }
 
 fn threshold_default() -> f64 {
@@ -368,6 +508,40 @@ pub struct Args {
     pub model: Model,
 }
 
+impl Display for Size {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Size::Single(cl) => write!(f, "{}", cl),
+            Size::Pair((cl1, cl2)) => write!(f, "({}, {})", cl1, cl2),
+        }
+    }
+}
+
+
+impl Display for Args {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Gse: {}", self.gse)?;
+        writeln!(f, "Gmc: {}", self.gmc)?;
+        writeln!(f, "alpha: {}", self.alpha)?;
+        writeln!(f, "seed: {}", self.seed)?;
+        writeln!(f, "size: {}", self.size)?;
+        writeln!(f, "tau: {:?}", self.tau)?;
+        writeln!(f, "smax: {:?}", self.smax)?;
+        writeln!(f, "update_rate: {}", self.update_rate)?;
+        writeln!(f, "kf: {:?}", self.kf)?;
+        writeln!(f, "fission: {:?}", self.fission)?;
+        writeln!(f, "block: {:?}", self.block)?;
+        writeln!(f, "chunk_handling: {:?}", self.chunk_handling)?;
+        writeln!(f, "chunk_size: {:?}", self.chunk_size)?;
+        writeln!(f, "canvas_type: {:?}", self.canvas_type)?;
+        writeln!(f, "hdoubletiles: {:?}", self.hdoubletiles)?;
+        writeln!(f, "vdoubletiles: {:?}", self.vdoubletiles)?;
+        writeln!(f, "model: {:?}", self.model)?;
+        writeln!(f, "threshold: {:?}", self.threshold)?;
+        Ok(())
+    }
+}
+
 impl Default for Args {
     fn default() -> Self {
         Args {
@@ -389,6 +563,31 @@ impl Default for Args {
             vdoubletiles: Vec::new(),
             model: model_default(),
             threshold: threshold_default(),
+        }
+    }
+}
+
+impl From<HashMap<String, Box<dyn Any>>> for Args {
+    fn from(value: HashMap<String, Box<dyn Any>>) -> Self {
+        Args {
+            gse: value.get("gse").map_or_else(|| gse_default(), |x| *(x.downcast_ref().unwrap())),
+            gmc: value.get("gmc").map_or_else(|| gmc_default(), |x| *x.downcast_ref::<f64>().unwrap()),
+            alpha: value.get("alpha").map_or_else(|| alpha_default(), |x| *x.downcast_ref::<f64>().unwrap()),
+            seed: value.get("seed").map_or_else(|| seed_default(), |x| x.try_into().unwrap()),
+            size: value.get("size").map_or_else(|| size_default(), |x| x.try_into().unwrap()),
+            tau: value.get("tau").map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
+            smax: value.get("smax").map_or_else(|| None, |x| *(x.downcast_ref().unwrap())),
+            update_rate: value.get("update_rate").map_or_else(|| update_rate_default(), |x| *(x.downcast_ref().unwrap())),
+            kf: value.get("kf").map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
+            fission: value.get("chunk_size").map_or_else(|| fission_default(), |x| (x.downcast_ref::<String>().unwrap().as_str()).into()),
+            block: value.get("block").map_or_else(|| block_default(), |x| *(x.downcast_ref().unwrap())),
+            chunk_handling: value.get("chunk_handling").map_or_else(|| None, |x| Some((x.downcast_ref::<String>().unwrap().as_str()).into())),
+            chunk_size: value.get("chunk_size").map_or_else(|| None, |x| Some(x.downcast_ref::<String>().unwrap().as_str().into())),
+            canvas_type: value.get("canvas_type").map_or_else(|| canvas_type_default(), |x: &Box<dyn Any>| x.downcast_ref::<String>().unwrap().as_str().into()),
+            hdoubletiles: Vec::new(),
+            vdoubletiles: Vec::new(),
+            model: value.get("model").map_or_else(|| model_default(), |x: &Box<dyn Any>| x.downcast_ref::<String>().unwrap().as_str().into()),
+            threshold: value.get("threshold").map_or_else(|| threshold_default(), |x| *(x.downcast_ref().unwrap())),
         }
     }
 }
@@ -810,7 +1009,7 @@ impl ProcessedTileSet {
             TileIdent::Name(x) => {  // FIXME: fail gracefully
                 self.tile_names.iter().position(|y| *y == *x).unwrap() as base::Tile
             }
-            TileIdent::Num(x) => *x,
+            TileIdent::Num(x) => (*x).try_into().unwrap(),
         }
     }
 

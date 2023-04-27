@@ -1,4 +1,8 @@
 use std::any::Any;
+use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
@@ -18,71 +22,26 @@ use rgrow::system::EvolveBounds;
 use rgrow::system::EvolveOutcome;
 use rgrow::tileset;
 use rgrow::tileset::TileShape;
+use rgrow::tileset::Ident;
+
+use indent;
+
 
 #[derive(FromPyObject, Clone)]
-enum Ident {
-    Num(usize),
-    Name(String),
-}
+struct Bond(Ident, f64);
 
-impl IntoPy<PyObject> for Ident {
-    fn into_py(self, py: Python) -> PyObject {
-        match self {
-            Ident::Num(num) => num.into_py(py),
-            Ident::Name(name) => name.into_py(py),
-        }
-    }
-}
-
-impl From<Ident> for tileset::GlueIdent {
-    fn from(ident: Ident) -> Self {
-        match ident {
-            Ident::Num(num) => tileset::GlueIdent::Num(num),
-            Ident::Name(name) => tileset::GlueIdent::Name(name),
-        }
-    }
-}
-
-impl From<Ident> for tileset::TileIdent {
-    fn from(ident: Ident) -> Self {
-        match ident {
-            Ident::Num(num) => tileset::TileIdent::Num(num as u32),
-            Ident::Name(name) => tileset::TileIdent::Name(name),
-        }
-    }
-}
-
-impl From<tileset::GlueIdent> for Ident {
-    fn from(ident: tileset::GlueIdent) -> Self {
-        match ident {
-            tileset::GlueIdent::Num(num) => Ident::Num(num),
-            tileset::GlueIdent::Name(name) => Ident::Name(name),
-        }
-    }
-}
-
-impl From<tileset::TileIdent> for Ident {
-    fn from(ident: tileset::TileIdent) -> Self {
-        match ident {
-            tileset::TileIdent::Num(num) => Ident::Num(num as usize),
-            tileset::TileIdent::Name(name) => Ident::Name(name),
-        }
-    }
-}
-
-impl From<tileset::Tile> for PyTile {
+impl From<tileset::Tile> for Tile {
     fn from(tile: tileset::Tile) -> Self {
-        PyTile(tile)
+        Tile(tile)
     }
 }
 
 #[pyclass]
-#[derive(FromPyObject)]
 #[repr(transparent)]
-pub struct PyTile(tileset::Tile);
+pub struct Tile(tileset::Tile);
 
 #[pymethods]
-impl PyTile {
+impl Tile {
     #[new]
     fn new(
         edges: Vec<Ident>,
@@ -133,6 +92,11 @@ impl PyTile {
     }
 
     #[getter]
+    /// The glues on the edges of the tile, in clockwise order starting from the North,
+    /// or the North-facing edge furthest to the West if not a single tile.
+    ///
+    /// Glues should be either strings, integers (starting at 1), or None or 0 to
+    /// refer to a null glue.
     fn get_edges(&self) -> Vec<Ident> {
         self.0.edges.iter().map(|e| e.clone().into()).collect()
     }
@@ -141,13 +105,30 @@ impl PyTile {
     fn set_edges(&mut self, edges: Vec<Ident>) {
         self.0.edges = edges.into_iter().map(|e| e.into()).collect();
     }
+
+    fn __repr__(&self) -> String {
+        self.0.to_string()
+    }
 }
 
+/// A class representing a tile set.
+/// 
+/// Parameters
+/// ----------
+/// 
+/// tiles : list[Tile]
+///    The tiles in the tile set.
+/// bonds : list[tuple[str | int, float]]
+///   The bonds in the tile set. Each bond is a tuple of the name of the glue and the strength of the bond.
+/// glues : list[tuple[str | int, str | int, float]]
+///   Specific glue-glue interactions.
+/// options : dict
+///   Options for the tile set.
 #[pyclass]
 #[repr(transparent)]
-pub struct PyTileSet(Arc<RwLock<tileset::TileSet>>);
+pub struct TileSet(Arc<RwLock<tileset::TileSet>>);
 
-impl PyTileSet {
+impl TileSet {
     fn read(&self) -> PyResult<std::sync::RwLockReadGuard<'_, tileset::TileSet>> {
         let x = self
             .0
@@ -166,65 +147,77 @@ impl PyTileSet {
 }
 
 #[pymethods]
-impl PyTileSet {
+impl TileSet {
     #[new]
-    fn new(tiles: Vec<PyTile>, 
-        bonds: Vec<(Ident, f64)>, 
-        glues: Vec<(Ident, Ident, f64)>, 
-        options: PyObject) -> PyResult<PyTileSet> {
-            let tileset = tileset::TileSet {
-                tiles: tiles.iter().map(|x| x.0.clone()).collect(),
-                bonds: bonds.iter().map(|x| {
-                    tileset::Bond {name: x.0.clone().into(), strength: x.1}
-                }).collect(),
-                glues: glues.iter().map(|x| {
-                    (x.0.clone().into(), x.1.clone().into(), x.2)
-                }).collect(),
-                options: tileset::Args::default(),
-                cover_strands: None
-            };
-            Ok(Self(Arc::new(RwLock::new(tileset))))
+    #[pyo3(signature = (tiles, bonds=Vec::default(), glues=Vec::default(), options=HashMap::default()))]
+    fn new(
+        tiles: Vec<&PyCell<Tile>>,
+        bonds: Vec<(Ident, f64)>,
+        glues: Vec<(Ident, Ident, f64)>,
+        options: HashMap<String, RustAny>,
+    ) -> PyResult<TileSet> {
+        let opts_any: HashMap<String, Box<dyn Any>> = options
+            .into_iter()
+            .map(|(k, v)| (k, v.0))
+            .collect();
+        let args = opts_any.into();
+        let tileset = tileset::TileSet {
+            tiles: tiles.into_iter().map(|x| x.borrow().0.clone()).collect(),
+            bonds: bonds
+                .iter()
+                .map(|x| tileset::Bond {
+                    name: x.0.clone().into(),
+                    strength: x.1,
+                })
+                .collect(),
+            glues: glues
+                .iter()
+                .map(|x| (x.0.clone().into(), x.1.clone().into(), x.2))
+                .collect(),
+            options: args,
+            cover_strands: None,
+        };
+        Ok(Self(Arc::new(RwLock::new(tileset))))
     }
 
+    /// Parses a JSON string into a TileSet.
     #[classmethod]
     fn from_json(_cls: &PyType, data: &str) -> PyResult<Self> {
         let tileset = tileset::TileSet::from_json(data);
         match tileset {
-            Ok(tileset) => Ok(PyTileSet(Arc::new(RwLock::new(tileset)))),
+            Ok(tileset) => Ok(TileSet(Arc::new(RwLock::new(tileset)))),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 err.to_string(),
             )),
         }
     }
 
-    /// Creates a TileSet from a dict by exporting to json, then parsing the json.
-    #[classmethod]
-    fn from_dict(_cls: &PyType, data: PyObject) -> PyResult<Self> {
-        let json: String = Python::with_gil(|py| {
-            let json = PyModule::import(py, "json")?;
-            json.call_method1("dumps", (data,))?.extract::<String>()
-        })?;
+    // /// Creates a TileSet from a dict by exporting to json, then parsing the json.
+    // #[classmethod]
+    // fn from_dict(_cls: &PyType, data: PyObject) -> PyResult<Self> {
+    //     let json: String = Python::with_gil(|py| {
+    //         let json = PyModule::import(py, "json")?;
+    //         json.call_method1("dumps", (data,))?.extract::<String>()
+    //     })?;
 
-        let tileset = tileset::TileSet::from_json(&json);
-        match tileset {
-            Ok(tileset) => Ok(PyTileSet(Arc::new(RwLock::new(tileset)))),
-            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                err.to_string(),
-            )),
-        }
-    }
+    //     let tileset = tileset::TileSet::from_json(&json);
+    //     match tileset {
+    //         Ok(tileset) => Ok(TileSet(Arc::new(RwLock::new(tileset)))),
+    //         Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+    //             err.to_string(),
+    //         )),
+    //     }
+    // }
 
+    /// Parses a file (JSON, YAML, etc) into a TileSet
     #[classmethod]
     fn from_file(_cls: &PyType, path: &str) -> PyResult<Self> {
         let ts = tileset::TileSet::from_file(path)
             .map_err(|err| PyErr::new::<PyValueError, _>(err.to_string()))?;
-        Ok(PyTileSet(Arc::new(RwLock::new(ts))))
+        Ok(TileSet(Arc::new(RwLock::new(ts))))
     }
 
-    fn __repr__(&self) -> String {
-        format!("{:?}", self.0)
-    }
-
+    /// Creates a :any:`Simulation` from the TileSet.
     fn to_simulation(&self) -> PyResult<Simulation> {
         let sim = self.write()?.into_simulation();
         match sim {
@@ -235,6 +228,8 @@ impl PyTileSet {
         }
     }
 
+    /// Creates a simulation, and runs it in a UI.  Returns the :any:`Simulation` when
+    /// finished.
     #[cfg(feature = "ui")]
     fn run_window(&self) -> PyResult<Simulation> {
         let f = self.read()?;
@@ -246,7 +241,7 @@ impl PyTileSet {
     }
 
     #[getter]
-    fn get_tiles(&self) -> PyResult<Vec<PyTile>> {
+    fn get_tiles(&self) -> PyResult<Vec<Tile>> {
         Ok(self
             .read()?
             .tiles
@@ -255,8 +250,9 @@ impl PyTileSet {
             .collect())
     }
 
+    /// Runs FFS.
     #[allow(clippy::too_many_arguments)]
-    #[args(config = "FFSRunConfig::default()", kwargs = "**")]
+    #[pyo3(signature = (config = FFSRunConfig::default(), **kwargs))]
     fn run_ffs(
         &self,
         config: FFSRunConfig,
@@ -279,8 +275,47 @@ impl PyTileSet {
             )),
         }
     }
+
+    fn __repr__(&self) -> String {
+        self.to_string()
+    }
 }
 
+impl Display for TileSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let ts = self.read().unwrap();
+        write!(f, "TileSet(\n")?;
+        write!(f, "    tiles=[\n")?;
+        for tile in &ts.tiles {
+            write!(f, "        {},\n", tile)?;
+        }
+        write!(f, "    ],\n")?;
+        if !&ts.bonds.is_empty() {
+            write!(f, "    bonds=[\n")?;
+            for bond in &ts.bonds {
+                write!(f, "        ({}, {}),\n", bond.name, bond.strength)?;
+            }
+            write!(f, "    ],\n")?;
+        };
+        if !&ts.glues.is_empty() {
+            write!(f, "    glues=[\n")?;
+            for (a, b, s) in &ts.glues {
+                write!(f, "        ({}, {}, {}),\n", a, b, s)?;
+            }
+            write!(f, "    ],\n")?;
+        };
+        write!(f, "    options=[\n")?;
+        write!(f, "{}", indent::indent_all_by(8, ts.options.to_string()))?;
+        write!(f, "    ]\n)\n")?;
+        Ok(())
+    }
+}
+
+
+/// A combination of a System, and a list of States, which can be added to.
+/// 
+/// This is not generally created directly, but is instead usually created
+/// from a :any:`TileSet`, using :any:`TileSet.to_simulation()`.
 #[pyclass]
 pub struct Simulation(RwLock<Box<dyn simulation::Simulation>>);
 
@@ -342,10 +377,54 @@ impl Simulation {
 
 #[pymethods]
 impl Simulation {
-    /// Evolves an individual state within bounds.
+    /// Evolve a particular state, with index `state_index`,
+    /// subject to some bounds.  Runs state 0 by default.
+    ///
+    /// By default, this requires a strong bound (the simulation
+    /// will eventually end, eg, not a size or other potentially
+    /// unreachable bound). Releases the GIL during the simulation.    
+    /// 
+    /// Parameters
+    /// ----------
+    /// state_index : int, optional
+    ///    The index of the state to evolve.  Defaults to 0, and creates sufficient states
+    ///    if they do not already exist.
+    /// for_events : int, optional
+    ///    Evolve until this many events have occurred.  Defaults to no limit. (Strong bound)
+    /// total_events : int, optional
+    ///    Evolve until this many events have occurred in total.  Defaults to no limit. (Strong bound)
+    /// for_time : float, optional
+    ///    Evolve until this much (physical) time has passed.  Defaults to no limit. (Strong bound)
+    /// total_time : float, optional
+    ///    Evolve until this much (physical) time has passed since the state creation.  
+    ///    Defaults to no limit. (Strong bound)
+    /// size_min : int, optional
+    ///    Evolve until the system has this many, or fewer, tiles. Defaults to no limit. (Weak bound)
+    /// size_max : int, optional
+    ///    Evolve until the system has this many, or more, tiles. Defaults to no limit. (Weak bound)
+    /// for_wall_time : float, optional
+    ///    Evolve until this much (wall) time has passed.  Defaults to no limit. (Strong bound)
+    /// require_strong_bound : bool, optional
+    ///    If True (default), a ValueError will be raised unless at least one strong bound has been
+    ///    set, ensuring that the simulation will eventually end.  If False, ensure only that some
+    ///    weak bound has been set, which may result in an infinite simulation.
+    /// 
+    /// Returns
+    /// -------
+    /// 
+    /// EvolveOutcome
+    ///   The stopping condition that caused the simulation to end.
     #[allow(clippy::too_many_arguments)]
     #[pyo3(
-        text_signature = "($self, state_index, for_events, for_time, size_min, size_max, for_wall_time)"
+        signature = (state_index=None,
+                    for_events=None,
+                    total_events=None,
+                    for_time=None,
+                    total_time=None,
+                    size_min=None,
+                    size_max=None,
+                    for_wall_time=None,
+                    require_strong_bound=true)
     )]
     fn evolve(
         &mut self,
@@ -357,7 +436,7 @@ impl Simulation {
         size_min: Option<u32>,
         size_max: Option<u32>,
         for_wall_time: Option<f64>,
-        require_strong_bound: Option<bool>,
+        require_strong_bound: bool,
         py: Python<'_>,
     ) -> PyResult<EvolveOutcome> {
         let state_index = self.ensure_state(state_index)?;
@@ -371,8 +450,6 @@ impl Simulation {
             size_max,
             for_wall_time: for_wall_time.map(Duration::from_secs_f64),
         };
-
-        let require_strong_bound = require_strong_bound.unwrap_or(false);
 
         if require_strong_bound & !bounds.is_strongly_bounded() {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -394,7 +471,56 @@ impl Simulation {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(
+        signature = (for_events=None,
+                    total_events=None,
+                    for_time=None,
+                    total_time=None,
+                    size_min=None,
+                    size_max=None,
+                    for_wall_time=None,
+                    require_strong_bound=true)
+    )]
     #[cfg(feature = "use_rayon")]
+    /// Evolve *all* states, stopping each as they reach the
+    /// boundary conditions.  Runs multithreaded using available
+    /// cores. 
+    /// 
+    /// By default, this requires a strong bound (the simulation
+    /// will eventually end, eg, not a size or other potentially
+    /// unreachable bound). Releases the GIL during the simulation.
+    /// Bounds are applied for each state individually.    
+    /// 
+    /// Parameters
+    /// ----------
+    /// state_index : int, optional
+    ///    The index of the state to evolve.  Defaults to 0, and creates sufficient states
+    ///    if they do not already exist.
+    /// for_events : int, optional
+    ///    Evolve until this many events have occurred.  Defaults to no limit. (Strong bound)
+    /// total_events : int, optional
+    ///    Evolve until this many events have occurred in total.  Defaults to no limit. (Strong bound)
+    /// for_time : float, optional
+    ///    Evolve until this much (physical) time has passed.  Defaults to no limit. (Strong bound)
+    /// total_time : float, optional
+    ///    Evolve until this much (physical) time has passed since the state creation.  
+    ///    Defaults to no limit. (Strong bound)
+    /// size_min : int, optional
+    ///    Evolve until the system has this many, or fewer, tiles. Defaults to no limit. (Weak bound)
+    /// size_max : int, optional
+    ///    Evolve until the system has this many, or more, tiles. Defaults to no limit. (Weak bound)
+    /// for_wall_time : float, optional
+    ///    Evolve until this much (wall) time has passed.  Defaults to no limit. (Strong bound)
+    /// require_strong_bound : bool, optional
+    ///    If True (default), a ValueError will be raised unless at least one strong bound has been
+    ///    set, ensuring that the simulation will eventually end.  If False, ensure only that some
+    ///    weak bound has been set, which may result in an infinite simulation.
+    /// 
+    /// Returns
+    /// -------
+    /// 
+    /// list[EvolveOutcome]
+    ///   The stopping condition that caused each simulation to end.
     fn evolve_all(
         &mut self,
         for_events: Option<u64>,
@@ -439,7 +565,17 @@ impl Simulation {
     }
 
     /// Returns the current canvas for state_index (default 0), as an array copy.
-    #[pyo3(text_signature = "($self, state_index)")]
+    /// 
+    /// Parameters
+    /// ----------
+    /// state_index : int, optional
+    ///   The index of the state to return.  Defaults to 0.
+    /// 
+    /// Returns
+    /// -------
+    /// 
+    /// numpy.ndarray[int]
+    ///  The current canvas for the state, copied.
     fn canvas_copy<'py>(
         &self,
         state_index: Option<usize>,
@@ -453,7 +589,25 @@ impl Simulation {
             .to_pyarray(py))
     }
 
-    #[pyo3(text_signature = "($self, state_index)")]
+    /// Returns the current canvas for state_index (default 0), as a
+    /// *direct* view of the state array.  This array will update as
+    /// the simulation evolves.  It should not be modified, as modifications
+    /// will not result in rate and other necessary updates.
+    /// 
+    /// Using this may cause memory safety problems: it is 'unsafe'-labelled in Rust.
+    /// Unless the state is deleted, the array should remain valid so long as the
+    /// underlying Simulation has not been garbage-collected.
+    /// 
+    /// Parameters
+    /// ----------
+    /// state_index : int, optional
+    ///   The index of the state to return.  Defaults to 0.
+    /// 
+    /// Returns
+    /// -------
+    /// 
+    /// numpy.ndarray[int]
+    ///  The current canvas for the state.
     fn canvas_view<'py>(
         this: &'py PyCell<Self>,
         state_index: Option<usize>,
@@ -468,30 +622,32 @@ impl Simulation {
         unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
     }
 
+    /// Returns the number of tiles in the state.
     fn state_ntiles(&self, state_index: Option<usize>) -> PyResult<u32> {
         let state_index = self.check_state(state_index)?;
         Ok(self.read()?.state_ref(state_index).ntiles())
     }
 
+    /// Returns the amount of time simulated (in seconds) for the state.
     fn state_time(&self, state_index: Option<usize>) -> PyResult<f64> {
         let state_index = self.check_state(state_index)?;
         Ok(self.read()?.state_ref(state_index).time())
     }
 
+    /// Returns the number of events simulated for the state.
     fn state_events(&self, state_index: Option<usize>) -> PyResult<u64> {
         let state_index = self.check_state(state_index)?;
         Ok(self.read()?.state_ref(state_index).total_events())
     }
 
     /// Add a new state to the simulation.
-    #[pyo3(text_signature = "($self, shape)")]
     fn add_state(&mut self) -> PyResult<usize> {
         self.write()?
             .add_state()
             .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
     }
 
-    #[pyo3(text_signature = "($self, n, shape")]
+    /// Adds n new states to the simulation.
     fn add_n_states(&mut self, n: usize) -> PyResult<Vec<usize>> {
         self.write()?
             .add_n_states(n)
@@ -513,46 +669,65 @@ impl Simulation {
         Ok(self.read()?.tile_names())
     }
 
-    fn set_system_param(&self, name: &str, value: &PyAny) {
-        let val = convert_pyany_to_any(value);
-        self.write().unwrap().set_system_param(name, val).unwrap();
+    fn set_system_param(&self, name: &str, value: RustAny) {
+        self.write()
+            .unwrap()
+            .set_system_param(name, value.0)
+            .unwrap();
     }
 
     fn get_system_param(&self, name: &str, py: Python) -> PyResult<Py<PyAny>> {
-        let val = self.read().unwrap().get_system_param(name).unwrap();
-        convert_any_to_pyany(&val, py)
+        self.read()
+            .unwrap()
+            .get_system_param(name)
+            .map(|x| RustAny(x).into_py(py))
+            .map_err(|x| PyValueError::new_err(x.to_string()))
     }
 }
 
-fn convert_pyany_to_any(value: &PyAny) -> Box<dyn Any> {
-    if let Ok(val) = value.extract::<f64>() {
-        Box::new(val)
-    } else if let Ok(val) = value.extract::<u64>() {
-        Box::new(val)
-    } else if let Ok(val) = value.extract::<i64>() {
-        Box::new(val)
-    } else if let Ok(val) = value.extract::<bool>() {
-        Box::new(val)
-    } else if let Ok(val) = value.extract::<String>() {
-        Box::new(val)
-    } else {
-        panic!("Cannot convert PyAny to Any");
+struct RustAny(Box<dyn Any>);
+
+impl FromPyObject<'_> for RustAny {
+    fn extract(obj: &PyAny) -> PyResult<Self> {
+        if let Ok(val) = obj.extract::<u64>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<f64>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<i64>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<bool>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<String>() {
+            Ok(RustAny(Box::new(val))) 
+        } else if let Ok(val) = obj.extract::<(u64, u64)>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<(usize, usize, Ident)>() {
+                Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<Vec<(usize, usize, Ident)>>() {
+            Ok(RustAny(Box::new(val)))
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                format!("Cannot convert value {:?}", obj),
+            ))
+        }
     }
 }
 
-fn convert_any_to_pyany(value: &Box<dyn Any>, py: Python) -> PyResult<Py<PyAny>> {
-    if let Some(val) = value.downcast_ref::<f64>() {
-        Ok(val.into_py(py))
-    } else if let Some(val) = value.downcast_ref::<u64>() {
-        Ok(val.into_py(py))
-    } else if let Some(val) = value.downcast_ref::<i64>() {
-        Ok(val.into_py(py))
-    } else if let Some(val) = value.downcast_ref::<bool>() {
-        Ok(val.into_py(py))
-    } else if let Some(val) = value.downcast_ref::<String>() {
-        Ok(val.into_py(py))
-    } else {
-        panic!("Cannot convert Any to PyAny");
+impl IntoPy<PyObject> for RustAny {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        if let Some(val) = self.0.downcast_ref::<f64>() {
+            val.into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<u64>() {
+            val.into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<i64>() {
+            val.into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<bool>() {
+            val.into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<String>() {
+            val.into_py(py)
+        } else {
+            panic!("Cannot convert Any to PyAny");
+        }
     }
 }
 

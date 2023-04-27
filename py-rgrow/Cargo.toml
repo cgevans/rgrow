@@ -1,11 +1,13 @@
 [package]
 name = "pyrgrow"
-version = "0.11.2"
-authors = ["Constantine Evans <cevans@costi.eu>"]
-edition = "2021"
 description = "Python interface to rgrow."
-repository = "https://github.com/evansfmm/pyrgrow"
-license = "BSD-3-Clause"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+
 
 [features]
 default = ["use_rayon", "ui"]
@@ -18,16 +20,17 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-numpy = "^0.17.2"
-ndarray = {version = "^0.15", features = ["serde"]}
-rand = {version = "^0", features = ["small_rng"]}
-serde = "^1"
 bincode = "^1"
+indent = "0.1.1"
+serde = { workspace=true }
+rand = {workspace=true}
+ndarray = {workspace=true}
+numpy = {workspace=true}
 
 [dependencies.rgrow]
 path = "../rgrow"
 features = ["python"]
 
 [dependencies.pyo3]
-version = "^0.17.3"
+version = "^0.18.3"
 features = ["extension-module"]

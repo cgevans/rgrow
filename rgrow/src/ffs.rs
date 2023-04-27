@@ -28,15 +28,20 @@ use state::{DangerousStateClone, State, StateCreate};
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
 
+/// Configuration options for FFS.
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
 pub struct FFSRunConfig {
     /// Use constant-variance, variable-configurations-per-surface method.
     /// If false, use max_configs for each surface.
     pub constant_variance: bool,
+    /// Variance per mean^2 for constant-variance method.
     pub var_per_mean2: f64,
+    /// Minimum number of configuratons to generate at each level.
     pub min_configs: usize,
+    /// Maximum number of configurations to generate at each level.
     pub max_configs: usize,
+    /// Use early cutoff for constant-variance method.
     pub early_cutoff: bool,
     pub cutoff_probability: f64,
     pub cutoff_number: usize,
@@ -181,95 +186,6 @@ impl FFSRunConfig {
         rc
     }
 
-    #[getter]
-    fn get_constant_variance(&self) -> bool {
-        self.constant_variance
-    }
-
-    #[setter]
-    fn set_constant_variance(&mut self, val: bool) {
-        self.constant_variance = val;
-    }
-
-    #[getter]
-    fn get_var_per_mean2(&self) -> f64 {
-        self.var_per_mean2
-    }
-
-    #[setter]
-    fn set_var_per_mean2(&mut self, val: f64) {
-        self.var_per_mean2 = val;
-    }
-
-    #[getter]
-    fn get_min_configs(&self) -> usize {
-        self.min_configs
-    }
-
-    #[setter]
-    fn set_min_configs(&mut self, val: usize) {
-        self.min_configs = val;
-    }
-
-    #[getter]
-    fn get_max_configs(&self) -> usize {
-        self.max_configs
-    }
-
-    #[setter]
-    fn set_max_configs(&mut self, val: usize) {
-        self.max_configs = val;
-    }
-
-    #[getter]
-    fn get_early_cutoff(&self) -> bool {
-        self.early_cutoff
-    }
-
-    #[setter]
-    fn set_early_cutoff(&mut self, val: bool) {
-        self.early_cutoff = val;
-    }
-
-    #[getter]
-    fn get_cutoff_probability(&self) -> f64 {
-        self.cutoff_probability
-    }
-
-    #[setter]
-    fn set_cutoff_probability(&mut self, val: f64) {
-        self.cutoff_probability = val;
-    }
-
-    #[getter]
-    fn get_cutoff_number(&self) -> usize {
-        self.cutoff_number
-    }
-
-    #[setter]
-    fn set_cutoff_number(&mut self, val: usize) {
-        self.cutoff_number = val;
-    }
-
-    #[getter]
-    fn get_min_cutoff_size(&self) -> NumTiles {
-        self.min_cutoff_size
-    }
-
-    #[setter]
-    fn set_min_cutoff_size(&mut self, val: NumTiles) {
-        self.min_cutoff_size = val;
-    }
-
-    #[getter]
-    fn get_init_bound(&self) -> EvolveBounds {
-        self.init_bound
-    }
-
-    #[setter]
-    fn set_init_bound(&mut self, val: EvolveBounds) {
-        self.init_bound = val;
-    }
 }
 
 pub trait FFSResult: Send + Sync {

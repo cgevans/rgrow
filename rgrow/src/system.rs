@@ -173,12 +173,34 @@ pub enum ChunkHandling {
     Equilibrium,
 }
 
+
+impl From<&str> for ChunkHandling {
+    fn from(s: &str) -> Self {
+        match s {
+            "none" => Self::None,
+            "detach" => Self::Detach,
+            "equilibrium" => Self::Equilibrium,
+            _ => panic!("Unknown chunk handling: {}", s),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum ChunkSize {
     #[serde(alias = "single")]
     Single,
     #[serde(alias = "dimer")]
     Dimer,
+}
+
+impl From<&str> for ChunkSize {
+    fn from(s: &str) -> Self {
+        match s {
+            "single" => Self::Single,
+            "dimer" => Self::Dimer,
+            _ => panic!("Unknown chunk size: {}", s),
+        }
+    }
 }
 
 pub trait System: Debug + Sync + Send {
@@ -457,4 +479,17 @@ pub enum FissionHandling {
     KeepLargest,
     #[serde(alias = "keep-weighted")]
     KeepWeighted,
+}
+
+impl From<&str> for FissionHandling {
+    fn from(s: &str) -> Self {
+        match s {
+            "off" | "no-fission" => FissionHandling::NoFission,
+            "just-detach" | "surface" => FissionHandling::JustDetach,
+            "on" | "keep-seeded" => FissionHandling::KeepSeeded,
+            "keep-largest" => FissionHandling::KeepLargest,
+            "keep-weighted" => FissionHandling::KeepWeighted,
+            _ => panic!("Unknown fission handling mode: {}", s),
+        }
+    }
 }

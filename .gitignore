@@ -22,3 +22,6 @@ py-rgrow/.ipynb_checkpoints/*
 py-rgrow/*.pyc
 py-rgrow/_build/*
 py-rgrow/rgrow/*.so
+rgrow/target
+*.pyc
+Cargo.lock
