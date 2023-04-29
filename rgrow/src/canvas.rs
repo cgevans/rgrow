@@ -286,6 +286,43 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
         }
     }
 
+    fn draw_scaled(
+        &self,
+        frame: &mut [u8],
+        colors: &[[u8; 4]],
+        tile_size: usize,
+        edge_size: usize,
+    ) {
+        let scale = tile_size + 2*edge_size;
+        let csc = self.ncols() * scale;
+
+        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
+            let framex = i % csc;
+            let framey = i / csc;
+
+            let x = framex / scale;
+            let y = framey / scale;
+
+            let blockx = framex % scale;
+            let blocky = framey % scale;
+
+            let tv = unsafe { self.uv_p((y, x)) };
+
+            pixel.copy_from_slice(
+                &(if (tv > 0)
+                    & (blockx > edge_size - 1)
+                    & (blocky > edge_size - 1)
+                    & (blockx < edge_size + tile_size)
+                    & (blocky < edge_size + tile_size)
+                {
+                    colors[tv as usize]
+                } else {
+                    [0, 0, 0, 0x00]
+                }),
+            );
+        }
+    }
+
     fn draw_size(&self) -> (u32, u32) {
         (self.ncols() as u32, self.nrows() as u32)
     }

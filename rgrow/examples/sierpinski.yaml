@@ -37,11 +37,11 @@ xgrowargs:
     size: 128
     seed:
     - [120,120,1]
-    smax: 500
+      #    smax: 500
     update_rate: 1
     Gse: 8.1
     Gmc: 16.0
-    threshold: 2.
+      #threshold: 2.
     canvas_type: Square
-    model: ATAM
+    model: KTAM
     fission: 'keep-seeded'

@@ -30,6 +30,7 @@ pub trait Simulation: Send + Sync + SystemInfo + TileBondInfo {
     }
     fn draw_size(&self, state_index: usize) -> (u32, u32);
     fn draw(&self, state_index: usize, frame: &mut [u8]);
+    fn draw_scaled(&self, state_index: usize, frame: &mut [u8], tile_size: usize, edge_size: usize);
 
     #[cfg(feature = "use_rayon")]
     fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>>;
@@ -77,6 +78,10 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
     fn draw(&self, state_index: usize, frame: &mut [u8]) {
         let state = &self.states[state_index]; //.lock().unwrap();
         state.draw(frame, self.system.tile_colors());
+    }
+    fn draw_scaled(&self, state_index: usize, frame: &mut [u8], tile_size: usize, edge_size: usize) {
+        let state = &self.states[state_index]; //.lock().unwrap();
+        state.draw_scaled(frame, self.system.tile_colors(), tile_size, edge_size);
     }
 
     fn add_state(&mut self) -> Result<usize, GrowError> {

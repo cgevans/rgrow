@@ -20,7 +20,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
 
     let (width, height) = sim.draw_size(state_i);
 
-    let scale = match parsed.options.block {
+    let mut scale = match parsed.options.block {
         Some(i) => i,
         None => {
             let (w, h) = app::screen_size();
@@ -54,7 +54,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
 
     let surface_texture = SurfaceTexture::new(win_width, win_height - 30, &win);
 
-    let mut pixels = { Pixels::new(width, height, surface_texture)? };
+    let mut pixels = { Pixels::new(width*(scale as u32), height*(scale as u32), surface_texture)? };
 
     let mut bounds = parsed.get_bounds();
 
@@ -65,14 +65,19 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
         if win.w() != win_width as i32 || win.h() != win_height as i32 {
             win_width = win.pixel_w() as u32;
             win_height = win.pixel_h() as u32;
-            pixels.resize_surface(win_width, win_height - 30);
+            pixels.resize_surface(win_width, win_height - 30).unwrap();
+            if parsed.options.block.is_none() {
+                scale = (win_width / width)
+                    .min((win_height - 30) / (height)) as usize;
+                pixels.resize_buffer(width*(scale as u32), height*(scale as u32)).unwrap();
+            }
             frame.set_pos(0, (win_height - 30) as i32);
             frame.set_size(win_width as i32, 30);
         }
 
         let evres = sim.evolve(state_i, bounds)?;
 
-        sim.draw(state_i, pixels.get_frame_mut());
+        sim.draw_scaled(state_i, pixels.frame_mut(), scale-2, 1);
         pixels.render()?;
 
         let state = sim.state_ref(state_i);

@@ -30,9 +30,9 @@ type GlueVec = Vec<(GlueIdent, GlueIdent, f64)>;
 
 fn std_delim<'a, P, O, E: ParseError<&'a str>>(
     parser: P,
-) -> impl Fn(&'a str) -> IResult<&'a str, O, E>
+) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
 where
-    P: Fn(&'a str) -> IResult<&'a str, O, E>,
+    P: FnMut(&'a str) -> IResult<&'a str, O, E>,
 {
     delimited(rsc, parser, rsc)
 }
