@@ -798,12 +798,12 @@ impl System for OldKTAM {
                 let ts = state.tile_to_s(p);
                 let tw = state.tile_to_w(p);
 
-                let nm = ((tn != 0) & (self.get_energy_ns(tn, t) < threshold)) as usize;
-                let ne = ((te != 0) & (self.get_energy_we(t, te) < threshold)) as usize;
-                let ns = ((ts != 0) & (self.get_energy_ns(t, ts) < threshold)) as usize;
-                let nw = ((tw != 0) & (self.get_energy_we(tw, t) < threshold)) as usize;
+                let mm_n = ((tn != 0) & (self.get_energy_ns(tn, t) < threshold)) as usize;
+                let mm_e = ((te != 0) & (self.get_energy_we(t, te) < threshold)) as usize;
+                let mm_s = ((ts != 0) & (self.get_energy_ns(t, ts) < threshold)) as usize;
+                let mm_w = ((tw != 0) & (self.get_energy_we(tw, t) < threshold)) as usize;
 
-                arr[(y, x)] = nm + ne + ns + nw;
+                arr[(y, x)] = 8*mm_n + 4*mm_e + 2*mm_s + mm_w;
             }
         }
 

@@ -739,6 +739,18 @@ impl Simulation {
             .map(|x| RustAny(x).into_py(py))
             .map_err(|x| PyValueError::new_err(x.to_string()))
     }
+
+    fn n_mismatches(&self, state_index: Option<usize>) -> PyResult<u64> {
+        let state_index = self.check_state(state_index)?;
+        Ok(self.read()?.n_mismatches(state_index) as u64)
+    }
+
+    fn mismatch_array<'p>(&self, state_index: Option<usize>, py: Python<'p>) -> PyResult<&'p PyArray2<usize>> {
+        let state_index = self.check_state(state_index)?;
+        let sim = self.read()?;
+        let ra = sim.mismatch_array(state_index);
+        Ok(PyArray2::from_owned_array(py, ra))
+    }
 }
 
 struct RustAny(Box<dyn Any>);

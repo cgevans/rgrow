@@ -2,6 +2,8 @@
 
 use std::any::Any;
 
+use ndarray::Array2;
+
 use crate::base::{GrowError, Tile};
 
 use crate::state::{State, StateCreate};
@@ -17,6 +19,9 @@ pub trait Simulation: Send + Sync + SystemInfo + TileBondInfo {
     fn state_ref(&self, state_index: usize) -> &dyn State; //std::sync::Arc<RwLock<dyn State>>;
     fn state_mut_ref(&mut self, state_index: usize) -> &mut dyn State; //std::sync::Arc<RwLock<dyn State>>;
     fn n_states(&self) -> usize;
+
+    fn mismatch_array(&self, state_index: usize) -> Array2<usize>;
+    fn n_mismatches(&self, state_index: usize) -> usize;
 
     fn state_keys(&self) -> Vec<usize>;
 
@@ -75,6 +80,17 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
         //std::sync::Arc<RwLock<dyn State>> {
         &mut self.states[state_index] //.clone()
     }
+
+    fn mismatch_array(&self, state_index: usize) -> Array2<usize> {
+        let state = &self.states[state_index]; //.lock().unwrap();
+        self.system.calc_mismatch_locations(state)
+    }
+
+    fn n_mismatches(&self, state_index: usize) -> usize {
+        let state = &self.states[state_index]; //.lock().unwrap();
+        self.system.calc_mismatches(state) as usize
+    }
+
     fn draw_size(&self, state_index: usize) -> (u32, u32) {
         self.states[state_index].draw_size() //.read().unwrap().draw_size()
     }
@@ -84,7 +100,11 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
     }
     fn draw_scaled(&self, state_index: usize, frame: &mut [u8], tile_size: usize, edge_size: usize) {
         let state = &self.states[state_index]; //.lock().unwrap();
-        state.draw_scaled(frame, self.system.tile_colors(), tile_size, edge_size);
+        if edge_size == 0 {
+            state.draw_scaled(frame, self.system.tile_colors(), tile_size, edge_size);
+        } else {
+            state.draw_scaled_with_mm(frame, self.system.tile_colors(), self.system.calc_mismatch_locations(state), tile_size, edge_size);
+        }
     }
 
     fn add_state(&mut self) -> Result<usize, GrowError> {

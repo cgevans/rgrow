@@ -173,7 +173,6 @@ pub enum ChunkHandling {
     Equilibrium,
 }
 
-
 impl From<&str> for ChunkHandling {
     fn from(s: &str) -> Self {
         match s {
@@ -404,11 +403,13 @@ pub trait System: Debug + Sync + Send {
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;
 
+    /// Returns an array of mismatch locations.  At each point, mismatches are designated by 8*N+4*E+2*S+1*W.
     fn calc_mismatch_locations<St: State>(&self, state: &St) -> Array2<usize>;
 
     fn calc_mismatches<St: State>(&self, state: &St) -> NumTiles {
-        let arr = self.calc_mismatch_locations(state);
-        arr.sum() as u32 / 2
+        let mut arr = self.calc_mismatch_locations(state);
+        arr.map_inplace(|x| *x = (*x & 0b01) + ((*x & 0b10) / 2));
+        arr.sum() as NumTiles
     }
 
     fn update_points<St: State>(&self, state: &mut St, points: &[PointSafeHere]) {
@@ -429,7 +430,7 @@ pub trait System: Debug + Sync + Send {
             NeededUpdate::NonZero => (0..nrows)
                 .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))))
                 .filter(|p| state.rate_at_point(*p) > 0.)
-                .collect::<Vec<_>>(), 
+                .collect::<Vec<_>>(),
             NeededUpdate::All => (0..nrows)
                 .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))))
                 .collect::<Vec<_>>(),

@@ -69,6 +69,7 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
             if parsed.options.block.is_none() {
                 scale = (win_width / width)
                     .min((win_height - 30) / (height)) as usize;
+                if scale >= 10 {scale = 10} else {scale = 1;} // (scale - 10) % 10 + 10;
                 pixels.resize_buffer(width*(scale as u32), height*(scale as u32)).unwrap();
             }
             frame.set_pos(0, (win_height - 30) as i32);
@@ -77,16 +78,23 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
 
         let evres = sim.evolve(state_i, bounds)?;
 
-        sim.draw_scaled(state_i, pixels.frame_mut(), scale-2, 1);
+        let edge_size = scale / 10;
+
+        if scale != 1 {
+            sim.draw_scaled(state_i, pixels.frame_mut(), scale-2*edge_size, edge_size);
+        } else {
+            sim.draw(state_i, pixels.frame_mut());
+        }
         pixels.render()?;
 
         let state = sim.state_ref(state_i);
         // Update text with the simulation time, events, and tiles
         frame.set_label(&format!(
-            "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}",
+            "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}\t Mismatches: {}",
             state.time(),
             state.total_events(),
-            state.ntiles()
+            state.ntiles(),
+            sim.n_mismatches(state_i) // FIXME: should not recalculate
         ));
 
         app::flush();
