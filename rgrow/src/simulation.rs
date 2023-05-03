@@ -35,6 +35,9 @@ pub trait Simulation: Send + Sync + SystemInfo + TileBondInfo {
     #[cfg(feature = "use_rayon")]
     fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>>;
 
+    #[cfg(feature = "use_rayon")]
+    fn evolve_some(&mut self, state_indices: &[usize], bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>>;
+
     fn set_system_param(&mut self, param_name: &str, _value: Box<dyn Any>) -> Result<(), GrowError> {
         Err(GrowError::NoParameter(param_name.to_string()))
     }
@@ -100,6 +103,19 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
         self.states
             .par_iter_mut()
             .map(|state| sys.evolve(state, bounds))
+            .collect()
+    }
+
+    // FIXME: this implementation could be better.
+    #[cfg(feature = "use_rayon")]
+    fn evolve_some(&mut self, state_indices: &[usize], bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>> {
+        use rayon::prelude::*;
+        let sys = &self.system;
+        self.states
+            .par_iter_mut()
+            .enumerate()
+            .filter(|(i, _)| state_indices.contains(i))
+            .map(|(_, state)| sys.evolve(state, bounds))
             .collect()
     }
 

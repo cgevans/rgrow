@@ -564,6 +564,62 @@ impl Simulation {
             .collect()
     }
 
+    #[pyo3(
+        signature = (state_indices,
+                    for_events=None,
+                    total_events=None,
+                    for_time=None,
+                    total_time=None,
+                    size_min=None,
+                    size_max=None,
+                    for_wall_time=None,
+                    require_strong_bound=true)
+    )]
+    fn evolve_some(
+        &mut self,
+        state_indices: Vec<usize>,
+        for_events: Option<u64>,
+        total_events: Option<u64>,
+        for_time: Option<f64>,
+        total_time: Option<f64>,
+        size_min: Option<u32>,
+        size_max: Option<u32>,
+        for_wall_time: Option<f64>,
+        require_strong_bound: Option<bool>,
+        py: Python<'_>,
+    ) -> PyResult<Vec<EvolveOutcome>> {
+        let bounds = EvolveBounds {
+            for_events,
+            for_time,
+            total_events,
+            total_time,
+            size_min,
+            size_max,
+            for_wall_time: for_wall_time.map(Duration::from_secs_f64),
+        };
+
+        let require_strong_bound = require_strong_bound.unwrap_or(false);
+
+        if require_strong_bound & !bounds.is_strongly_bounded() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No strong bounds specified.",
+            ));
+        }
+
+        if !bounds.is_weakly_bounded() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No weak bounds specified.",
+            ));
+        }
+
+        let res = py.allow_threads(|| self.write().unwrap().evolve_some(&state_indices[..], bounds));
+
+        res.into_iter()
+            .map(|x| x.map_err(|y| PyValueError::new_err(y.to_string())))
+            .collect()
+    }
+
+
     /// Returns the current canvas for state_index (default 0), as an array copy.
     /// 
     /// Parameters
