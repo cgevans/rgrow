@@ -2,11 +2,14 @@
 
 The version number for Rust has been increased to give consistent version numbering for both Rust and Python.
 
+- Combined the pyrgrow and rgrow repositories, to ease development and ensure version matching.
 - Initial support for mid-simulation system parameter changes.
 - RateStore multi-update optimizations.
-- Combined the pyrgrow and rgrow repositories, to ease development and ensure version matching.
-- Significant refactoring of Python API.
-- Documentation for Python API.
+- Significant refactoring of Python API, and more documentation.
+- Calculation of mismatches and mismatch locations.
+- Display improvements, with mismatches shown at higher display scales, and dynamic scaling.
+- Parallel evolution improvements.
+- Make UI no longer default for Python.
 
 # 0.7.1
 
