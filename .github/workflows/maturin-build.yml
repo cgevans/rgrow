@@ -19,7 +19,21 @@ permissions:
   contents: read
 
 jobs:
-  checks:
+  rust_checks:
+    name: Checks for Rust
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-Dwarnings"
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            components: clippy
+            override: true
+      - name: Run Clippy, including Python features
+        run: cargo clippy --features ui,use_rayon
+  python_checks:
     name: Checks for Python
     runs-on: ubuntu-latest
     env:
@@ -39,13 +53,14 @@ jobs:
       - name: Install mypy
         run: pip install --upgrade mypy
       - name: Run mypy
-        run: mypy --cache-dir .mypy_cache --install-types --non-interactive --show-traceback py-rgrow/rgrow/
-      - uses: chartboost/ruff-action@v1
+        run: mypy --cache-dir .mypy_cache --install-types --ignore-missing-imports --non-interactive --show-traceback py-rgrow/rgrow/
+      - name: Run Ruff on Python code
+        uses: chartboost/ruff-action@v1
         with:
           src: "./py-rgrow"
   linux:
     name: Python Linux builds
-    needs: [checks]
+    needs: [python_checks]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -72,7 +87,7 @@ jobs:
 
   windows:
     name: Python Windows builds
-    needs: [checks]
+    needs: [python_checks]
     runs-on: windows-latest
     strategy:
       matrix:
@@ -99,7 +114,7 @@ jobs:
 
   macos:
     name: Python MacOS builds
-    needs: [checks]
+    needs: [python_checks]
     runs-on: macos-latest
     strategy:
       matrix:
@@ -124,7 +139,7 @@ jobs:
           path: py-rgrow/dist
 
   sdist:
-    needs: [checks]
+    needs: [python_checks]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
