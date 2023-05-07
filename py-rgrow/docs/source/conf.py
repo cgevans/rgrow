@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-import sphinx_autosummary_accessors
+#import sphinx_autosummary_accessors
 
 # sys.path.insert(0, os.path.abspath("../.."))
 
@@ -37,13 +37,13 @@ extensions = [
     # ----------------------
     "autodocsumm",
     "numpydoc",
-    "sphinx_autosummary_accessors",
+    #"sphinx_autosummary_accessors",
     "sphinx_copybutton",
     "sphinx_design",
     "sphinx_favicon",
 ]
 
-templates_path = ['_templates', sphinx_autosummary_accessors.templates_path]
+templates_path = ['_templates'] #, sphinx_autosummary_accessors.templates_path]
 exclude_patterns = []
 
 

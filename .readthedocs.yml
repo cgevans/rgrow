@@ -8,9 +8,11 @@ build:
     jobs:
       pre_install:
         - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
-        - export PATH="$HOME/.cargo/bin:$PATH"
+        - echo $PATH
+        - ln -s ~/.cargo/bin/* /home/docs/.asdf/bin/
 python:
   install:
+    - requirements: py-rgrow/docs/requirements-docs.txt
     - method: pip
       path: py-rgrow
       extra_requirements:
