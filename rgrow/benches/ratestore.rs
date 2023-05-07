@@ -34,10 +34,8 @@ fn ratestore_qsta_update(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("ratestore-update-all");
     group.plot_config(plot_config.clone());
-    for (pn, pv) in vec![
-        ("all", &allchanges[..]),
-        ("all_shuffle", &allchanges_shuffled[..]),
-    ] {
+    for (pn, pv) in &[("all", &allchanges[..]),
+        ("all_shuffle", &allchanges_shuffled[..])] {
         group.bench_with_input(BenchmarkId::new("small update", pn), &pv, |b, a| {
             b.iter(|| rs._update_multiple_small(a))
         });
@@ -64,7 +62,7 @@ fn ratestore_qsta_update(c: &mut Criterion) {
     let mut group = c.benchmark_group("ratestore-update-sized");
     group.plot_config(plot_config.clone());
 
-    for s in vec![8, 16, 32, 64, 128, 256, 512] {
+    for &s in &[8, 16, 32, 64, 128, 256, 512] {
         if s < 2000 {
             group.bench_with_input(
                 BenchmarkId::new("small update", s),
@@ -100,8 +98,8 @@ fn ratestore_qsta_update(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("ratestore-update-combined");
-    group.plot_config(plot_config.clone());
-    for s in vec![8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] {
+    group.plot_config(plot_config);
+    for &s in &[8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] {
         group.bench_with_input(
             BenchmarkId::new("combined-update", s),
             &allchanges[0..s],
