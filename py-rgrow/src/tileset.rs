@@ -192,22 +192,23 @@ impl TileSet {
         }
     }
 
-    // /// Creates a TileSet from a dict by exporting to json, then parsing the json.
-    // #[classmethod]
-    // fn from_dict(_cls: &PyType, data: PyObject) -> PyResult<Self> {
-    //     let json: String = Python::with_gil(|py| {
-    //         let json = PyModule::import(py, "json")?;
-    //         json.call_method1("dumps", (data,))?.extract::<String>()
-    //     })?;
+    /// Creates a TileSet from a dict by exporting to json, then parsing the json.
+    /// FIXME: implement this without the json trip.
+    #[classmethod]
+    fn from_dict(_cls: &PyType, data: PyObject) -> PyResult<Self> {
+        let json: String = Python::with_gil(|py| {
+            let json = PyModule::import(py, "json")?;
+            json.call_method1("dumps", (data,))?.extract::<String>()
+        })?;
 
-    //     let tileset = tileset::TileSet::from_json(&json);
-    //     match tileset {
-    //         Ok(tileset) => Ok(TileSet(Arc::new(RwLock::new(tileset)))),
-    //         Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-    //             err.to_string(),
-    //         )),
-    //     }
-    // }
+        let tileset = tileset::TileSet::from_json(&json);
+        match tileset {
+            Ok(tileset) => Ok(TileSet(Arc::new(RwLock::new(tileset)))),
+            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                err.to_string(),
+            )),
+        }
+    }
 
     /// Parses a file (JSON, YAML, etc) into a TileSet
     #[classmethod]

@@ -34,7 +34,3 @@ features = ["python"]
 [dependencies.pyo3]
 version = "^0.18.3"
 features = ["extension-module"]
-
-[profile.release]
-debug = true
-lto = true
