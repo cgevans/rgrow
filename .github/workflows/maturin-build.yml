@@ -31,8 +31,8 @@ jobs:
             toolchain: nightly
             components: clippy
             override: true
-      - name: Run Clippy, Python-only features
-        run: cargo clippy --no-default-features --features python,use_rayon
+      - name: Run Clippy, including Python features
+        run: cargo clippy --features python,use_rayon
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
