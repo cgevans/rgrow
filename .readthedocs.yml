@@ -8,7 +8,7 @@ build:
     jobs:
       pre_install:
         - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
-        - source $HOME/.cargo/env
+        - export PATH="$HOME/.cargo/bin:$PATH"
 python:
   install:
     - method: pip
