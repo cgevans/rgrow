@@ -8,6 +8,6 @@ build:
 python:
   install:
     - method: pip
-      path: .
+      path: py-rgrow
       extra_requirements:
         - docs
