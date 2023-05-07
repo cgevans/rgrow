@@ -69,11 +69,16 @@ fn main() -> anyhow::Result<()> {
 
     match opts.subcmd {
         SubCommand::Run(po) =>
-        #[cfg(feature = "ui")]
         {
-            let parsed = TileSet::from_file(po.input)?;
-            run_window(&parsed)?;
-            Ok(())
+            #[cfg(feature = "ui")] {
+                let parsed = TileSet::from_file(po.input)?;
+                run_window(&parsed)?;
+                Ok(())            
+            }
+            #[cfg(not(feature = "ui"))] {
+                Err(anyhow::anyhow!("UI not enabled."))
+            }
+
         }
         SubCommand::NucRate(po) => {
             nucrate(po)?;

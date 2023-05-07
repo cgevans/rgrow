@@ -24,7 +24,7 @@ use rgrow::tileset;
 use rgrow::tileset::Ident;
 use rgrow::tileset::TileShape;
 
-use indent;
+
 
 #[derive(FromPyObject, Clone)]
 struct Bond(Ident, f64);
@@ -49,7 +49,7 @@ impl Tile {
         color: Option<String>,
         _shape: Option<String>,
     ) -> Self {
-        let edges: Vec<tileset::GlueIdent> = edges.into_iter().map(|e| e.into()).collect();
+        let edges: Vec<tileset::GlueIdent> = edges.into_iter().collect();
         let tile = tileset::Tile {
             name,
             edges,
@@ -97,12 +97,12 @@ impl Tile {
     /// Glues should be either strings, integers (starting at 1), or None or 0 to
     /// refer to a null glue.
     fn get_edges(&self) -> Vec<Ident> {
-        self.0.edges.iter().map(|e| e.clone().into()).collect()
+        self.0.edges.to_vec()
     }
 
     #[setter]
     fn set_edges(&mut self, edges: Vec<Ident>) {
-        self.0.edges = edges.into_iter().map(|e| e.into()).collect();
+        self.0.edges = edges.into_iter().collect();
     }
 
     fn __repr__(&self) -> String {
@@ -163,13 +163,13 @@ impl TileSet {
             bonds: bonds
                 .iter()
                 .map(|x| tileset::Bond {
-                    name: x.0.clone().into(),
+                    name: x.0.clone(),
                     strength: x.1,
                 })
                 .collect(),
             glues: glues
                 .iter()
-                .map(|x| (x.0.clone().into(), x.1.clone().into(), x.2))
+                .map(|x| (x.0.clone(), x.1.clone(), x.2))
                 .collect(),
             options: args,
             cover_strands: None,
@@ -282,27 +282,27 @@ impl TileSet {
 impl Display for TileSet {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let ts = self.read().unwrap();
-        write!(f, "TileSet(\n")?;
-        write!(f, "    tiles=[\n")?;
+        writeln!(f, "TileSet(")?;
+        writeln!(f, "    tiles=[")?;
         for tile in &ts.tiles {
-            write!(f, "        {},\n", tile)?;
+            writeln!(f, "        {},", tile)?;
         }
-        write!(f, "    ],\n")?;
+        writeln!(f, "    ],")?;
         if !&ts.bonds.is_empty() {
-            write!(f, "    bonds=[\n")?;
+            writeln!(f, "    bonds=[")?;
             for bond in &ts.bonds {
-                write!(f, "        ({}, {}),\n", bond.name, bond.strength)?;
+                writeln!(f, "        ({}, {}),", bond.name, bond.strength)?;
             }
-            write!(f, "    ],\n")?;
+            writeln!(f, "    ],")?;
         };
         if !&ts.glues.is_empty() {
-            write!(f, "    glues=[\n")?;
+            writeln!(f, "    glues=[")?;
             for (a, b, s) in &ts.glues {
-                write!(f, "        ({}, {}, {}),\n", a, b, s)?;
+                writeln!(f, "        ({}, {}, {}),", a, b, s)?;
             }
-            write!(f, "    ],\n")?;
+            writeln!(f, "    ],")?;
         };
-        write!(f, "    options=[\n")?;
+        writeln!(f, "    options=[")?;
         write!(f, "{}", indent::indent_all_by(8, ts.options.to_string()))?;
         write!(f, "    ]\n)\n")?;
         Ok(())
@@ -585,6 +585,7 @@ impl Simulation {
         require_strong_bound: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<Vec<EvolveOutcome>> {
+        #![allow(clippy::too_many_arguments)]
         let bounds = EvolveBounds {
             for_events,
             for_time,
