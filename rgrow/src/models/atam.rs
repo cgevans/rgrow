@@ -637,11 +637,7 @@ impl ATAM {
                     self.energy_we[(t1 as usize, t2 as usize)] = self.glue_strengths[t1r[1]]
                 }
             }
-            if (t1 > 0) && (self.tile_stoics[t1 as usize] > 0.) {
-                self.should_be_counted[t1 as usize] = true;
-            } else {
-                self.should_be_counted[t1 as usize] = false;
-            }
+            self.should_be_counted[t1 as usize] = (t1 > 0) && (self.tile_stoics[t1 as usize] > 0.);
         }
 
         if (self.double_to_right.sum() > 0) || (self.double_to_bottom.sum() > 0) {

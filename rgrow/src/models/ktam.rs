@@ -839,11 +839,7 @@ impl KTAM {
                     self.energy_we[(t1, t2)] = self.g_se * self.glue_strengths[t1r[1]]
                 }
             }
-            if (t1 > 0) && (self.tile_concs[t1] > 0.) {
-                self.should_be_counted[t1] = true;
-            } else {
-                self.should_be_counted[t1] = false;
-            }
+            self.should_be_counted[t1] =  (t1 > 0) && (self.tile_concs[t1] > 0.);
         }
 
         if (self.double_to_right.sum() > 0) || (self.double_to_bottom.sum() > 0) {
