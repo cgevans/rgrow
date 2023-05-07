@@ -21,11 +21,10 @@ use rgrow::simulation;
 use rgrow::system::EvolveBounds;
 use rgrow::system::EvolveOutcome;
 use rgrow::tileset;
-use rgrow::tileset::TileShape;
 use rgrow::tileset::Ident;
+use rgrow::tileset::TileShape;
 
 use indent;
-
 
 #[derive(FromPyObject, Clone)]
 struct Bond(Ident, f64);
@@ -112,10 +111,10 @@ impl Tile {
 }
 
 /// A class representing a tile set.
-/// 
+///
 /// Parameters
 /// ----------
-/// 
+///
 /// tiles : list[Tile]
 ///    The tiles in the tile set.
 /// bonds : list[tuple[str | int, float]]
@@ -156,10 +155,8 @@ impl TileSet {
         glues: Vec<(Ident, Ident, f64)>,
         options: HashMap<String, RustAny>,
     ) -> PyResult<TileSet> {
-        let opts_any: HashMap<String, Box<dyn Any>> = options
-            .into_iter()
-            .map(|(k, v)| (k, v.0))
-            .collect();
+        let opts_any: HashMap<String, Box<dyn Any>> =
+            options.into_iter().map(|(k, v)| (k, v.0)).collect();
         let args = opts_any.into();
         let tileset = tileset::TileSet {
             tiles: tiles.into_iter().map(|x| x.borrow().0.clone()).collect(),
@@ -312,9 +309,8 @@ impl Display for TileSet {
     }
 }
 
-
 /// A combination of a System, and a list of States, which can be added to.
-/// 
+///
 /// This is not generally created directly, but is instead usually created
 /// from a :any:`TileSet`, using :any:`TileSet.to_simulation()`.
 #[pyclass]
@@ -384,7 +380,7 @@ impl Simulation {
     /// By default, this requires a strong bound (the simulation
     /// will eventually end, eg, not a size or other potentially
     /// unreachable bound). Releases the GIL during the simulation.    
-    /// 
+    ///
     /// Parameters
     /// ----------
     /// state_index : int, optional
@@ -409,10 +405,10 @@ impl Simulation {
     ///    If True (default), a ValueError will be raised unless at least one strong bound has been
     ///    set, ensuring that the simulation will eventually end.  If False, ensure only that some
     ///    weak bound has been set, which may result in an infinite simulation.
-    /// 
+    ///
     /// Returns
     /// -------
-    /// 
+    ///
     /// EvolveOutcome
     ///   The stopping condition that caused the simulation to end.
     #[allow(clippy::too_many_arguments)]
@@ -485,13 +481,13 @@ impl Simulation {
     #[cfg(feature = "use_rayon")]
     /// Evolve *all* states, stopping each as they reach the
     /// boundary conditions.  Runs multithreaded using available
-    /// cores. 
-    /// 
+    /// cores.
+    ///
     /// By default, this requires a strong bound (the simulation
     /// will eventually end, eg, not a size or other potentially
     /// unreachable bound). Releases the GIL during the simulation.
     /// Bounds are applied for each state individually.    
-    /// 
+    ///
     /// Parameters
     /// ----------
     /// state_index : int, optional
@@ -516,10 +512,10 @@ impl Simulation {
     ///    If True (default), a ValueError will be raised unless at least one strong bound has been
     ///    set, ensuring that the simulation will eventually end.  If False, ensure only that some
     ///    weak bound has been set, which may result in an infinite simulation.
-    /// 
+    ///
     /// Returns
     /// -------
-    /// 
+    ///
     /// list[EvolveOutcome]
     ///   The stopping condition that caused each simulation to end.
     fn evolve_all(
@@ -613,24 +609,27 @@ impl Simulation {
             ));
         }
 
-        let res = py.allow_threads(|| self.write().unwrap().evolve_some(&state_indices[..], bounds));
+        let res = py.allow_threads(|| {
+            self.write()
+                .unwrap()
+                .evolve_some(&state_indices[..], bounds)
+        });
 
         res.into_iter()
             .map(|x| x.map_err(|y| PyValueError::new_err(y.to_string())))
             .collect()
     }
 
-
     /// Returns the current canvas for state_index (default 0), as an array copy.
-    /// 
+    ///
     /// Parameters
     /// ----------
     /// state_index : int, optional
     ///   The index of the state to return.  Defaults to 0.
-    /// 
+    ///
     /// Returns
     /// -------
-    /// 
+    ///
     /// numpy.ndarray[int]
     ///  The current canvas for the state, copied.
     fn canvas_copy<'py>(
@@ -650,19 +649,19 @@ impl Simulation {
     /// *direct* view of the state array.  This array will update as
     /// the simulation evolves.  It should not be modified, as modifications
     /// will not result in rate and other necessary updates.
-    /// 
+    ///
     /// Using this may cause memory safety problems: it is 'unsafe'-labelled in Rust.
     /// Unless the state is deleted, the array should remain valid so long as the
     /// underlying Simulation has not been garbage-collected.
-    /// 
+    ///
     /// Parameters
     /// ----------
     /// state_index : int, optional
     ///   The index of the state to return.  Defaults to 0.
-    /// 
+    ///
     /// Returns
     /// -------
-    /// 
+    ///
     /// numpy.ndarray[int]
     ///  The current canvas for the state.
     fn canvas_view<'py>(
@@ -746,7 +745,11 @@ impl Simulation {
         Ok(self.read()?.n_mismatches(state_index) as u64)
     }
 
-    fn mismatch_array<'p>(&self, state_index: Option<usize>, py: Python<'p>) -> PyResult<&'p PyArray2<usize>> {
+    fn mismatch_array<'p>(
+        &self,
+        state_index: Option<usize>,
+        py: Python<'p>,
+    ) -> PyResult<&'p PyArray2<usize>> {
         let state_index = self.check_state(state_index)?;
         let sim = self.read()?;
         let ra = sim.mismatch_array(state_index);
@@ -767,17 +770,18 @@ impl FromPyObject<'_> for RustAny {
         } else if let Ok(val) = obj.extract::<bool>() {
             Ok(RustAny(Box::new(val)))
         } else if let Ok(val) = obj.extract::<String>() {
-            Ok(RustAny(Box::new(val))) 
+            Ok(RustAny(Box::new(val)))
         } else if let Ok(val) = obj.extract::<(u64, u64)>() {
             Ok(RustAny(Box::new(val)))
         } else if let Ok(val) = obj.extract::<(usize, usize, Ident)>() {
-                Ok(RustAny(Box::new(val)))
+            Ok(RustAny(Box::new(val)))
         } else if let Ok(val) = obj.extract::<Vec<(usize, usize, Ident)>>() {
             Ok(RustAny(Box::new(val)))
         } else {
-            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                format!("Cannot convert value {:?}", obj),
-            ))
+            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                "Cannot convert value {:?}",
+                obj
+            )))
         }
     }
 }

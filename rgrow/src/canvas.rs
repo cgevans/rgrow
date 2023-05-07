@@ -293,7 +293,7 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
         tile_size: usize,
         edge_size: usize,
     ) {
-        let scale = tile_size + 2*edge_size;
+        let scale = tile_size + 2 * edge_size;
         let csc = self.ncols() * scale;
 
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
@@ -331,7 +331,7 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
         tile_size: usize,
         edge_size: usize,
     ) {
-        let scale = tile_size + 2*edge_size;
+        let scale = tile_size + 2 * edge_size;
         let csc = self.ncols() * scale;
 
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
@@ -354,14 +354,25 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
                     & (blocky < edge_size + tile_size)
                 {
                     colors[tv as usize]
-                } else if ((blockx <= edge_size - 1) & (blocky > edge_size - 1) & (blocky < edge_size + tile_size) & (mismatches[(y,x)] & 0b0001 == 0b0001)) |
-                          ((blockx >= edge_size + tile_size) & (blocky > edge_size - 1) & (blocky < edge_size + tile_size) & (mismatches[(y,x)] & 0b0100 == 0b0100)) |
-                          ((blocky <= edge_size - 1) & (blockx > edge_size - 1) & (blockx < edge_size + tile_size) & (mismatches[(y,x)] & 0b1000 == 0b1000)) |
-                          ((blocky >= edge_size + tile_size) & (blockx > edge_size - 1) & (blockx < edge_size + tile_size) & (mismatches[(y,x)] & 0b010 == 0b010))
+                } else if ((blockx <= edge_size - 1)
+                    & (blocky > edge_size - 1)
+                    & (blocky < edge_size + tile_size)
+                    & (mismatches[(y, x)] & 0b0001 == 0b0001))
+                    | ((blockx >= edge_size + tile_size)
+                        & (blocky > edge_size - 1)
+                        & (blocky < edge_size + tile_size)
+                        & (mismatches[(y, x)] & 0b0100 == 0b0100))
+                    | ((blocky <= edge_size - 1)
+                        & (blockx > edge_size - 1)
+                        & (blockx < edge_size + tile_size)
+                        & (mismatches[(y, x)] & 0b1000 == 0b1000))
+                    | ((blocky >= edge_size + tile_size)
+                        & (blockx > edge_size - 1)
+                        & (blockx < edge_size + tile_size)
+                        & (mismatches[(y, x)] & 0b010 == 0b010))
                 {
                     [0xff, 0x00, 0x00, 0xff]
-                }
-                else {
+                } else {
                     [0, 0, 0, 0x00]
                 }),
             );

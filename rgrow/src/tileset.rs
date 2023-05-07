@@ -13,11 +13,11 @@ use super::*;
 use anyhow::Context;
 use base::{NumEvents, NumTiles};
 use bimap::BiMap;
+use core::fmt;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use simulation::Simulation;
-use core::fmt;
 use std::any::Any;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter};
@@ -61,7 +61,6 @@ pub enum ParserError {
         shape: TileShape,
     },
 }
-
 
 #[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(untagged)]
@@ -154,7 +153,6 @@ pub enum ParsedSeed {
     Single(CanvasLength, CanvasLength, TileIdent),
     Multi(Vec<(CanvasLength, CanvasLength, TileIdent)>),
 }
-
 
 impl Display for ParsedSeed {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -391,12 +389,12 @@ impl From<&Box<dyn Any>> for Size {
         if let Some(cl) = b.downcast_ref::<CanvasLength>() {
             Size::Single(*cl)
         } else if let Some((cl1, cl2)) = b.downcast_ref::<(CanvasLength, CanvasLength)>() {
-            Size::Pair((*cl1, *cl2)) 
+            Size::Pair((*cl1, *cl2))
         } else if let Some(cl) = b.downcast_ref::<u64>() {
             Size::Single(*cl as usize)
         } else if let Some((cl1, cl2)) = b.downcast_ref::<(u64, u64)>() {
-            Size::Pair((*cl1 as usize, *cl2 as usize)) 
-        }  else {
+            Size::Pair((*cl1 as usize, *cl2 as usize))
+        } else {
             panic!("Size::from::<Box<dyn Any>>: unknown type")
         }
     }
@@ -517,7 +515,6 @@ impl Display for Size {
     }
 }
 
-
 impl Display for Args {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         writeln!(f, "Gse: {}", self.gse)?;
@@ -570,24 +567,61 @@ impl Default for Args {
 impl From<HashMap<String, Box<dyn Any>>> for Args {
     fn from(value: HashMap<String, Box<dyn Any>>) -> Self {
         Args {
-            gse: value.get("gse").map_or_else(|| gse_default(), |x| *(x.downcast_ref().unwrap())),
-            gmc: value.get("gmc").map_or_else(|| gmc_default(), |x| *x.downcast_ref::<f64>().unwrap()),
-            alpha: value.get("alpha").map_or_else(|| alpha_default(), |x| *x.downcast_ref::<f64>().unwrap()),
-            seed: value.get("seed").map_or_else(|| seed_default(), |x| x.try_into().unwrap()),
-            size: value.get("size").map_or_else(|| size_default(), |x| x.try_into().unwrap()),
-            tau: value.get("tau").map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
-            smax: value.get("smax").map_or_else(|| None, |x| *(x.downcast_ref().unwrap())),
-            update_rate: value.get("update_rate").map_or_else(|| update_rate_default(), |x| *(x.downcast_ref().unwrap())),
-            kf: value.get("kf").map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
-            fission: value.get("chunk_size").map_or_else(|| fission_default(), |x| (x.downcast_ref::<String>().unwrap().as_str()).into()),
-            block: value.get("block").map_or_else(|| block_default(), |x| *(x.downcast_ref().unwrap())),
-            chunk_handling: value.get("chunk_handling").map_or_else(|| None, |x| Some((x.downcast_ref::<String>().unwrap().as_str()).into())),
-            chunk_size: value.get("chunk_size").map_or_else(|| None, |x| Some(x.downcast_ref::<String>().unwrap().as_str().into())),
-            canvas_type: value.get("canvas_type").map_or_else(|| canvas_type_default(), |x: &Box<dyn Any>| x.downcast_ref::<String>().unwrap().as_str().into()),
+            gse: value
+                .get("gse")
+                .map_or_else(|| gse_default(), |x| *(x.downcast_ref().unwrap())),
+            gmc: value
+                .get("gmc")
+                .map_or_else(|| gmc_default(), |x| *x.downcast_ref::<f64>().unwrap()),
+            alpha: value
+                .get("alpha")
+                .map_or_else(|| alpha_default(), |x| *x.downcast_ref::<f64>().unwrap()),
+            seed: value
+                .get("seed")
+                .map_or_else(|| seed_default(), |x| x.try_into().unwrap()),
+            size: value
+                .get("size")
+                .map_or_else(|| size_default(), |x| x.try_into().unwrap()),
+            tau: value
+                .get("tau")
+                .map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
+            smax: value
+                .get("smax")
+                .map_or_else(|| None, |x| *(x.downcast_ref().unwrap())),
+            update_rate: value
+                .get("update_rate")
+                .map_or_else(|| update_rate_default(), |x| *(x.downcast_ref().unwrap())),
+            kf: value
+                .get("kf")
+                .map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
+            fission: value.get("chunk_size").map_or_else(
+                || fission_default(),
+                |x| (x.downcast_ref::<String>().unwrap().as_str()).into(),
+            ),
+            block: value
+                .get("block")
+                .map_or_else(|| block_default(), |x| *(x.downcast_ref().unwrap())),
+            chunk_handling: value.get("chunk_handling").map_or_else(
+                || None,
+                |x| Some((x.downcast_ref::<String>().unwrap().as_str()).into()),
+            ),
+            chunk_size: value.get("chunk_size").map_or_else(
+                || None,
+                |x| Some(x.downcast_ref::<String>().unwrap().as_str().into()),
+            ),
+            canvas_type: value.get("canvas_type").map_or_else(
+                || canvas_type_default(),
+                |x: &Box<dyn Any>| x.downcast_ref::<String>().unwrap().as_str().into(),
+            ),
             hdoubletiles: Vec::new(),
             vdoubletiles: Vec::new(),
-            model: value.get("model").map_or_else(|| model_default(), |x: &Box<dyn Any>| x.downcast_ref::<String>().unwrap().as_str().into()),
-            threshold: value.get("threshold").map_or_else(|| threshold_default(), |x| *(x.downcast_ref().unwrap())),
+            model: value.get("model").map_or_else(
+                || model_default(),
+                |x: &Box<dyn Any>| x.downcast_ref::<String>().unwrap().as_str().into(),
+            ),
+            threshold: value
+                .get("threshold")
+                .map_or_else(|| threshold_default(), |x| *(x.downcast_ref().unwrap())),
         }
     }
 }
@@ -1006,7 +1040,8 @@ impl ProcessedTileSet {
 
     pub fn tpmap(&self, tp: &TileIdent) -> base::Tile {
         match tp {
-            TileIdent::Name(x) => {  // FIXME: fail gracefully
+            TileIdent::Name(x) => {
+                // FIXME: fail gracefully
                 self.tile_names.iter().position(|y| *y == *x).unwrap() as base::Tile
             }
             TileIdent::Num(x) => (*x).try_into().unwrap(),

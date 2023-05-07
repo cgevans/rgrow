@@ -1,12 +1,10 @@
 from typing import List, Optional, Tuple, Union, cast, Callable
-from numpy.core.fromnumeric import var
 # import statsmodels
 # import statsmodels.stats.proportion
-from numpy import isin, ndarray
+from numpy import ndarray
 import numpy as np
 import pandas as pd
 import rgrow.rgrow as rg
-import dataclasses
 import multiprocessing
 import multiprocessing.pool
 from . import rgrow
@@ -99,7 +97,7 @@ class FFSResult(rgrow.FFSResult):
                               min=0.4, max=0.6, ci_pct=0.95, max_events=10_000_000) -> pd.DataFrame:
         trajs = self.trajectory_configs
 
-        sim = ts.to_simulation()
+        ts.to_simulation()
 
         if proppool or (pool is None):
             seeds = []

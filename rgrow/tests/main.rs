@@ -8,7 +8,7 @@ use rgrow::{
     canvas::{CanvasPeriodic, PointSafe2},
     state::{NullStateTracker, QuadTreeState, StateStatus},
     system::{EvolveBounds, FissionHandling, System},
-    tileset::{FromTileSet, ParsedSeed, Size, TileSet}
+    tileset::{FromTileSet, ParsedSeed, Size, TileSet},
 };
 
 fn test_sim(ts: &TileSet) -> Result<()> {

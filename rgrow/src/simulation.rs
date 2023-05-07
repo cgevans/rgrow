@@ -41,9 +41,17 @@ pub trait Simulation: Send + Sync + SystemInfo + TileBondInfo {
     fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>>;
 
     #[cfg(feature = "use_rayon")]
-    fn evolve_some(&mut self, state_indices: &[usize], bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>>;
+    fn evolve_some(
+        &mut self,
+        state_indices: &[usize],
+        bounds: EvolveBounds,
+    ) -> Vec<Result<EvolveOutcome, GrowError>>;
 
-    fn set_system_param(&mut self, param_name: &str, _value: Box<dyn Any>) -> Result<(), GrowError> {
+    fn set_system_param(
+        &mut self,
+        param_name: &str,
+        _value: Box<dyn Any>,
+    ) -> Result<(), GrowError> {
         Err(GrowError::NoParameter(param_name.to_string()))
     }
 
@@ -98,12 +106,24 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
         let state = &self.states[state_index]; //.lock().unwrap();
         state.draw(frame, self.system.tile_colors());
     }
-    fn draw_scaled(&self, state_index: usize, frame: &mut [u8], tile_size: usize, edge_size: usize) {
+    fn draw_scaled(
+        &self,
+        state_index: usize,
+        frame: &mut [u8],
+        tile_size: usize,
+        edge_size: usize,
+    ) {
         let state = &self.states[state_index]; //.lock().unwrap();
         if edge_size == 0 {
             state.draw_scaled(frame, self.system.tile_colors(), tile_size, edge_size);
         } else {
-            state.draw_scaled_with_mm(frame, self.system.tile_colors(), self.system.calc_mismatch_locations(state), tile_size, edge_size);
+            state.draw_scaled_with_mm(
+                frame,
+                self.system.tile_colors(),
+                self.system.calc_mismatch_locations(state),
+                tile_size,
+                edge_size,
+            );
         }
     }
 
@@ -128,7 +148,11 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
 
     // FIXME: this implementation could be better.
     #[cfg(feature = "use_rayon")]
-    fn evolve_some(&mut self, state_indices: &[usize], bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>> {
+    fn evolve_some(
+        &mut self,
+        state_indices: &[usize],
+        bounds: EvolveBounds,
+    ) -> Vec<Result<EvolveOutcome, GrowError>> {
         use rayon::prelude::*;
         let sys = &self.system;
         self.states

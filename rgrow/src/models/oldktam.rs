@@ -803,7 +803,7 @@ impl System for OldKTAM {
                 let mm_s = ((ts != 0) & (self.get_energy_ns(t, ts) < threshold)) as usize;
                 let mm_w = ((tw != 0) & (self.get_energy_we(tw, t) < threshold)) as usize;
 
-                arr[(y, x)] = 8*mm_n + 4*mm_e + 2*mm_s + mm_w;
+                arr[(y, x)] = 8 * mm_n + 4 * mm_e + 2 * mm_s + mm_w;
             }
         }
 

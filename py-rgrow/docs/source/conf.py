@@ -7,10 +7,6 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 import sphinx_autosummary_accessors
-import sys
-import os
-import shutil
-import inspect
 
 # sys.path.insert(0, os.path.abspath("../.."))
 

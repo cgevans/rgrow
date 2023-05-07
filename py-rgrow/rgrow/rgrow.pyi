@@ -138,3 +138,9 @@ class TileSet(object):
         max_subseq_time: float | None = None,
         keep_surface_configs: bool = False,
     ) -> FFSResult: ...
+
+class Tile(object):
+    ...
+
+class FFSRunConfig(object):
+    ...

@@ -54,7 +54,13 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
 
     let surface_texture = SurfaceTexture::new(win_width, win_height - 30, &win);
 
-    let mut pixels = { Pixels::new(width*(scale as u32), height*(scale as u32), surface_texture)? };
+    let mut pixels = {
+        Pixels::new(
+            width * (scale as u32),
+            height * (scale as u32),
+            surface_texture,
+        )?
+    };
 
     let mut bounds = parsed.get_bounds();
 
@@ -67,10 +73,15 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
             win_height = win.pixel_h() as u32;
             pixels.resize_surface(win_width, win_height - 30).unwrap();
             if parsed.options.block.is_none() {
-                scale = (win_width / width)
-                    .min((win_height - 30) / (height)) as usize;
-                if scale >= 10 {scale = 10} else {scale = 1;} // (scale - 10) % 10 + 10;
-                pixels.resize_buffer(width*(scale as u32), height*(scale as u32)).unwrap();
+                scale = (win_width / width).min((win_height - 30) / (height)) as usize;
+                if scale >= 10 {
+                    scale = 10
+                } else {
+                    scale = 1;
+                } // (scale - 10) % 10 + 10;
+                pixels
+                    .resize_buffer(width * (scale as u32), height * (scale as u32))
+                    .unwrap();
             }
             frame.set_pos(0, (win_height - 30) as i32);
             frame.set_size(win_width as i32, 30);
@@ -81,7 +92,12 @@ pub fn run_window(parsed: &crate::tileset::TileSet) -> Result<Box<dyn Simulation
         let edge_size = scale / 10;
 
         if scale != 1 {
-            sim.draw_scaled(state_i, pixels.frame_mut(), scale-2*edge_size, edge_size);
+            sim.draw_scaled(
+                state_i,
+                pixels.frame_mut(),
+                scale - 2 * edge_size,
+                edge_size,
+            );
         } else {
             sim.draw(state_i, pixels.frame_mut());
         }

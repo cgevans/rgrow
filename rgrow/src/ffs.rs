@@ -185,7 +185,6 @@ impl FFSRunConfig {
         }
         rc
     }
-
 }
 
 pub trait FFSResult: Send + Sync {

@@ -1,0 +1,6 @@
+exclude = [
+    ".git",
+    "py-rgrow/old"
+]
+
+line-length = 100
