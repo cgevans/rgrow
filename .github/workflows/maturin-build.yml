@@ -12,6 +12,9 @@ on:
       - master
     tags:
       - "*"
+    paths-ignore:
+      - CHANGELOG.md
+      - README.md
   pull_request:
   workflow_dispatch:
 

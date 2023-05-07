@@ -1,4 +1,4 @@
-# 0.12.0 (dev)
+# 0.12.0
 
 The version number for Rust has been increased to give consistent version numbering for both Rust and Python.
 
