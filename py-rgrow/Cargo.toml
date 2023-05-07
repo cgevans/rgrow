@@ -30,6 +30,7 @@ numpy = {workspace=true}
 [dependencies.rgrow]
 path = "../rgrow"
 features = ["python"]
+default-features = false
 
 [dependencies.pyo3]
 version = "^0.18.3"
