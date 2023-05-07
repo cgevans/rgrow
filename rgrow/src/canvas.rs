@@ -354,7 +354,7 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
                     & (blocky < edge_size + tile_size)
                 {
                     colors[tv as usize]
-                } else if ((blockx <= edge_size - 1)
+                } else if ((blockx < edge_size)
                     & (blocky > edge_size - 1)
                     & (blocky < edge_size + tile_size)
                     & (mismatches[(y, x)] & 0b0001 == 0b0001))
@@ -362,7 +362,7 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
                         & (blocky > edge_size - 1)
                         & (blocky < edge_size + tile_size)
                         & (mismatches[(y, x)] & 0b0100 == 0b0100))
-                    | ((blocky <= edge_size - 1)
+                    | ((blocky < edge_size)
                         & (blockx > edge_size - 1)
                         & (blockx < edge_size + tile_size)
                         & (mismatches[(y, x)] & 0b1000 == 0b1000))

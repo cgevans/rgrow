@@ -602,7 +602,6 @@ impl ATAM {
                 let mut rng = rand::thread_rng();
                 let ug = rand::distributions::Uniform::new(100u8, 254);
                 (0..ntiles)
-                    .into_iter()
                     .map(|_x| {
                         [
                             ug.sample(&mut rng),

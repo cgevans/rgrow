@@ -569,19 +569,19 @@ impl From<HashMap<String, Box<dyn Any>>> for Args {
         Args {
             gse: value
                 .get("gse")
-                .map_or_else(|| gse_default(), |x| *(x.downcast_ref().unwrap())),
+                .map_or_else(gse_default, |x| *(x.downcast_ref().unwrap())),
             gmc: value
                 .get("gmc")
-                .map_or_else(|| gmc_default(), |x| *x.downcast_ref::<f64>().unwrap()),
+                .map_or_else(gmc_default, |x| *x.downcast_ref::<f64>().unwrap()),
             alpha: value
                 .get("alpha")
-                .map_or_else(|| alpha_default(), |x| *x.downcast_ref::<f64>().unwrap()),
+                .map_or_else(alpha_default, |x| *x.downcast_ref::<f64>().unwrap()),
             seed: value
                 .get("seed")
-                .map_or_else(|| seed_default(), |x| x.try_into().unwrap()),
+                .map_or_else(seed_default, |x| x.try_into().unwrap()),
             size: value
                 .get("size")
-                .map_or_else(|| size_default(), |x| x.try_into().unwrap()),
+                .map_or_else(size_default, |x| x.try_into().unwrap()),
             tau: value
                 .get("tau")
                 .map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
@@ -590,17 +590,17 @@ impl From<HashMap<String, Box<dyn Any>>> for Args {
                 .map_or_else(|| None, |x| *(x.downcast_ref().unwrap())),
             update_rate: value
                 .get("update_rate")
-                .map_or_else(|| update_rate_default(), |x| *(x.downcast_ref().unwrap())),
+                .map_or_else(update_rate_default, |x| *(x.downcast_ref().unwrap())),
             kf: value
                 .get("kf")
                 .map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
             fission: value.get("chunk_size").map_or_else(
-                || fission_default(),
+                fission_default,
                 |x| (x.downcast_ref::<String>().unwrap().as_str()).into(),
             ),
             block: value
                 .get("block")
-                .map_or_else(|| block_default(), |x| *(x.downcast_ref().unwrap())),
+                .map_or_else(block_default, |x| *(x.downcast_ref().unwrap())),
             chunk_handling: value.get("chunk_handling").map_or_else(
                 || None,
                 |x| Some((x.downcast_ref::<String>().unwrap().as_str()).into()),
@@ -610,18 +610,18 @@ impl From<HashMap<String, Box<dyn Any>>> for Args {
                 |x| Some(x.downcast_ref::<String>().unwrap().as_str().into()),
             ),
             canvas_type: value.get("canvas_type").map_or_else(
-                || canvas_type_default(),
+                canvas_type_default,
                 |x: &Box<dyn Any>| x.downcast_ref::<String>().unwrap().as_str().into(),
             ),
             hdoubletiles: Vec::new(),
             vdoubletiles: Vec::new(),
             model: value.get("model").map_or_else(
-                || model_default(),
+                model_default,
                 |x: &Box<dyn Any>| x.downcast_ref::<String>().unwrap().as_str().into(),
             ),
             threshold: value
                 .get("threshold")
-                .map_or_else(|| threshold_default(), |x| *(x.downcast_ref().unwrap())),
+                .map_or_else(threshold_default, |x| *(x.downcast_ref().unwrap())),
         }
     }
 }

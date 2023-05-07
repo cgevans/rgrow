@@ -164,7 +164,7 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
     }
 
     fn state_keys(&self) -> Vec<usize> {
-        return (0..self.states.len()).into_iter().collect();
+        (0..self.states.len()).collect()
     }
 
     fn set_system_param(&mut self, param_name: &str, value: Box<dyn Any>) -> Result<(), GrowError> {

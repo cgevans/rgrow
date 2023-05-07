@@ -196,8 +196,8 @@ impl OldKTAM {
             g_se: Some(g_se),
             k_f: k_f.unwrap_or(1e6),
             fission_handling: fission_handling.unwrap_or(FissionHandling::NoFission),
-            tile_names: tile_names,
-            tile_colors: tile_colors,
+            tile_names,
+            tile_colors,
             chunk_handling: chunk_handling.unwrap_or(ChunkHandling::None),
             chunk_size: chunk_size.unwrap_or(ChunkSize::Single),
         }
@@ -270,13 +270,12 @@ impl OldKTAM {
 
         let ntiles = tile_adj_concs.len();
 
-        let tile_names = (0..ntiles).into_iter().map(|x| x.to_string()).collect();
+        let tile_names = (0..ntiles).map(|x| x.to_string()).collect();
 
         let tile_colors = {
             let mut rng = rand::thread_rng();
             let ug = rand::distributions::Uniform::new(100u8, 254);
             (0..ntiles)
-                .into_iter()
                 .map(|_x| {
                     [
                         ug.sample(&mut rng),
