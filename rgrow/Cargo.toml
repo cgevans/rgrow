@@ -44,7 +44,7 @@ python = ["pyo3", "numpy"]
 [dependencies]
 fltk = { version = "^1.4", features = [
     "rwh05",
-#    "fltk-bundled",
+    "fltk-bundled",
 ], optional = true }
 num-format = "0.4"
 fnv = "1.0"
