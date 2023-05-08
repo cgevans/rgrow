@@ -34,7 +34,7 @@ jobs:
           components: clippy,llvm-tools
           toolchain: nightly-2023-05-06
       - name: Set up cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
         with:
           key: coverage-cargo-python-linux # ${{ matrix.os }}
         continue-on-error: true
@@ -46,7 +46,6 @@ jobs:
         run: cargo clippy --features ui,use_rayon
       - name: Run tests and coverage
         run: |
-          source venv/bin/activate
           source <(cargo llvm-cov show-env --export-prefix)
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           export CARGO_INCREMENTAL=1
@@ -69,7 +68,7 @@ jobs:
           components: clippy,llvm-tools
           toolchain: nightly-2023-05-06
       - name: Set up cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
         with:
           key: coverage-cargo-python-linux # ${{ matrix.os }}
         continue-on-error: true
