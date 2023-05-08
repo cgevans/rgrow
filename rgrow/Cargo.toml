@@ -77,3 +77,7 @@ default-features = false
 
 [dependencies.num-traits]
 version = "0.2"
+
+[package.metadata.docs.rs]
+no-default-features = true
+features = ["use_rayon", "python"]
