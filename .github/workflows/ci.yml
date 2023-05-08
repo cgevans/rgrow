@@ -29,11 +29,14 @@ jobs:
       RUSTFLAGS: "-Dwarnings"
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@master
         with:
           components: clippy
-      - name: Run Clippy, including Python features
+          toolchain: nightly-2023-05-06
+      - name: Run Clippy
         run: cargo clippy --features ui,use_rayon
+      - name: Run tests
+        run: cargo test --features ui,use_rayon
   python_checks:
     name: Checks for Python
     runs-on: ubuntu-latest
@@ -41,9 +44,10 @@ jobs:
       RUSTFLAGS: "-Dwarnings"
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@master
         with:
-          components: clippy
+          components: clippy,llvm-tools
+          toolchain: nightly-2023-05-06
       - name: Run Clippy, including Python features
         run: cargo clippy --features python,use_rayon
       - uses: actions/setup-python@v4
@@ -57,6 +61,32 @@ jobs:
         uses: chartboost/ruff-action@v1
         with:
           src: "./py-rgrow"
+      - name: Install carge llvm-cov
+        run: cargo install cargo-llvm-cov
+      - name: Set up cache
+        uses: Swatinem/rust-cache@v1
+        with:
+          key: coverage-cargo-linux # ${{ matrix.os }}
+        continue-on-error: true
+      - name: Setup virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+      - name: Run coverage
+        run: |
+          source venv/bin/activate
+          source <(cargo llvm-cov show-env --export-prefix)
+          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+          export CARGO_INCREMENTAL=1
+          cargo llvm-cov clean --workspace
+          cd py-rgrow
+          maturin develop
+          pytest tests --cov=rgrow --cov-report xml
+          cargo llvm-cov --no-run --lcov --output-path coverage.lcov
+      - uses: codecov/codecov-action@v3
+        with:
+          files: py-rgrow/coverage.lcov,py-rgrow/coverage.xml
+          name: linux # ${{ matrix.os }}
   linux:
     name: Python Linux builds
     needs: [python_checks]
@@ -77,7 +107,7 @@ jobs:
           sccache: "true"
           manylinux: auto
           working-directory: py-rgrow
-          rust-toolchain: nightly
+          rust-toolchain: nightly-2023-05-06
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
@@ -194,7 +224,9 @@ jobs:
     needs: [rust_checks]
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2023-05-06
       - name: Publish to crates.io
         run: cargo publish --allow-dirty -p rgrow --no-default-features -F use_rayon
         env:

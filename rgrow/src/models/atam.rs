@@ -302,9 +302,74 @@ impl System for ATAM {
         v
     }
 
-    fn calc_mismatch_locations<S: State>(&self, _state: &S) -> Array2<usize> {
-        todo!()
-    }
+    fn calc_mismatch_locations<S: State>(&self, state: &S) -> Array2<usize> {
+        let threshold = self.threshold/4.0; // FIXME: this is a hack
+        let mut mismatch_locations = Array2::<usize>::zeros((state.nrows(), state.ncols()));
+
+        // TODO: this should use an iterator from the canvas, which we should implement.
+        for i in 0..state.nrows() {
+            for j in 0..state.ncols() {
+                if !state.inbounds((i, j)) {
+                    continue;
+                }
+                let p = PointSafe2((i, j));
+
+                let t = state.tile_at_point(p);
+
+                if t == 0 {
+                    continue;
+                }
+
+                let tn;
+                let te;
+                let ts;
+                let tw;
+
+                // We set duple directions to 0, because these will be
+                // excluded from the mismatch calculation.
+                match self.tile_shape(t) {
+                    TileShape::Single => {
+                        tn = state.tile_to_n(p);
+                        te = state.tile_to_e(p);
+                        ts = state.tile_to_s(p);
+                        tw = state.tile_to_w(p);
+                    }
+                    TileShape::DupleToRight(_) => {
+                        tn = state.tile_to_n(p);
+                        te = 0;
+                        ts = state.tile_to_s(p);
+                        tw = state.tile_to_w(p);
+                    }
+                    TileShape::DupleToBottom(_) => {
+                        tn = state.tile_to_n(p);
+                        te = state.tile_to_e(p);
+                        ts = 0;
+                        tw = state.tile_to_w(p);
+                    }
+                    TileShape::DupleToLeft(_) => {
+                        tn = state.tile_to_n(p);
+                        te = state.tile_to_e(p);
+                        ts = state.tile_to_s(p);
+                        tw = 0;
+                    }
+                    TileShape::DupleToTop(_) => {
+                        tn = 0;
+                        te = state.tile_to_e(p);
+                        ts = state.tile_to_s(p);
+                        tw = state.tile_to_w(p);
+                    }
+                }
+
+                let mm_n = ((tn != 0) & (self.get_energy_ns(tn, t) < threshold)) as usize;
+                let mm_e = ((te != 0) & (self.get_energy_we(t, te) < threshold)) as usize;
+                let mm_s = ((ts != 0) & (self.get_energy_ns(t, ts) < threshold)) as usize;
+                let mm_w = ((tw != 0) & (self.get_energy_we(tw, t) < threshold)) as usize;
+
+                mismatch_locations[(i, j)] = 8 * mm_n + 4 * mm_e + 2 * mm_s + mm_w;
+            }
+        }
+
+        mismatch_locations    }
 }
 
 impl ATAM {

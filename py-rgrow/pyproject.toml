@@ -1,8 +1,15 @@
 [project]
 name = "rgrow"
-dependencies = [ "numpy" ]
+dependencies = ["numpy"]
 requires-python = ">=3.9"
 
 [build-system]
 requires = ["maturin>=0.14,<0.15"]
 build-backend = "maturin"
+
+[tool.pytest.ini_options]
+norecursedirs = [
+    "dist",
+    "build",
+    ".tox"]
+testpaths = ["tests"]

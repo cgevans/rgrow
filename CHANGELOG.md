@@ -1,3 +1,12 @@
+# 0.12.2
+
+- Python tests.
+- Mismatch calculations for aTAM.
+
+# 0.12.1
+
+Version bump to fix some release automation problems.
+
 # 0.12.0
 
 The version number for Rust has been increased to give consistent version numbering for both Rust and Python.

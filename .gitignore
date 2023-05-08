@@ -25,3 +25,6 @@ py-rgrow/rgrow/*.so
 rgrow/target
 *.pyc
 Cargo.lock
+.coverage
+coverage.xml
+coverage.lcov
