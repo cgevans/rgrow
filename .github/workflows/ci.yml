@@ -68,12 +68,14 @@ jobs:
       - name: Set up cache
         uses: Swatinem/rust-cache@v1
         with:
-          key: coverage-cargo-linux # ${{ matrix.os }}
+          key: coverage-cargo-python-linux # ${{ matrix.os }}
         continue-on-error: true
       - name: Setup virtual environment
         run: |
           python -m venv venv
           source venv/bin/activate
+      - name: Install maturin
+        run: pip install maturin
       - name: Run coverage
         run: |
           source venv/bin/activate
@@ -88,7 +90,7 @@ jobs:
       - uses: codecov/codecov-action@v3
         with:
           files: py-rgrow/coverage.lcov,py-rgrow/coverage.xml
-          name: linux # ${{ matrix.os }}
+          name: python-linux # ${{ matrix.os }}
   linux:
     name: Python Linux builds
     needs: [python_checks]
