@@ -72,8 +72,6 @@ jobs:
         with:
           key: coverage-cargo-python-linux # ${{ matrix.os }}
         continue-on-error: true
-      - name: Run Clippy, including Python features
-        run: cargo clippy --features python,use_rayon
       - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
@@ -92,7 +90,9 @@ jobs:
           python -m venv venv
           source venv/bin/activate
       - name: Install maturin and pytest
-        run: pip install maturin pytest pytest-cov
+        run: |
+          source venv/bin/activate
+          pip install maturin pytest pytest-cov
       - name: Run coverage
         run: |
           source venv/bin/activate
@@ -100,9 +100,9 @@ jobs:
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
+          cargo clippy --features python,use_rayon
           cd py-rgrow
           maturin develop
-          pip install .
           pytest tests --cov=rgrow --cov-report xml
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
       - uses: codecov/codecov-action@v3
