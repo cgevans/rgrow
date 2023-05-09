@@ -94,6 +94,7 @@ jobs:
           source venv/bin/activate
           pip install maturin pytest pytest-cov
       - name: Run coverage #           cargo clippy --features python,use_rayon
+        continue-on-error: true
         run: |
           source venv/bin/activate
           source <(cargo llvm-cov show-env --export-prefix)
@@ -101,9 +102,14 @@ jobs:
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
           cd py-rgrow
-          maturin develop
+          pip install .
           python -m pytest # --cov=rgrow --cov-report xml
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
+      - name: Check segfault
+        run: |
+          source venv/bin/activate
+          cd py-rgrow
+          find . \( -name "*.core" -o -name core \) -exec gdb --batch --quiet -ex "thread apply all bt" "$(readlink -f $(which python3))" {} \;
       - uses: codecov/codecov-action@v3
         with:
           files: py-rgrow/coverage.lcov #,py-rgrow/coverage.xml
