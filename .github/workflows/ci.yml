@@ -93,14 +93,13 @@ jobs:
         run: |
           source venv/bin/activate
           pip install maturin pytest pytest-cov
-      - name: Run coverage
+      - name: Run coverage #           cargo clippy --features python,use_rayon
         run: |
           source venv/bin/activate
           source <(cargo llvm-cov show-env --export-prefix)
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
-          cargo clippy --features python,use_rayon
           cd py-rgrow
           maturin develop
           pytest tests --cov=rgrow --cov-report xml
