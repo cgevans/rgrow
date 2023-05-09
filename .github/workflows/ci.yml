@@ -102,11 +102,11 @@ jobs:
           cargo llvm-cov clean --workspace
           cd py-rgrow
           maturin develop
-          pytest tests --cov=rgrow --cov-report xml
+          pytest # --cov=rgrow --cov-report xml
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
       - uses: codecov/codecov-action@v3
         with:
-          files: py-rgrow/coverage.lcov,py-rgrow/coverage.xml
+          files: py-rgrow/coverage.lcov #,py-rgrow/coverage.xml
           name: python-linux # ${{ matrix.os }}
   linux:
     name: Python Linux builds
