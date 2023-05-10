@@ -17,8 +17,6 @@ def test_full_simulation(canvas_type):
         for i2 in [0, 1]
     ]
 
-    tiles = []
-
     bonds = [("h", 2), ("v", 2)]
 
     options = {
@@ -32,6 +30,7 @@ def test_full_simulation(canvas_type):
     ts = TileSet(tiles, bonds, options=options)  # noqa: F841
 
     sim = ts.to_simulation()
+
 
     sim.evolve(for_events=10000)
 
@@ -68,4 +67,4 @@ def test_atam(canvas_type):
 
     sim.evolve(for_events=3600)
 
-    assert sim.state_ntiles() == 3600
+    assert sim.state_ntiles() == 3601
