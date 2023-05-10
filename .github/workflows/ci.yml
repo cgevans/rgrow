@@ -74,7 +74,7 @@ jobs:
         continue-on-error: true
       - uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: "3.10"
       - name: Install mypy
         run: pip install --upgrade mypy
       - name: Run mypy
@@ -89,6 +89,7 @@ jobs:
         run: |
           python -m venv venv
           source venv/bin/activate
+          pip install -U pip setuptools wheel
       - name: Install maturin and pytest
         run: |
           source venv/bin/activate
@@ -104,15 +105,24 @@ jobs:
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
           cd py-rgrow
-          maturin develop --release
-          #python -m pytest # --cov=rgrow --cov-report xml
-          gdb --batch --quiet -ex r -ex "thread apply all bt" --args "$(readlink -f $(which python))" -m pytest -p no:faulthandler -x tests/test_runs.py
+          maturin develop
+          python -m pytest # --cov=rgrow --cov-report xml
+          gdb --batch --quiet -ex r -ex "thread apply all bt" --args "$(readlink -f $(which python3))" -m pytest -p no:faulthandler -x tests/test_runs.py
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
       - name: Check segfault
         run: |
           source venv/bin/activate
           cd py-rgrow
           find . \( -name "*.core" -o -name core \) -exec gdb --batch --quiet -ex "thread apply all bt" "$(readlink -f $(which python3))" {} \;
+      - name: Upload wheels
+        uses: actions/upload-artifact@v3
+        with:
+          name: cores
+          path: |
+            py-rgrow/*.core
+            *.core
+            core
+            py-rgrow/core
       - uses: codecov/codecov-action@v3
         with:
           files: py-rgrow/coverage.lcov #,py-rgrow/coverage.xml
@@ -138,7 +148,7 @@ jobs:
           args: --release --out dist --find-interpreter
           container: off
           sccache: "true"
-          manylinux: "2_28"
+          manylinux: "auto"
           working-directory: py-rgrow
           rust-toolchain: nightly-2023-05-06
       - name: Upload wheels
