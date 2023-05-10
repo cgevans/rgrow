@@ -94,7 +94,7 @@ jobs:
           source venv/bin/activate
           pip install maturin pytest pytest-cov
       - name: Install X components
-        run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
+        run: sudo apt-get install -y gdb libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
       - name: Run coverage #           cargo clippy --features python,use_rayon
         continue-on-error: true
         run: |
