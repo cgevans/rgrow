@@ -100,14 +100,22 @@ jobs:
         continue-on-error: true
         run: |
           source venv/bin/activate
-          #source <(cargo llvm-cov show-env --export-prefix)
-          #export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
-          #export CARGO_INCREMENTAL=1
-          #cargo llvm-cov clean --workspace
           cd py-rgrow
+          source <(cargo llvm-cov show-env --export-prefix)
+          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+          export CARGO_INCREMENTAL=1
+          cargo llvm-cov clean --workspace
           RUSTFLAGS="-C instrument-coverage" maturin develop
-          python -m pytest -vvv --debug # --cov=rgrow --cov-report xml
-          cargo llvm-cov --no-run --lcov --output-path coverage.lcov
+          python -m pytest -vvv --debug --cov=rgrow --cov-report xml
+      - name: Run llvm-cov #           cargo clippy --features python,use_rayon
+        continue-on-error: true
+        run: |
+          source venv/bin/activate
+          source <(cargo llvm-cov show-env --export-prefix)
+          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+          export CARGO_INCREMENTAL=1
+          cd py-rgrow
+          cargo llvm-cov report --lcov --output-path coverage.lcov
       - uses: codecov/codecov-action@v3
         with:
           files: py-rgrow/coverage.lcov,py-rgrow/coverage.xml
