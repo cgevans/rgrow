@@ -1,32 +1,34 @@
-from rgrow import Tile
+from rgrow import TileSet # noqa: F841
 
 
 def test_full_simulation():
     # Make a simple sierpinski set:
-    tiles = [  # noqa: F841
-        Tile([0, "h", "v", 0]),
-        Tile(["v", "e1", "v", 0]),
-        Tile([0, "h", "e1", "h"]),
-    ] + [
-        Tile(
-            ["e" + str(i1), "e" + str(i1 ^ i2), "e" + str(i1 ^ i2), "e" + str(i2)],
-            name=f"t{i1}{i2}",
-        )
-        for i1 in [0, 1]
-        for i2 in [0, 1]
-    ]
+    # tiles = [  # noqa: F841
+    #     Tile([0, "h", "v", 0]),
+    #     Tile(["v", "e1", "v", 0]),
+    #     Tile([0, "h", "e1", "h"]),
+    # ] + [
+    #     Tile(
+    #         ["e" + str(i1), "e" + str(i1 ^ i2), "e" + str(i1 ^ i2), "e" + str(i2)],
+    #         name=f"t{i1}{i2}",
+    #     )
+    #     for i1 in [0, 1]
+    #     for i2 in [0, 1]
+    # ]
 
-    # bonds = [("h", 2), ("v", 2)]
+    tiles = []
 
-    # options = {
-    #     "seed": [(2, 2, 1)],
-    #     "gse": 9.0,
-    #     "gmc": 16.0,
-    #     "canvas_type": "square",
-    #     "size": 64,
-    # }
+    bonds = [("h", 2), ("v", 2)]
 
-    # ts = TileSet(tiles, bonds, options=options)  # noqa: F841
+    options = {
+        "seed": [(2, 2, 1)],
+        "gse": 9.0,
+        "gmc": 16.0,
+        "canvas_type": "square",
+        "size": 64,
+    }
+
+    ts = TileSet(tiles, bonds, options=options)  # noqa: F841
 
     # sim = ts.to_simulation()
 

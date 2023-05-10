@@ -100,10 +100,10 @@ jobs:
         continue-on-error: true
         run: |
           source venv/bin/activate
-          source <(cargo llvm-cov show-env --export-prefix)
-          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
-          export CARGO_INCREMENTAL=1
-          cargo llvm-cov clean --workspace
+          #source <(cargo llvm-cov show-env --export-prefix)
+          #export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+          #export CARGO_INCREMENTAL=1
+          #cargo llvm-cov clean --workspace
           cd py-rgrow
           maturin develop
           python -m pytest -vvv --debug # --cov=rgrow --cov-report xml
@@ -114,7 +114,7 @@ jobs:
           source venv/bin/activate
           cd py-rgrow
           find . \( -name "*.core" -o -name core \) -exec gdb --batch --quiet -ex "thread apply all bt" "$(readlink -f $(which python3))" {} \;
-      - name: Upload wheels
+      - name: Upload cores
         uses: actions/upload-artifact@v3
         with:
           name: cores
@@ -124,6 +124,7 @@ jobs:
             core
             py-rgrow/core
             py-rgrow/pytestdebug.log
+            /home/runner/work/_temp/*core
       - uses: codecov/codecov-action@v3
         with:
           files: py-rgrow/coverage.lcov #,py-rgrow/coverage.xml
