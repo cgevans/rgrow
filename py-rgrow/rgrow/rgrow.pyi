@@ -1,5 +1,8 @@
-from typing import Any, Sequence
+from typing import Any, Sequence, TYPE_CHECKING
 import numpy as np
+
+if TYPE_CHECKING:
+    import matplotlib.pyplot as plt
 
 class EvolveOutcome(object): ...
 
@@ -70,6 +73,13 @@ class Simulation(object):
         """Add `n` new states, returning their indices."""
     tile_concs: list[float]
     tile_stoics: list[float]
+
+    @property
+    def tile_colors(self) -> list[tuple[int, int, int, int]]: ...
+
+    def plot_state(self: Simulation, state: int = 0, ax: "int | plt.Axes" = None) -> 'plt.QuadMesh | Any':
+        ...
+
 
 class FFSResult(object):
     @property

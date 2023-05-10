@@ -45,4 +45,4 @@ def _plot_state(self: Simulation, state: int = 0, ax: "int | plt.Axes" = None):
     return pc
 
 
-Simulation.plot_state = _plot_state
+Simulation.plot_state = _plot_state # type: ignore
