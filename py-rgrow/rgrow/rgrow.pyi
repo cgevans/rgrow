@@ -76,10 +76,9 @@ class Simulation(object):
 
     @property
     def tile_colors(self) -> list[tuple[int, int, int, int]]: ...
-
-    def plot_state(self: Simulation, state: int = 0, ax: "int | plt.Axes" = None) -> 'plt.QuadMesh | Any':
-        ...
-
+    def plot_state(
+        self: Simulation, state: int = 0, ax: "int | plt.Axes" = None
+    ) -> "plt.QuadMesh | Any": ...
 
 class FFSResult(object):
     @property
