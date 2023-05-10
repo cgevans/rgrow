@@ -106,7 +106,7 @@ jobs:
           cd py-rgrow
           maturin develop --release
           #python -m pytest # --cov=rgrow --cov-report xml
-          gdb --batch --quiet -ex r -ex "thread apply all bt" --args "$(readlink -f $(which python3))" -m pytest -p no:faulthandler -x tests/test_runs.py
+          gdb --batch --quiet -ex r -ex "thread apply all bt" --args "$(readlink -f $(which python))" -m pytest -p no:faulthandler -x tests/test_runs.py
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
       - name: Check segfault
         run: |
@@ -136,8 +136,9 @@ jobs:
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
+          container: off
           sccache: "true"
-          manylinux: auto
+          manylinux: "2_28"
           working-directory: py-rgrow
           rust-toolchain: nightly-2023-05-06
       - name: Upload wheels
