@@ -106,7 +106,7 @@ jobs:
           cargo llvm-cov clean --workspace
           cd py-rgrow
           maturin develop
-          python -m pytest # --cov=rgrow --cov-report xml
+          python -m pytest -vvv --debug # --cov=rgrow --cov-report xml
           gdb --batch --quiet -ex r -ex "thread apply all bt" --args "$(readlink -f $(which python3))" -m pytest -p no:faulthandler -x tests/test_runs.py
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
       - name: Check segfault
@@ -123,6 +123,7 @@ jobs:
             *.core
             core
             py-rgrow/core
+            py-rgrow/pytestdebug.log
       - uses: codecov/codecov-action@v3
         with:
           files: py-rgrow/coverage.lcov #,py-rgrow/coverage.xml
