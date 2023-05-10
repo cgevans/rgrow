@@ -34,8 +34,10 @@ fn ratestore_qsta_update(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("ratestore-update-all");
     group.plot_config(plot_config.clone());
-    for (pn, pv) in &[("all", &allchanges[..]),
-        ("all_shuffle", &allchanges_shuffled[..])] {
+    for (pn, pv) in &[
+        ("all", &allchanges[..]),
+        ("all_shuffle", &allchanges_shuffled[..]),
+    ] {
         group.bench_with_input(BenchmarkId::new("small update", pn), &pv, |b, a| {
             b.iter(|| rs._update_multiple_small(a))
         });

@@ -594,10 +594,9 @@ impl From<HashMap<String, Box<dyn Any>>> for Args {
             kf: value
                 .get("kf")
                 .map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
-            fission: value.get("chunk_size").map_or_else(
-                fission_default,
-                |x| (x.downcast_ref::<String>().unwrap().as_str()).into(),
-            ),
+            fission: value.get("chunk_size").map_or_else(fission_default, |x| {
+                (x.downcast_ref::<String>().unwrap().as_str()).into()
+            }),
             block: value
                 .get("block")
                 .map_or_else(block_default, |x| *(x.downcast_ref().unwrap())),
@@ -609,16 +608,18 @@ impl From<HashMap<String, Box<dyn Any>>> for Args {
                 || None,
                 |x| Some(x.downcast_ref::<String>().unwrap().as_str().into()),
             ),
-            canvas_type: value.get("canvas_type").map_or_else(
-                canvas_type_default,
-                |x: &Box<dyn Any>| x.downcast_ref::<String>().unwrap().as_str().into(),
-            ),
+            canvas_type: value
+                .get("canvas_type")
+                .map_or_else(canvas_type_default, |x: &Box<dyn Any>| {
+                    x.downcast_ref::<String>().unwrap().as_str().into()
+                }),
             hdoubletiles: Vec::new(),
             vdoubletiles: Vec::new(),
-            model: value.get("model").map_or_else(
-                model_default,
-                |x: &Box<dyn Any>| x.downcast_ref::<String>().unwrap().as_str().into(),
-            ),
+            model: value
+                .get("model")
+                .map_or_else(model_default, |x: &Box<dyn Any>| {
+                    x.downcast_ref::<String>().unwrap().as_str().into()
+                }),
             threshold: value
                 .get("threshold")
                 .map_or_else(threshold_default, |x| *(x.downcast_ref().unwrap())),

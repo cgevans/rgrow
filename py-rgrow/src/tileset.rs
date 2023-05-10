@@ -24,8 +24,6 @@ use rgrow::tileset;
 use rgrow::tileset::Ident;
 use rgrow::tileset::TileShape;
 
-
-
 #[derive(FromPyObject, Clone)]
 struct Bond(Ident, f64);
 
@@ -490,9 +488,6 @@ impl Simulation {
     ///
     /// Parameters
     /// ----------
-    /// state_index : int, optional
-    ///    The index of the state to evolve.  Defaults to 0, and creates sufficient states
-    ///    if they do not already exist.
     /// for_events : int, optional
     ///    Evolve until this many events have occurred.  Defaults to no limit. (Strong bound)
     /// total_events : int, optional
@@ -561,6 +556,44 @@ impl Simulation {
             .collect()
     }
 
+    /// Evolve *some* states, stopping each as they reach the
+    /// boundary conditions.  Runs multithreaded using available
+    /// cores.
+    ///
+    /// By default, this requires a strong bound (the simulation
+    /// will eventually end, eg, not a size or other potentially
+    /// unreachable bound). Releases the GIL during the simulation.
+    /// Bounds are applied for each state individually.    
+    ///
+    /// Parameters
+    /// ----------
+    /// state_indices : list[int]
+    ///   The indices of the states to evolve.
+    /// for_events : int, optional
+    ///    Evolve until this many events have occurred.  Defaults to no limit. (Strong bound)
+    /// total_events : int, optional
+    ///    Evolve until this many events have occurred in total.  Defaults to no limit. (Strong bound)
+    /// for_time : float, optional
+    ///    Evolve until this much (physical) time has passed.  Defaults to no limit. (Strong bound)
+    /// total_time : float, optional
+    ///    Evolve until this much (physical) time has passed since the state creation.  
+    ///    Defaults to no limit. (Strong bound)
+    /// size_min : int, optional
+    ///    Evolve until the system has this many, or fewer, tiles. Defaults to no limit. (Weak bound)
+    /// size_max : int, optional
+    ///    Evolve until the system has this many, or more, tiles. Defaults to no limit. (Weak bound)
+    /// for_wall_time : float, optional
+    ///    Evolve until this much (wall) time has passed.  Defaults to no limit. (Strong bound)
+    /// require_strong_bound : bool, optional
+    ///    If True (default), a ValueError will be raised unless at least one strong bound has been
+    ///    set, ensuring that the simulation will eventually end.  If False, ensure only that some
+    ///    weak bound has been set, which may result in an infinite simulation.
+    ///
+    /// Returns
+    /// -------
+    ///
+    /// list[EvolveOutcome]
+    ///   The stopping condition that caused each simulation to end.
     #[pyo3(
         signature = (state_indices,
                     for_events=None,
@@ -646,6 +679,31 @@ impl Simulation {
             .to_pyarray(py))
     }
 
+    /// Returns the current canvas for state_index (default 0), as an array of tile names.
+    /// 'empty' indicates empty locations; numbers are translated to strings.
+    ///
+    /// Parameters
+    /// ----------
+    /// state_index : int, optional
+    ///  The index of the state to return.  Defaults to 0.
+    ///
+    /// Returns
+    /// -------
+    ///
+    /// numpy.ndarray[str]
+    ///  The current canvas for the state, as an array of tile names.
+    fn name_canvas<'py>(
+        &self,
+        state_index: Option<usize>,
+        py: Python<'py>,
+    ) -> PyResult<&'py PyArray2<PyObject>> {
+        let state_index = self.check_state(state_index)?;
+        let sim = self.read()?;
+        let ra = sim.state_ref(state_index).raw_array();
+        let names = sim.tile_names();
+        Ok(ra.mapv(|x| names[x as usize].to_object(py)).to_pyarray(py))
+    }
+
     /// Returns the current canvas for state_index (default 0), as a
     /// *direct* view of the state array.  This array will update as
     /// the simulation evolves.  It should not be modified, as modifications
@@ -677,6 +735,28 @@ impl Simulation {
         let ra = sim.state_ref(state_index).raw_array();
 
         unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
+    }
+
+    /// Returns a list of the number of tiles in each state.
+    #[getter]
+    fn states_ntiles(&self) -> PyResult<Vec<u32>> {
+        Ok(self.read()?.iter_states().map(|x| x.ntiles()).collect())
+    }
+
+    /// Returns a list of the amount of time simulated (in seconds) for each state.
+    #[getter]
+    fn states_time(&self) -> PyResult<Vec<f64>> {
+        Ok(self.read()?.iter_states().map(|x| x.time()).collect())
+    }
+
+    /// Returns a list of the total number of events simulated for each state.
+    #[getter]
+    fn states_events(&self) -> PyResult<Vec<u64>> {
+        Ok(self
+            .read()?
+            .iter_states()
+            .map(|x| x.total_events())
+            .collect())
     }
 
     /// Returns the number of tiles in the state.
@@ -726,13 +806,37 @@ impl Simulation {
         Ok(self.read()?.tile_names())
     }
 
-    fn set_system_param(&self, name: &str, value: RustAny) {
+    #[getter]
+    fn get_tile_colors(&self) -> PyResult<Vec<[u8; 4]>> {
+        Ok(self.read()?.tile_colors().clone())
+    }
+
+    /// Sets a system parameter.
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///   The name of the parameter.
+    /// value : Any
+    ///   The value of the parameter.
+    fn set_system_param(&self, name: &str, value: RustAny) -> PyResult<()> {
         self.write()
             .unwrap()
             .set_system_param(name, value.0)
-            .unwrap();
+            .map_err(|x| PyValueError::new_err(x.to_string()))
     }
 
+    /// Gets a system parameter.
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///   The name of the parameter.
+    ///
+    /// Returns
+    /// -------
+    /// Any
+    ///   The value of the parameter.
     fn get_system_param(&self, name: &str, py: Python) -> PyResult<Py<PyAny>> {
         self.read()
             .unwrap()

@@ -10,7 +10,7 @@ categories = { workspace = true }
 
 
 [features]
-default = ["use_rayon"]         # "ui"
+default = ["use_rayon", "ui"]         # "ui"
 use_rayon = ["rgrow/use_rayon"]
 ui = ["rgrow/ui"]
 

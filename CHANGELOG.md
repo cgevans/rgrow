@@ -2,6 +2,8 @@
 
 - Python tests.
 - Mismatch calculations for aTAM.
+- Add several convenience functions to Python API.
+- Improve documentation.
 
 # 0.12.1
 

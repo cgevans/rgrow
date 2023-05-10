@@ -14,6 +14,7 @@ Running simulations
     Simulation
     Simulation.evolve
     Simulation.evolve_all
+    Simulation.evolve_some
 
 ---------------------------------------------
 Modifying simulations and getting information
@@ -28,9 +29,17 @@ Modifying simulations and getting information
     Simulation.get_system_param
     Simulation.canvas_copy
     Simulation.canvas_view
-    Simulation.tile_concs
-    Simulation.tile_stoics
-    Simulation.tile_names
+    Simulation.names_canvas
     Simulation.state_events
     Simulation.state_time
     Simulation.state_ntiles
+    Simulation.states_events
+    Simulation.states_time
+    Simulation.states_ntiles
+    Simulation.tile_concs
+    Simulation.tile_stoics
+    Simulation.tile_names
+    Simulation.tile_colors
+    Simulation.n_mismatches
+    Simulation.mismatch_array
+

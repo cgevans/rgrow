@@ -20,6 +20,8 @@ pub trait Simulation: Send + Sync + SystemInfo + TileBondInfo {
     fn state_mut_ref(&mut self, state_index: usize) -> &mut dyn State; //std::sync::Arc<RwLock<dyn State>>;
     fn n_states(&self) -> usize;
 
+    fn iter_states(&self) -> std::vec::IntoIter<&dyn State>;
+
     fn mismatch_array(&self, state_index: usize) -> Array2<usize>;
     fn n_mismatches(&self, state_index: usize) -> usize;
 
@@ -84,9 +86,15 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
         //std::sync::Arc<RwLock<dyn State>> {
         &self.states[state_index] //.clone()
     }
+
     fn state_mut_ref(&mut self, state_index: usize) -> &mut dyn State {
         //std::sync::Arc<RwLock<dyn State>> {
         &mut self.states[state_index] //.clone()
+    }
+
+    fn iter_states(&self) -> std::vec::IntoIter<&dyn State> {
+        let states: Vec<&dyn State> = self.states.iter().map(|s| s as &dyn State).collect();
+        states.into_iter()
     }
 
     fn mismatch_array(&self, state_index: usize) -> Array2<usize> {

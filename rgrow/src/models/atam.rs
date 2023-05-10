@@ -303,7 +303,7 @@ impl System for ATAM {
     }
 
     fn calc_mismatch_locations<S: State>(&self, state: &S) -> Array2<usize> {
-        let threshold = self.threshold/4.0; // FIXME: this is a hack
+        let threshold = self.threshold / 4.0; // FIXME: this is a hack
         let mut mismatch_locations = Array2::<usize>::zeros((state.nrows(), state.ncols()));
 
         // TODO: this should use an iterator from the canvas, which we should implement.
@@ -369,7 +369,8 @@ impl System for ATAM {
             }
         }
 
-        mismatch_locations    }
+        mismatch_locations
+    }
 }
 
 impl ATAM {
