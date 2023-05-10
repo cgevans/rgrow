@@ -24,7 +24,7 @@ def test_full_simulation(canvas_type):
         "gse": 9.0,
         "gmc": 16.0,
         "canvas_type": canvas_type,
-        "size": 64,
+        "size": (64, 128),
     }
 
     ts = TileSet(tiles, bonds, options=options)  # noqa: F841
@@ -58,7 +58,7 @@ def test_atam(canvas_type):
         "seed": [(2, 2, 1)],
         "model": "atam",
         "canvas_type": canvas_type,
-        "size": 64,
+        "size": 100,
     }
 
     ts = TileSet(tiles, bonds, options=options)
