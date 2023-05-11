@@ -42,4 +42,5 @@ Modifying simulations and getting information
     Simulation.tile_colors
     Simulation.n_mismatches
     Simulation.mismatch_array
-
+    Simulation.plot_state
+    Simulation.tile_cmap

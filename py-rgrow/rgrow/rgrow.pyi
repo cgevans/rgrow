@@ -1,8 +1,9 @@
 from typing import Any, Sequence, TYPE_CHECKING
 import numpy as np
 
-if TYPE_CHECKING:
+if TYPE_CHECKING: # pragma: no cover
     import matplotlib.pyplot as plt
+    import matplotlib.colors
 
 class EvolveOutcome(object): ...
 
@@ -79,6 +80,7 @@ class Simulation(object):
     def plot_state(
         self: Simulation, state: int = 0, ax: "int | plt.Axes" = None
     ) -> "plt.QuadMesh | Any": ...
+    def tile_cmap(self) -> "matplotlib.colors.ListedColorMap": ...
 
 class FFSResult(object):
     @property

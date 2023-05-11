@@ -20,22 +20,24 @@ from rgrow.rgrow import (
 
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt
+    import matplotlib.colors
 
 
-def _plot_state(self: Simulation, state: int = 0, ax: "int | plt.Axes" = None):
+def _plot_state(
+    self: Simulation, state_index: int = 0, ax: "int | plt.Axes" = None
+) -> "plt.QuadMesh":
+    """Plot a state as a pcolormesh.  Returns the pcolormesh object."""
     import matplotlib.pyplot as plt
-    from matplotlib.colors import ListedColormap
-    import numpy as np
 
     if ax is None:
         _, ax = plt.subplots()
 
-    v = self.canvas_view(state)
+    v = self.canvas_view(state_index)
     pc = ax.pcolormesh(
         v,
-        cmap=ListedColormap(np.array(self.tile_colors) / 255),
+        cmap=self.tile_cmap(),
         linewidth=0.5,
         edgecolors="#ffffff",
     )
@@ -45,4 +47,16 @@ def _plot_state(self: Simulation, state: int = 0, ax: "int | plt.Axes" = None):
     return pc
 
 
-Simulation.plot_state = _plot_state # type: ignore
+def _tile_cmap(self: Simulation) -> "matplotlib.colors.ListedColormap":
+    """Returns a matplotlib colormap for tile numbers."""
+    from matplotlib.colors import ListedColormap
+    import numpy as np
+
+    return ListedColormap(
+        np.array(self.tile_colors) / 255,
+        name="tile_cmap",
+    )
+
+
+Simulation.plot_state = _plot_state  # type: ignore
+Simulation.tile_cmap = _tile_cmap  # type: ignore
