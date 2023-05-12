@@ -5,9 +5,16 @@ build:
     os: ubuntu-22.04
     tools:
         python: "3.10"
+    apt_packages:
+      - libxinerama-dev
+      - libxcursor-dev
+      - libxfixes-dev
+      - libxft-dev
+      - libpango1.0-dev
+      - libpangoxft-1.0-0
+      - libpangocairo-1.0-0
     jobs:
       pre_install:
-        - sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
         - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
         - echo $PATH
         - ln -s ~/.cargo/bin/* /home/docs/.asdf/bin/
