@@ -13,7 +13,7 @@
 project = "Rgrow"
 copyright = "2023, Constantine Evans"
 author = "Constantine Evans"
-release = "0.12.0-alpha"
+release = "0.12.2"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
