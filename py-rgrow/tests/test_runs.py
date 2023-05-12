@@ -1,5 +1,6 @@
-from rgrow import Tile, TileSet # noqa: F841
+from rgrow import Tile, TileSet  # noqa: F841
 import pytest
+
 
 @pytest.mark.parametrize("canvas_type", ["square", "periodic"])
 def test_full_simulation(canvas_type):
@@ -31,10 +32,10 @@ def test_full_simulation(canvas_type):
 
     sim = ts.to_simulation()
 
-
     sim.evolve(for_events=10000)
 
     assert sim.state_ntiles(0) > 60
+
 
 @pytest.mark.parametrize("canvas_type", ["square", "periodic"])
 def test_atam(canvas_type):

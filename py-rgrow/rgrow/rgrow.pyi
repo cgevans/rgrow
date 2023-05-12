@@ -1,7 +1,7 @@
 from typing import Any, Sequence, TYPE_CHECKING
 import numpy as np
 
-if TYPE_CHECKING: # pragma: no cover
+if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt
     import matplotlib.colors
 
