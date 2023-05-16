@@ -30,3 +30,5 @@ pub mod models;
 // pub mod arcsim;
 
 pub mod cffi;
+
+pub mod new_tileset;

@@ -5,7 +5,7 @@ use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, State, StateCreate};
-use crate::system::{EvolveBounds, System, SystemInfo, TileBondInfo};
+use crate::system::{DynSystem, EvolveBounds, System, SystemInfo, TileBondInfo};
 
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;
@@ -60,6 +60,8 @@ pub enum ParserError {
         num: usize,
         shape: TileShape,
     },
+    #[error(transparent)]
+    OptError(#[from] ConfigErr),
 }
 
 #[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -343,6 +345,7 @@ pub struct Bond {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass)]
 pub struct TileSet {
     #[serde(default = "Vec::new")]
     pub tiles: Vec<Tile>,
@@ -564,6 +567,52 @@ impl Default for Args {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum ConfigErr {
+    #[error("Wrong type for {0}")]
+    WrongType(String),
+}
+
+trait Config {
+    fn try_get_option_float(&self, key: &str) -> Result<Option<f64>, ConfigErr>;
+
+    fn try_get_seed(&self, key: &str) -> Result<&ParsedSeed, ConfigErr>;
+
+    fn try_get_ident_pair_list(&self, key: &str)
+        -> Result<&Vec<(TileIdent, TileIdent)>, ConfigErr>;
+}
+
+impl Config for Args {
+    fn try_get_option_float(&self, key: &str) -> Result<Option<f64>, ConfigErr> {
+        match key {
+            "gse" => Ok(Some(self.gse)),
+            "gmc" => Ok(Some(self.gmc)),
+            "alpha" => Ok(Some(self.alpha)),
+            "threshold" => Ok(Some(self.threshold)),
+            "kf" => Ok(self.kf),
+            _ => Err(ConfigErr::WrongType(key.to_string())),
+        }
+    }
+
+    fn try_get_seed(&self, key: &str) -> Result<&ParsedSeed, ConfigErr> {
+        match key {
+            "seed" => Ok(&self.seed),
+            _ => Err(ConfigErr::WrongType(key.to_string())),
+        }
+    }
+
+    fn try_get_ident_pair_list(
+        &self,
+        key: &str,
+    ) -> Result<&Vec<(TileIdent, TileIdent)>, ConfigErr> {
+        match key {
+            "hdoubletiles" => Ok(&self.hdoubletiles),
+            "vdoubletiles" => Ok(&self.vdoubletiles),
+            _ => Err(ConfigErr::WrongType(key.to_string())),
+        }
+    }
+}
+
 impl From<HashMap<String, Box<dyn Any>>> for Args {
     fn from(value: HashMap<String, Box<dyn Any>>) -> Self {
         Args {
@@ -691,6 +740,33 @@ impl TileSet {
             default_state_size: size,
         };
         Ok(Box::new(sim))
+    }
+
+    pub fn create_dynsystem(&self) -> Result<Box<dyn DynSystem>, RgrowError> {
+        Ok(match self.options.model {
+            Model::KTAM => Box::new(KTAM::from_tileset(self)?),
+            Model::ATAM => Box::new(ATAM::from_tileset(self)?),
+            Model::OldKTAM => Box::new(OldKTAM::from_tileset(self)?),
+        })
+    }
+
+    pub fn create_state(&self) -> Result<Box<dyn State>, RgrowError> {
+        let shape = match self.options.size {
+            Size::Single(i) => (i, i),
+            Size::Pair(i) => i,
+        };
+
+        match self.options.canvas_type {
+            CanvasType::Square => Ok(Box::new(
+                QuadTreeState::<CanvasSquare, NullStateTracker>::empty(shape)?,
+            )),
+            CanvasType::Periodic => Ok(Box::new(
+                QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty(shape)?,
+            )),
+            CanvasType::Tube => Ok(Box::new(
+                QuadTreeState::<CanvasTube, NullStateTracker>::empty(shape)?,
+            )),
+        }
     }
 
     pub fn into_simulation(&self) -> Result<Box<dyn Simulation>, RgrowError> {
@@ -1005,7 +1081,7 @@ impl ProcessedTileSet {
             .map(|(g1, g2, st)| (s.gpmap(g1), s.gpmap(g2), *st))
             .collect::<Vec<_>>();
 
-        s.seed = match &tileset.options.seed {
+        s.seed = match tileset.options.try_get_seed("seed")? {
             ParsedSeed::None() => Vec::new(),
             ParsedSeed::Single(x, y, t) => vec![(*x, *y, s.tpmap(t))],
             ParsedSeed::Multi(v) => v
@@ -1022,13 +1098,13 @@ impl ProcessedTileSet {
 
         let hdoubles = tileset
             .options
-            .hdoubletiles
+            .try_get_ident_pair_list("hdoubletiles")?
             .iter()
             .map(|(a, b)| (s.tpmap(a), s.tpmap(b)))
             .collect::<Vec<_>>();
         let vdoubles = tileset
             .options
-            .vdoubletiles
+            .try_get_ident_pair_list("vdoubletiles")?
             .iter()
             .map(|(a, b)| (s.tpmap(a), s.tpmap(b)))
             .collect::<Vec<_>>();

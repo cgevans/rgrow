@@ -4,6 +4,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::base::CanvasLength;
+use crate::base::RgrowError;
 use crate::state::State;
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateCreate,
@@ -15,6 +16,10 @@ use crate::canvas::PointSafe2;
 use std::any::Any;
 use std::fmt::Debug;
 use std::time::Duration;
+
+use fltk::{app, prelude::*, window::Window};
+
+use pixels::{Pixels, SurfaceTexture};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -43,6 +48,10 @@ pub enum NeededUpdate {
     None,
     NonZero,
     All,
+}
+
+thread_local! {
+    pub static APP: fltk::app::App = app::App::default()
 }
 
 #[derive(Debug, Copy, Clone, Default)]
@@ -202,7 +211,7 @@ impl From<&str> for ChunkSize {
     }
 }
 
-pub trait System: Debug + Sync + Send {
+pub trait System: Debug + Sync + Send + TileBondInfo {
     fn new_state<St: StateCreate + State>(
         &self,
         shape: (CanvasLength, CanvasLength),
@@ -242,11 +251,11 @@ pub trait System: Debug + Sync + Send {
         Ok(ret)
     }
 
-    fn calc_ntiles<St: State>(&self, state: &St) -> NumTiles {
+    fn calc_ntiles<St: State + ?Sized>(&self, state: &St) -> NumTiles {
         state.calc_ntiles()
     }
 
-    fn state_step<St: State>(&self, state: &mut St, max_time_step: f64) -> StepOutcome {
+    fn state_step<St: State + ?Sized>(&self, state: &mut St, max_time_step: f64) -> StepOutcome {
         let time_step = -f64::ln(thread_rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
@@ -264,7 +273,7 @@ pub trait System: Debug + Sync + Send {
         StepOutcome::HadEventAt(time_step)
     }
 
-    fn evolve<St: State>(
+    fn evolve<St: State + ?Sized>(
         &self,
         state: &mut St,
         bounds: EvolveBounds,
@@ -322,7 +331,20 @@ pub trait System: Debug + Sync + Send {
         }
     }
 
-    fn set_point<St: State>(
+    #[cfg(feature = "use_rayon")]
+    fn evolve_states<St: State>(
+        &mut self,
+        states: &mut [St],
+        bounds: EvolveBounds,
+    ) -> Vec<Result<EvolveOutcome, GrowError>> {
+        use rayon::prelude::*;
+        states
+            .par_iter_mut()
+            .map(|state| self.evolve(state, bounds))
+            .collect()
+    }
+
+    fn set_point<St: State + ?Sized>(
         &self,
         state: &mut St,
         point: Point,
@@ -335,7 +357,12 @@ pub trait System: Debug + Sync + Send {
         }
     }
 
-    fn set_safe_point<St: State>(&self, state: &mut St, point: PointSafe2, tile: Tile) -> &Self {
+    fn set_safe_point<St: State + ?Sized>(
+        &self,
+        state: &mut St,
+        point: PointSafe2,
+        tile: Tile,
+    ) -> &Self {
         let event = Event::MonomerChange(point, tile);
 
         self.perform_event(state, &event)
@@ -344,7 +371,11 @@ pub trait System: Debug + Sync + Send {
         self
     }
 
-    fn set_points<St: State>(&self, state: &mut St, changelist: &[(Point, Tile)]) -> &Self {
+    fn set_points<St: State + ?Sized>(
+        &self,
+        state: &mut St,
+        changelist: &[(Point, Tile)],
+    ) -> &Self {
         for (point, _) in changelist {
             assert!(state.inbounds(*point))
         }
@@ -359,14 +390,14 @@ pub trait System: Debug + Sync + Send {
         self
     }
 
-    fn insert_seed<St: State>(&self, state: &mut St) -> Result<(), GrowError> {
+    fn insert_seed<St: State + ?Sized>(&self, state: &mut St) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;
         }
         Ok(())
     }
 
-    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
+    fn perform_event<St: State + ?Sized>(&self, state: &mut St, event: &Event) -> &Self {
         //state.record_event(&event);
         match event {
             Event::None => panic!("Being asked to perform null event."),
@@ -391,28 +422,33 @@ pub trait System: Debug + Sync + Send {
         self
     }
 
-    fn update_after_event<St: State>(&self, state: &mut St, event: &Event);
+    fn update_after_event<St: State + ?Sized>(&self, state: &mut St, event: &Event);
 
     /// Returns the total event rate at a given point.  These should correspond with the events chosen by `choose_event_at_point`.
-    fn event_rate_at_point<St: State>(&self, state: &St, p: PointSafeHere) -> Rate;
+    fn event_rate_at_point<St: State + ?Sized>(&self, state: &St, p: PointSafeHere) -> Rate;
 
     /// Given a point, and an accumulated random rate choice `acc` (which should be less than the total rate at the point),
     /// return the event that should take place.
-    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: Rate) -> Event;
+    fn choose_event_at_point<St: State + ?Sized>(
+        &self,
+        state: &St,
+        p: PointSafe2,
+        acc: Rate,
+    ) -> Event;
 
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;
 
     /// Returns an array of mismatch locations.  At each point, mismatches are designated by 8*N+4*E+2*S+1*W.
-    fn calc_mismatch_locations<St: State>(&self, state: &St) -> Array2<usize>;
+    fn calc_mismatch_locations<St: State + ?Sized>(&self, state: &St) -> Array2<usize>;
 
-    fn calc_mismatches<St: State>(&self, state: &St) -> NumTiles {
+    fn calc_mismatches<St: State + ?Sized>(&self, state: &St) -> NumTiles {
         let mut arr = self.calc_mismatch_locations(state);
         arr.map_inplace(|x| *x = (*x & 0b01) + ((*x & 0b10) / 2));
         arr.sum() as NumTiles
     }
 
-    fn update_points<St: State>(&self, state: &mut St, points: &[PointSafeHere]) {
+    fn update_points<St: State + ?Sized>(&self, state: &mut St, points: &[PointSafeHere]) {
         let p = points
             .iter()
             .map(|p| (*p, self.event_rate_at_point(state, *p)))
@@ -421,7 +457,7 @@ pub trait System: Debug + Sync + Send {
         state.update_multiple(&p);
     }
 
-    fn update_all<St: State>(&self, state: &mut St, needed: &NeededUpdate) {
+    fn update_all<St: State + ?Sized>(&self, state: &mut St, needed: &NeededUpdate) {
         let ncols = state.ncols();
         let nrows = state.nrows();
 
@@ -445,6 +481,195 @@ pub trait System: Debug + Sync + Send {
 
     fn get_param(&self, _name: &str) -> Result<Box<dyn Any>, GrowError> {
         todo!();
+    }
+
+    #[cfg(feature = "ui")]
+    fn evolve_in_window<St: State + ?Sized>(
+        &self,
+        state: &mut St,
+        block: Option<usize>,
+        mut bounds: EvolveBounds,
+    ) -> Result<EvolveOutcome, RgrowError> {
+        let (width, height) = state.draw_size();
+
+        let mut scale = match block {
+            Some(i) => i,
+            None => {
+                let (w, h) = app::screen_size();
+                ((w - 50.) / (width as f64))
+                    .min((h - 50.) / (height as f64))
+                    .floor() as usize
+            }
+        };
+        app::screen_size();
+
+        // let sr = state.read().unwrap();
+        let mut win = Window::default()
+            .with_size(
+                (scale * state.ncols()) as i32,
+                ((scale * state.nrows()) + 30) as i32,
+            )
+            .with_label("rgrow!");
+
+        win.make_resizable(true);
+
+        // add a frame with a label at the bottom of the window
+        let mut frame = fltk::frame::Frame::default()
+            .with_size(win.pixel_w(), 30)
+            .with_pos(0, win.pixel_h() - 30)
+            .with_label("Hello");
+        win.end();
+        win.show();
+
+        let mut win_width = win.pixel_w() as u32;
+        let mut win_height = win.pixel_h() as u32;
+
+        let surface_texture = SurfaceTexture::new(win_width, win_height - 30, &win);
+
+        let mut pixels = {
+            Pixels::new(
+                width * (scale as u32),
+                height * (scale as u32),
+                surface_texture,
+            )?
+        };
+
+        bounds.for_wall_time = Some(Duration::from_millis(16));
+
+        let mut evres: EvolveOutcome = EvolveOutcome::ReachedZeroRate;
+
+        let tile_colors = self.tile_colors();
+
+        while app::wait() {
+            // Check if window was resized
+            if win.w() != win_width as i32 || win.h() != win_height as i32 {
+                win_width = win.pixel_w() as u32;
+                win_height = win.pixel_h() as u32;
+                pixels.resize_surface(win_width, win_height - 30).unwrap();
+                if block.is_none() {
+                    scale = (win_width / width).min((win_height - 30) / (height)) as usize;
+                    if scale >= 10 {
+                        scale = 10
+                    } else {
+                        scale = 1;
+                    } // (scale - 10) % 10 + 10;
+                    pixels
+                        .resize_buffer(width * (scale as u32), height * (scale as u32))
+                        .unwrap();
+                }
+                frame.set_pos(0, (win_height - 30) as i32);
+                frame.set_size(win_width as i32, 30);
+            }
+
+            evres = self.evolve(state, bounds)?;
+            let edge_size = scale / 10;
+            let tile_size = scale - 2 * edge_size;
+            let pixel_frame = pixels.frame_mut();
+
+            if scale != 1 {
+                if edge_size == 0 {
+                    state.draw_scaled(pixel_frame, tile_colors, tile_size, edge_size);
+                } else {
+                    state.draw_scaled_with_mm(
+                        pixel_frame,
+                        tile_colors,
+                        self.calc_mismatch_locations(state),
+                        tile_size,
+                        edge_size,
+                    );
+                }
+            } else {
+                state.draw(pixel_frame, tile_colors);
+            }
+            pixels.render()?;
+
+            // Update text with the simulation time, events, and tiles
+            frame.set_label(&format!(
+                "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}\t Mismatches: {}",
+                state.time(),
+                state.total_events(),
+                state.ntiles(),
+                self.calc_mismatches(state) // FIXME: should not recalculate
+            ));
+
+            app::flush();
+            app::awake();
+
+            match evres {
+                EvolveOutcome::ReachedWallTimeMax => {}
+                EvolveOutcome::ReachedZeroRate => {}
+                _ => {
+                    break;
+                }
+            }
+        }
+
+        // Close window.
+        win.hide();
+
+        Ok(evres)
+    }
+}
+
+pub trait DynSystem {
+    fn evolve(
+        &self,
+        state: &mut dyn State,
+        bounds: EvolveBounds,
+    ) -> Result<EvolveOutcome, GrowError>;
+
+    #[cfg(feature = "use_rayon")]
+    fn evolve_states(
+        &mut self,
+        states: &mut [&mut dyn State],
+        bounds: EvolveBounds,
+    ) -> Vec<Result<EvolveOutcome, GrowError>>;
+
+    fn setup_state(&self, state: &mut dyn State) -> Result<(), GrowError>;
+
+    #[cfg(feature = "ui")]
+    fn evolve_in_window(
+        &self,
+        state: &mut dyn State,
+        block: Option<usize>,
+        bounds: EvolveBounds,
+    ) -> Result<EvolveOutcome, RgrowError>;
+}
+
+impl<S: System> DynSystem for S {
+    fn evolve(
+        &self,
+        state: &mut dyn State,
+        bounds: EvolveBounds,
+    ) -> Result<EvolveOutcome, GrowError> {
+        self.evolve(state, bounds)
+    }
+
+    #[cfg(feature = "use_rayon")]
+    fn evolve_states(
+        &mut self,
+        states: &mut [&mut dyn State],
+        bounds: EvolveBounds,
+    ) -> Vec<Result<EvolveOutcome, GrowError>> {
+        use rayon::prelude::*;
+        states
+            .par_iter_mut()
+            .map(|state| self.evolve(*state, bounds))
+            .collect()
+    }
+
+    fn setup_state(&self, state: &mut dyn State) -> Result<(), GrowError> {
+        self.insert_seed(state)
+    }
+
+    #[cfg(feature = "ui")]
+    fn evolve_in_window(
+        &self,
+        state: &mut dyn State,
+        block: Option<usize>,
+        bounds: EvolveBounds,
+    ) -> Result<EvolveOutcome, RgrowError> {
+        self.evolve_in_window(state, block, bounds)
     }
 }
 

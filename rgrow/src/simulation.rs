@@ -1,12 +1,14 @@
 //$ Simulations hold both a model and a state, so that they can be handled without knowing the specific model, state, or canvas being used.
 
 use std::any::Any;
+use std::ops::{Deref, DerefMut};
 
 use ndarray::Array2;
 
 use crate::base::{GrowError, Tile};
 
-use crate::state::{State, StateCreate};
+use crate::canvas::CanvasPeriodic;
+use crate::state::{NullStateTracker, QuadTreeState, State, StateCreate};
 use crate::system::TileBondInfo;
 use crate::system::{EvolveBounds, EvolveOutcome, System, SystemInfo};
 
@@ -146,12 +148,8 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
 
     #[cfg(feature = "use_rayon")]
     fn evolve_all(&mut self, bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>> {
-        use rayon::prelude::*;
-        let sys = &self.system;
-        self.states
-            .par_iter_mut()
-            .map(|state| sys.evolve(state, bounds))
-            .collect()
+        let sys = &mut self.system;
+        sys.evolve_states(&mut self.states, bounds)
     }
 
     // FIXME: this implementation could be better.
@@ -232,5 +230,143 @@ impl<Sy: System + TileBondInfo + System, St: State> TileBondInfo for ConcreteSim
 
     fn bond_names(&self) -> Vec<String> {
         self.system.bond_names()
+    }
+}
+
+struct DynSimulation<Sy: System> {
+    system: Sy,
+    states: Vec<Box<dyn State>>,
+    default_state_size: (usize, usize),
+}
+
+impl<Sy: System + TileBondInfo + System> TileBondInfo for DynSimulation<Sy> {
+    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
+        self.system.tile_color(tile_number)
+    }
+
+    fn tile_name(&self, tile_number: Tile) -> &str {
+        self.system.tile_name(tile_number)
+    }
+
+    fn bond_name(&self, bond_number: usize) -> &str {
+        self.system.bond_name(bond_number)
+    }
+
+    fn tile_colors(&self) -> &Vec<[u8; 4]> {
+        self.system.tile_colors()
+    }
+
+    fn tile_names(&self) -> Vec<String> {
+        self.system.tile_names()
+    }
+
+    fn bond_names(&self) -> Vec<String> {
+        self.system.bond_names()
+    }
+}
+
+impl<Sy: System + TileBondInfo + SystemInfo> SystemInfo for DynSimulation<Sy> {
+    fn tile_concs(&self) -> Vec<f64> {
+        self.system.tile_concs()
+    }
+
+    fn tile_stoics(&self) -> Vec<f64> {
+        self.system.tile_stoics()
+    }
+}
+
+impl<Sy: System + TileBondInfo + SystemInfo> Simulation for DynSimulation<Sy> {
+    fn evolve(
+        &mut self,
+        state_index: usize,
+        bounds: EvolveBounds,
+    ) -> Result<EvolveOutcome, GrowError> {
+        let state = self.states.get_mut(state_index).unwrap();
+        self.system.evolve(state.deref_mut(), bounds)
+    }
+
+    fn state_ref(&self, state_index: usize) -> &dyn State {
+        self.states[state_index].deref() //.clone()
+    }
+
+    fn state_mut_ref(&mut self, state_index: usize) -> &mut dyn State {
+        self.states[state_index].deref_mut() //.clone()
+    }
+
+    fn n_states(&self) -> usize {
+        self.states.len()
+    }
+
+    fn iter_states(&self) -> std::vec::IntoIter<&dyn State> {
+        let states: Vec<&dyn State> = self
+            .states
+            .iter()
+            .map(|s| s.deref() as &dyn State)
+            .collect();
+        states.into_iter()
+    }
+
+    fn mismatch_array(&self, state_index: usize) -> Array2<usize> {
+        let state = self.states[state_index].deref();
+        self.system.calc_mismatch_locations(state)
+    }
+
+    fn n_mismatches(&self, state_index: usize) -> usize {
+        let state = self.states[state_index].deref();
+        self.system.calc_mismatches(state) as usize
+    }
+
+    fn state_keys(&self) -> Vec<usize> {
+        (0..self.states.len()).collect()
+    }
+
+    fn add_state(&mut self) -> Result<usize, GrowError> {
+        let mut state =
+            QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty(self.default_state_size)?;
+        self.system.insert_seed(&mut state)?;
+        self.states.push(Box::new(state));
+        Ok(self.states.len() - 1)
+    }
+
+    fn draw_size(&self, state_index: usize) -> (u32, u32) {
+        self.states[state_index].draw_size() //.read().unwrap().draw_size()
+    }
+
+    fn draw(&self, state_index: usize, frame: &mut [u8]) {
+        let state = self.states[state_index].deref(); //.lock().unwrap();
+        state.draw(frame, self.system.tile_colors());
+    }
+
+    fn draw_scaled(
+        &self,
+        state_index: usize,
+        frame: &mut [u8],
+        tile_size: usize,
+        edge_size: usize,
+    ) {
+        let state = &self.states[state_index]; //.lock().unwrap();
+        if edge_size == 0 {
+            state.draw_scaled(frame, self.system.tile_colors(), tile_size, edge_size);
+        } else {
+            state.draw_scaled_with_mm(
+                frame,
+                self.system.tile_colors(),
+                self.system.calc_mismatch_locations(state.deref()),
+                tile_size,
+                edge_size,
+            );
+        }
+    }
+
+    fn evolve_all(&mut self, _bounds: EvolveBounds) -> Vec<Result<EvolveOutcome, GrowError>> {
+        todo!()
+    }
+
+    fn evolve_some(
+        &mut self,
+        _state_indices: &[usize],
+        _bounds: EvolveBounds,
+    ) -> Vec<Result<EvolveOutcome, GrowError>> {
+        todo!()
     }
 }
