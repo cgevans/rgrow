@@ -11,7 +11,7 @@ categories = { workspace = true }
 
 [features]
 default = ["use_rayon", "ui"]         # "ui"
-use_rayon = ["rgrow/use_rayon"]
+use_rayon = ["rgrow/use_rayon", "rayon"]
 ui = ["rgrow/ui"]
 
 [lib]
@@ -26,6 +26,7 @@ serde = { workspace = true }
 rand = { workspace = true }
 ndarray = { workspace = true }
 numpy = { workspace = true }
+rayon = { version = "1", optional = true }
 
 [dependencies.rgrow]
 path = "../rgrow"

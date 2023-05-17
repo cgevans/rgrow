@@ -12,7 +12,7 @@ fn bench_window(c: &mut Criterion) {
     ts.options.model = rgrow::tileset::Model::KTAM;
     ts.options.smax = Some(20000);
 
-    group.bench_function("window", |b| b.iter(|| rgrow::ui::run_window(&ts)));
+    group.bench_function("window", |b| b.iter(|| ts.run_window()));
 }
 
 criterion::criterion_group!(benches, bench_window);

@@ -22,6 +22,7 @@ use std::any::Any;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter};
 use std::io::{self, Read};
+use std::ops::DerefMut;
 use std::path::Path;
 use system::{ChunkHandling, ChunkSize};
 
@@ -803,6 +804,18 @@ impl TileSet {
                 }
             },
         }
+    }
+
+    #[cfg(feature = "ui")]
+    pub fn run_window(&self) -> Result<Box<dyn State>, RgrowError> {
+        let sys = self.create_dynsystem()?;
+        let mut state = self.create_state()?;
+
+        sys.setup_state(state.deref_mut())?;
+        let bounds = self.get_bounds();
+        let block = self.options.block;
+        sys.evolve_in_window(state.deref_mut(), block, bounds)?;
+        Ok(state)
     }
 }
 

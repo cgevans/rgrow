@@ -611,7 +611,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     }
 }
 
-pub trait DynSystem {
+pub trait DynSystem: Sync + Send {
     fn evolve(
         &self,
         state: &mut dyn State,
@@ -636,7 +636,7 @@ pub trait DynSystem {
     ) -> Result<EvolveOutcome, RgrowError>;
 }
 
-impl<S: System> DynSystem for S {
+impl<S: System + TileBondInfo> DynSystem for S {
     fn evolve(
         &self,
         state: &mut dyn State,

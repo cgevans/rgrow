@@ -31,6 +31,13 @@ pub enum GrowError {
     WrongParameterType(String),
 }
 
+#[cfg(feature = "python")]
+impl From<GrowError> for pyo3::PyErr {
+    fn from(err: GrowError) -> Self {
+        pyo3::exceptions::PyException::new_err(err.to_string())
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum RgrowError {
     #[error(transparent)]
@@ -44,6 +51,13 @@ pub enum RgrowError {
     Pixel(#[from] pixels::Error),
     #[error(transparent)]
     IO(#[from] std::io::Error),
+}
+
+#[cfg(feature = "python")]
+impl From<RgrowError> for pyo3::PyErr {
+    fn from(err: RgrowError) -> Self {
+        pyo3::exceptions::PyException::new_err(err.to_string())
+    }
 }
 
 #[derive(Error, Debug)]

@@ -1,3 +1,7 @@
+# 0.13.0
+
+- Restructured API to allow separate, easier-to-use Systems and States.
+
 # 0.12.2
 
 - Python tests.

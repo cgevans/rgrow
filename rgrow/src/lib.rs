@@ -12,9 +12,6 @@ pub mod parser_xgrow;
 
 pub mod colors;
 
-#[cfg(feature = "ui")]
-pub mod ui;
-
 pub mod base;
 pub mod canvas;
 pub mod ffs;

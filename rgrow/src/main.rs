@@ -9,9 +9,6 @@ use rgrow::tileset::TileSet;
 
 use std::fs::File;
 
-#[cfg(feature = "ui")]
-use rgrow::ui::run_window;
-
 #[derive(Parser)]
 #[clap(version = "0.1.0", author = "Constantine Evans <cevans@costinet.org")]
 struct Opts {
@@ -72,7 +69,7 @@ fn main() -> anyhow::Result<()> {
             #[cfg(feature = "ui")]
             {
                 let parsed = TileSet::from_file(po.input)?;
-                run_window(&parsed)?;
+                parsed.run_window()?;
                 Ok(())
             }
             #[cfg(not(feature = "ui"))]

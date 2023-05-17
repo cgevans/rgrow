@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::ops::DerefMut;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
@@ -13,6 +14,7 @@ use numpy::PyArray2;
 use numpy::ToPyArray;
 use pyo3::exceptions::PyValueError;
 use pyo3::types::PyDict;
+
 use pyo3::{prelude::*, types::PyType};
 
 use rgrow::ffs;
@@ -224,16 +226,28 @@ impl TileSet {
         }
     }
 
+    fn create_system(&self) -> PyResult<System> {
+        let sys = self.read()?.create_dynsystem()?;
+        Ok(System(sys))
+    }
+
+    fn create_state(&self) -> PyResult<State> {
+        let sys = self.read()?.create_dynsystem()?;
+        let mut state = self.read()?.create_state()?;
+        sys.setup_state(&mut *state)?;
+        Ok(State::new(state))
+    }
+
     /// Creates a simulation, and runs it in a UI.  Returns the :any:`Simulation` when
     /// finished.
     #[cfg(feature = "ui")]
-    fn run_window(&self) -> PyResult<Simulation> {
+    fn run_window(&self) -> PyResult<State> {
         let f = self.read()?;
-        let s = rgrow::ui::run_window(&f);
+        let s = f.run_window();
 
-        let s2 =
+        let st =
             s.map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))?;
-        Ok(Simulation(RwLock::new(s2)))
+        Ok(State::new(st))
     }
 
     #[getter]
@@ -779,16 +793,12 @@ impl Simulation {
 
     /// Add a new state to the simulation.
     fn add_state(&mut self) -> PyResult<usize> {
-        self.write()?
-            .add_state()
-            .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
+        Ok(self.write()?.add_state()?)
     }
 
     /// Adds n new states to the simulation.
     fn add_n_states(&mut self, n: usize) -> PyResult<Vec<usize>> {
-        self.write()?
-            .add_n_states(n)
-            .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))
+        Ok(self.write()?.add_n_states(n)?)
     }
 
     #[getter]
@@ -820,10 +830,7 @@ impl Simulation {
     /// value : Any
     ///   The value of the parameter.
     fn set_system_param(&self, name: &str, value: RustAny) -> PyResult<()> {
-        self.write()
-            .unwrap()
-            .set_system_param(name, value.0)
-            .map_err(|x| PyValueError::new_err(x.to_string()))
+        Ok(self.write()?.set_system_param(name, value.0)?)
     }
 
     /// Gets a system parameter.
@@ -838,11 +845,7 @@ impl Simulation {
     /// Any
     ///   The value of the parameter.
     fn get_system_param(&self, name: &str, py: Python) -> PyResult<Py<PyAny>> {
-        self.read()
-            .unwrap()
-            .get_system_param(name)
-            .map(|x| RustAny(x).into_py(py))
-            .map_err(|x| PyValueError::new_err(x.to_string()))
+        Ok(RustAny(self.read()?.get_system_param(name)?).into_py(py))
     }
 
     fn n_mismatches(&self, state_index: Option<usize>) -> PyResult<u64> {
@@ -985,5 +988,108 @@ impl FFSLevel {
     #[getter]
     fn get_previous_indices(&self) -> Vec<usize> {
         self.res.surfaces()[self.level].previous_list()
+    }
+}
+
+#[pyclass]
+pub struct State(pub Box<dyn rgrow::state::State>);
+
+impl State {
+    fn new(state: Box<dyn rgrow::state::State>) -> Self {
+        Self(state)
+    }
+}
+
+#[pymethods]
+impl State {
+    #[getter]
+    pub fn canvas_view<'py>(
+        this: &'py PyCell<Self>,
+        _py: Python<'py>,
+    ) -> PyResult<&'py PyArray2<rgrow::base::Tile>> {
+        let t = this.borrow();
+        let ra = t.0.raw_array();
+
+        unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
+    }
+}
+
+#[pyclass]
+pub struct System(pub Box<dyn rgrow::system::DynSystem>);
+
+#[pymethods]
+impl System {
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(
+        signature = (state,
+                    for_events=None,
+                    total_events=None,
+                    for_time=None,
+                    total_time=None,
+                    size_min=None,
+                    size_max=None,
+                    for_wall_time=None,
+                    require_strong_bound=true)
+    )]
+    pub fn evolve(
+        &mut self,
+        state: &mut State,
+        for_events: Option<u64>,
+        total_events: Option<u64>,
+        for_time: Option<f64>,
+        total_time: Option<f64>,
+        size_min: Option<u32>,
+        size_max: Option<u32>,
+        for_wall_time: Option<f64>,
+        require_strong_bound: bool,
+        py: Python<'_>,
+    ) -> PyResult<EvolveOutcome> {
+        let bounds = EvolveBounds {
+            for_events,
+            for_time,
+            total_events,
+            total_time,
+            size_min,
+            size_max,
+            for_wall_time: for_wall_time.map(Duration::from_secs_f64),
+        };
+
+        if require_strong_bound & !bounds.is_strongly_bounded() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No strong bounds specified.",
+            ));
+        }
+
+        if !bounds.is_weakly_bounded() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No weak bounds specified.",
+            ));
+        }
+
+        Ok(self.0.evolve(&mut *state.0, bounds)?)
+    }
+
+    #[cfg(feature = "use_rayon")]
+    pub fn evolve_states<'py>(
+        &mut self,
+        pystates: Vec<&'py PyCell<State>>,
+        bounds: EvolveBounds,
+        _py: Python<'py>,
+    ) -> PyResult<Vec<EvolveOutcome>> {
+        use rayon::prelude::*;
+        let mut refs = pystates
+            .into_iter()
+            .map(|x| x.borrow_mut())
+            .collect::<Vec<_>>();
+        let mut states = refs.iter_mut().map(|x| x.0.deref_mut()).collect::<Vec<_>>();
+        let out = states
+            .par_iter_mut()
+            .map(|state| self.0.evolve(&mut **state, bounds))
+            .collect::<Vec<_>>();
+        // let a = self.0.evolve_states_vec(states, bounds);
+        // drop(boxstates);
+        out.into_iter()
+            .map(|x| x.map_err(|y| PyValueError::new_err(y.to_string())))
+            .collect()
     }
 }
