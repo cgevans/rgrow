@@ -1,3 +1,9 @@
+use std::{
+    any::Any,
+    fmt::{Display, Formatter},
+};
+
+use serde::{Deserialize, Serialize};
 use thiserror;
 
 use crate::tileset::ParserError;
@@ -10,6 +16,9 @@ pub type Tile = u32;
 pub type Energy = f64;
 pub type Glue = usize;
 pub type CanvasLength = usize;
+
+#[cfg(feature = "python")]
+use pyo3::{FromPyObject, IntoPy, PyAny, PyErr, PyObject, PyResult, Python};
 
 #[derive(Error, Debug)]
 pub enum GrowError {
@@ -73,3 +82,98 @@ pub type Rate = f64;
 use fnv::{FnvHashMap, FnvHashSet};
 pub(crate) type HashSetType<T> = FnvHashSet<T>;
 pub(crate) type HashMapType<K, V> = FnvHashMap<K, V>;
+
+#[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(untagged)]
+#[cfg_attr(feature = "python", derive(FromPyObject))]
+pub enum Ident {
+    Num(usize),
+    Name(String),
+}
+
+#[cfg(feature = "python")]
+impl IntoPy<PyObject> for Ident {
+    fn into_py(self, py: Python) -> PyObject {
+        match self {
+            Ident::Num(num) => num.into_py(py),
+            Ident::Name(name) => name.into_py(py),
+        }
+    }
+}
+
+impl From<u32> for Ident {
+    fn from(value: u32) -> Self {
+        Self::Num(value as usize)
+    }
+}
+
+impl Display for Ident {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(s) => write!(f, "\"{s}\""),
+            Self::Num(n) => write!(f, "{n}"),
+        }
+    }
+}
+
+impl core::fmt::Debug for Ident {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(s) => write!(f, "\"{s}\""),
+            Self::Num(n) => write!(f, "{n}"),
+        }
+    }
+}
+
+pub type GlueIdent = Ident;
+pub type TileIdent = Ident;
+
+#[cfg(feature = "python")]
+pub struct RustAny(pub Box<dyn Any>);
+
+#[cfg(feature = "python")]
+impl FromPyObject<'_> for RustAny {
+    fn extract(obj: &PyAny) -> PyResult<Self> {
+        if let Ok(val) = obj.extract::<u64>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<f64>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<i64>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<bool>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<String>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<(u64, u64)>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<(usize, usize, Ident)>() {
+            Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<Vec<(usize, usize, Ident)>>() {
+            Ok(RustAny(Box::new(val)))
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                "Cannot convert value {:?}",
+                obj
+            )))
+        }
+    }
+}
+
+#[cfg(feature = "python")]
+impl IntoPy<PyObject> for RustAny {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        if let Some(val) = self.0.downcast_ref::<f64>() {
+            val.into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<u64>() {
+            val.into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<i64>() {
+            val.into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<bool>() {
+            val.into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<String>() {
+            val.into_py(py)
+        } else {
+            panic!("Cannot convert Any to PyAny");
+        }
+    }
+}

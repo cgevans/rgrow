@@ -8,7 +8,7 @@ use std::{
 use crate::{
     base::{NumEvents, NumTiles, Tile},
     simulation::Simulation,
-    system::{self, EvolveOutcome},
+    system::{self, BoxedSystem, DynSystem, EvolveOutcome},
     tileset::TileSet,
 };
 
@@ -104,20 +104,21 @@ pub unsafe extern "C" fn create_tileset_from_json(s: *const c_char) -> *mut Tile
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn create_simulation_from_tileset(t: *const TileSet) -> *mut c_void {
+pub unsafe extern "C" fn create_system_from_tileset(t: *const TileSet) -> *mut c_void {
     let ts = &*t;
-    let sim = ts.into_simulation().unwrap();
-    Box::into_raw(Box::new(sim)) as *mut c_void
+    let sim = ts.create_dynsystem().unwrap();
+    Box::into_raw(sim.0) as *mut c_void
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn new_state(sim: *mut c_void) -> usize {
-    let sim = &mut *sim.cast::<Box<dyn Simulation>>();
-    sim.add_state().unwrap()
+pub unsafe extern "C" fn create_state_from_tileset(ts: *const TileSet) -> *mut c_void {
+    let ts = &*ts;
+    let state = ts.create_state().unwrap();
+    Box::into_raw(state) as *mut c_void
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn drop_simulation(sim: *mut c_void) {
+pub unsafe extern "C" fn drop_system(sim: *mut c_void) {
     let sim = Box::from_raw(sim.cast::<Box<dyn Simulation>>());
     drop(sim);
 }

@@ -4,11 +4,11 @@
 use crate::{
     base::Glue,
     system::FissionHandling,
-    tileset::{CanvasType, Model, Size, TileIdent, TileShape},
+    tileset::{CanvasType, Model, Size, TileShape},
 };
 
+use super::base::{GlueIdent, TileIdent};
 use super::tileset;
-use super::tileset::GlueIdent;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
@@ -47,13 +47,13 @@ fn rsc<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (), E> {
     Ok((input, ()))
 }
 
-fn glue(input: &str) -> IResult<&str, tileset::GlueIdent> {
-    fn glue_num(input: &str) -> IResult<&str, tileset::GlueIdent> {
+fn glue(input: &str) -> IResult<&str, GlueIdent> {
+    fn glue_num(input: &str) -> IResult<&str, GlueIdent> {
         let (input, n) = map_res(digit1, |n: &str| n.parse::<Glue>())(input)?;
         Ok((input, GlueIdent::Num(n)))
     }
 
-    fn glue_name(input: &str) -> IResult<&str, tileset::GlueIdent> {
+    fn glue_name(input: &str) -> IResult<&str, GlueIdent> {
         map(is_not(" \n\t}"), |n: &str| GlueIdent::Name(n.to_string()))(input)
     }
 
@@ -136,7 +136,7 @@ fn parse(input: &str) -> IResult<&str, tileset::TileSet> {
                 .iter()
                 .zip(b)
                 .map(|(s, n)| tileset::Bond {
-                    name: tileset::GlueIdent::Name(n.to_string()),
+                    name: GlueIdent::Name(n.to_string()),
                     strength: *s,
                 })
                 .collect(),
@@ -144,7 +144,7 @@ fn parse(input: &str) -> IResult<&str, tileset::TileSet> {
             None => b
                 .iter()
                 .map(|n| tileset::Bond {
-                    name: tileset::GlueIdent::Name(n.to_string()),
+                    name: GlueIdent::Name(n.to_string()),
                     strength: 1.0,
                 })
                 .collect(),
@@ -154,7 +154,7 @@ fn parse(input: &str) -> IResult<&str, tileset::TileSet> {
                 .iter()
                 .enumerate()
                 .map(|(i, s)| tileset::Bond {
-                    name: tileset::GlueIdent::Num((i + 1) as Glue),
+                    name: GlueIdent::Num((i + 1) as Glue),
                     strength: *s,
                 })
                 .collect(),

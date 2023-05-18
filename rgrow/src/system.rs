@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::base::CanvasLength;
 use crate::base::RgrowError;
+use crate::state::BoxedState;
 use crate::state::State;
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateCreate,
@@ -15,14 +16,20 @@ use crate::canvas::PointSafe2;
 
 use std::any::Any;
 use std::fmt::Debug;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::time::Duration;
 
+#[cfg(feature = "ui")]
 use fltk::{app, prelude::*, window::Window};
 
 use pixels::{Pixels, SurfaceTexture};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+use crate::base::RustAny;
 
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -44,6 +51,7 @@ pub enum StepOutcome {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum NeededUpdate {
     None,
     NonZero,
@@ -442,10 +450,10 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     /// Returns an array of mismatch locations.  At each point, mismatches are designated by 8*N+4*E+2*S+1*W.
     fn calc_mismatch_locations<St: State + ?Sized>(&self, state: &St) -> Array2<usize>;
 
-    fn calc_mismatches<St: State + ?Sized>(&self, state: &St) -> NumTiles {
+    fn calc_mismatches<St: State + ?Sized>(&self, state: &St) -> usize {
         let mut arr = self.calc_mismatch_locations(state);
         arr.map_inplace(|x| *x = (*x & 0b01) + ((*x & 0b10) / 2));
-        arr.sum() as NumTiles
+        arr.sum()
     }
 
     fn update_points<St: State + ?Sized>(&self, state: &mut St, points: &[PointSafeHere]) {
@@ -627,6 +635,10 @@ pub trait DynSystem: Sync + Send {
 
     fn setup_state(&self, state: &mut dyn State) -> Result<(), GrowError>;
 
+    fn setup_boxedstate(&self, state: &mut BoxedState) -> Result<(), GrowError> {
+        self.setup_state(&mut **state)
+    }
+
     #[cfg(feature = "ui")]
     fn evolve_in_window(
         &self,
@@ -634,6 +646,13 @@ pub trait DynSystem: Sync + Send {
         block: Option<usize>,
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError>;
+
+    fn calc_mismatches(&self, state: &dyn State) -> usize;
+
+    fn set_param(&mut self, name: &str, value: Box<dyn Any>) -> Result<NeededUpdate, GrowError>;
+    fn get_param(&self, name: &str) -> Result<Box<dyn Any>, GrowError>;
+
+    fn update_all(&self, state: &mut dyn State, needed: &NeededUpdate);
 }
 
 impl<S: System + TileBondInfo> DynSystem for S {
@@ -670,6 +689,178 @@ impl<S: System + TileBondInfo> DynSystem for S {
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError> {
         self.evolve_in_window(state, block, bounds)
+    }
+
+    fn calc_mismatches(&self, state: &dyn State) -> usize {
+        self.calc_mismatches(state)
+    }
+
+    fn set_param(&mut self, name: &str, value: Box<dyn Any>) -> Result<NeededUpdate, GrowError> {
+        self.set_param(name, value)
+    }
+
+    fn get_param(&self, name: &str) -> Result<Box<dyn Any>, GrowError> {
+        self.get_param(name)
+    }
+
+    fn update_all(&self, state: &mut dyn State, needed: &NeededUpdate) {
+        self.update_all(state, needed)
+    }
+}
+
+#[repr(transparent)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow", name = "System"))]
+pub struct BoxedSystem(pub Box<dyn DynSystem>);
+
+impl DerefMut for BoxedSystem {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut *self.0
+    }
+}
+
+impl Deref for BoxedSystem {
+    type Target = dyn DynSystem;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl BoxedSystem {
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(
+        signature = (state,
+                    for_events=None,
+                    total_events=None,
+                    for_time=None,
+                    total_time=None,
+                    size_min=None,
+                    size_max=None,
+                    for_wall_time=None,
+                    require_strong_bound=true)
+    )]
+    pub fn evolve(
+        &mut self,
+        state: &mut BoxedState,
+        for_events: Option<u64>,
+        total_events: Option<u64>,
+        for_time: Option<f64>,
+        total_time: Option<f64>,
+        size_min: Option<u32>,
+        size_max: Option<u32>,
+        for_wall_time: Option<f64>,
+        require_strong_bound: bool,
+        py: Python<'_>,
+    ) -> PyResult<EvolveOutcome> {
+        let bounds = EvolveBounds {
+            for_events,
+            for_time,
+            total_events,
+            total_time,
+            size_min,
+            size_max,
+            for_wall_time: for_wall_time.map(Duration::from_secs_f64),
+        };
+
+        if require_strong_bound & !bounds.is_strongly_bounded() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No strong bounds specified.",
+            ));
+        }
+
+        if !bounds.is_weakly_bounded() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No weak bounds specified.",
+            ));
+        }
+
+        Ok(py.allow_threads(|| self.0.evolve(&mut **state, bounds))?)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(
+        signature = (pystates,
+                    for_events=None,
+                    total_events=None,
+                    for_time=None,
+                    total_time=None,
+                    size_min=None,
+                    size_max=None,
+                    for_wall_time=None,
+                    require_strong_bound=true)
+    )]
+    #[cfg(feature = "use_rayon")]
+    pub fn evolve_states(
+        &mut self,
+        pystates: Vec<&PyCell<BoxedState>>,
+        for_events: Option<u64>,
+        total_events: Option<u64>,
+        for_time: Option<f64>,
+        total_time: Option<f64>,
+        size_min: Option<u32>,
+        size_max: Option<u32>,
+        for_wall_time: Option<f64>,
+        require_strong_bound: bool,
+        py: Python<'_>,
+    ) -> PyResult<Vec<EvolveOutcome>> {
+        use rayon::prelude::*;
+
+        let bounds = EvolveBounds {
+            for_events,
+            for_time,
+            total_events,
+            total_time,
+            size_min,
+            size_max,
+            for_wall_time: for_wall_time.map(Duration::from_secs_f64),
+        };
+
+        if require_strong_bound & !bounds.is_strongly_bounded() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No strong bounds specified.",
+            ));
+        }
+
+        if !bounds.is_weakly_bounded() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No weak bounds specified.",
+            ));
+        }
+
+        let mut refs = pystates
+            .into_iter()
+            .map(|x| x.borrow_mut())
+            .collect::<Vec<_>>();
+        let mut states = refs.iter_mut().map(|x| x.deref_mut()).collect::<Vec<_>>();
+        let out = py.allow_threads(|| {
+            states
+                .par_iter_mut()
+                .map(|state| self.0.evolve(&mut ***state, bounds))
+                .collect::<Vec<_>>()
+        });
+        // let a = self.0.evolve_states_vec(states, bounds);
+        // drop(boxstates);
+        out.into_iter()
+            .map(|x| x.map_err(|y| pyo3::exceptions::PyValueError::new_err(y.to_string())))
+            .collect()
+    }
+
+    fn calc_mismatches(&self, state: &BoxedState) -> usize {
+        self.0.calc_mismatches(&**state)
+    }
+
+    fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
+        Ok(self.0.set_param(param_name, value.0)?)
+    }
+
+    fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
+        Ok(RustAny(self.0.get_param(param_name)?))
+    }
+
+    fn update_all(&self, state: &mut BoxedState, needed: &NeededUpdate) {
+        self.0.update_all(&mut **state, needed)
     }
 }
 

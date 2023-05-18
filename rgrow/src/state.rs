@@ -9,9 +9,75 @@ use crate::{
 use ndarray::prelude::*;
 
 use std::fmt::Debug;
+use std::ops::{Deref, DerefMut};
+
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+use numpy::PyArray2;
 
 pub trait State: RateStoreP + Canvas + StateStatus + Sync + Send {
     fn panicinfo(&self) -> String;
+}
+
+#[repr(transparent)]
+#[cfg_attr(feature = "python", pyclass(name = "State"))]
+pub struct BoxedState(Box<dyn State>);
+
+impl Deref for BoxedState {
+    type Target = dyn State;
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+impl DerefMut for BoxedState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut *self.0
+    }
+}
+
+impl From<Box<dyn State>> for BoxedState {
+    fn from(value: Box<dyn State>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<BoxedState> for Box<dyn State> {
+    fn from(value: BoxedState) -> Self {
+        value.0
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl BoxedState {
+    #[getter]
+    pub fn canvas_view<'py>(
+        this: &'py PyCell<Self>,
+        _py: Python<'py>,
+    ) -> PyResult<&'py PyArray2<crate::base::Tile>> {
+        let t = this.borrow();
+        let ra = t.0.raw_array();
+
+        unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
+    }
+
+    #[getter]
+    pub fn ntiles(&self) -> NumTiles {
+        self.0.ntiles()
+    }
+
+    #[getter]
+    pub fn total_events(&self) -> NumEvents {
+        self.0.total_events()
+    }
+
+    #[getter]
+    pub fn time(&self) -> f64 {
+        self.0.time()
+    }
 }
 
 pub trait StateStatus {

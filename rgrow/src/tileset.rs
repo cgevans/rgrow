@@ -1,11 +1,11 @@
-use crate::base::RgrowError;
+use crate::base::{GlueIdent, RgrowError, TileIdent};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube};
 use crate::colors::get_color_or_random;
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, State, StateCreate};
-use crate::system::{DynSystem, EvolveBounds, System, SystemInfo, TileBondInfo};
+use crate::system::{BoxedSystem, EvolveBounds, System, SystemInfo, TileBondInfo};
 
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;
@@ -63,72 +63,6 @@ pub enum ParserError {
     },
     #[error(transparent)]
     OptError(#[from] ConfigErr),
-}
-
-#[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
-#[serde(untagged)]
-#[cfg_attr(feature = "python", derive(FromPyObject))]
-pub enum Ident {
-    Num(usize),
-    Name(String),
-}
-
-#[cfg(feature = "python")]
-impl IntoPy<PyObject> for Ident {
-    fn into_py(self, py: Python) -> PyObject {
-        match self {
-            Ident::Num(num) => num.into_py(py),
-            Ident::Name(name) => name.into_py(py),
-        }
-    }
-}
-
-pub type GlueIdent = Ident;
-
-// #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
-// #[serde(untagged)]
-// pub enum GlueIdent {
-//     Name(String),
-//     Num(base::Glue),
-// }
-
-impl From<u32> for GlueIdent {
-    fn from(value: u32) -> Self {
-        Self::Num(value as usize)
-    }
-}
-
-pub type TileIdent = Ident;
-
-// #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
-// #[serde(untagged)]
-// pub enum TileIdent {
-//     Name(String),
-//     Num(base::Tile),
-// }
-
-// impl From<u32> for TileIdent {
-//     fn from(value: u32) -> Self {
-//         Self::Num(value as base::Tile)
-//     }
-// }
-
-impl Display for GlueIdent {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Name(s) => write!(f, "\"{s}\""),
-            Self::Num(n) => write!(f, "{n}"),
-        }
-    }
-}
-
-impl core::fmt::Debug for GlueIdent {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Name(s) => write!(f, "\"{s}\""),
-            Self::Num(n) => write!(f, "{n}"),
-        }
-    }
 }
 
 // impl core::fmt::Debug for TileIdent {
@@ -743,11 +677,11 @@ impl TileSet {
         Ok(Box::new(sim))
     }
 
-    pub fn create_dynsystem(&self) -> Result<Box<dyn DynSystem>, RgrowError> {
+    pub fn create_dynsystem(&self) -> Result<BoxedSystem, RgrowError> {
         Ok(match self.options.model {
-            Model::KTAM => Box::new(KTAM::from_tileset(self)?),
-            Model::ATAM => Box::new(ATAM::from_tileset(self)?),
-            Model::OldKTAM => Box::new(OldKTAM::from_tileset(self)?),
+            Model::KTAM => BoxedSystem(Box::new(KTAM::from_tileset(self)?)),
+            Model::ATAM => BoxedSystem(Box::new(ATAM::from_tileset(self)?)),
+            Model::OldKTAM => BoxedSystem(Box::new(OldKTAM::from_tileset(self)?)),
         })
     }
 
