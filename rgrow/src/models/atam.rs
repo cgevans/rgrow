@@ -18,6 +18,8 @@ type Strength = f64;
 type Energy = f64;
 type Rate = f64;
 
+const THRESHOLD_DEFAULT: f64 = 2.0;
+
 trait NonZero {
     fn nonzero(self) -> bool;
 }
@@ -891,7 +893,7 @@ impl FromTileSet for ATAM {
             proc.tile_stoics,
             proc.tile_edges,
             proc.glue_strengths,
-            tileset.options.threshold,
+            tileset.threshold.unwrap_or(THRESHOLD_DEFAULT),
             Some(seed),
             Some(proc.tile_names),
             Some(proc.tile_colors),

@@ -8,14 +8,13 @@ use rgrow::{
     canvas::{CanvasPeriodic, PointSafe2},
     state::{NullStateTracker, QuadTreeState, StateStatus},
     system::{EvolveBounds, FissionHandling, System},
-    tileset::{FromTileSet, ParsedSeed, Size, TileSet},
+    tileset::{FromTileSet, Seed, Size, TileSet},
 };
 
 fn test_sim(ts: &TileSet) -> Result<()> {
-    let mut sim = ts.into_simulation()?;
-    sim.add_state()?;
-    sim.evolve(
-        0,
+    let (sys, mut state) = ts.create_system_and_state()?;
+    sys.evolve(
+        &mut *state,
         EvolveBounds {
             for_events: Some(10),
             ..Default::default()
@@ -60,17 +59,15 @@ fn parser_test() -> Result<()> {
 fn atam_test() -> Result<()> {
     let mut ts = get_sierpinski()?;
 
-    ts.options.model = rgrow::tileset::Model::ATAM;
-    ts.options.size = Size::Single(64);
+    ts.model = Some(rgrow::tileset::Model::ATAM);
+    ts.size = Some(Size::Single(64));
     let p = PointSafe2((60, 60));
-    ts.options.seed = ParsedSeed::Single(p.0 .0, p.0 .1, 1.into());
+    ts.seed = Some(Seed::Single(p.0 .0, p.0 .1, 1.into()));
 
-    let mut at = ts.into_simulation()?;
+    let (sys, mut state) = ts.create_system_and_state()?;
 
-    at.add_state()?;
-
-    at.evolve(
-        0,
+    sys.evolve(
+        &mut *state,
         EvolveBounds {
             size_max: Some(500),
             for_events: Some(2000),
@@ -78,14 +75,10 @@ fn atam_test() -> Result<()> {
         },
     )?;
 
-    let state = at.state_ref(0);
+    assert!(state.ntiles() == 500);
 
-    let sr = state; //.read().unwrap();
-
-    assert!(sr.ntiles() == 500);
-
-    assert!(sr.tile_at_point(PointSafe2((p.0 .0 - 7, p.0 .1 - 7))) == 4);
-    assert!(sr.tile_at_point(PointSafe2((p.0 .0 - 8, p.0 .1 - 8))) == 5);
+    assert!(state.tile_at_point(PointSafe2((p.0 .0 - 7, p.0 .1 - 7))) == 4);
+    assert!(state.tile_at_point(PointSafe2((p.0 .0 - 8, p.0 .1 - 8))) == 5);
 
     Ok(())
 }
@@ -94,9 +87,9 @@ fn atam_test() -> Result<()> {
 fn ktam_test() -> Result<()> {
     let mut ts = get_sierpinski()?;
 
-    ts.options.model = rgrow::tileset::Model::KTAM;
-    ts.options.size = Size::Single(64);
-    ts.options.seed = ParsedSeed::Single(60, 60, 1.into());
+    ts.model = Some(rgrow::tileset::Model::KTAM);
+    ts.size = Some(Size::Single(64));
+    ts.seed = Some(Seed::Single(60, 60, 1.into()));
 
     let mut sys = rgrow::models::ktam::KTAM::from_tileset(&ts)?;
 
@@ -139,16 +132,16 @@ fn ktam_test() -> Result<()> {
 fn ktam_barish_test() -> Result<()> {
     let mut ts = TileSet::from_file("examples/barish-perfect.yaml")?;
 
-    ts.options.model = rgrow::tileset::Model::KTAM;
-    ts.options.gse = 8.5;
-    ts.options.gmc = 16.0;
+    print!("ts: {:?}", ts);
 
-    let mut sim = ts.into_simulation()?;
+    ts.model = Some(rgrow::tileset::Model::KTAM);
+    ts.gse = Some(8.5);
+    ts.gmc = Some(16.0);
 
-    let si = sim.add_state()?;
+    let (sys, mut state) = ts.create_system_and_state()?;
 
-    sim.evolve(
-        si,
+    sys.evolve(
+        &mut *state,
         EvolveBounds {
             for_events: Some(20000),
             size_max: Some(220),
@@ -156,7 +149,8 @@ fn ktam_barish_test() -> Result<()> {
         },
     )?;
 
-    assert!(sim.state_ref(si).ntiles() > 200);
+    println!("ntiles: {}", state.ntiles());
+    assert!(state.ntiles() > 200);
 
     Ok(())
 }
@@ -165,10 +159,10 @@ fn ktam_barish_test() -> Result<()> {
 fn oldktam_test() -> Result<()> {
     let mut ts = get_sierpinski()?;
 
-    ts.options.model = rgrow::tileset::Model::OldKTAM;
-    ts.options.size = Size::Single(64);
-    ts.options.seed = ParsedSeed::Single(60, 60, 1.into());
-    ts.options.gse = 8.1;
+    ts.model = Some(rgrow::tileset::Model::OldKTAM);
+    ts.size = Some(Size::Single(64));
+    ts.seed = Some(Seed::Single(60, 60, 1.into()));
+    ts.gse = Some(8.1);
 
     let sys = rgrow::models::oldktam::OldKTAM::from_tileset(&ts)?;
 
@@ -185,7 +179,7 @@ fn oldktam_test() -> Result<()> {
 
     assert!(st.ntiles() > 200);
 
-    ts.options.gse = 7.8;
+    ts.gse = Some(7.8);
     let sys = rgrow::models::oldktam::OldKTAM::from_tileset(&ts)?;
 
     sys.evolve(
@@ -208,30 +202,26 @@ fn oldktam_test() -> Result<()> {
 fn simple_fission_test() -> Result<()> {
     let mut ts = TileSet::from_file("examples/fission-small-ribbon.yaml")?;
 
-    ts.options.fission = FissionHandling::NoFission;
-    let mut sim = ts.into_simulation()?;
-    sim.add_state()?;
-    sim.evolve(
-        0,
+    ts.fission = Some(FissionHandling::NoFission);
+    let (sys, mut state) = ts.create_system_and_state()?;
+    sys.evolve(
+        &mut *state,
         EvolveBounds {
             for_time: Some(1000.),
             ..Default::default()
         },
     )?;
-    let state = sim.state_ref(0);
     assert!(state.ntiles() > 800); //.read().unwrap()
 
-    ts.options.fission = FissionHandling::KeepSeeded;
-    let mut sim = ts.into_simulation()?;
-    sim.add_state()?;
-    sim.evolve(
-        0,
+    ts.fission = Some(FissionHandling::KeepSeeded);
+    let (sys, mut state) = ts.create_system_and_state()?;
+    sys.evolve(
+        &mut *state,
         EvolveBounds {
             for_time: Some(1000.),
             ..Default::default()
         },
     )?;
-    let state = sim.state_ref(0);
     assert!(state.ntiles() < 500); // .read().unwrap()
     Ok(())
 }
@@ -240,12 +230,12 @@ fn simple_fission_test() -> Result<()> {
 fn nucrate_test() -> Result<()> {
     let mut ts: TileSet = serde_yaml::from_reader(File::open("examples/barish-perfect.yaml")?)?;
 
-    ts.options.alpha = -7.1;
-    ts.options.gse = 5.7;
-    ts.options.gmc = 9.7;
-    ts.options.model = rgrow::tileset::Model::KTAM;
-    ts.options.canvas_type = rgrow::tileset::CanvasType::Periodic;
-    ts.options.fission = rgrow::system::FissionHandling::KeepLargest;
+    ts.alpha = Some(-7.1);
+    ts.gse = Some(5.7);
+    ts.gmc = Some(9.7);
+    ts.model = Some(rgrow::tileset::Model::KTAM);
+    ts.canvas_type = Some(rgrow::tileset::CanvasType::Periodic);
+    ts.fission = Some(rgrow::system::FissionHandling::KeepLargest);
 
     let conf = rgrow::ffs::FFSRunConfig {
         max_configs: 100,

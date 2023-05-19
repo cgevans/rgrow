@@ -14,13 +14,13 @@ categories = { workspace = true }
 [dev-dependencies]
 criterion = "0.3"
 
-[[bench]]
-name = "sierpinski"
-harness = false
+# [[bench]]
+# name = "sierpinski"
+# harness = false
 
-[[bench]]
-name = "ratestore"
-harness = false
+# [[bench]]
+# name = "ratestore"
+# harness = false
 
 [[bench]]
 name = "ui"

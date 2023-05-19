@@ -7,3 +7,4 @@ options:
   fission: keep-seeded
   size: [8, 1024]
   seed: [4, 2, 2]
+  model: oldktam

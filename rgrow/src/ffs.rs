@@ -1,12 +1,14 @@
 #![allow(clippy::too_many_arguments)]
 
+use std::sync::Arc;
+
 use crate::base::{GrowError, RgrowError, Tile};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
 use crate::system::{EvolveBounds, SystemWithDimers};
-use crate::tileset::{CanvasType, FromTileSet, Model, TileSet};
+use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
 use super::*;
 //use ndarray::prelude::*;
@@ -14,6 +16,8 @@ use super::*;
 use base::{NumTiles, Rate};
 
 use ndarray::{Array2, ArrayView2};
+#[cfg(feature = "python")]
+use numpy::{PyArray2, ToPyArray};
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
 use rand::{prelude::SmallRng, SeedableRng};
 use rand::{thread_rng, Rng};
@@ -209,8 +213,8 @@ pub trait FFSSurface: Send + Sync {
 
 impl TileSet {
     pub fn run_ffs(&self, config: &FFSRunConfig) -> Result<Box<dyn FFSResult>, RgrowError> {
-        match self.options.model {
-            Model::KTAM => match self.options.canvas_type {
+        match self.model.unwrap_or(Model::KTAM) {
+            Model::KTAM => match self.canvas_type.unwrap_or(CanvasType::Periodic) {
                 CanvasType::Square => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasSquare, NullStateTracker>,
                     KTAM,
@@ -231,7 +235,7 @@ impl TileSet {
                 )?)),
             },
             Model::ATAM => Err(GrowError::FFSCannotRunATAM.into()),
-            Model::OldKTAM => match self.options.canvas_type {
+            Model::OldKTAM => match self.canvas_type.unwrap_or(CanvasType::Periodic) {
                 CanvasType::Square => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasSquare, NullStateTracker>,
                     OldKTAM,
@@ -362,7 +366,7 @@ impl<
         let sys = Sy::from_tileset(tileset)?;
         let c = {
             let mut c = config.clone();
-            c.canvas_size = match tileset.options.size {
+            c.canvas_size = match tileset.size.unwrap_or(SIZE_DEFAULT) {
                 tileset::Size::Single(x) => (x, x),
                 tileset::Size::Pair(p) => p,
             };
@@ -625,4 +629,85 @@ fn variance_over_mean2(num_success: usize, num_trials: usize) -> f64 {
     let nt = num_trials as f64;
     let p = ns / nt;
     (1. - p) / (ns)
+}
+
+#[cfg_attr(feature = "python", pyclass(name = "FFSResult"))]
+pub struct BoxedFFSResult(pub(crate) Arc<Box<dyn ffs::FFSResult>>);
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl BoxedFFSResult {
+    /// Nucleation rate, in M/s.  Calculated from the forward probability vector,
+    /// and dimerization rate.
+    #[getter]
+    fn get_nucleation_rate(&self) -> f64 {
+        self.0.nucleation_rate()
+    }
+
+    #[getter]
+    fn get_forward_vec(&self) -> Vec<f64> {
+        self.0.forward_vec().clone()
+    }
+
+    #[getter]
+    fn get_dimerization_rate(&self) -> f64 {
+        self.0.dimerization_rate()
+    }
+
+    #[getter]
+    fn get_surfaces(&self) -> Vec<FFSLevelRef> {
+        self.0
+            .surfaces()
+            .iter()
+            .enumerate()
+            .map(|(i, _)| FFSLevelRef {
+                res: self.0.clone(),
+                level: i,
+            })
+            .collect()
+    }
+
+    fn __str__(&self) -> String {
+        format!(
+            "FFSResult({:1.4e} M/s, {:?})",
+            self.0.nucleation_rate(),
+            self.0.forward_vec()
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+
+    #[getter]
+    fn previous_indices(&self) -> Vec<Vec<usize>> {
+        self.get_surfaces()
+            .iter()
+            .map(|x| x.get_previous_indices())
+            .collect()
+    }
+}
+
+#[cfg_attr(feature = "python", pyclass)]
+pub struct FFSLevelRef {
+    res: Arc<Box<dyn ffs::FFSResult>>,
+    level: usize,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl FFSLevelRef {
+    #[getter]
+    fn get_configs<'py>(&self, py: Python<'py>) -> Vec<&'py PyArray2<crate::base::Tile>> {
+        self.res.surfaces()[self.level]
+            .configs()
+            .iter()
+            .map(|x| x.to_pyarray(py))
+            .collect()
+    }
+
+    #[getter]
+    fn get_previous_indices(&self) -> Vec<usize> {
+        self.res.surfaces()[self.level].previous_list()
+    }
 }

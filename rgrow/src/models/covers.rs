@@ -11,7 +11,7 @@ use crate::{
         ChunkSize, DimerInfo, Event, StepOutcome, System, SystemInfo, SystemWithDimers,
         TileBondInfo,
     },
-    tileset::{FromTileSet, ProcessedTileSet, TileSet},
+    tileset::{FromTileSet, ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
 };
 
 #[derive(Debug, Clone)]
@@ -424,17 +424,17 @@ impl FromTileSet for StaticKTAMCover {
         let tile_edges = proc.tile_edges;
 
         let seed = if proc.seed.is_empty() {
-            Seed::None()
+            None
         } else if proc.seed.len() == 1 {
             let (x, y, v) = proc.seed[0];
-            Seed::SingleTile {
+            Some(Seed::SingleTile {
                 point: (x, y),
                 tile: v,
-            }
+            })
         } else {
             let mut hm = HashMapType::default();
             hm.extend(proc.seed.iter().map(|(y, x, v)| ((*y, *x), *v)));
-            Seed::MultiTile(hm)
+            Some(Seed::MultiTile(hm))
         };
 
         let inner = OldKTAM::from_ktam(
@@ -442,14 +442,14 @@ impl FromTileSet for StaticKTAMCover {
             tile_edges,
             proc.glue_strengths,
             proc.gluelinks,
-            tsc.options.gse,
-            tsc.options.gmc,
-            Some(tsc.options.alpha),
-            tsc.options.kf,
-            Some(seed),
-            Some(tsc.options.fission),
-            tsc.options.chunk_handling,
-            tsc.options.chunk_size,
+            tsc.gse.unwrap_or(GSE_DEFAULT),
+            tsc.gmc.unwrap_or(GMC_DEFAULT),
+            tsc.alpha,
+            tsc.kf,
+            seed,
+            tsc.fission,
+            tsc.chunk_handling,
+            tsc.chunk_size,
             proc.tile_names,
             proc.tile_colors,
         );

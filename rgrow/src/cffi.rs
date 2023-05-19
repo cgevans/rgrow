@@ -6,9 +6,8 @@ use std::{
 };
 
 use crate::{
-    base::{NumEvents, NumTiles, Tile},
-    simulation::Simulation,
-    system::{self, BoxedSystem, DynSystem, EvolveOutcome},
+    base::{NumEvents, NumTiles},
+    system::{self},
     tileset::TileSet,
 };
 
@@ -91,14 +90,12 @@ impl From<EvolveBounds> for system::EvolveBounds {
 
 #[no_mangle]
 pub unsafe extern "C" fn create_tileset_from_file(s: *const c_char) -> *mut TileSet {
-    println!("Loading");
     let ts = TileSet::from_file(unsafe { std::ffi::CStr::from_ptr(s) }.to_str().unwrap()).unwrap();
     Box::into_raw(Box::new(ts))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn create_tileset_from_json(s: *const c_char) -> *mut TileSet {
-    println!("Loading");
     let ts = TileSet::from_json(unsafe { std::ffi::CStr::from_ptr(s) }.to_str().unwrap()).unwrap();
     Box::into_raw(Box::new(ts))
 }
@@ -113,43 +110,12 @@ pub unsafe extern "C" fn create_system_from_tileset(t: *const TileSet) -> *mut c
 #[no_mangle]
 pub unsafe extern "C" fn create_state_from_tileset(ts: *const TileSet) -> *mut c_void {
     let ts = &*ts;
-    let state = ts.create_state().unwrap();
+    let state = ts.create_state_empty().unwrap();
     Box::into_raw(state) as *mut c_void
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn drop_system(sim: *mut c_void) {
-    let sim = Box::from_raw(sim.cast::<Box<dyn Simulation>>());
-    drop(sim);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn drop_tileset(ts: *mut TileSet) {
     let ts = Box::from_raw(ts);
     drop(ts);
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn evolve_index(
-    sim: *mut c_void,
-    state: u64,
-    bounds: EvolveBounds,
-) -> EvolveOutcome {
-    let sim = &mut *sim.cast::<Box<dyn Simulation>>();
-    let bounds = bounds.into();
-    sim.evolve(state as usize, bounds).unwrap()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn get_canvas_view(sim: *const c_void, state: u64) -> CArrayView2<Tile> {
-    let sim = &*sim.cast::<Box<dyn Simulation>>();
-    println!("AAAA");
-    let state = sim.state_ref(state as usize);
-    let canvas = state.raw_array();
-    println!("BBBB");
-    CArrayView2 {
-        data: canvas.as_ptr(),
-        nrows: canvas.nrows() as u64,
-        ncols: canvas.ncols() as u64,
-    }
 }

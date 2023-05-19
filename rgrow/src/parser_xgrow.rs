@@ -126,7 +126,7 @@ fn parse(input: &str) -> IResult<&str, tileset::TileSet> {
         std_delim(delimited(tag("{"), many1(std_delim(string_f64)), tag("}"))),
     )))(input)?;
 
-    let (input, (options, glues)) = xgrow_args(input)?;
+    let (input, (mut options, glues)) = xgrow_args(input)?;
 
     // todo: checks
 
@@ -165,18 +165,12 @@ fn parse(input: &str) -> IResult<&str, tileset::TileSet> {
 
     all_consuming(rsc)(input)?;
 
-    Ok((
-        input,
-        tileset::TileSet {
-            tiles,
-            bonds,
-            glues,
-            options,
-            cover_strands: None,
-        },
-    ))
+    options.tiles = tiles;
+    options.bonds = bonds;
+    options.glues = glues;
+    options.cover_strands = None;
 
-    //Ok((input, ()));
+    Ok((input, options))
 }
 
 enum XgrowArgs<'a> {
@@ -186,7 +180,7 @@ enum XgrowArgs<'a> {
     Gmc(f64),
     UpdateRate(u64),
     Unhandled(&'a str),
-    Seed(tileset::ParsedSeed),
+    Seed(tileset::Seed),
     T(f64),
     GlueLink(u32, u32, f64),
     Periodic(bool),
@@ -237,11 +231,7 @@ fn arg_seed(input: &str) -> IResult<&str, XgrowArgs> {
         map(
             tuple((take_u32, tag(","), take_u32, tag(","), take_u32)),
             |(y, _, x, _, t)| {
-                XgrowArgs::Seed(tileset::ParsedSeed::Single(
-                    y as usize,
-                    x as usize,
-                    t.into(),
-                ))
+                XgrowArgs::Seed(tileset::Seed::Single(y as usize, x as usize, t.into()))
             },
         ),
     )(input)
@@ -281,8 +271,8 @@ fn unhandled_option(input: &str) -> IResult<&str, XgrowArgs> {
     map(is_not(" \t\r\n%"), XgrowArgs::Unhandled)(input)
 }
 
-fn xgrow_args(input: &str) -> IResult<&str, (tileset::Args, GlueVec)> {
-    let mut args = tileset::Args::default();
+fn xgrow_args(input: &str) -> IResult<&str, (tileset::TileSet, GlueVec)> {
+    let mut args = tileset::TileSet::default();
 
     let parsers = (
         arg_block,
@@ -300,7 +290,7 @@ fn xgrow_args(input: &str) -> IResult<&str, (tileset::Args, GlueVec)> {
     );
 
     let mut i2 = input;
-    args.size = Size::Single(132);
+    args.size = Some(Size::Single(132));
 
     let mut gluelinks = Vec::new();
 
@@ -310,64 +300,70 @@ fn xgrow_args(input: &str) -> IResult<&str, (tileset::Args, GlueVec)> {
                 args.block = Some(n);
             }
             XgrowArgs::Size(n) => {
-                args.size = crate::tileset::Size::Single(n);
+                args.size = Some(crate::tileset::Size::Single(n));
             }
             XgrowArgs::Gse(x) => {
-                args.gse = x;
+                args.gse = Some(x);
             }
             XgrowArgs::Gmc(x) => {
-                args.gmc = x;
+                args.gmc = Some(x);
             }
             XgrowArgs::Unhandled(u) => {
                 println!("Warning: \"{u}\" unhandled.");
             }
             XgrowArgs::UpdateRate(x) => {
-                args.update_rate = x;
+                args.update_rate = Some(x);
             }
             XgrowArgs::Seed(x) => {
-                args.seed = x;
+                args.seed = Some(x);
             }
             XgrowArgs::T(x) => {
-                args.model = Model::ATAM;
-                args.threshold = x;
+                args.model = Some(Model::ATAM);
+                args.threshold = Some(x);
             }
             XgrowArgs::GlueLink(g1, g2, v) => gluelinks.push((g1.into(), g2.into(), v)),
             XgrowArgs::Periodic(b) => {
                 if b {
-                    args.canvas_type = CanvasType::Periodic;
+                    args.canvas_type = Some(CanvasType::Periodic);
                 } else {
-                    args.canvas_type = CanvasType::Square;
+                    args.canvas_type = Some(CanvasType::Square);
                 }
             }
             XgrowArgs::HDoubleTile(t1, t2) => {
-                args.hdoubletiles.push((t1, t2));
+                match args.hdoubletiles {
+                    None => args.hdoubletiles = Some(vec![(t1, t2)]),
+                    Some(ref mut v) => v.push((t1, t2)),
+                };
             }
             XgrowArgs::VDoubleTile(t1, t2) => {
-                args.vdoubletiles.push((t1, t2));
+                match args.vdoubletiles {
+                    None => args.vdoubletiles = Some(vec![(t1, t2)]),
+                    Some(ref mut v) => v.push((t1, t2)),
+                };
             }
         }
         i2 = input;
     }
 
-    let Size::Single(size) = args.size else { panic!() };
+    let Some(Size::Single(size)) = args.size else { panic!() };
 
-    if let tileset::ParsedSeed::None() = args.seed {
-        args.seed = tileset::ParsedSeed::Single(size - 3, size - 3, 1.into());
+    if args.seed.is_none() {
+        args.seed = Some(tileset::Seed::Single(size - 3, size - 3, 1.into()));
     }
 
-    if let tileset::ParsedSeed::Single(x, y, t) = &args.seed {
-        if ((*x > size - 3) || (*y > size - 3))
-            || (*x < 2)
-            || (*y < 2) && (args.canvas_type == CanvasType::Square)
+    if let Some(tileset::Seed::Single(x, y, ref t)) = args.seed {
+        if ((x > size - 3) || (y > size - 3))
+            || (x < 2)
+            || (y < 2) && (args.canvas_type == Some(CanvasType::Square) || args.canvas_type == None)
         {
-            let nx = (*x).clamp(2, size - 3);
-            let ny = (*y).clamp(2, size - 3);
+            let nx = (x).clamp(2, size - 3);
+            let ny = (y).clamp(2, size - 3);
             println!("Warning: seed position {x}, {y} is out of bounds for rgrow.  Adjusting to {nx}, {ny}.");
-            args.seed = tileset::ParsedSeed::Single(nx, ny, t.clone());
+            args.seed = Some(tileset::Seed::Single(nx, ny, t.clone()));
         }
     }
 
-    args.fission = FissionHandling::NoFission;
+    args.fission = Some(FissionHandling::NoFission);
 
     Ok((i2, (args, gluelinks)))
 }

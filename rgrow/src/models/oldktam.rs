@@ -1,6 +1,9 @@
 use std::{collections::HashMap, sync::RwLock};
 
-use crate::base::{HashMapType, HashSetType};
+use crate::{
+    base::{HashMapType, HashSetType},
+    tileset::{GMC_DEFAULT, GSE_DEFAULT},
+};
 use cached::{Cached, SizedCache};
 use fnv::FnvHashMap;
 use ndarray::{Array1, Array2};
@@ -890,14 +893,14 @@ impl FromTileSet for OldKTAM {
             proc.tile_edges,
             proc.glue_strengths,
             proc.gluelinks,
-            tileset.options.gse,
-            tileset.options.gmc,
-            Some(tileset.options.alpha),
-            tileset.options.kf,
+            tileset.gse.unwrap_or(GSE_DEFAULT),
+            tileset.gmc.unwrap_or(GMC_DEFAULT),
+            tileset.alpha,
+            tileset.kf,
             Some(seed),
-            Some(tileset.options.fission),
-            tileset.options.chunk_handling,
-            tileset.options.chunk_size,
+            tileset.fission,
+            tileset.chunk_handling,
+            tileset.chunk_size,
             proc.tile_names,
             proc.tile_colors,
         );

@@ -16,7 +16,7 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
         System, SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{FromTileSet, ProcessedTileSet, TileSet},
+    tileset::{FromTileSet, ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
 };
 
 use crate::base::{HashMapType, HashSetType};
@@ -1416,31 +1416,31 @@ impl FromTileSet for KTAM {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
 
         let seed = if proc.seed.is_empty() {
-            Seed::None()
+            None
         } else if proc.seed.len() == 1 {
             let (x, y, v) = proc.seed[0];
-            Seed::SingleTile {
+            Some(Seed::SingleTile {
                 point: PointSafe2((x, y)),
                 tile: v,
-            }
+            })
         } else {
             let mut hm = HashMap::default();
             hm.extend(proc.seed.iter().map(|(y, x, v)| (PointSafe2((*y, *x)), *v)));
-            Seed::MultiTile(hm)
+            Some(Seed::MultiTile(hm))
         };
 
         let mut newkt = Self::from_ktam(
             proc.tile_stoics,
             proc.tile_edges,
             proc.glue_strengths,
-            tileset.options.gse,
-            tileset.options.gmc,
-            Some(tileset.options.alpha),
-            tileset.options.kf,
-            Some(seed),
-            Some(tileset.options.fission),
-            tileset.options.chunk_handling,
-            tileset.options.chunk_size,
+            tileset.gse.unwrap_or(GSE_DEFAULT),
+            tileset.gmc.unwrap_or(GMC_DEFAULT),
+            tileset.alpha,
+            tileset.kf,
+            seed,
+            tileset.fission,
+            tileset.chunk_handling,
+            tileset.chunk_size,
             Some(proc.tile_names),
             Some(proc.tile_colors),
         );

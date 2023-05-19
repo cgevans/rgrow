@@ -1,11 +1,17 @@
 use crate::base::{GlueIdent, RgrowError, TileIdent};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube};
 use crate::colors::get_color_or_random;
+
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
+#[cfg(feature = "python")]
+use crate::state::BoxedState;
 use crate::state::{NullStateTracker, QuadTreeState, State, StateCreate};
-use crate::system::{BoxedSystem, EvolveBounds, System, SystemInfo, TileBondInfo};
+use crate::system::{BoxedSystem, DynSystem, EvolveBounds};
+
+#[cfg(feature = "python")]
+use crate::ffs::{BoxedFFSResult, FFSRunConfig};
 
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;
@@ -17,10 +23,9 @@ use core::fmt;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use simulation::Simulation;
 use std::any::Any;
-use std::collections::{BTreeMap, HashMap};
-use std::fmt::{Display, Formatter};
+use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter, Write};
 use std::io::{self, Read};
 use std::ops::DerefMut;
 use std::path::Path;
@@ -29,9 +34,20 @@ use system::{ChunkHandling, ChunkSize};
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
+#[cfg(feature = "python")]
+use pyo3::exceptions::PyValueError;
+#[cfg(feature = "python")]
+use pyo3::types::{PyDict, PyType};
+
 use thiserror;
 
 type GlueNameMap = BiMap<String, Glue>;
+
+pub const MODEL_DEFAULT: Model = Model::KTAM;
+pub const GMC_DEFAULT: f64 = 16.0;
+pub const GSE_DEFAULT: f64 = 8.1;
+pub const CANVAS_TYPE_DEFAULT: CanvasType = CanvasType::Square;
+pub const SIZE_DEFAULT: Size = Size::Single(64);
 
 #[derive(thiserror::Error, Debug)]
 pub enum ParserError {
@@ -61,40 +77,19 @@ pub enum ParserError {
         num: usize,
         shape: TileShape,
     },
-    #[error(transparent)]
-    OptError(#[from] ConfigErr),
 }
-
-// impl core::fmt::Debug for TileIdent {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             Self::Name(s) => write!(f, "\"{s}\""),
-//             Self::Num(n) => write!(f, "{n}"),
-//         }
-//     }
-// }
-
-// impl Display for TileIdent {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             Self::Name(s) => write!(f, "\"{s}\""),
-//             Self::Num(n) => write!(f, "{n}"),
-//         }
-//     }
-// }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
-pub enum ParsedSeed {
-    None(),
+#[cfg_attr(feature = "python", derive(FromPyObject))]
+pub enum Seed {
     Single(CanvasLength, CanvasLength, TileIdent),
     Multi(Vec<(CanvasLength, CanvasLength, TileIdent)>),
 }
 
-impl Display for ParsedSeed {
+impl Display for Seed {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::None() => write!(f, "None"),
             Self::Single(x, y, tile) => write!(f, "Single({},{},{})", x, y, tile),
             Self::Multi(v) => {
                 write!(f, "Multi(")?;
@@ -107,23 +102,18 @@ impl Display for ParsedSeed {
     }
 }
 
-impl TryFrom<&Box<dyn Any>> for ParsedSeed {
-    type Error = RgrowError;
-
-    fn try_from(value: &Box<dyn Any>) -> Result<Self, Self::Error> {
-        if let Some((x, y, tile)) = value.downcast_ref::<(CanvasLength, CanvasLength, TileIdent)>()
-        {
-            Ok(Self::Single(*x, *y, tile.clone()))
-        } else if let Some(v) = value.downcast_ref::<Vec<(CanvasLength, CanvasLength, TileIdent)>>()
-        {
-            Ok(Self::Multi(v.clone()))
-        } else {
-            panic!("Invalid seed type")
+#[cfg(feature = "python")]
+impl IntoPy<PyObject> for Seed {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            Seed::Single(x, y, z) => (x, y, z).into_py(py),
+            Seed::Multi(v) => v.into_py(py),
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum TileShape {
     #[serde(alias = "single", alias = "s", alias = "S")]
     Single,
@@ -144,7 +134,7 @@ impl Display for TileShape {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
 pub struct Tile {
     /// The name of the tile.  If unset, the eventual
     /// number of the tile will be used.
@@ -164,6 +154,52 @@ pub struct Tile {
     pub shape: Option<TileShape>,
 }
 
+#[cfg(feature = "python")]
+#[pymethods]
+impl Tile {
+    #[new]
+    fn new(
+        edges: Vec<GlueIdent>,
+        name: Option<String>,
+        stoic: Option<f64>,
+        color: Option<String>,
+        shape: Option<TileShape>,
+    ) -> Tile {
+        Tile {
+            name,
+            edges,
+            stoic,
+            color,
+            shape,
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        let mut f = String::from("Tile(");
+        if let Some(ref name) = self.name {
+            write!(f, "name=\"{}\", ", name).unwrap();
+        }
+        write!(f, "edges=[").unwrap();
+        for edge in &self.edges {
+            write!(f, "{}, ", edge).unwrap();
+        }
+        f.pop();
+        f.pop(); // FIXME
+        write!(f, "]").unwrap();
+        if let Some(stoic) = self.stoic {
+            write!(f, ", stoic={}", stoic).unwrap();
+        }
+        if let Some(ref color) = self.color {
+            write!(f, ", color=\"{}\"", color).unwrap();
+        }
+        if let Some(ref shape) = self.shape {
+            write!(f, ", shape={}", shape).unwrap();
+        }
+        write!(f, ")").unwrap();
+        f
+    }
+}
+
 impl Display for Tile {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Tile {{ ")?;
@@ -174,21 +210,22 @@ impl Display for Tile {
         for edge in &self.edges {
             write!(f, "{}, ", edge)?;
         }
-        write!(f, "], ")?;
+        write!(f, "]")?;
         if let Some(stoic) = self.stoic {
-            write!(f, "stoic: {}, ", stoic)?;
+            write!(f, ", stoic: {}", stoic)?;
         }
         if let Some(color) = &self.color {
-            write!(f, "color: {}, ", color)?;
+            write!(f, ", color: {}, ", color)?;
         }
         if let Some(shape) = &self.shape {
-            write!(f, "shape: {}, ", shape)?;
+            write!(f, ", shape: {}, ", shape)?;
         }
         write!(f, "}}")
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum Direction {
     N,
     E,
@@ -197,6 +234,7 @@ pub enum Direction {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
 pub struct CoverStrand {
     pub name: Option<String>,
     pub glue: GlueIdent,
@@ -274,13 +312,53 @@ impl CoverStrand {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
 pub struct Bond {
     pub name: GlueIdent,
     pub strength: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python", pyclass)]
+// The purpose of this recursive version of TileSet is to allow serde to parse
+// files with an "option" field for backwards compatibility.
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+struct SerdeTileSet {
+    #[serde(default = "Vec::new")]
+    pub(self) tiles: Vec<Tile>,
+    #[serde(default = "Vec::new")]
+    pub(self) bonds: Vec<Bond>,
+    #[serde(default = "Vec::new")]
+    pub(self) glues: Vec<(GlueIdent, GlueIdent, f64)>,
+    pub(self) cover_strands: Option<Vec<CoverStrand>>,
+    #[serde(alias = "Gse")]
+    pub(self) gse: Option<f64>,
+    #[serde(alias = "Gmc")]
+    pub(self) gmc: Option<f64>,
+    #[serde(alias = "α")]
+    pub(self) alpha: Option<f64>,
+    pub(self) threshold: Option<f64>,
+    pub(self) seed: Option<Seed>,
+    pub(self) size: Option<Size>,
+    pub(self) tau: Option<f64>,
+    pub(self) smax: Option<NumTiles>,
+    pub(self) update_rate: Option<NumEvents>,
+    #[serde(alias = "k_f")]
+    pub(self) kf: Option<f64>,
+    pub(self) fission: Option<FissionHandling>,
+    pub(self) block: Option<usize>,
+    pub(self) chunk_handling: Option<ChunkHandling>,
+    pub(self) chunk_size: Option<ChunkSize>,
+    pub(self) canvas_type: Option<CanvasType>,
+    #[serde(alias = "doubletiles")]
+    pub(self) hdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
+    pub(self) vdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
+    pub(self) model: Option<Model>,
+    #[serde(alias = "xgrowargs", alias = "params")]
+    pub(self) options: Option<Box<SerdeTileSet>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
+#[serde(from = "SerdeTileSet")]
 pub struct TileSet {
     #[serde(default = "Vec::new")]
     pub tiles: Vec<Tile>,
@@ -288,26 +366,183 @@ pub struct TileSet {
     pub bonds: Vec<Bond>,
     #[serde(default = "Vec::new")]
     pub glues: Vec<(GlueIdent, GlueIdent, f64)>,
-    #[serde(alias = "xgrowargs")]
-    pub options: Args,
     pub cover_strands: Option<Vec<CoverStrand>>,
+    pub gse: Option<f64>,
+    pub gmc: Option<f64>,
+    pub alpha: Option<f64>,
+    pub threshold: Option<f64>,
+    pub seed: Option<Seed>,
+    pub size: Option<Size>,
+    pub tau: Option<f64>,
+    pub smax: Option<NumTiles>,
+    pub update_rate: Option<NumEvents>,
+    pub kf: Option<f64>,
+    pub fission: Option<FissionHandling>,
+    pub block: Option<usize>,
+    pub chunk_handling: Option<ChunkHandling>,
+    pub chunk_size: Option<ChunkSize>,
+    pub canvas_type: Option<CanvasType>,
+    pub hdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
+    pub vdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
+    pub model: Option<Model>,
 }
 
-fn alpha_default() -> f64 {
-    0.0
+impl From<SerdeTileSet> for TileSet {
+    fn from(serde_tile_set: SerdeTileSet) -> Self {
+        let SerdeTileSet {
+            tiles,
+            bonds,
+            glues,
+            cover_strands,
+            gse,
+            gmc,
+            alpha,
+            threshold,
+            seed,
+            size,
+            tau,
+            smax,
+            update_rate,
+            kf,
+            fission,
+            block,
+            chunk_handling,
+            chunk_size,
+            canvas_type,
+            hdoubletiles,
+            vdoubletiles,
+            model,
+            options,
+        } = serde_tile_set;
+
+        let mut tile_set = TileSet {
+            tiles,
+            bonds,
+            glues,
+            cover_strands,
+            gse,
+            gmc,
+            alpha,
+            threshold,
+            seed,
+            size,
+            tau,
+            smax,
+            update_rate,
+            kf,
+            fission,
+            block,
+            chunk_handling,
+            chunk_size,
+            canvas_type,
+            hdoubletiles,
+            vdoubletiles,
+            model,
+        };
+
+        if let Some(options) = options {
+            tile_set.tiles.extend(options.tiles);
+            tile_set.bonds.extend(options.bonds);
+            tile_set.glues.extend(options.glues);
+            tile_set.cover_strands = options.cover_strands.or(tile_set.cover_strands);
+            tile_set.gse = options.gse.or(tile_set.gse);
+            tile_set.gmc = options.gmc.or(tile_set.gmc);
+            tile_set.alpha = options.alpha.or(tile_set.alpha);
+            tile_set.threshold = options.threshold.or(tile_set.threshold);
+            tile_set.seed = options.seed.or(tile_set.seed);
+            tile_set.size = options.size.or(tile_set.size);
+            tile_set.tau = options.tau.or(tile_set.tau);
+            tile_set.smax = options.smax.or(tile_set.smax);
+            tile_set.update_rate = options.update_rate.or(tile_set.update_rate);
+            tile_set.kf = options.kf.or(tile_set.kf);
+            tile_set.fission = options.fission.or(tile_set.fission);
+            tile_set.block = options.block.or(tile_set.block);
+            tile_set.chunk_handling = options.chunk_handling.or(tile_set.chunk_handling);
+            tile_set.chunk_size = options.chunk_size.or(tile_set.chunk_size);
+            tile_set.canvas_type = options.canvas_type.or(tile_set.canvas_type);
+            tile_set.hdoubletiles = options.hdoubletiles.or(tile_set.hdoubletiles);
+            tile_set.vdoubletiles = options.vdoubletiles.or(tile_set.vdoubletiles);
+            tile_set.model = options.model.or(tile_set.model);
+        }
+
+        tile_set
+    }
 }
-fn gse_default() -> f64 {
-    8.1
-}
-fn gmc_default() -> f64 {
-    16.0
+
+impl Display for TileSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(f, "TileSet(")?;
+        writeln!(f, "    tiles=[")?;
+        for tile in &self.tiles {
+            writeln!(f, "        {},", tile)?;
+        }
+        writeln!(f, "    ],")?;
+        if !self.bonds.is_empty() {
+            writeln!(f, "    bonds=[")?;
+            for bond in &self.bonds {
+                writeln!(f, "        ({}, {}),", bond.name, bond.strength)?;
+            }
+            writeln!(f, "    ],")?;
+        };
+        if !self.glues.is_empty() {
+            writeln!(f, "    glues=[")?;
+            for (a, b, s) in &self.glues {
+                writeln!(f, "        ({}, {}, {}),", a, b, s)?;
+            }
+            writeln!(f, "    ],")?;
+        };
+        writeln!(f, "    options=[")?;
+        if let Some(x) = self.gse {
+            writeln!(f, "        Gse: {}", x)?;
+        }
+        if let Some(x) = self.gmc {
+            writeln!(f, "        Gmc: {}", x)?;
+        }
+        if let Some(x) = self.alpha {
+            writeln!(f, "        alpha: {}", x)?;
+        }
+        if let Some(x) = &self.seed {
+            writeln!(f, "        seed: {}", x)?;
+        }
+        if let Some(x) = self.size {
+            writeln!(f, "        size: {}", x)?;
+        }
+        writeln!(f, "        tau: {:?}", self.tau)?;
+        writeln!(f, "        smax: {:?}", self.smax)?;
+        if let Some(x) = self.update_rate {
+            writeln!(f, "        update_rate: {}", x)?;
+        }
+        writeln!(f, "        kf: {:?}", self.kf)?;
+        writeln!(f, "        fission: {:?}", self.fission)?;
+        writeln!(f, "        block: {:?}", self.block)?;
+        writeln!(f, "        chunk_handling: {:?}", self.chunk_handling)?;
+        writeln!(f, "        chunk_size: {:?}", self.chunk_size)?;
+        writeln!(f, "        canvas_type: {:?}", self.canvas_type)?;
+        writeln!(f, "        hdoubletiles: {:?}", self.hdoubletiles)?;
+        writeln!(f, "        vdoubletiles: {:?}", self.vdoubletiles)?;
+        writeln!(f, "        model: {:?}", self.model)?;
+        writeln!(f, "        threshold: {:?}", self.threshold)?;
+        write!(f, "    ]\n)\n")?;
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(untagged)]
+#[cfg_attr(feature = "python", derive(FromPyObject))]
 pub enum Size {
     Single(CanvasLength),
     Pair((CanvasLength, CanvasLength)),
+}
+
+#[cfg(feature = "python")]
+impl IntoPy<PyObject> for Size {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            Size::Single(x) => x.into_py(py),
+            Size::Pair(p) => p.into_py(py),
+        }
+    }
 }
 
 impl From<CanvasLength> for Size {
@@ -338,26 +573,9 @@ impl From<&Box<dyn Any>> for Size {
     }
 }
 
-fn size_default() -> Size {
-    Size::Single(32)
-}
-fn update_rate_default() -> NumEvents {
-    1000
-}
-fn seed_default() -> ParsedSeed {
-    ParsedSeed::None()
-}
-fn fission_default() -> FissionHandling {
-    FissionHandling::KeepSeeded
-}
-fn block_default() -> Option<usize> {
-    None
-}
-fn tilepairlist_default() -> Vec<(TileIdent, TileIdent)> {
-    Vec::new()
-}
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
+#[cfg_attr(feature = "python", pyclass)]
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum CanvasType {
     #[serde(alias = "square")]
     Square,
@@ -378,11 +596,8 @@ impl From<&str> for CanvasType {
     }
 }
 
-fn canvas_type_default() -> CanvasType {
-    CanvasType::Periodic
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum Model {
     #[serde(alias = "kTAM", alias = "ktam")]
     KTAM,
@@ -403,46 +618,12 @@ impl From<&str> for Model {
     }
 }
 
-fn threshold_default() -> f64 {
-    2.0
-}
-
-fn model_default() -> Model {
-    Model::KTAM
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Args {
-    #[serde(default = "gse_default", alias = "Gse")]
-    pub gse: f64,
-    #[serde(default = "gmc_default", alias = "Gmc")]
-    pub gmc: f64,
-    #[serde(default = "alpha_default")]
-    pub alpha: f64,
-    #[serde(default = "threshold_default")]
-    pub threshold: f64,
-    #[serde(default = "seed_default")]
-    pub seed: ParsedSeed,
-    #[serde(default = "size_default")]
-    pub size: Size,
-    pub tau: Option<f64>,
-    pub smax: Option<NumTiles>,
-    #[serde(default = "update_rate_default")]
-    pub update_rate: NumEvents,
-    pub kf: Option<f64>,
-    #[serde(default = "fission_default")]
-    pub fission: FissionHandling,
-    pub block: Option<usize>,
-    pub chunk_handling: Option<ChunkHandling>,
-    pub chunk_size: Option<ChunkSize>,
-    #[serde(default = "canvas_type_default")]
-    pub canvas_type: CanvasType,
-    #[serde(default = "tilepairlist_default", alias = "doubletiles")]
-    pub hdoubletiles: Vec<(TileIdent, TileIdent)>,
-    #[serde(default = "tilepairlist_default")]
-    pub vdoubletiles: Vec<(TileIdent, TileIdent)>,
-    #[serde(default = "model_default")]
-    pub model: Model,
-}
+// #[cfg(feature = "python")]
+// impl IntoPy<PyObject> for Model {
+//     fn into_py(self, py: Python<'_>) -> PyObject {
+//         todo!()
+//     }
+// }
 
 impl Display for Size {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -453,176 +634,11 @@ impl Display for Size {
     }
 }
 
-impl Display for Args {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Gse: {}", self.gse)?;
-        writeln!(f, "Gmc: {}", self.gmc)?;
-        writeln!(f, "alpha: {}", self.alpha)?;
-        writeln!(f, "seed: {}", self.seed)?;
-        writeln!(f, "size: {}", self.size)?;
-        writeln!(f, "tau: {:?}", self.tau)?;
-        writeln!(f, "smax: {:?}", self.smax)?;
-        writeln!(f, "update_rate: {}", self.update_rate)?;
-        writeln!(f, "kf: {:?}", self.kf)?;
-        writeln!(f, "fission: {:?}", self.fission)?;
-        writeln!(f, "block: {:?}", self.block)?;
-        writeln!(f, "chunk_handling: {:?}", self.chunk_handling)?;
-        writeln!(f, "chunk_size: {:?}", self.chunk_size)?;
-        writeln!(f, "canvas_type: {:?}", self.canvas_type)?;
-        writeln!(f, "hdoubletiles: {:?}", self.hdoubletiles)?;
-        writeln!(f, "vdoubletiles: {:?}", self.vdoubletiles)?;
-        writeln!(f, "model: {:?}", self.model)?;
-        writeln!(f, "threshold: {:?}", self.threshold)?;
-        Ok(())
-    }
-}
-
-impl Default for Args {
-    fn default() -> Self {
-        Args {
-            gse: gse_default(),
-            gmc: gmc_default(),
-            alpha: alpha_default(),
-            seed: seed_default(),
-            size: size_default(),
-            tau: None,
-            smax: None,
-            update_rate: update_rate_default(),
-            kf: None,
-            fission: fission_default(),
-            block: block_default(),
-            chunk_handling: None,
-            chunk_size: None,
-            canvas_type: CanvasType::Square,
-            hdoubletiles: Vec::new(),
-            vdoubletiles: Vec::new(),
-            model: model_default(),
-            threshold: threshold_default(),
-        }
-    }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum ConfigErr {
-    #[error("Wrong type for {0}")]
-    WrongType(String),
-}
-
-trait Config {
-    fn try_get_option_float(&self, key: &str) -> Result<Option<f64>, ConfigErr>;
-
-    fn try_get_seed(&self, key: &str) -> Result<&ParsedSeed, ConfigErr>;
-
-    fn try_get_ident_pair_list(&self, key: &str)
-        -> Result<&Vec<(TileIdent, TileIdent)>, ConfigErr>;
-}
-
-impl Config for Args {
-    fn try_get_option_float(&self, key: &str) -> Result<Option<f64>, ConfigErr> {
-        match key {
-            "gse" => Ok(Some(self.gse)),
-            "gmc" => Ok(Some(self.gmc)),
-            "alpha" => Ok(Some(self.alpha)),
-            "threshold" => Ok(Some(self.threshold)),
-            "kf" => Ok(self.kf),
-            _ => Err(ConfigErr::WrongType(key.to_string())),
-        }
-    }
-
-    fn try_get_seed(&self, key: &str) -> Result<&ParsedSeed, ConfigErr> {
-        match key {
-            "seed" => Ok(&self.seed),
-            _ => Err(ConfigErr::WrongType(key.to_string())),
-        }
-    }
-
-    fn try_get_ident_pair_list(
-        &self,
-        key: &str,
-    ) -> Result<&Vec<(TileIdent, TileIdent)>, ConfigErr> {
-        match key {
-            "hdoubletiles" => Ok(&self.hdoubletiles),
-            "vdoubletiles" => Ok(&self.vdoubletiles),
-            _ => Err(ConfigErr::WrongType(key.to_string())),
-        }
-    }
-}
-
-impl From<HashMap<String, Box<dyn Any>>> for Args {
-    fn from(value: HashMap<String, Box<dyn Any>>) -> Self {
-        Args {
-            gse: value
-                .get("gse")
-                .map_or_else(gse_default, |x| *(x.downcast_ref().unwrap())),
-            gmc: value
-                .get("gmc")
-                .map_or_else(gmc_default, |x| *x.downcast_ref::<f64>().unwrap()),
-            alpha: value
-                .get("alpha")
-                .map_or_else(alpha_default, |x| *x.downcast_ref::<f64>().unwrap()),
-            seed: value
-                .get("seed")
-                .map_or_else(seed_default, |x| x.try_into().unwrap()),
-            size: value
-                .get("size")
-                .map_or_else(size_default, |x| x.try_into().unwrap()),
-            tau: value
-                .get("tau")
-                .map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
-            smax: value
-                .get("smax")
-                .map_or_else(|| None, |x| *(x.downcast_ref().unwrap())),
-            update_rate: value
-                .get("update_rate")
-                .map_or_else(update_rate_default, |x| *(x.downcast_ref().unwrap())),
-            kf: value
-                .get("kf")
-                .map_or_else(|| None, |x| Some(*(x.downcast_ref().unwrap()))),
-            fission: value.get("chunk_size").map_or_else(fission_default, |x| {
-                (x.downcast_ref::<String>().unwrap().as_str()).into()
-            }),
-            block: value
-                .get("block")
-                .map_or_else(block_default, |x| *(x.downcast_ref().unwrap())),
-            chunk_handling: value.get("chunk_handling").map_or_else(
-                || None,
-                |x| Some((x.downcast_ref::<String>().unwrap().as_str()).into()),
-            ),
-            chunk_size: value.get("chunk_size").map_or_else(
-                || None,
-                |x| Some(x.downcast_ref::<String>().unwrap().as_str().into()),
-            ),
-            canvas_type: value
-                .get("canvas_type")
-                .map_or_else(canvas_type_default, |x: &Box<dyn Any>| {
-                    x.downcast_ref::<String>().unwrap().as_str().into()
-                }),
-            hdoubletiles: Vec::new(),
-            vdoubletiles: Vec::new(),
-            model: value
-                .get("model")
-                .map_or_else(model_default, |x: &Box<dyn Any>| {
-                    x.downcast_ref::<String>().unwrap().as_str().into()
-                }),
-            threshold: value
-                .get("threshold")
-                .map_or_else(threshold_default, |x| *(x.downcast_ref().unwrap())),
-        }
-    }
-}
-
 pub trait FromTileSet: Sized {
     fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError>;
 }
 
 impl TileSet {
-    pub fn get_bounds(&self) -> EvolveBounds {
-        EvolveBounds {
-            size_max: self.options.smax,
-            ..Default::default()
-        }
-    }
-
     pub fn from_json(data: &str) -> serde_json::Result<Self> {
         serde_json::from_str(data)
     }
@@ -657,41 +673,22 @@ impl TileSet {
         }
     }
 
-    fn sim_from_tileset<
-        Sy: System + FromTileSet + TileBondInfo + SystemInfo + 'static,
-        S: StateCreate + State + 'static,
-    >(
-        self: &TileSet,
-    ) -> Result<Box<dyn Simulation>, RgrowError> {
-        let sys = Sy::from_tileset(self)?;
-        let size = match self.options.size {
-            Size::Single(x) => (x, x),
-            Size::Pair((x, y)) => (x, y),
-        };
-        // let state = sys.new_state(size)?;
-        let sim = crate::simulation::ConcreteSimulation::<Sy, S> {
-            system: sys,
-            states: vec![],
-            default_state_size: size,
-        };
-        Ok(Box::new(sim))
-    }
-
     pub fn create_dynsystem(&self) -> Result<BoxedSystem, RgrowError> {
-        Ok(match self.options.model {
+        Ok(match self.model.unwrap_or(MODEL_DEFAULT) {
             Model::KTAM => BoxedSystem(Box::new(KTAM::from_tileset(self)?)),
             Model::ATAM => BoxedSystem(Box::new(ATAM::from_tileset(self)?)),
             Model::OldKTAM => BoxedSystem(Box::new(OldKTAM::from_tileset(self)?)),
         })
     }
 
-    pub fn create_state(&self) -> Result<Box<dyn State>, RgrowError> {
-        let shape = match self.options.size {
+    /// Creates an empty state, without any setup by a System.
+    pub fn create_state_empty(&self) -> Result<Box<dyn State>, RgrowError> {
+        let shape = match self.size.unwrap_or(SIZE_DEFAULT) {
             Size::Single(i) => (i, i),
             Size::Pair(i) => i,
         };
 
-        match self.options.canvas_type {
+        match self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT) {
             CanvasType::Square => Ok(Box::new(
                 QuadTreeState::<CanvasSquare, NullStateTracker>::empty(shape)?,
             )),
@@ -704,52 +701,194 @@ impl TileSet {
         }
     }
 
-    pub fn into_simulation(&self) -> Result<Box<dyn Simulation>, RgrowError> {
-        match self.options.model {
-            Model::KTAM => match self.options.canvas_type {
-                CanvasType::Square => {
-                    self.sim_from_tileset::<KTAM, QuadTreeState<CanvasSquare, NullStateTracker>>()
-                }
-                CanvasType::Periodic => {
-                    self.sim_from_tileset::<KTAM, QuadTreeState<CanvasPeriodic, NullStateTracker>>()
-                }
-                CanvasType::Tube => {
-                    self.sim_from_tileset::<KTAM, QuadTreeState<CanvasTube, NullStateTracker>>()
-                }
-            },
-            Model::ATAM => match self.options.canvas_type {
-                CanvasType::Square => {
-                    self.sim_from_tileset::<ATAM, QuadTreeState<CanvasSquare, NullStateTracker>>()
-                }
-                CanvasType::Periodic => {
-                    self.sim_from_tileset::<ATAM, QuadTreeState<CanvasPeriodic, NullStateTracker>>()
-                }
-                CanvasType::Tube => {
-                    self.sim_from_tileset::<ATAM, QuadTreeState<CanvasTube, NullStateTracker>>()
-                }
-            },
-            Model::OldKTAM => match self.options.canvas_type {
-                CanvasType::Square => self
-                    .sim_from_tileset::<OldKTAM, QuadTreeState<CanvasSquare, NullStateTracker>>(),
-                CanvasType::Periodic => self
-                    .sim_from_tileset::<OldKTAM, QuadTreeState<CanvasPeriodic, NullStateTracker>>(),
-                CanvasType::Tube => {
-                    self.sim_from_tileset::<OldKTAM, QuadTreeState<CanvasTube, NullStateTracker>>()
-                }
-            },
-        }
+    /// Create a state, and set it up with a provided DynSystem.
+    pub fn create_state_with_system(
+        &self,
+        sys: &dyn DynSystem,
+    ) -> Result<Box<dyn State>, RgrowError> {
+        let mut state = self.create_state_empty()?;
+        sys.setup_state(state.deref_mut())?;
+        Ok(state)
+    }
+
+    /// Create a system and state
+    pub fn create_system_and_state(&self) -> Result<(BoxedSystem, Box<dyn State>), RgrowError> {
+        let mut sys = self.create_dynsystem()?;
+        let state = self.create_state_with_system(sys.deref_mut())?;
+        Ok((sys, state))
     }
 
     #[cfg(feature = "ui")]
     pub fn run_window(&self) -> Result<Box<dyn State>, RgrowError> {
-        let sys = self.create_dynsystem()?;
-        let mut state = self.create_state()?;
-
-        sys.setup_state(state.deref_mut())?;
-        let bounds = self.get_bounds();
-        let block = self.options.block;
-        sys.evolve_in_window(state.deref_mut(), block, bounds)?;
+        let (sys, mut state) = self.create_system_and_state()?;
+        sys.evolve_in_window(state.deref_mut(), self.block, self.get_bounds())?;
         Ok(state)
+    }
+
+    fn get_bounds(&self) -> EvolveBounds {
+        EvolveBounds {
+            size_max: self.smax,
+            ..Default::default()
+        }
+    }
+}
+
+#[pymethods]
+#[cfg(feature = "python")]
+impl TileSet {
+    #[new]
+    #[pyo3(signature = (tiles, bonds=Vec::default(), glues=Vec::default(), **kwargs))]
+    fn new(
+        tiles: Vec<&PyCell<Tile>>,
+        bonds: Vec<(TileIdent, f64)>,
+        glues: Vec<(GlueIdent, GlueIdent, f64)>,
+        kwargs: Option<&PyDict>,
+    ) -> PyResult<TileSet> {
+        let mut tileset = tileset::TileSet {
+            tiles: tiles.into_iter().map(|x| x.borrow().clone()).collect(),
+            bonds: bonds
+                .iter()
+                .map(|x| tileset::Bond {
+                    name: x.0.clone(),
+                    strength: x.1,
+                })
+                .collect(),
+            glues: glues
+                .iter()
+                .map(|x| (x.0.clone(), x.1.clone(), x.2))
+                .collect(),
+            cover_strands: None,
+            ..Default::default()
+        };
+        if let Some(x) = kwargs {
+            for (k, v) in x.iter() {
+                let key = k.extract::<String>()?;
+                match key.as_str() {
+                    "gse" => tileset.gse = Some(v.extract()?),
+                    "gmc" => tileset.gmc = Some(v.extract()?),
+                    "alpha" => tileset.alpha = Some(v.extract()?),
+                    "threshold" => tileset.threshold = Some(v.extract()?),
+                    "seed" => tileset.seed = Some(v.extract()?),
+                    "size" => tileset.size = Some(v.extract()?),
+                    "tau" => tileset.tau = Some(v.extract()?),
+                    "smax" => tileset.smax = Some(v.extract()?),
+                    "update_rate" => tileset.update_rate = Some(v.extract()?),
+                    "kf" => tileset.kf = Some(v.extract()?),
+                    "fission" => tileset.fission = Some(v.extract()?),
+                    "block" => tileset.block = Some(v.extract()?),
+                    "chunk_handling" => tileset.chunk_handling = Some(v.extract()?),
+                    "chunk_size" => tileset.chunk_size = Some(v.extract()?),
+                    "canvas_type" => tileset.canvas_type = Some(v.extract()?),
+                    "hdoubletiles" => tileset.hdoubletiles = Some(v.extract()?),
+                    "vdoubletiles" => tileset.vdoubletiles = Some(v.extract()?),
+                    "model" => tileset.model = Some(v.extract()?),
+                    _ => (),
+                }
+            }
+        }
+        Ok(tileset)
+    }
+
+    /// Parses a JSON string into a TileSet.
+    #[pyo3(name = "from_json")]
+    #[classmethod]
+    fn py_from_json(_cls: &PyType, data: &str) -> PyResult<Self> {
+        let tileset = tileset::TileSet::from_json(data);
+        match tileset {
+            Ok(tileset) => Ok(tileset),
+            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                err.to_string(),
+            )),
+        }
+    }
+
+    /// Creates a TileSet from a dict by exporting to json, then parsing the json.
+    /// FIXME: implement this without the json trip.
+    #[pyo3(name = "from_dict")]
+    #[classmethod]
+    fn py_from_dict(_cls: &PyType, data: PyObject) -> PyResult<Self> {
+        let json: String = Python::with_gil(|py| {
+            let json = PyModule::import(py, "json")?;
+            json.call_method1("dumps", (data,))?.extract::<String>()
+        })?;
+
+        let tileset = tileset::TileSet::from_json(&json);
+        match tileset {
+            Ok(tileset) => Ok(tileset),
+            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                err.to_string(),
+            )),
+        }
+    }
+
+    /// Parses a file (JSON, YAML, etc) into a TileSet
+    #[pyo3(name = "from_file")]
+    #[classmethod]
+    fn py_from_file(_cls: &PyType, path: &str) -> PyResult<Self> {
+        let ts = tileset::TileSet::from_file(path)
+            .map_err(|err| PyErr::new::<PyValueError, _>(err.to_string()))?;
+        Ok(ts)
+    }
+
+    #[pyo3(name = "create_system")]
+    fn py_create_system(&self) -> PyResult<BoxedSystem> {
+        let sys = self.create_dynsystem()?;
+        Ok(sys)
+    }
+
+    #[pyo3(name = "create_state")]
+    fn py_create_state(&self) -> PyResult<BoxedState> {
+        let sys = self.create_dynsystem()?;
+        let mut state = self.create_state_with_system(&*sys)?;
+        sys.setup_state(&mut *state)?;
+        Ok(state.into())
+    }
+
+    /// Creates a simulation, and runs it in a UI.  Returns the :any:`Simulation` when
+    /// finished.
+    #[cfg(feature = "ui")]
+    #[pyo3(name = "run_window")]
+    fn py_run_window(&self) -> PyResult<BoxedState> {
+        let s = self.run_window();
+
+        let st =
+            s.map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))?;
+        Ok(st.into())
+    }
+
+    #[getter]
+    fn get_tiles(&self) -> PyResult<Vec<Tile>> {
+        Ok(self.tiles.iter().map(|t| t.clone().into()).collect())
+    }
+
+    /// Runs FFS.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), **kwargs))]
+    fn py_run_ffs(
+        &self,
+        config: FFSRunConfig,
+        kwargs: Option<&PyDict>,
+        py: Python<'_>,
+    ) -> PyResult<BoxedFFSResult> {
+        let mut c = config;
+
+        if let Some(dict) = kwargs {
+            for (k, v) in dict.iter() {
+                c._py_set(&k.extract::<String>()?, v, py)?;
+            }
+        }
+
+        let res = py.allow_threads(|| self.run_ffs(&c));
+        match res {
+            Ok(res) => Ok(BoxedFFSResult(res.into())),
+            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                err.to_string(),
+            )),
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        self.to_string()
     }
 }
 
@@ -875,10 +1014,11 @@ impl ProcessedTileSet {
             glue_strengths[*j] = *v;
         }
 
-        let mut tile_names = Vec::with_capacity(tileset.tiles.len() + 1);
-        let mut tile_colors = Vec::with_capacity(tileset.tiles.len() + 1);
-        let mut tile_stoics = Vec::with_capacity(tileset.tiles.len() + 1);
-        let mut tile_edges = Vec::with_capacity((tileset.tiles.len() + 1) * 4);
+        let ntiles = tileset.tiles.len();
+        let mut tile_names = Vec::with_capacity(ntiles + 1);
+        let mut tile_colors = Vec::with_capacity(ntiles + 1);
+        let mut tile_stoics = Vec::with_capacity(ntiles + 1);
+        let mut tile_edges = Vec::with_capacity((ntiles + 1) * 4);
 
         let mut double_tile_edges = Vec::new();
         let mut double_tile_colors = Vec::new();
@@ -1028,10 +1168,10 @@ impl ProcessedTileSet {
             .map(|(g1, g2, st)| (s.gpmap(g1), s.gpmap(g2), *st))
             .collect::<Vec<_>>();
 
-        s.seed = match tileset.options.try_get_seed("seed")? {
-            ParsedSeed::None() => Vec::new(),
-            ParsedSeed::Single(x, y, t) => vec![(*x, *y, s.tpmap(t))],
-            ParsedSeed::Multi(v) => v
+        s.seed = match &tileset.seed {
+            None => Vec::new(),
+            Some(Seed::Single(x, y, t)) => vec![(*x, *y, s.tpmap(t))],
+            Some(Seed::Multi(v)) => v
                 .iter()
                 .map(|(x, y, t)| {
                     (
@@ -1043,19 +1183,25 @@ impl ProcessedTileSet {
                 .collect(),
         };
 
-        let hdoubles = tileset
-            .options
-            .try_get_ident_pair_list("hdoubletiles")?
-            .iter()
-            .map(|(a, b)| (s.tpmap(a), s.tpmap(b)))
-            .collect::<Vec<_>>();
-        let vdoubles = tileset
-            .options
-            .try_get_ident_pair_list("vdoubletiles")?
-            .iter()
-            .map(|(a, b)| (s.tpmap(a), s.tpmap(b)))
-            .collect::<Vec<_>>();
+        let hdoubles = {
+            match &tileset.hdoubletiles {
+                Some(x) => x
+                    .iter()
+                    .map(|(a, b)| (s.tpmap(a), s.tpmap(b)))
+                    .collect::<Vec<_>>(),
+                None => Vec::new(),
+            }
+        };
 
+        let vdoubles = {
+            match &tileset.vdoubletiles {
+                Some(x) => x
+                    .iter()
+                    .map(|(a, b)| (s.tpmap(a), s.tpmap(b)))
+                    .collect::<Vec<_>>(),
+                None => Vec::new(),
+            }
+        };
         s.hdoubletiles.extend(hdoubles);
         s.vdoubletiles.extend(vdoubles);
 

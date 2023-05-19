@@ -1,7 +1,7 @@
-use std::{
-    any::Any,
-    fmt::{Display, Formatter},
-};
+use std::fmt::{Display, Formatter};
+
+#[cfg(feature = "python")]
+use std::any::Any;
 
 use serde::{Deserialize, Serialize};
 use thiserror;

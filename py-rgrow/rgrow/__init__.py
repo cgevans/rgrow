@@ -13,7 +13,7 @@ from rgrow.rgrow import (
     Tile,
     TileSet,
     EvolveOutcome,
-    FFSLevel,
+    # FFSLevel,
     FFSResult,
     FFSRunConfig,
     System,

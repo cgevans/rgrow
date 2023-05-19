@@ -181,6 +181,7 @@ pub struct DimerInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum ChunkHandling {
     #[serde(alias = "none")]
     None,
@@ -202,6 +203,7 @@ impl From<&str> for ChunkHandling {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum ChunkSize {
     #[serde(alias = "single")]
     Single,
@@ -731,6 +733,7 @@ impl Deref for BoxedSystem {
 impl BoxedSystem {
     #[allow(clippy::too_many_arguments)]
     #[pyo3(
+        name = "evolve",
         signature = (state,
                     for_events=None,
                     total_events=None,
@@ -741,7 +744,7 @@ impl BoxedSystem {
                     for_wall_time=None,
                     require_strong_bound=true)
     )]
-    pub fn evolve(
+    pub fn py_evolve(
         &mut self,
         state: &mut BoxedState,
         for_events: Option<u64>,
@@ -885,6 +888,7 @@ pub trait SystemInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum FissionHandling {
     #[serde(alias = "off", alias = "no-fission")]
     NoFission,
@@ -910,3 +914,18 @@ impl From<&str> for FissionHandling {
         }
     }
 }
+
+// #[cfg(feature = "python")]
+// impl IntoPy<PyObject> for FissionHandling {
+//     fn into_py(self, py: Python<'_>) -> PyObject {
+//         (match self {
+//             FissionHandling::NoFission => "off",
+//             FissionHandling::JustDetach => "just-detach",
+//             FissionHandling::KeepSeeded => "keep-seeded",
+//             FissionHandling::KeepLargest => "keep-largest",
+//             FissionHandling::KeepWeighted => "keep-weighted",
+//         })
+//         .to_string()
+//         .into_py(py)
+//     }
+// }
