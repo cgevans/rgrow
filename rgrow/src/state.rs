@@ -64,6 +64,16 @@ impl BoxedState {
         unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
     }
 
+    pub fn canvas_copy<'py>(
+        this: &'py PyCell<Self>,
+        py: Python<'py>,
+    ) -> PyResult<&'py PyArray2<crate::base::Tile>> {
+        let t = this.borrow();
+        let ra = t.0.raw_array();
+
+        unsafe { Ok(PyArray2::from_array(py, &ra)) }
+    }
+
     #[getter]
     pub fn ntiles(&self) -> NumTiles {
         self.0.ntiles()

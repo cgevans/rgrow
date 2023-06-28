@@ -8,10 +8,11 @@ __all__ = [
     "FFSRunConfig",
 ]
 
+import copy
 import numpy as np
-from rgrow.rgrow import (
-    Tile,
-    TileSet,
+from . import rgrow as rgr
+from .rgrow import (
+    TileSet as _TileSet,
     EvolveOutcome,
     # FFSLevel,
     FFSResult,
@@ -19,12 +20,167 @@ from rgrow.rgrow import (
     System,
     State,
 )
+import attrs
 
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
 
 if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt
     import matplotlib.colors
+
+
+import attr
+
+
+@attr.define(auto_attribs=True)
+class CoverStrand:
+    name: Optional[str]
+    glue: int | str
+    dir: str
+    stoic: float
+
+
+@attr.define(auto_attribs=True)
+class Tile:
+    edges: List[int | str]
+    name: Optional[str] = None
+    stoic: Optional[float] = 1.0
+    color: Optional[str] = None
+    shape: Optional[str | rgr.TileShape] = None
+
+
+@attrs.define(auto_attribs=True)
+class Bond:
+    name: str
+    strength: float
+
+    @staticmethod
+    def _conv(a: "Bond | Any", *args, **kwargs) -> "Bond":
+        if isinstance(a, Bond):
+            return a
+        elif isinstance(a, dict):
+            return Bond(**a)
+        elif isinstance(a, tuple):
+            return Bond(*a)
+        else:
+            return Bond(a, *args, **kwargs)
+
+
+def _conv_bond_list(q: Sequence[Any]):
+    return [Bond._conv(x) for x in q]
+
+
+@attrs.define(auto_attribs=True)
+class TileSet:
+    tiles: List[Tile] = attrs.field(factory=list)
+    bonds: List[Bond] = attrs.field(
+        factory=list, converter=_conv_bond_list, on_setattr=attrs.setters.convert
+    )
+    glues: List[tuple[int | str, int | str, float]] = attrs.field(factory=list)
+    cover_strands: Optional[List[CoverStrand]] = None
+    gse: Optional[float] = None
+    gmc: Optional[float] = None
+    alpha: Optional[float] = None
+    threshold: Optional[float] = None
+    seed: Optional[tuple[int, int, int | str] | list[tuple[int, int, int | str]]] = None
+    size: Optional[int | tuple[int, int]] = None
+    tau: Optional[float] = None
+    smax: Optional[int] = None
+    update_rate: Optional[int] = None
+    kf: Optional[float] = None
+    fission: Optional[str] = None
+    block: Optional[int] = None
+    chunk_handling: Optional[str] = None
+    chunk_size: Optional[str] = None
+    canvas_type: Optional[str] = None
+    hdoubletiles: Optional[List[Tuple[str | int, str | int]]] = None
+    vdoubletiles: Optional[List[Tuple[str | int, str | int]]] = None
+    model: Optional[str] = None
+
+    def _to_rg_tileset(self) -> _TileSet:
+        kwargs = {
+            k: getattr(self, k)
+            for k in [
+                "gse",
+                "gmc",
+                "alpha",
+                "threshold",
+                "seed",
+                "size",
+                "tau",
+                "smax",
+                "update_rate",
+                "kf",
+                "fission",
+                "block",
+                "chunk_handling",
+                "chunk_size",
+                "canvas_type",
+                "cover_strands",
+                "hdoubletiles",
+                "vdoubletiles",
+                "model",
+            ]
+            if getattr(self, k) is not None
+        }
+
+        # FIXME: this is a quick hack
+        rtiles = []
+        for t in self.tiles:
+            t2 = copy.deepcopy(t)
+            match t2.shape:
+                case None:
+                    pass
+                case "S" | "s" | "single" | "Single":
+                    t2.shape = rgr.TileShape.Single
+                case "H" | "h" | "horizontal" | "Horizontal":
+                    t2.shape = rgr.TileShape.Horizontal
+                case "V" | "v" | "vertical" | "Vertical":
+                    t2.shape = rgr.TileShape.Vertical
+                case _:
+                    raise ValueError(f"unknown shape {t2.shape!r}")
+            rtiles.append(t2)
+
+        return _TileSet(tiles=rtiles, bonds=self.bonds, glues=self.glues, **kwargs)
+
+    def create_system(self) -> System:
+        return self._to_rg_tileset().create_system()
+
+    def create_state_empty(self) -> State:
+        return self._to_rg_tileset().create_state_empty()
+
+    def create_system_and_state(self) -> tuple[System, State]:
+        return self._to_rg_tileset().create_system_and_state()
+
+    def create_state(self, system: System | None = None) -> State:
+        if system is None:
+            system = self.create_system()
+        return self._to_rg_tileset().create_state(system=system)
+
+    def run_window(self) -> tuple[System, State]:
+        return self._to_rg_tileset().run_window()
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "TileSet":
+        if "tiles" in d:
+            d["tiles"] = [Tile(**x) for x in d["tiles"]]
+        if "bonds" in d:
+            d["bonds"] = [Bond(**x) for x in d["bonds"]]
+        if "options" in d:
+            d.update(d.pop("options"))
+        if "Gse" in d:
+            d["gse"] = d.pop("Gse")
+        if "Gmc" in d:
+            d["gmc"] = d.pop("Gmc")
+        # remove unknown keys, and warn
+        for k in list(d.keys()):
+            if k not in cls.__dict__:
+                print(f"Warning: unknown key {k!r} in tileset")
+                del d[k]
+        return cls(**d)
+
+    def run_ffs(self, **kwargs) -> FFSResult:
+        return self._to_rg_tileset().run_ffs(**kwargs)
 
 
 class Simulation:
@@ -114,14 +270,14 @@ class Simulation:
         state = self.states[state_index]
         return self.system.evolve(
             state,
-            for_events,
-            total_events,
-            for_time,
-            total_time,
-            size_min,
-            size_max,
-            for_wall_time,
-            require_strong_bound,
+            for_events=for_events,
+            total_events=total_events,
+            for_time=for_time,
+            total_time=total_time,
+            size_min=size_min,
+            size_max=size_max,
+            for_wall_time=for_wall_time,
+            require_strong_bound=require_strong_bound,
         )
 
     def evolve_all(
@@ -176,14 +332,14 @@ class Simulation:
         """
         return self.system.evolve_states(
             self.states,
-            for_events,
-            total_events,
-            for_time,
-            total_time,
-            size_min,
-            size_max,
-            for_wall_time,
-            require_strong_bound,
+            for_events=for_events,
+            total_events=total_events,
+            for_time=for_time,
+            total_time=total_time,
+            size_min=size_min,
+            size_max=size_max,
+            for_wall_time=for_wall_time,
+            require_strong_bound=require_strong_bound,
         )
 
     def evolve_some(
@@ -242,14 +398,14 @@ class Simulation:
         """
         return self.system.evolve_states(
             [self.states[i] for i in state_indices],
-            for_events,
-            total_events,
-            for_time,
-            total_time,
-            size_min,
-            size_max,
-            for_wall_time,
-            require_strong_bound,
+            for_events=for_events,
+            total_events=total_events,
+            for_time=for_time,
+            total_time=total_time,
+            size_min=size_min,
+            size_max=size_max,
+            for_wall_time=for_wall_time,
+            require_strong_bound=require_strong_bound,
         )
 
     def plot_state(

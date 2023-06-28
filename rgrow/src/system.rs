@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::base::CanvasLength;
 use crate::base::RgrowError;
+use crate::base::StringConvError;
 use crate::state::BoxedState;
 use crate::state::State;
 use crate::{
@@ -191,13 +192,15 @@ pub enum ChunkHandling {
     Equilibrium,
 }
 
-impl From<&str> for ChunkHandling {
-    fn from(s: &str) -> Self {
+impl TryFrom<&str> for ChunkHandling {
+    type Error = StringConvError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "none" => Self::None,
-            "detach" => Self::Detach,
-            "equilibrium" => Self::Equilibrium,
-            _ => panic!("Unknown chunk handling: {}", s),
+            "none" => Ok(Self::None),
+            "detach" => Ok(Self::Detach),
+            "equilibrium" => Ok(Self::Equilibrium),
+            _ => Err(StringConvError(format!("Unknown chunk handling: {}. Valid values are \"none\", \"detach\", \"equilibrium\".", s))),
         }
     }
 }
@@ -211,12 +214,17 @@ pub enum ChunkSize {
     Dimer,
 }
 
-impl From<&str> for ChunkSize {
-    fn from(s: &str) -> Self {
+impl TryFrom<&str> for ChunkSize {
+    type Error = StringConvError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "single" => Self::Single,
-            "dimer" => Self::Dimer,
-            _ => panic!("Unknown chunk size: {}", s),
+            "single" => Ok(Self::Single),
+            "dimer" => Ok(Self::Dimer),
+            _ => Err(StringConvError(format!(
+                "Unknown chunk size: {}. Valid values are \"single\" and \"dimer\".",
+                s
+            ))),
         }
     }
 }
@@ -519,7 +527,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
                 (scale * state.ncols()) as i32,
                 ((scale * state.nrows()) + 30) as i32,
             )
-            .with_label("rgrow!");
+            .with_label("rgrow v0.11.3");
 
         win.make_resizable(true);
 
@@ -650,6 +658,7 @@ pub trait DynSystem: Sync + Send {
     ) -> Result<EvolveOutcome, RgrowError>;
 
     fn calc_mismatches(&self, state: &dyn State) -> usize;
+    fn calc_mismatch_locations(&self, state: &dyn State) -> Array2<usize>;
 
     fn set_param(&mut self, name: &str, value: Box<dyn Any>) -> Result<NeededUpdate, GrowError>;
     fn get_param(&self, name: &str) -> Result<Box<dyn Any>, GrowError>;
@@ -657,7 +666,7 @@ pub trait DynSystem: Sync + Send {
     fn update_all(&self, state: &mut dyn State, needed: &NeededUpdate);
 }
 
-impl<S: System + TileBondInfo> DynSystem for S {
+impl<S: System> DynSystem for S {
     fn evolve(
         &self,
         state: &mut dyn State,
@@ -695,6 +704,10 @@ impl<S: System + TileBondInfo> DynSystem for S {
 
     fn calc_mismatches(&self, state: &dyn State) -> usize {
         self.calc_mismatches(state)
+    }
+
+    fn calc_mismatch_locations(&self, state: &dyn State) -> Array2<usize> {
+        self.calc_mismatch_locations(state)
     }
 
     fn set_param(&mut self, name: &str, value: Box<dyn Any>) -> Result<NeededUpdate, GrowError> {
@@ -854,6 +867,10 @@ impl BoxedSystem {
         self.0.calc_mismatches(&**state)
     }
 
+    // fn mismatch_array(&self, state: &BoxedState) -> Vec<u32> {
+    //     self.0.calc_mismatch_locations(&**state)
+    // }
+
     fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
         Ok(self.0.set_param(param_name, value.0)?)
     }
@@ -902,30 +919,17 @@ pub enum FissionHandling {
     KeepWeighted,
 }
 
-impl From<&str> for FissionHandling {
-    fn from(s: &str) -> Self {
+impl TryFrom<&str> for FissionHandling {
+    type Error = StringConvError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "off" | "no-fission" => FissionHandling::NoFission,
-            "just-detach" | "surface" => FissionHandling::JustDetach,
-            "on" | "keep-seeded" => FissionHandling::KeepSeeded,
-            "keep-largest" => FissionHandling::KeepLargest,
-            "keep-weighted" => FissionHandling::KeepWeighted,
-            _ => panic!("Unknown fission handling mode: {}", s),
+            "off" | "no-fission" => Ok(FissionHandling::NoFission),
+            "just-detach" | "surface" => Ok(FissionHandling::JustDetach),
+            "on" | "keep-seeded" => Ok(FissionHandling::KeepSeeded),
+            "keep-largest" => Ok(FissionHandling::KeepLargest),
+            "keep-weighted" => Ok(FissionHandling::KeepWeighted),
+            _ => Err(StringConvError(format!("Unknown fission handling mode: {}. Valid values are: no-fission, just-detach, keep-seeded, keep-largest, keep-weighted", s))),
         }
     }
 }
-
-// #[cfg(feature = "python")]
-// impl IntoPy<PyObject> for FissionHandling {
-//     fn into_py(self, py: Python<'_>) -> PyObject {
-//         (match self {
-//             FissionHandling::NoFission => "off",
-//             FissionHandling::JustDetach => "just-detach",
-//             FissionHandling::KeepSeeded => "keep-seeded",
-//             FissionHandling::KeepLargest => "keep-largest",
-//             FissionHandling::KeepWeighted => "keep-weighted",
-//         })
-//         .to_string()
-//         .into_py(py)
-//     }
-// }

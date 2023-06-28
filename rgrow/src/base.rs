@@ -17,6 +17,17 @@ pub type Energy = f64;
 pub type Glue = usize;
 pub type CanvasLength = usize;
 
+#[derive(Error, Debug)]
+#[error("{0}")]
+pub struct StringConvError(pub(crate) String);
+
+#[cfg(feature = "python")]
+impl From<StringConvError> for pyo3::PyErr {
+    fn from(value: StringConvError) -> Self {
+        pyo3::exceptions::PyValueError::new_err(value.0)
+    }
+}
+
 #[cfg(feature = "python")]
 use pyo3::{FromPyObject, IntoPy, PyAny, PyErr, PyObject, PyResult, Python};
 

@@ -1,4 +1,4 @@
-use crate::base::{GlueIdent, RgrowError, TileIdent};
+use crate::base::{GlueIdent, RgrowError, StringConvError, TileIdent};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube};
 use crate::colors::get_color_or_random;
 
@@ -134,7 +134,7 @@ impl Display for TileShape {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
+#[cfg_attr(feature = "python", derive(FromPyObject))]
 pub struct Tile {
     /// The name of the tile.  If unset, the eventual
     /// number of the tile will be used.
@@ -152,52 +152,6 @@ pub struct Tile {
     /// The tile shape: whether the tile is a single, horizontal duple, or
     /// vertical duple.
     pub shape: Option<TileShape>,
-}
-
-#[cfg(feature = "python")]
-#[pymethods]
-impl Tile {
-    #[new]
-    fn new(
-        edges: Vec<GlueIdent>,
-        name: Option<String>,
-        stoic: Option<f64>,
-        color: Option<String>,
-        shape: Option<TileShape>,
-    ) -> Tile {
-        Tile {
-            name,
-            edges,
-            stoic,
-            color,
-            shape,
-        }
-    }
-
-    fn __repr__(&self) -> String {
-        let mut f = String::from("Tile(");
-        if let Some(ref name) = self.name {
-            write!(f, "name=\"{}\", ", name).unwrap();
-        }
-        write!(f, "edges=[").unwrap();
-        for edge in &self.edges {
-            write!(f, "{}, ", edge).unwrap();
-        }
-        f.pop();
-        f.pop(); // FIXME
-        write!(f, "]").unwrap();
-        if let Some(stoic) = self.stoic {
-            write!(f, ", stoic={}", stoic).unwrap();
-        }
-        if let Some(ref color) = self.color {
-            write!(f, ", color=\"{}\"", color).unwrap();
-        }
-        if let Some(ref shape) = self.shape {
-            write!(f, ", shape={}", shape).unwrap();
-        }
-        write!(f, ")").unwrap();
-        f
-    }
 }
 
 impl Display for Tile {
@@ -234,7 +188,7 @@ pub enum Direction {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
+#[cfg_attr(feature = "python", derive(FromPyObject))]
 pub struct CoverStrand {
     pub name: Option<String>,
     pub glue: GlueIdent,
@@ -312,7 +266,7 @@ impl CoverStrand {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
+#[cfg_attr(feature = "python", derive(FromPyObject))]
 pub struct Bond {
     pub name: GlueIdent,
     pub strength: f64,
@@ -357,7 +311,7 @@ struct SerdeTileSet {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
+#[cfg_attr(feature = "python", pyclass)]
 #[serde(from = "SerdeTileSet")]
 pub struct TileSet {
     #[serde(default = "Vec::new")]
@@ -545,34 +499,6 @@ impl IntoPy<PyObject> for Size {
     }
 }
 
-impl From<CanvasLength> for Size {
-    fn from(cl: CanvasLength) -> Self {
-        Size::Single(cl)
-    }
-}
-
-impl From<(CanvasLength, CanvasLength)> for Size {
-    fn from((cl1, cl2): (CanvasLength, CanvasLength)) -> Self {
-        Size::Pair((cl1, cl2))
-    }
-}
-
-impl From<&Box<dyn Any>> for Size {
-    fn from(b: &Box<dyn Any>) -> Self {
-        if let Some(cl) = b.downcast_ref::<CanvasLength>() {
-            Size::Single(*cl)
-        } else if let Some((cl1, cl2)) = b.downcast_ref::<(CanvasLength, CanvasLength)>() {
-            Size::Pair((*cl1, *cl2))
-        } else if let Some(cl) = b.downcast_ref::<u64>() {
-            Size::Single(*cl as usize)
-        } else if let Some((cl1, cl2)) = b.downcast_ref::<(u64, u64)>() {
-            Size::Pair((*cl1 as usize, *cl2 as usize))
-        } else {
-            panic!("Size::from::<Box<dyn Any>>: unknown type")
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
 #[cfg_attr(feature = "python", pyclass)]
 
@@ -585,19 +511,20 @@ pub enum CanvasType {
     Tube,
 }
 
-impl From<&str> for CanvasType {
-    fn from(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "square" => CanvasType::Square,
-            "periodic" => CanvasType::Periodic,
-            "tube" => CanvasType::Tube,
-            _ => panic!("Unknown canvas type {}", s),
+impl TryFrom<&str> for CanvasType {
+    type Error = StringConvError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "square" => Ok(CanvasType::Square),
+            "periodic" => Ok(CanvasType::Periodic),
+            "tube" => Ok(CanvasType::Tube),
+            _ => Err(StringConvError(format!("Unknown canvas type {}.  Valid options are \"square\", \"periodic\", and \"tube\".", value))),
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-#[cfg_attr(feature = "python", pyclass)]
 pub enum Model {
     #[serde(alias = "kTAM", alias = "ktam")]
     KTAM,
@@ -607,23 +534,23 @@ pub enum Model {
     OldKTAM,
 }
 
-impl From<&str> for Model {
-    fn from(s: &str) -> Self {
+use std::convert::TryFrom;
+
+impl TryFrom<&str> for Model {
+    type Error = StringConvError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s.to_lowercase().as_str() {
-            "kTAM" | "ktam" => Model::KTAM,
-            "aTAM" | "atam" => Model::ATAM,
-            "OldkTAM" | "oldktam" => Model::OldKTAM,
-            _ => panic!("Unknown model {}", s),
+            "ktam" => Ok(Model::KTAM),
+            "atam" => Ok(Model::ATAM),
+            "oldktam" => Ok(Model::OldKTAM),
+            _ => Err(StringConvError(format!(
+                "Unknown model {}. Valid options are kTAM, aTAM, and oldkTAM.",
+                s
+            ))),
         }
     }
 }
-
-// #[cfg(feature = "python")]
-// impl IntoPy<PyObject> for Model {
-//     fn into_py(self, py: Python<'_>) -> PyObject {
-//         todo!()
-//     }
-// }
 
 impl Display for Size {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -739,33 +666,26 @@ impl TileSet {
     #[new]
     #[pyo3(signature = (tiles, bonds=Vec::default(), glues=Vec::default(), **kwargs))]
     fn new(
-        tiles: Vec<&PyCell<Tile>>,
-        bonds: Vec<(TileIdent, f64)>,
+        tiles: Vec<Tile>,
+        bonds: Vec<Bond>,
         glues: Vec<(GlueIdent, GlueIdent, f64)>,
         kwargs: Option<&PyDict>,
     ) -> PyResult<TileSet> {
         let mut tileset = tileset::TileSet {
-            tiles: tiles.into_iter().map(|x| x.borrow().clone()).collect(),
-            bonds: bonds
-                .iter()
-                .map(|x| tileset::Bond {
-                    name: x.0.clone(),
-                    strength: x.1,
-                })
-                .collect(),
+            tiles: tiles,
+            bonds: bonds,
             glues: glues
                 .iter()
                 .map(|x| (x.0.clone(), x.1.clone(), x.2))
                 .collect(),
-            cover_strands: None,
             ..Default::default()
         };
         if let Some(x) = kwargs {
             for (k, v) in x.iter() {
                 let key = k.extract::<String>()?;
                 match key.as_str() {
-                    "gse" => tileset.gse = Some(v.extract()?),
-                    "gmc" => tileset.gmc = Some(v.extract()?),
+                    "Gse" | "gse" => tileset.gse = Some(v.extract()?),
+                    "Gmc" | "gmc" => tileset.gmc = Some(v.extract()?),
                     "alpha" => tileset.alpha = Some(v.extract()?),
                     "threshold" => tileset.threshold = Some(v.extract()?),
                     "seed" => tileset.seed = Some(v.extract()?),
@@ -773,16 +693,26 @@ impl TileSet {
                     "tau" => tileset.tau = Some(v.extract()?),
                     "smax" => tileset.smax = Some(v.extract()?),
                     "update_rate" => tileset.update_rate = Some(v.extract()?),
-                    "kf" => tileset.kf = Some(v.extract()?),
-                    "fission" => tileset.fission = Some(v.extract()?),
+                    "k_f" | "kf" => tileset.kf = Some(v.extract()?),
+                    "fission" => tileset.fission = Some(v.extract::<&str>()?.try_into()?),
                     "block" => tileset.block = Some(v.extract()?),
-                    "chunk_handling" => tileset.chunk_handling = Some(v.extract()?),
-                    "chunk_size" => tileset.chunk_size = Some(v.extract()?),
-                    "canvas_type" => tileset.canvas_type = Some(v.extract()?),
+                    "chunk_handling" => {
+                        tileset.chunk_handling = Some(v.extract::<&str>()?.try_into()?)
+                    }
+                    "chunk_size" => tileset.chunk_size = Some(v.extract::<&str>()?.try_into()?),
+                    "canvas_type" => tileset.canvas_type = Some(v.extract::<&str>()?.try_into()?),
                     "hdoubletiles" => tileset.hdoubletiles = Some(v.extract()?),
                     "vdoubletiles" => tileset.vdoubletiles = Some(v.extract()?),
-                    "model" => tileset.model = Some(v.extract()?),
-                    _ => (),
+                    "model" => tileset.model = Some(v.extract::<&str>()?.try_into()?),
+                    "cover_strands" => {
+                        tileset.cover_strands = Some(v.extract::<Vec<CoverStrand>>()?)
+                    }
+                    v => Python::with_gil(|py| {
+                        let user_warning = py.get_type::<pyo3::exceptions::PyUserWarning>();
+                        PyErr::warn(py, user_warning, &format!("Ignoring unknown key {v}."), 0)
+                            .unwrap();
+                        ()
+                    }),
                 }
             }
         }
@@ -837,11 +767,16 @@ impl TileSet {
     }
 
     #[pyo3(name = "create_state")]
-    fn py_create_state(&self) -> PyResult<BoxedState> {
-        let sys = self.create_dynsystem()?;
-        let mut state = self.create_state_with_system(&*sys)?;
-        sys.setup_state(&mut *state)?;
-        Ok(state.into())
+    fn py_create_state(&self, system: Option<&BoxedSystem>) -> PyResult<BoxedState> {
+        let sys_ref;
+        let sys;
+        if system.is_none() {
+            sys = self.create_dynsystem()?;
+            sys_ref = &sys;
+        } else {
+            sys_ref = system.unwrap();
+        }
+        Ok(self.create_state_with_system(&**sys_ref)?.into())
     }
 
     /// Creates a simulation, and runs it in a UI.  Returns the :any:`Simulation` when
@@ -854,11 +789,6 @@ impl TileSet {
         let st =
             s.map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))?;
         Ok(st.into())
-    }
-
-    #[getter]
-    fn get_tiles(&self) -> PyResult<Vec<Tile>> {
-        Ok(self.tiles.iter().map(|t| t.clone().into()).collect())
     }
 
     /// Runs FFS.

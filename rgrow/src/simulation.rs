@@ -70,7 +70,7 @@ pub(crate) struct ConcreteSimulation<Sy: System, St: State> {
     pub default_state_size: (usize, usize),
 }
 
-impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> Simulation
+impl<Sy: System + SystemInfo, St: State + StateCreate + 'static> Simulation
     for ConcreteSimulation<Sy, St>
 {
     fn evolve(
@@ -197,7 +197,7 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State + StateCreate + 'static> 
     }
 }
 
-impl<Sy: System + TileBondInfo + SystemInfo, St: State> SystemInfo for ConcreteSimulation<Sy, St> {
+impl<Sy: System + SystemInfo, St: State> SystemInfo for ConcreteSimulation<Sy, St> {
     fn tile_concs(&self) -> Vec<f64> {
         self.system.tile_concs()
     }
@@ -207,7 +207,7 @@ impl<Sy: System + TileBondInfo + SystemInfo, St: State> SystemInfo for ConcreteS
     }
 }
 
-impl<Sy: System + TileBondInfo + System, St: State> TileBondInfo for ConcreteSimulation<Sy, St> {
+impl<Sy: System + System, St: State> TileBondInfo for ConcreteSimulation<Sy, St> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
         self.system.tile_color(tile_number)
     }
@@ -239,7 +239,7 @@ struct DynSimulation<Sy: System> {
     default_state_size: (usize, usize),
 }
 
-impl<Sy: System + TileBondInfo + System> TileBondInfo for DynSimulation<Sy> {
+impl<Sy: System + System> TileBondInfo for DynSimulation<Sy> {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
         self.system.tile_color(tile_number)
     }
@@ -265,7 +265,7 @@ impl<Sy: System + TileBondInfo + System> TileBondInfo for DynSimulation<Sy> {
     }
 }
 
-impl<Sy: System + TileBondInfo + SystemInfo> SystemInfo for DynSimulation<Sy> {
+impl<Sy: System + SystemInfo> SystemInfo for DynSimulation<Sy> {
     fn tile_concs(&self) -> Vec<f64> {
         self.system.tile_concs()
     }
@@ -275,7 +275,7 @@ impl<Sy: System + TileBondInfo + SystemInfo> SystemInfo for DynSimulation<Sy> {
     }
 }
 
-impl<Sy: System + TileBondInfo + SystemInfo> Simulation for DynSimulation<Sy> {
+impl<Sy: System + SystemInfo> Simulation for DynSimulation<Sy> {
     fn evolve(
         &mut self,
         state_index: usize,
