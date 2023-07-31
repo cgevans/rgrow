@@ -779,6 +779,12 @@ impl TileSet {
         Ok(self.create_state_with_system(&**sys_ref)?.into())
     }
 
+    #[pyo3(name = "create_system_and_state")]
+    fn py_create_system_and_state(&self) -> PyResult<(BoxedSystem, BoxedState)> {
+        let (sys, state) = self.create_system_and_state()?;
+        Ok((sys, state.into()))
+    }
+
     /// Creates a simulation, and runs it in a UI.  Returns the :any:`Simulation` when
     /// finished.
     #[cfg(feature = "ui")]

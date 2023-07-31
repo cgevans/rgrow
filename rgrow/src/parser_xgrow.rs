@@ -345,7 +345,9 @@ fn xgrow_args(input: &str) -> IResult<&str, (tileset::TileSet, GlueVec)> {
         i2 = input;
     }
 
-    let Some(Size::Single(size)) = args.size else { panic!() };
+    let Some(Size::Single(size)) = args.size else {
+        panic!()
+    };
 
     if args.seed.is_none() {
         args.seed = Some(tileset::Seed::Single(size - 3, size - 3, 1.into()));

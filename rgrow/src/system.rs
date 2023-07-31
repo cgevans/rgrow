@@ -524,8 +524,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         // let sr = state.read().unwrap();
         let mut win = Window::default()
             .with_size(
-                (scale * state.ncols()) as i32,
-                ((scale * state.nrows()) + 30) as i32,
+                (scale * (width as usize)) as i32,
+                ((scale * (height as usize)) + 30) as i32,
             )
             .with_label("rgrow v0.11.3");
 

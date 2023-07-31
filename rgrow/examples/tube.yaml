@@ -16,10 +16,10 @@ options:
   Gse: 5.4
   alpha: -7.1
   seed:
-  - [1,10,3]
-  - [3,9,2]
-  - [5,8,1]
-  size: [8, 64]
+  - [0,19,3]
+  - [2,18,2]
+  - [4,17,1]
+  size: [6, 64]
   update_rate: 10
   fission: keep-seeded
   canvas_type: Tube 
