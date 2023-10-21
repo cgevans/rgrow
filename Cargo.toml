@@ -6,7 +6,8 @@ resolver = "2"
 [workspace.dependencies]
 ndarray = {version = "^0.15", features = ["serde"]}
 rand = {version = "^0", features = ["small_rng"]}
-serde = {version = "1", features=["derive"]}
+# See https://github.com/serde-rs/serde/issues/2538
+serde = {version = "1, <= 1.0.171", features=["derive"]}
 pyo3 = {version = "^0.18", features = ["extension-module", "multiple-pymethods"]}
 rayon = { version = "1" }
 numpy = "^0.18"
