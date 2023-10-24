@@ -32,6 +32,12 @@ use pyo3::prelude::*;
 #[cfg(feature = "python")]
 use crate::base::RustAny;
 
+#[cfg(feature = "python")]
+use numpy::PyArray2;
+
+#[cfg(feature = "python")]
+use numpy::ToPyArray;
+
 #[derive(Clone, Debug)]
 pub enum Event {
     None,
@@ -867,9 +873,15 @@ impl BoxedSystem {
         self.0.calc_mismatches(&**state)
     }
 
-    // fn mismatch_array(&self, state: &BoxedState) -> Vec<u32> {
-    //     self.0.calc_mismatch_locations(&**state)
-    // }
+    fn calc_mismatch_locations<'py>(
+        this: &'py PyCell<Self>,
+        state: &BoxedState,
+        py: Python<'py>,
+    ) -> PyResult<&'py PyArray2<usize>> {
+        let t = this.borrow();
+        let ra = t.0.calc_mismatch_locations(&**state);
+        unsafe { Ok(PyArray2::from_array(py, &ra)) }
+    }
 
     fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
         Ok(self.0.set_param(param_name, value.0)?)
