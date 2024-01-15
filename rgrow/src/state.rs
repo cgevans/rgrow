@@ -71,7 +71,7 @@ impl BoxedState {
         let t = this.borrow();
         let ra = t.0.raw_array();
 
-        unsafe { Ok(PyArray2::from_array(py, &ra)) }
+        Ok(PyArray2::from_array(py, &ra))
     }
 
     #[getter]

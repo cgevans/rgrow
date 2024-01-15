@@ -35,8 +35,6 @@ use crate::base::RustAny;
 #[cfg(feature = "python")]
 use numpy::PyArray2;
 
-#[cfg(feature = "python")]
-use numpy::ToPyArray;
 
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -880,7 +878,7 @@ impl BoxedSystem {
     ) -> PyResult<&'py PyArray2<usize>> {
         let t = this.borrow();
         let ra = t.0.calc_mismatch_locations(&**state);
-        unsafe { Ok(PyArray2::from_array(py, &ra)) }
+        Ok(PyArray2::from_array(py, &ra))
     }
 
     fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
