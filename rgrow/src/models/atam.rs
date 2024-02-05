@@ -2,7 +2,7 @@ use crate::{
     base::{RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
-    system::{Event, System, SystemInfo, TileBondInfo},
+    system::{Event, System, SystemInfo, SystemWithDimers, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, TileSet},
 };
 
@@ -919,5 +919,11 @@ impl SystemInfo for ATAM {
 
     fn tile_stoics(&self) -> Vec<f64> {
         self.tile_stoics.clone().into_raw_vec()
+    }
+}
+
+impl SystemWithDimers for ATAM {
+    fn calc_dimers(&self) -> Vec<crate::system::DimerInfo> {
+        todo!()
     }
 }

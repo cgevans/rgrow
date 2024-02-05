@@ -10,6 +10,7 @@ use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
 use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
+
 use super::*;
 //use ndarray::prelude::*;
 //use ndarray::Zip;
@@ -217,20 +218,17 @@ impl TileSet {
             Model::KTAM => match self.canvas_type.unwrap_or(CanvasType::Periodic) {
                 CanvasType::Square => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasSquare, NullStateTracker>,
-                    KTAM,
-                >::create_from_tileset(
+                >::create_from_tileset::<KTAM>(
                     self, config
                 )?)),
                 CanvasType::Periodic => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasPeriodic, NullStateTracker>,
-                    KTAM,
-                >::create_from_tileset(
+                >::create_from_tileset::<KTAM>(
                     self, config
                 )?)),
                 CanvasType::Tube => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasTube, NullStateTracker>,
-                    KTAM,
-                >::create_from_tileset(
+                >::create_from_tileset::<KTAM>(
                     self, config
                 )?)),
             },
@@ -238,37 +236,32 @@ impl TileSet {
             Model::OldKTAM => match self.canvas_type.unwrap_or(CanvasType::Periodic) {
                 CanvasType::Square => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasSquare, NullStateTracker>,
-                    OldKTAM,
-                >::create_from_tileset(
+                >::create_from_tileset::<OldKTAM>(
                     self, config
                 )?)),
                 CanvasType::Periodic => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasPeriodic, NullStateTracker>,
-                    OldKTAM,
-                >::create_from_tileset(
+                >::create_from_tileset::<OldKTAM>(
                     self, config
                 )?)),
                 CanvasType::Tube => Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasTube, NullStateTracker>,
-                    OldKTAM,
-                >::create_from_tileset(
+                >::create_from_tileset::<OldKTAM>(
                     self, config
                 )?)),
             },
         }
     }
+
 }
 
-pub struct FFSRun<St: State + StateTracked<NullStateTracker>, Sy: System> {
-    pub system: Sy,
-    pub level_list: Vec<FFSLevel<St, Sy>>,
+pub struct FFSRun<St: State + StateTracked<NullStateTracker>> {
+    pub level_list: Vec<FFSLevel<St>>,
     pub dimerization_rate: f64,
     pub forward_prob: Vec<f64>,
 }
 
-impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers> FFSResult
-    for FFSRun<St, Sy>
-{
+impl<St: State + StateTracked<NullStateTracker>> FFSResult for FFSRun<St> {
     fn nucleation_rate(&self) -> Rate {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
@@ -289,12 +282,8 @@ impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers> FFSResult
     }
 }
 
-impl<
-        St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: SystemWithDimers + FromTileSet + System,
-    > FFSRun<St, Sy>
-{
-    pub fn create(system: Sy, config: &FFSRunConfig) -> Self {
+impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>> FFSRun<St> {
+    pub fn create<Sy: SystemWithDimers + System>(system: &mut Sy, config: &FFSRunConfig) -> Self {
         let level_list = Vec::new();
 
         let dimerization_rate = system
@@ -305,11 +294,10 @@ impl<
         let mut ret = Self {
             level_list,
             dimerization_rate,
-            system,
             forward_prob: Vec::new(),
         };
 
-        let (first_level, dimer_level) = FFSLevel::nmers_from_dimers(&mut ret.system, config);
+        let (first_level, dimer_level) = FFSLevel::nmers_from_dimers(system, config);
 
         ret.forward_prob.push(first_level.p_r);
 
@@ -323,7 +311,7 @@ impl<
         while current_size < config.target_size {
             let last = ret.level_list.last_mut().unwrap();
 
-            let next = last.next_level(&mut ret.system, config);
+            let next = last.next_level(system, config);
             if !config.keep_configs {
                 last.drop_states();
             }
@@ -358,12 +346,17 @@ impl<
 
         ret
     }
+    pub fn dimer_conc(&self) -> f64 {
+        self.level_list[0].p_r
+    }
+}
 
-    pub fn create_from_tileset(
+impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>> FFSRun<St> {
+    pub fn create_from_tileset<Sy: SystemWithDimers + System + FromTileSet>(
         tileset: &TileSet,
         config: &FFSRunConfig,
     ) -> Result<Self, RgrowError> {
-        let sys = Sy::from_tileset(tileset)?;
+        let mut sys = Sy::from_tileset(tileset)?;
         let c = {
             let mut c = config.clone();
             c.canvas_size = match tileset.size.unwrap_or(SIZE_DEFAULT) {
@@ -373,16 +366,11 @@ impl<
             c
         };
 
-        Ok(Self::create(sys, &c))
-    }
-
-    pub fn dimer_conc(&self) -> f64 {
-        self.level_list[0].p_r
+        Ok(Self::create(&mut sys, &c))
     }
 }
 
-pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System> {
-    pub system: std::marker::PhantomData<Sy>,
+pub struct FFSLevel<St: State + StateTracked<NullStateTracker>> {
     pub state_list: Vec<St>,
     pub previous_list: Vec<usize>,
     pub p_r: f64,
@@ -391,9 +379,7 @@ pub struct FFSLevel<St: State + StateTracked<NullStateTracker>, Sy: System> {
     pub target_size: NumTiles,
 }
 
-impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers + Sync + Send> FFSSurface
-    for FFSLevel<St, Sy>
-{
+impl<St: State + StateTracked<NullStateTracker>> FFSSurface for FFSLevel<St> {
     fn get_config(&self, i: usize) -> ArrayView2<Tile> {
         self.state_list[i].raw_array()
     }
@@ -415,17 +401,17 @@ impl<St: State + StateTracked<NullStateTracker>, Sy: SystemWithDimers + Sync + S
     }
 }
 
-impl<
-        St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>,
-        Sy: SystemWithDimers + System,
-    > FFSLevel<St, Sy>
-{
+impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>> FFSLevel<St> {
     pub fn drop_states(&mut self) -> &Self {
         self.state_list.drain(..);
         self
     }
 
-    pub fn next_level(&self, system: &mut Sy, config: &FFSRunConfig) -> Self {
+    pub fn next_level<Sy: SystemWithDimers + System>(
+        &self,
+        system: &mut Sy,
+        config: &FFSRunConfig,
+    ) -> Self {
         let mut rng = thread_rng();
 
         let mut state_list = Vec::new();
@@ -496,13 +482,15 @@ impl<
             previous_list,
             p_r,
             target_size,
-            system: std::marker::PhantomData::<Sy>,
             num_states,
             num_trials: i,
         }
     }
 
-    pub fn nmers_from_dimers(system: &mut Sy, config: &FFSRunConfig) -> (Self, Self) {
+    pub fn nmers_from_dimers<Sy: SystemWithDimers + System>(
+        system: &mut Sy,
+        config: &FFSRunConfig,
+    ) -> (Self, Self) {
         let mut rng = SmallRng::from_entropy();
 
         let dimers = system.calc_dimers();
@@ -603,7 +591,6 @@ impl<
 
         (
             Self {
-                system: std::marker::PhantomData::<Sy>,
                 state_list,
                 previous_list,
                 p_r,
@@ -612,7 +599,6 @@ impl<
                 num_trials: i,
             },
             Self {
-                system: std::marker::PhantomData::<Sy>,
                 state_list: dimer_state_list,
                 previous_list: tile_list.into_iter().map(|x| x as usize).collect(),
                 p_r: 1.0,

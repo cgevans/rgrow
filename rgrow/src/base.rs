@@ -3,6 +3,8 @@ use std::fmt::{Display, Formatter};
 #[cfg(feature = "python")]
 use std::any::Any;
 
+use ndarray::{Array1, Array2};
+use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyArray2};
 use serde::{Deserialize, Serialize};
 use thiserror;
 
@@ -155,6 +157,10 @@ impl FromPyObject<'_> for RustAny {
             Ok(RustAny(Box::new(val)))
         } else if let Ok(val) = obj.extract::<String>() {
             Ok(RustAny(Box::new(val)))
+        } else if let Ok(val) = obj.extract::<PyReadonlyArray1<f64>>() {
+            Ok(RustAny(Box::new(val.to_owned_array())))
+        } else if let Ok(val) = obj.extract::<PyReadonlyArray2<f64>>() {
+            Ok(RustAny(Box::new(val.to_owned_array())))
         } else if let Ok(val) = obj.extract::<(u64, u64)>() {
             Ok(RustAny(Box::new(val)))
         } else if let Ok(val) = obj.extract::<(usize, usize, Ident)>() {
@@ -183,6 +189,15 @@ impl IntoPy<PyObject> for RustAny {
             val.into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<String>() {
             val.into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<Array1<f64>>() {
+            PyArray1::from_array(py, val).into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<Array2<f64>>() {
+            PyArray2::from_array(py, val).into_py(py)
+        } 
+        else if let Some(val) = self.0.downcast_ref::<(u64, u64)>() {
+            (val.0, val.1).into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<(usize, usize, Ident)>() {
+            (val.0, val.1, val.2.clone()).into_py(py)
         } else {
             panic!("Cannot convert Any to PyAny");
         }

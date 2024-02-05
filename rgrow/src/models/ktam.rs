@@ -626,6 +626,30 @@ impl System for KTAM {
                 self.update_system();
                 Ok(NeededUpdate::NonZero)
             }
+            "tile_concs" => {
+                let tile_concs = value
+                    .downcast_ref::<Array1<f64>>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.tile_concs = tile_concs.clone();
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
+            "glue_strengths" => {
+                let glue_strengths = value
+                    .downcast_ref::<Array1<f64>>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.glue_strengths = glue_strengths.clone();
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
+            "glue_links" => {
+                let glue_links = value
+                    .downcast_ref::<Array2<f64>>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.glue_links = glue_links.clone();
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }
@@ -635,6 +659,9 @@ impl System for KTAM {
             "g_se" => Ok(Box::new(self.g_se)),
             "alpha" => Ok(Box::new(self.alpha)),
             "kf" => Ok(Box::new(self.kf)),
+            "tile_concs" => Ok(Box::new(self.tile_concs.clone())),
+            "glue_strengths" => Ok(Box::new(self.glue_strengths.clone())),
+            "glue_links" => Ok(Box::new(self.glue_links.clone())),
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }

@@ -1,4 +1,5 @@
 use ndarray::prelude::*;
+use pyo3::types::PyDict;
 use rand::thread_rng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -6,8 +7,18 @@ use serde::{Deserialize, Serialize};
 use crate::base::CanvasLength;
 use crate::base::RgrowError;
 use crate::base::StringConvError;
+use crate::canvas::CanvasPeriodic;
+use crate::canvas::CanvasSquare;
+use crate::canvas::CanvasTube;
+use crate::ffs::BoxedFFSResult;
+use crate::ffs::FFSRun;
+use crate::ffs::FFSRunConfig;
 use crate::state::BoxedState;
+use crate::state::NullStateTracker;
+use crate::state::QuadTreeState;
 use crate::state::State;
+use crate::tileset::CanvasType;
+use crate::tileset::TileSet;
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateCreate,
 };
@@ -19,6 +30,7 @@ use std::any::Any;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(feature = "ui")]
@@ -34,7 +46,6 @@ use crate::base::RustAny;
 
 #[cfg(feature = "python")]
 use numpy::PyArray2;
-
 
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -668,9 +679,15 @@ pub trait DynSystem: Sync + Send {
     fn get_param(&self, name: &str) -> Result<Box<dyn Any>, GrowError>;
 
     fn update_all(&self, state: &mut dyn State, needed: &NeededUpdate);
+
+    fn run_ffs(
+        &mut self,
+        config: &FFSRunConfig,
+        canvas_type: Option<CanvasType>,
+    ) -> Result<BoxedFFSResult, GrowError>;
 }
 
-impl<S: System> DynSystem for S {
+impl<S: System + SystemWithDimers> DynSystem for S {
     fn evolve(
         &self,
         state: &mut dyn State,
@@ -724,6 +741,30 @@ impl<S: System> DynSystem for S {
 
     fn update_all(&self, state: &mut dyn State, needed: &NeededUpdate) {
         self.update_all(state, needed)
+    }
+
+    fn run_ffs(
+        &mut self,
+        config: &FFSRunConfig,
+        canvas_type: Option<CanvasType>,
+    ) -> Result<BoxedFFSResult, GrowError> {
+        match canvas_type.unwrap_or(CanvasType::Periodic) {
+            CanvasType::Square => {
+                let run =
+                    FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create(self, config);
+                Ok(BoxedFFSResult(Arc::new(Box::new(run))))
+            }
+            CanvasType::Periodic => {
+                let run =
+                    FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(self, config);
+                Ok(BoxedFFSResult(Arc::new(Box::new(run))))
+            }
+            CanvasType::Tube => {
+                let run =
+                    FFSRun::<QuadTreeState<CanvasTube, NullStateTracker>>::create(self, config);
+                Ok(BoxedFFSResult(Arc::new(Box::new(run))))
+            }
+        }
     }
 }
 
@@ -891,6 +932,31 @@ impl BoxedSystem {
 
     fn update_all(&self, state: &mut BoxedState, needed: &NeededUpdate) {
         self.0.update_all(&mut **state, needed)
+    }
+
+    #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), canvas_type = None, **kwargs))]
+    fn py_run_ffs(
+        &mut self,
+        config: FFSRunConfig,
+        canvas_type: Option<CanvasType>,
+        kwargs: Option<&PyDict>,
+        py: Python<'_>,
+    ) -> PyResult<BoxedFFSResult> {
+        let mut c = config;
+
+        if let Some(dict) = kwargs {
+            for (k, v) in dict.iter() {
+                c._py_set(&k.extract::<String>()?, v, py)?;
+            }
+        }
+
+        let res = py.allow_threads(|| self.0.run_ffs(&c, canvas_type));
+        match res {
+            Ok(res) => Ok(res),
+            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                err.to_string(),
+            )),
+        }
     }
 }
 

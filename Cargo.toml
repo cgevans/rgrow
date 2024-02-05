@@ -8,13 +8,13 @@ ndarray = {version = "^0.15", features = ["serde"]}
 rand = {version = "^0", features = ["small_rng"]}
 # See https://github.com/serde-rs/serde/issues/2538
 serde = {version = "1, <= 1.0.171", features=["derive"]}
-pyo3 = {version = "^0.18", features = ["extension-module", "multiple-pymethods"]}
+pyo3 = {version = "^0.20", features = ["extension-module", "multiple-pymethods"]}
 rayon = { version = "1" }
-numpy = "^0.18"
+numpy = "^0.20"
 
 [workspace.package]
 version = "0.12.2"
-authors = ["Constantine Evans <const@costi.eu>"]
+authors = ["Constantine Evans <const@costi.net>"]
 edition = "2021"
 repository = "https://github.com/evansfmm/rgrow"
 license = "BSD-3-Clause"
