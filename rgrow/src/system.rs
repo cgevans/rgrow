@@ -1,4 +1,9 @@
 use ndarray::prelude::*;
+use numpy::IntoPyArray;
+use numpy::PyArray1;
+use numpy::PyArray3;
+use numpy::PyFixedString;
+use numpy::PyFixedUnicode;
 use pyo3::types::PyDict;
 use rand::thread_rng;
 use rand::Rng;
@@ -36,7 +41,11 @@ use std::time::Duration;
 #[cfg(feature = "ui")]
 use fltk::{app, prelude::*, window::Window};
 
+use rayon::prelude::*;
+
 use pixels::{Pixels, SurfaceTexture};
+
+const MAX_NAME_LENGTH: usize = 64;
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -331,9 +340,9 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         let start_time = bounds.for_wall_time.map(|_| std::time::Instant::now());
 
         loop {
-            if bounds.size_min.is_some_and(|ms| state.ntiles() <= ms) {
+            if bounds.size_min.is_some_and(|ms| state.n_tiles() <= ms) {
                 return Ok(EvolveOutcome::ReachedSizeMin);
-            } else if bounds.size_max.is_some_and(|ms| state.ntiles() >= ms) {
+            } else if bounds.size_max.is_some_and(|ms| state.n_tiles() >= ms) {
                 return Ok(EvolveOutcome::ReachedSizeMax);
             } else if rtime <= 0. {
                 return Ok(EvolveOutcome::ReachedTimeMax);
@@ -621,7 +630,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
                 "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}\t Mismatches: {}",
                 state.time(),
                 state.total_events(),
-                state.ntiles(),
+                state.n_tiles(),
                 self.calc_mismatches(state) // FIXME: should not recalculate
             ));
 
@@ -644,7 +653,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     }
 }
 
-pub trait DynSystem: Sync + Send {
+pub trait DynSystem: Sync + Send + TileBondInfo {
     fn evolve(
         &self,
         state: &mut dyn State,
@@ -768,6 +777,15 @@ impl<S: System + SystemWithDimers> DynSystem for S {
     }
 }
 
+#[cfg(feature = "python")]
+#[derive(FromPyObject)]
+pub enum PyStateOrStates<'py> {
+    #[pyo3(transparent)]
+    State(&'py PyCell<BoxedState>),
+    #[pyo3(transparent)]
+    States(Vec<&'py PyCell<BoxedState>>),
+}
+
 #[repr(transparent)]
 #[cfg_attr(feature = "python", pyclass(module = "rgrow", name = "System"))]
 pub struct BoxedSystem(pub Box<dyn DynSystem>);
@@ -802,9 +820,12 @@ impl BoxedSystem {
                     for_wall_time=None,
                     require_strong_bound=true)
     )]
-    pub fn py_evolve(
+    /// Evolve a state (or states), with some bounds on the simulation.
+    /// 
+    /// If evolving multiple states, the bounds are applied per-state.
+    pub fn py_evolve<'py>(
         &mut self,
-        state: &mut BoxedState,
+        state: PyStateOrStates<'py>,
         for_events: Option<u64>,
         total_events: Option<u64>,
         for_time: Option<f64>,
@@ -813,8 +834,8 @@ impl BoxedSystem {
         size_max: Option<u32>,
         for_wall_time: Option<f64>,
         require_strong_bound: bool,
-        py: Python<'_>,
-    ) -> PyResult<EvolveOutcome> {
+        py: Python<'py>,
+    ) -> PyResult<PyObject> {
         let bounds = EvolveBounds {
             for_events,
             for_time,
@@ -837,75 +858,30 @@ impl BoxedSystem {
             ));
         }
 
-        Ok(py.allow_threads(|| self.0.evolve(&mut **state, bounds))?)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    #[pyo3(
-        signature = (pystates,
-                    for_events=None,
-                    total_events=None,
-                    for_time=None,
-                    total_time=None,
-                    size_min=None,
-                    size_max=None,
-                    for_wall_time=None,
-                    require_strong_bound=true)
-    )]
-    #[cfg(feature = "use_rayon")]
-    pub fn evolve_states(
-        &mut self,
-        pystates: Vec<&PyCell<BoxedState>>,
-        for_events: Option<u64>,
-        total_events: Option<u64>,
-        for_time: Option<f64>,
-        total_time: Option<f64>,
-        size_min: Option<u32>,
-        size_max: Option<u32>,
-        for_wall_time: Option<f64>,
-        require_strong_bound: bool,
-        py: Python<'_>,
-    ) -> PyResult<Vec<EvolveOutcome>> {
-        use rayon::prelude::*;
-
-        let bounds = EvolveBounds {
-            for_events,
-            for_time,
-            total_events,
-            total_time,
-            size_min,
-            size_max,
-            for_wall_time: for_wall_time.map(Duration::from_secs_f64),
-        };
-
-        if require_strong_bound & !bounds.is_strongly_bounded() {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "No strong bounds specified.",
-            ));
+        match state {
+            PyStateOrStates::State(pystate) => {
+                let state = &mut **pystate.borrow_mut();
+                Ok(py.allow_threads(|| self.0.evolve(state, bounds))?.into_py(py))
+            }
+            PyStateOrStates::States(pystates) => {
+                let mut refs = pystates
+                    .into_iter()
+                    .map(|x| x.borrow_mut())
+                    .collect::<Vec<_>>();
+                let mut states = refs.iter_mut().map(|x| x.deref_mut()).collect::<Vec<_>>();
+                let out = py.allow_threads(|| {
+                    states
+                        .par_iter_mut()
+                        .map(|state| self.0.evolve(&mut ***state, bounds))
+                        .collect::<Vec<_>>()
+                });
+                let o: Result<Vec<EvolveOutcome>, PyErr> = out
+                    .into_iter()
+                    .map(|x| x.map_err(|y| pyo3::exceptions::PyValueError::new_err(y.to_string())))
+                    .collect();
+                o.map(|x| x.into_py(py))
+            }
         }
-
-        if !bounds.is_weakly_bounded() {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "No weak bounds specified.",
-            ));
-        }
-
-        let mut refs = pystates
-            .into_iter()
-            .map(|x| x.borrow_mut())
-            .collect::<Vec<_>>();
-        let mut states = refs.iter_mut().map(|x| x.deref_mut()).collect::<Vec<_>>();
-        let out = py.allow_threads(|| {
-            states
-                .par_iter_mut()
-                .map(|state| self.0.evolve(&mut ***state, bounds))
-                .collect::<Vec<_>>()
-        });
-        // let a = self.0.evolve_states_vec(states, bounds);
-        // drop(boxstates);
-        out.into_iter()
-            .map(|x| x.map_err(|y| pyo3::exceptions::PyValueError::new_err(y.to_string())))
-            .collect()
     }
 
     fn calc_mismatches(&self, state: &BoxedState) -> usize {
@@ -924,6 +900,41 @@ impl BoxedSystem {
 
     fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
         Ok(self.0.set_param(param_name, value.0)?)
+    }
+
+    /// Names of tiles, per number.
+    // #[getter]
+    // fn tile_names(&self, py: Python<'_>) -> PyArray1<PyFixedUnicode<MAX_NAME_LENGTH>> {
+    //     PyArray1::from_vec(py, self.0.tile_names()).into()
+    // }
+
+    #[getter]
+    fn tile_names(&self) -> Vec<String> {
+        self.0.tile_names().iter().map(|x| x.to_string()).collect()
+    }
+
+    fn tile_number(&self, tile_name: &str) -> Option<Tile> {
+        self.0.tile_names()
+            .iter()
+            .position(|x| *x == tile_name)
+            .map(|x| x as Tile)
+    }
+
+    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
+        self.0.tile_color(tile_number)
+    }
+
+    #[getter]
+    fn tile_colors(&self, py: Python<'_>) -> Py<PyArray2<u8>> {
+        let colors = self.0.tile_colors();
+        let mut arr = Array2::zeros((colors.len(), 4));
+        for (i, c) in colors.iter().enumerate() {
+            arr[[i, 0]] = c[0];
+            arr[[i, 1]] = c[1];
+            arr[[i, 2]] = c[2];
+            arr[[i, 3]] = c[3];
+        }
+        arr.into_pyarray(py).to_owned()
     }
 
     fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
@@ -971,8 +982,8 @@ pub trait TileBondInfo {
     fn bond_name(&self, bond_number: usize) -> &str;
 
     fn tile_colors(&self) -> &Vec<[u8; 4]>;
-    fn tile_names(&self) -> Vec<String>;
-    fn bond_names(&self) -> Vec<String>;
+    fn tile_names(&self) -> Vec<&str>;
+    fn bond_names(&self) -> Vec<&str>;
 }
 
 pub trait SystemInfo {

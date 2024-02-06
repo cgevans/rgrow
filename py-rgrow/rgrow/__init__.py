@@ -21,6 +21,8 @@ from .rgrow import (
     State,
 )
 import attrs
+import attr
+
 
 from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
 
@@ -29,7 +31,137 @@ if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.colors
 
 
-import attr
+def _system_name_canvas(self: System, state: State) -> np.ndarray:
+    """Returns the current canvas for state, as an array of tile names.
+    'empty' indicates empty locations; numbers are translated to strings.
+
+    Parameters
+    ----------
+    state : State
+      The state to return.
+
+    Returns
+    -------
+
+    numpy.ndarray[str]
+      The current canvas for the state, as an array of tile names.
+    """
+    a = np.array(self.tile_names)
+    return a[state.canvas_view]
+
+
+System.name_canvas = _system_name_canvas  # type: ignore
+
+
+def _system_color_canvas(self: System, state: State) -> np.ndarray:
+    """Returns the current canvas for state, as an array of tile colors."""
+
+    return self.tile_colors[state.canvas_view]
+
+
+System.color_canvas = _system_color_canvas  # type: ignore
+
+
+def _system_plot_canvas(
+    sys, state, ax=None, annotate_tiles=False, annotate_mismatches=False, crop=False
+) -> 'plt.Axes':
+    import matplotlib.pyplot as plt
+    import numpy as np
+    if ax is None:
+        _, ax = plt.subplots(figsize=(6, 6), constrained_layout=True)
+
+    cv = state.canvas_view
+
+    rows, cols = cv.shape
+
+    
+    if crop:
+        nz = np.nonzero(cv)
+        x1, x2 = nz[0].min(), nz[0].max()
+        y1, y2 = nz[1].min(), nz[1].max()
+        rows = x2 - x1 + 1
+        cols = y2 - y1 + 1
+    else:
+        x1, y1 = 0, 0
+        x2, y2 = rows-1, cols-1
+    
+
+    xg = x1 + np.tile([0.9, 0.1], cols+1).cumsum() - 1.45
+    yg = y1 + np.tile([0.9, 0.1], rows+1).cumsum() - 1.45
+
+    colors = sys.color_canvas(state)
+    if crop:
+        colors = colors[x1:x2+1, y1:y2+1, :]
+
+    fullcolors = np.zeros((2*rows+1, 2*cols+1, 4), dtype=np.uint8)
+    fullcolors[1:-1:2, 1:-1:2, :] = colors
+    # mask all transparent values
+    mask = fullcolors[..., 3] == 0
+    mask[0::2, 0::2] = True # FIXME: remove if adding bond colors
+    mask = np.repeat(mask[:, :, np.newaxis], 4, axis=2)
+    fullcolors = np.ma.array(fullcolors, mask=mask, copy=False)
+
+    ax.pcolor(xg, yg, fullcolors, zorder=2)
+
+    # reverse y
+    ax.set_ylim(x2+0.5, x1-0.7)
+    ax.set_xlim(y1-0.7, y2+0.5)
+    ax.set_aspect('equal')
+    # Add x ticks and labels at the top
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position('top')
+
+    # Remove bottom and right spines
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+    # Face ticks in
+    # ax.xaxis.set_tick_params(direction='in')
+    # ax.yaxis.set_tick_params(direction='in')
+
+    if annotate_tiles:
+        # If we're annotating, we assume we have space for more ticks!
+        ax.set_xticks(np.arange(y1, y2+1, 1))
+        ax.set_yticks(np.arange(x1, x2+1, 1))
+
+        # Put light gray grid lines in the background
+        ax.grid(True, color='lightgray', zorder=1)
+
+        names = sys.tile_names
+        tile_colors = sys.tile_colors / 255
+        lumcolors = np.where((tile_colors) <= 0.03928, tile_colors/12.92, ((tile_colors + 0.055)/1.055)**2.4)
+        lum = 0.2126 * lumcolors[:,0] + 0.7152 * lumcolors[:,1] + 0.0722 * lumcolors[:,2]
+        cv = state.canvas_view
+        for i in range(x1, x2+1):
+            for j in range(y1, y2+1):
+                if cv[i,j] == 0:
+                    continue
+                n = names[cv[i,j]]
+                # Get relative luminance of the color:
+
+                if lum[cv[i,j]] > 0.2:
+                    ax.text(j, i, n, ha='center', va='center', color='black')
+                else:
+                    ax.text(j, i, n, ha='center', va='center', color='white')
+
+    if annotate_mismatches:
+        mml = sys.calc_mismatch_locations(state)
+        for x, y in zip(*mml.nonzero()):
+            d = mml[x,y]
+            if d > 2:
+                # will have already been marked by the other side
+                # mismatches are designated by 8*N+4*E+2*S+1*W
+                continue
+            elif d == 1: # W
+                ax.add_patch(plt.Rectangle((y-.75, x-0.25), 0.5, 0.5, fill=True, color='red', zorder=3, linewidth=0))
+            elif d == 2: # S
+                ax.add_patch(plt.Rectangle((y-0.25, x+0.25), 0.5, 0.5, fill=True, color='red', zorder=3, linewidth=0))
+                
+    return ax
+
+System.plot_canvas = _system_plot_canvas  # type: ignore
 
 
 @attr.define(auto_attribs=True)
@@ -208,9 +340,7 @@ class Simulation:
     def check_state(self, n: int = 0) -> int:
         """Check that the simulation has at least n states."""
         if len(self.states) < n:
-            raise ValueError(
-                f"Simulation has {len(self.states)} states, but {n} were required."
-            )
+            raise ValueError(f"Simulation has {len(self.states)} states, but {n} were required.")
 
         return n
 
@@ -408,9 +538,7 @@ class Simulation:
             require_strong_bound=require_strong_bound,
         )
 
-    def plot_state(
-        self, state_index: int = 0, ax: "int | plt.Axes" = None
-    ) -> "plt.QuadMesh":
+    def plot_state(self, state_index: int = 0, ax: "int | plt.Axes" = None) -> "plt.QuadMesh":
         """Plot a state as a pcolormesh.  Returns the pcolormesh object."""
         import matplotlib.pyplot as plt
 

@@ -441,27 +441,27 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
 
             let mut i_old_state: usize = 0;
 
-            while state.ntiles() == 0 {
+            while state.n_tiles() == 0 {
                 if state.total_rate() != 0. {
                     panic!("Total rate is not zero! {state:?}");
                 };
                 i_old_state = chooser.sample(&mut rng);
 
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
-                debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
+                debug_assert_eq!(system.calc_ntiles(&state), state.n_tiles());
 
                 system.evolve(&mut state, bounds).unwrap();
                 i += 1;
             }
 
-            if state.ntiles() >= target_size {
+            if state.n_tiles() >= target_size {
                 // >= hack for duples
                 state_list.push(state);
                 previous_list.push(i_old_state);
             } else {
                 println!(
                     "Ran out of events: {} tiles, {} events, {} time, {} total rate.",
-                    state.ntiles(),
+                    state.n_tiles(),
                     state.total_events(),
                     state.time(),
                     state.total_rate(),
@@ -531,7 +531,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
         while state_list.len() < config.max_configs {
             let mut state = St::create_raw(Array2::zeros(config.canvas_size)).unwrap();
 
-            while state.ntiles() == 0 {
+            while state.n_tiles() == 0 {
                 let i_old_state = chooser.sample(&mut rng);
                 let dimer = &dimers[i_old_state];
 
@@ -541,12 +541,12 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
                 };
                 system.set_points(&mut state, &[(mid.0, dimer.t1), (other, dimer.t2)]);
 
-                debug_assert_eq!(system.calc_ntiles(&state), state.ntiles());
+                debug_assert_eq!(system.calc_ntiles(&state), state.n_tiles());
 
                 system.evolve(&mut state, bounds).unwrap();
                 i += 1;
 
-                if state.ntiles() >= config.start_size {
+                if state.n_tiles() >= config.start_size {
                     // FIXME: >= is a hack
                     // Create (retrospectively) a dimer state
                     let mut dimer_state =
@@ -573,7 +573,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
 
                     break;
                 } else {
-                    if state.ntiles() != 0 {
+                    if state.n_tiles() != 0 {
                         panic!("{}", state.panicinfo())
                     }
                     if state.total_rate() != 0. {

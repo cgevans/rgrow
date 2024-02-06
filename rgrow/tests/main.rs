@@ -75,7 +75,7 @@ fn atam_test() -> Result<()> {
         },
     )?;
 
-    assert!(state.ntiles() == 500);
+    assert!(state.n_tiles() == 500);
 
     assert!(state.tile_at_point(PointSafe2((p.0 .0 - 7, p.0 .1 - 7))) == 4);
     assert!(state.tile_at_point(PointSafe2((p.0 .0 - 8, p.0 .1 - 8))) == 5);
@@ -107,7 +107,7 @@ fn ktam_test() -> Result<()> {
         },
     )?;
 
-    assert!(st.ntiles() > 200);
+    assert!(st.n_tiles() > 200);
 
     sys.g_se = 7.8;
     sys.update_system();
@@ -121,7 +121,7 @@ fn ktam_test() -> Result<()> {
         },
     )?;
 
-    assert!(st.ntiles() < 100);
+    assert!(st.n_tiles() < 100);
 
     // let state = at.state_ref(0);
 
@@ -149,8 +149,8 @@ fn ktam_barish_test() -> Result<()> {
         },
     )?;
 
-    println!("ntiles: {}", state.ntiles());
-    assert!(state.ntiles() > 200);
+    println!("ntiles: {}", state.n_tiles());
+    assert!(state.n_tiles() > 200);
 
     Ok(())
 }
@@ -177,7 +177,7 @@ fn oldktam_test() -> Result<()> {
         },
     )?;
 
-    assert!(st.ntiles() > 200);
+    assert!(st.n_tiles() > 200);
 
     ts.gse = Some(7.8);
     let sys = rgrow::models::oldktam::OldKTAM::from_tileset(&ts)?;
@@ -191,7 +191,7 @@ fn oldktam_test() -> Result<()> {
         },
     )?;
 
-    assert!(st.ntiles() < 100);
+    assert!(st.n_tiles() < 100);
 
     // let state = at.state_ref(0);
 
@@ -211,7 +211,7 @@ fn simple_fission_test() -> Result<()> {
             ..Default::default()
         },
     )?;
-    assert!(state.ntiles() > 800); //.read().unwrap()
+    assert!(state.n_tiles() > 800); //.read().unwrap()
 
     ts.fission = Some(FissionHandling::KeepSeeded);
     let (sys, mut state) = ts.create_system_and_state()?;
@@ -222,7 +222,7 @@ fn simple_fission_test() -> Result<()> {
             ..Default::default()
         },
     )?;
-    assert!(state.ntiles() < 500); // .read().unwrap()
+    assert!(state.n_tiles() < 500); // .read().unwrap()
     Ok(())
 }
 

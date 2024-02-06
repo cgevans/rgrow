@@ -722,11 +722,11 @@ impl TileBondInfo for KTAM {
         &self.tile_colors
     }
 
-    fn tile_names(&self) -> Vec<String> {
-        self.tile_names.clone()
+    fn tile_names(&self) -> Vec<&str> {
+        self.tile_names.iter().map(|x| x.as_str()).collect()
     }
 
-    fn bond_names(&self) -> Vec<String> {
+    fn bond_names(&self) -> Vec<&str> {
         todo!()
     }
 }

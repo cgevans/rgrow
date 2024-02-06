@@ -50,10 +50,13 @@ impl From<BoxedState> for Box<dyn State> {
     }
 }
 
+/// A single 'assembly', or 'state', containing a canvas with tiles at locations.
+/// Generally does not store concentration or temperature information, but does store time simulated.
 #[cfg(feature = "python")]
 #[pymethods]
 impl BoxedState {
     #[getter]
+    /// A direct, mutable view of the state's canvas.  This is potentially unsafe.
     pub fn canvas_view<'py>(
         this: &'py PyCell<Self>,
         _py: Python<'py>,
@@ -64,6 +67,8 @@ impl BoxedState {
         unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
     }
 
+
+    /// A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
     pub fn canvas_copy<'py>(
         this: &'py PyCell<Self>,
         py: Python<'py>,
@@ -74,24 +79,45 @@ impl BoxedState {
         Ok(PyArray2::from_array(py, &ra))
     }
 
+    /// The number of tiles in the state.
     #[getter]
-    pub fn ntiles(&self) -> NumTiles {
-        self.0.ntiles()
+    pub fn n_tiles(&self) -> NumTiles {
+        self.0.n_tiles()
     }
 
+    /// The number of tiles in the state (deprecated, use `n_tiles` instead).
+    #[getter]
+    pub fn ntiles(&self) -> NumTiles {
+        self.0.n_tiles()
+    }
+
+    /// The total number of events that have occurred in the state.
     #[getter]
     pub fn total_events(&self) -> NumEvents {
         self.0.total_events()
     }
 
+    /// The total time the state has simulated, in seconds.
     #[getter]
     pub fn time(&self) -> f64 {
         self.0.time()
     }
+
+    pub fn __repr__(&self) -> String {
+        format!(
+            "State(n_tiles={}, time={} s, events={}, size=({}, {}), total_rate={})",
+            self.n_tiles(),
+            self.0.time(),
+            self.total_events(),
+            self.0.ncols(),
+            self.0.nrows(),
+            self.0.total_rate()
+        )
+    }
 }
 
 pub trait StateStatus {
-    fn ntiles(&self) -> NumTiles;
+    fn n_tiles(&self) -> NumTiles;
     fn total_events(&self) -> NumEvents;
     fn add_events(&mut self, n: NumEvents);
     fn reset_events(&mut self);
@@ -136,7 +162,7 @@ impl<C: CanvasSquarable + CanvasCreate, T: StateTracker> State for QuadTreeState
             "{:?} {:?} {}={}",
             self.rates,
             self.canvas.raw_array(),
-            self.ntiles(),
+            self.n_tiles(),
             self.calc_ntiles()
         )
     }
@@ -308,7 +334,7 @@ unsafe impl<C: CanvasSquarable, T: StateTracker> Send for QuadTreeState<C, T> {}
 
 impl<C: CanvasSquarable, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     #[inline(always)]
-    fn ntiles(&self) -> NumTiles {
+    fn n_tiles(&self) -> NumTiles {
         self.ntiles
     }
 

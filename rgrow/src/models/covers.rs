@@ -336,11 +336,11 @@ impl TileBondInfo for StaticKTAMCover {
         self.inner.tile_colors()
     }
 
-    fn tile_names(&self) -> Vec<String> {
+    fn tile_names(&self) -> Vec<&str> {
         self.inner.tile_names()
     }
 
-    fn bond_names(&self) -> Vec<String> {
+    fn bond_names(&self) -> Vec<&str> {
         todo!()
     }
 }
