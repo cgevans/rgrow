@@ -7,11 +7,14 @@ use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 #[cfg(feature = "python")]
 use crate::state::BoxedState;
-use crate::state::{NullStateTracker, QuadTreeState, State, StateCreate};
+use crate::state::{NullStateTracker, QuadTreeState, State, StateWithCreate};
 use crate::system::{BoxedSystem, DynSystem, EvolveBounds};
 
 #[cfg(feature = "python")]
 use crate::ffs::{BoxedFFSResult, FFSRunConfig};
+
+use self::base::GrowError;
+use self::state::{StateSinglePeriodic, StateSingleSquare, StateSingleTube};
 
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;
@@ -615,15 +618,9 @@ impl TileSet {
         };
 
         match self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT) {
-            CanvasType::Square => Ok(Box::new(
-                QuadTreeState::<CanvasSquare, NullStateTracker>::empty(shape)?,
-            )),
-            CanvasType::Periodic => Ok(Box::new(
-                QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty(shape)?,
-            )),
-            CanvasType::Tube => Ok(Box::new(
-                QuadTreeState::<CanvasTube, NullStateTracker>::empty(shape)?,
-            )),
+            CanvasType::Square => Ok(Box::new(StateSingleSquare::empty(shape)?)),
+            CanvasType::Periodic => Ok(Box::new(StateSinglePeriodic::empty(shape)?)),
+            CanvasType::Tube => Ok(Box::new(StateSingleTube::empty(shape)?)),
         }
     }
 

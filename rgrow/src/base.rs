@@ -4,6 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::any::Any;
 
 use ndarray::{Array1, Array2};
+#[cfg(feature = "python")]
 use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyArray2};
 use serde::{Deserialize, Serialize};
 use thiserror;

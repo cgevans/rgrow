@@ -28,7 +28,7 @@ use pyo3::exceptions::PyTypeError;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-use state::{DangerousStateClone, State, StateCreate};
+use state::{State, StateWithCreate};
 
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
@@ -282,8 +282,8 @@ impl<St: State + StateTracked<NullStateTracker>> FFSResult for FFSRun<St> {
     }
 }
 
-impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>> FFSRun<St> {
-    pub fn create<Sy: SystemWithDimers + System>(system: &mut Sy, config: &FFSRunConfig) -> Self {
+impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullStateTracker>> FFSRun<St> {
+    pub fn create<Sy: SystemWithDimers + System>(system: &mut Sy, config: &FFSRunConfig) -> Result<Self, GrowError> {
         let level_list = Vec::new();
 
         let dimerization_rate = system
@@ -297,7 +297,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
             forward_prob: Vec::new(),
         };
 
-        let (first_level, dimer_level) = FFSLevel::nmers_from_dimers(system, config);
+        let (first_level, dimer_level) = FFSLevel::nmers_from_dimers(system, config)?;
 
         ret.forward_prob.push(first_level.p_r);
 
@@ -311,7 +311,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
         while current_size < config.target_size {
             let last = ret.level_list.last_mut().unwrap();
 
-            let next = last.next_level(system, config);
+            let next = last.next_level(system, config)?;
             if !config.keep_configs {
                 last.drop_states();
             }
@@ -344,14 +344,14 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
             }
         }
 
-        ret
+        Ok(ret)
     }
     pub fn dimer_conc(&self) -> f64 {
         self.level_list[0].p_r
     }
 }
 
-impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>> FFSRun<St> {
+impl<St: State + StateWithCreate<Params=(usize, usize)> + StateTracked<NullStateTracker>> FFSRun<St> {
     pub fn create_from_tileset<Sy: SystemWithDimers + System + FromTileSet>(
         tileset: &TileSet,
         config: &FFSRunConfig,
@@ -366,7 +366,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
             c
         };
 
-        Ok(Self::create(&mut sys, &c))
+        Ok(Self::create(&mut sys, &c)?)
     }
 }
 
@@ -401,7 +401,7 @@ impl<St: State + StateTracked<NullStateTracker>> FFSSurface for FFSLevel<St> {
     }
 }
 
-impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTracker>> FFSLevel<St> {
+impl<St: State + StateWithCreate<Params=(usize,usize)> + StateTracked<NullStateTracker>> FFSLevel<St> {
     pub fn drop_states(&mut self) -> &Self {
         self.state_list.drain(..);
         self
@@ -411,7 +411,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
         &self,
         system: &mut Sy,
         config: &FFSRunConfig,
-    ) -> Self {
+    ) -> Result<Self, GrowError> {
         let mut rng = thread_rng();
 
         let mut state_list = Vec::new();
@@ -428,7 +428,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
 
         let chooser = Uniform::new(0, self.state_list.len());
 
-        let canvas_size = (self.state_list[0].nrows(), self.state_list[0].ncols());
+        let canvas_size = self.state_list[0].get_params();
 
         let cvar = if config.constant_variance {
             config.var_per_mean2
@@ -437,7 +437,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
         };
 
         while state_list.len() < config.max_configs {
-            let mut state = St::create_raw(Array2::zeros(canvas_size)).unwrap();
+            let mut state = St::empty(canvas_size)?;
 
             let mut i_old_state: usize = 0;
 
@@ -448,7 +448,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
                 i_old_state = chooser.sample(&mut rng);
 
                 state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
-                debug_assert_eq!(system.calc_ntiles(&state), state.n_tiles());
+                debug_assert_eq!(system.calc_n_tiles(&state), state.n_tiles());
 
                 system.evolve(&mut state, bounds).unwrap();
                 i += 1;
@@ -477,20 +477,20 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
         let p_r = (state_list.len() as f64) / (i as f64);
         let num_states = state_list.len();
 
-        Self {
+        Ok(Self {
             state_list,
             previous_list,
             p_r,
             target_size,
             num_states,
             num_trials: i,
-        }
+        })
     }
 
     pub fn nmers_from_dimers<Sy: SystemWithDimers + System>(
         system: &mut Sy,
         config: &FFSRunConfig,
-    ) -> (Self, Self) {
+    ) -> Result<(Self, Self), GrowError> {
         let mut rng = SmallRng::from_entropy();
 
         let dimers = system.calc_dimers();
@@ -529,7 +529,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
         };
 
         while state_list.len() < config.max_configs {
-            let mut state = St::create_raw(Array2::zeros(config.canvas_size)).unwrap();
+            let mut state = St::empty(config.canvas_size)?;
 
             while state.n_tiles() == 0 {
                 let i_old_state = chooser.sample(&mut rng);
@@ -541,7 +541,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
                 };
                 system.set_points(&mut state, &[(mid.0, dimer.t1), (other, dimer.t2)]);
 
-                debug_assert_eq!(system.calc_ntiles(&state), state.n_tiles());
+                debug_assert_eq!(system.calc_n_tiles(&state), state.n_tiles());
 
                 system.evolve(&mut state, bounds).unwrap();
                 i += 1;
@@ -550,7 +550,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
                     // FIXME: >= is a hack
                     // Create (retrospectively) a dimer state
                     let mut dimer_state =
-                        St::create_raw(Array2::zeros(config.canvas_size)).unwrap();
+                        St::empty(config.canvas_size)?;
                     other = match dimer.orientation {
                         Orientation::NS => dimer_state.move_sa_s(mid).0,
                         Orientation::WE => dimer_state.move_sa_e(mid).0,
@@ -589,7 +589,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
 
         let p_r = (num_states as f64) / (i as f64);
 
-        (
+        Ok((
             Self {
                 state_list,
                 previous_list,
@@ -606,7 +606,7 @@ impl<St: State + StateCreate + DangerousStateClone + StateTracked<NullStateTrack
                 num_states,
                 num_trials: num_states,
             },
-        )
+        ))
     }
 }
 

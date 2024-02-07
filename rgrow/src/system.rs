@@ -1,9 +1,15 @@
 use ndarray::prelude::*;
+#[cfg(feature = "python")]
 use numpy::IntoPyArray;
+#[cfg(feature = "python")]
 use numpy::PyArray1;
+#[cfg(feature = "python")]
 use numpy::PyArray3;
+#[cfg(feature = "python")]
 use numpy::PyFixedString;
+#[cfg(feature = "python")]
 use numpy::PyFixedUnicode;
+#[cfg(feature = "python")]
 use pyo3::types::PyDict;
 use rand::thread_rng;
 use rand::Rng;
@@ -22,10 +28,13 @@ use crate::state::BoxedState;
 use crate::state::NullStateTracker;
 use crate::state::QuadTreeState;
 use crate::state::State;
+use crate::state::StateSinglePeriodic;
+use crate::state::StateSingleSquare;
+use crate::state::StateSingleTube;
 use crate::tileset::CanvasType;
 use crate::tileset::TileSet;
 use crate::{
-    base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateCreate,
+    base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateWithCreate,
 };
 
 use super::base::{Point, Rate, Tile};
@@ -254,50 +263,20 @@ impl TryFrom<&str> for ChunkSize {
 }
 
 pub trait System: Debug + Sync + Send + TileBondInfo {
-    fn new_state<St: StateCreate + State>(
+    fn new_state<St: StateWithCreate + State>(
         &self,
-        shape: (CanvasLength, CanvasLength),
+        params: St::Params,
     ) -> Result<St, GrowError> {
-        let mut new_state = St::empty(shape)?;
-        self.insert_seed(&mut new_state)?;
+        let mut new_state = St::empty(params)?;
+        self.configure_empty_state(&mut new_state)?;
         Ok(new_state)
     }
 
-    fn create_we_pair<St: StateCreate + State>(
-        &mut self,
-        w: Tile,
-        e: Tile,
-        size: usize,
-    ) -> Result<St, GrowError> {
-        assert!(size > 8);
-        let mut ret = St::empty((size, size))?;
-        let mid = size / 2;
-        // self.insert_seed(&mut ret);
-        self.set_point(&mut ret, (mid, mid), w)?;
-        self.set_point(&mut ret, (mid, mid + 1), e)?;
-        Ok(ret)
+    fn calc_n_tiles<St: State + ?Sized>(&self, state: &St) -> NumTiles {
+        state.calc_n_tiles()
     }
 
-    fn create_ns_pair<St: StateCreate + State>(
-        &mut self,
-        n: Tile,
-        s: Tile,
-        size: usize,
-    ) -> Result<St, GrowError> {
-        assert!(size > 8);
-        let mut ret = St::empty((size, size))?;
-        let mid = size / 2;
-        // self.insert_seed(&mut ret);
-        self.set_point(&mut ret, (mid, mid), n)?;
-        self.set_point(&mut ret, (mid + 1, mid), s)?;
-        Ok(ret)
-    }
-
-    fn calc_ntiles<St: State + ?Sized>(&self, state: &St) -> NumTiles {
-        state.calc_ntiles()
-    }
-
-    fn state_step<St: State + ?Sized>(&self, state: &mut St, max_time_step: f64) -> StepOutcome {
+    fn take_single_step<St: State + ?Sized>(&self, state: &mut St, max_time_step: f64) -> StepOutcome {
         let time_step = -f64::ln(thread_rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
@@ -356,7 +335,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
             } else if state.total_rate() == 0. {
                 return Ok(EvolveOutcome::ReachedZeroRate);
             }
-            let out = self.state_step(state, rtime);
+            let out = self.take_single_step(state, rtime);
             match out {
                 StepOutcome::HadEventAt(t) => {
                     events += 1;
@@ -432,7 +411,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         self
     }
 
-    fn insert_seed<St: State + ?Sized>(&self, state: &mut St) -> Result<(), GrowError> {
+    fn configure_empty_state<St: State + ?Sized>(&self, state: &mut St) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;
         }
@@ -719,7 +698,7 @@ impl<S: System + SystemWithDimers> DynSystem for S {
     }
 
     fn setup_state(&self, state: &mut dyn State) -> Result<(), GrowError> {
-        self.insert_seed(state)
+        self.configure_empty_state(state)
     }
 
     #[cfg(feature = "ui")]
@@ -760,17 +739,17 @@ impl<S: System + SystemWithDimers> DynSystem for S {
         match canvas_type.unwrap_or(CanvasType::Periodic) {
             CanvasType::Square => {
                 let run =
-                    FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create(self, config);
+                    FFSRun::<StateSingleSquare>::create(self, config)?;
                 Ok(BoxedFFSResult(Arc::new(Box::new(run))))
             }
             CanvasType::Periodic => {
                 let run =
-                    FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(self, config);
+                    FFSRun::<StateSinglePeriodic>::create(self, config)?;
                 Ok(BoxedFFSResult(Arc::new(Box::new(run))))
             }
             CanvasType::Tube => {
                 let run =
-                    FFSRun::<QuadTreeState<CanvasTube, NullStateTracker>>::create(self, config);
+                    FFSRun::<StateSingleTube>::create(self, config)?;
                 Ok(BoxedFFSResult(Arc::new(Box::new(run))))
             }
         }

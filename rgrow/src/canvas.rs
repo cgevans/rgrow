@@ -3,10 +3,8 @@ use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub trait CanvasCreate: Sized + Canvas {
-    fn from_array(canvas: Array2<Tile>) -> GrowResult<Self>;
-    fn new_sized(shape: (usize, usize)) -> GrowResult<Self> {
-        Self::from_array(Array2::zeros(shape))
-    }
+    type Params;
+    fn new_sized(shape: Self::Params) -> GrowResult<Self>;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug, Serialize, Deserialize)]
@@ -32,8 +30,8 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     fn u_move_point_s(&self, p: Point) -> Point;
     fn u_move_point_w(&self, p: Point) -> Point;
     fn inbounds(&self, p: Point) -> bool;
-    fn calc_ntiles(&self) -> NumTiles;
-    fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles;
+    fn calc_n_tiles(&self) -> NumTiles;
+    fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles;
     fn raw_array(&self) -> ArrayView2<Tile>;
     fn nrows(&self) -> usize;
     fn ncols(&self) -> usize;
@@ -388,38 +386,27 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     }
 }
 
-pub trait CanvasSquarable: Canvas {
-    fn square_size(&self) -> usize;
-}
 
 #[derive(Clone, Debug)]
-pub struct CanvasSquare {
-    values: Array2<Tile>,
-}
-
-impl CanvasSquarable for CanvasSquare {
-    #[inline(always)]
-    fn square_size(&self) -> usize {
-        let largest = self.values.nrows().max(self.values.ncols());
-        2usize.pow(f64::log2(largest as f64).ceil() as u32)
-    }
-}
+pub struct CanvasSquare(Array2<Tile>);
 
 impl CanvasCreate for CanvasSquare {
-    fn from_array(values: Array2<Tile>) -> GrowResult<Self> {
-        Ok(Self { values })
+    type Params = (usize, usize);
+
+    fn new_sized(shape: Self::Params) -> GrowResult<Self> {
+        Ok(Self(Array2::zeros(shape)))
     }
 }
 
 impl Canvas for CanvasSquare {
     #[inline(always)]
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
-        self.values.uget(p)
+        self.0.uget(p)
     }
 
     #[inline(always)]
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {
-        self.values.uget_mut(p)
+        self.0.uget_mut(p)
     }
 
     #[inline(always)]
@@ -468,135 +455,122 @@ impl Canvas for CanvasSquare {
     }
 
     #[inline(always)]
-    fn calc_ntiles(&self) -> NumTiles {
-        self.values.fold(0, |x, y| x + u32::from(*y != 0))
+    fn calc_n_tiles(&self) -> NumTiles {
+        self.0.fold(0, |x, y| x + u32::from(*y != 0))
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {
-        self.values.view()
+        self.0.view()
     }
 
     fn nrows(&self) -> usize {
-        self.values.nrows()
+        self.0.nrows()
     }
 
     fn ncols(&self) -> usize {
-        self.values.ncols()
+        self.0.ncols()
     }
 
-    fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
-        self.values
+    fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
+        self.0
             .fold(0, |x, y| x + u32::from(should_be_counted[*y as usize]))
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct CanvasPeriodic {
-    values: Array2<Tile>,
-}
+pub struct CanvasPeriodic(Array2<Tile>);
 
 impl CanvasCreate for CanvasPeriodic {
-    fn from_array(values: Array2<Tile>) -> GrowResult<Self> {
-        Ok(Self { values })
+    type Params = (usize, usize);
+
+    fn new_sized(shape: Self::Params) -> GrowResult<Self> {
+        Ok(Self(Array2::zeros(shape)))
     }
 }
 
-impl CanvasSquarable for CanvasPeriodic {
-    fn square_size(&self) -> usize {
-        let largest = self.values.nrows().max(self.values.ncols());
-        2usize.pow(f64::log2(largest as f64).ceil() as u32)
-    }
-}
 
 impl Canvas for CanvasPeriodic {
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
-        self.values.uget(p)
+        self.0.uget(p)
     }
 
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {
-        self.values.uget_mut(p)
+        self.0.uget_mut(p)
     }
 
     fn u_move_point_n(&self, p: Point) -> Point {
         if p.0 == 0 {
-            (self.values.nrows() - 1, p.1)
+            (self.0.nrows() - 1, p.1)
         } else {
             (p.0 - 1, p.1)
         }
     }
 
     fn u_move_point_e(&self, p: Point) -> Point {
-        (p.0, (p.1 + 1) % self.values.ncols())
+        (p.0, (p.1 + 1) % self.0.ncols())
     }
 
     fn u_move_point_s(&self, p: Point) -> Point {
-        (((p.0 + 1) % self.values.nrows()), p.1)
+        (((p.0 + 1) % self.0.nrows()), p.1)
     }
 
     fn u_move_point_w(&self, p: Point) -> Point {
         if p.1 == 0 {
-            (p.0, self.values.ncols() - 1)
+            (p.0, self.0.ncols() - 1)
         } else {
             (p.0, p.1 - 1)
         }
     }
 
     fn inbounds(&self, p: Point) -> bool {
-        (p.0 < self.values.nrows()) & (p.1 < self.values.ncols())
+        (p.0 < self.0.nrows()) & (p.1 < self.0.ncols())
     }
 
-    fn calc_ntiles(&self) -> NumTiles {
-        self.values.fold(0, |x, y| x + u32::from(*y != 0))
+    fn calc_n_tiles(&self) -> NumTiles {
+        self.0.fold(0, |x, y| x + u32::from(*y != 0))
     }
 
-    fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
-        self.values
+    fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
+        self.0
             .fold(0, |x, y| x + u32::from(should_be_counted[*y as usize]))
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {
-        self.values.view()
+        self.0.view()
     }
 
     fn nrows(&self) -> usize {
-        self.values.nrows()
+        self.0.nrows()
     }
 
     fn ncols(&self) -> usize {
-        self.values.ncols()
+        self.0.ncols()
     }
 }
 
 #[derive(Debug)]
-pub struct CanvasTube {
-    values: Array2<Tile>,
-}
+pub struct CanvasTube(Array2<Tile>);
 
 impl CanvasCreate for CanvasTube {
-    fn from_array(values: Array2<Tile>) -> GrowResult<Self> {
-        let width = values.nrows();
-        if width % 2 != 0 {
-            Err(GrowError::WrongCanvasSize(width, values.ncols()))
-        } else {
-            Ok(Self { values })
-        }
-    }
-}
+    type Params = (usize, usize);
 
-impl CanvasSquarable for CanvasTube {
-    fn square_size(&self) -> usize {
-        let largest = self.values.nrows().max(self.values.ncols());
-        2usize.pow(f64::log2(largest as f64).ceil() as u32)
+    fn new_sized(shape: Self::Params) -> GrowResult<Self> {
+        let width = shape.0;
+        if width % 2 != 0 {
+            Err(GrowError::WrongCanvasSize(width, shape.1))
+        } else {
+            Ok(Self(Array2::zeros(shape)))
+        }
     }
 }
 
 impl Canvas for CanvasTube {
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
-        self.values.uget(p)
+        self.0.uget(p)
     }
 
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {
-        self.values.uget_mut(p)
+        self.0.uget_mut(p)
     }
 
     fn u_move_point_n(&self, p: Point) -> Point {
@@ -632,29 +606,29 @@ impl Canvas for CanvasTube {
     }
 
     fn inbounds(&self, p: Point) -> bool {
-        let (xs, ys) = self.values.dim();
+        let (xs, ys) = self.0.dim();
         (p.0 < xs) & (p.1 < ys - 2 - (self.nrows() / 2)) & (p.1 >= 2 + (self.nrows() / 2))
     }
 
-    fn calc_ntiles(&self) -> NumTiles {
-        self.values.fold(0, |x, y| x + u32::from(*y != 0))
+    fn calc_n_tiles(&self) -> NumTiles {
+        self.0.fold(0, |x, y| x + u32::from(*y != 0))
     }
 
-    fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
-        self.values
+    fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
+        self.0
             .fold(0, |x, y| x + u32::from(should_be_counted[*y as usize]))
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {
-        self.values.view()
+        self.0.view()
     }
 
     fn nrows(&self) -> usize {
-        self.values.nrows()
+        self.0.nrows()
     }
 
     fn ncols(&self) -> usize {
-        self.values.ncols()
+        self.0.ncols()
     }
 
     fn draw_size(&self) -> (u32, u32) {
@@ -668,7 +642,7 @@ impl Canvas for CanvasTube {
         let mut py: usize;
         let mut pos: usize;
 
-        for ((x, y), t) in self.values.indexed_iter() {
+        for ((x, y), t) in self.0.indexed_iter() {
             py = y;
             px = x + y;
             pos = 4 * (px * s + py);

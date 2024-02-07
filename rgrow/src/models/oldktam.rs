@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::RwLock};
 
 use crate::{
-    base::{HashMapType, HashSetType},
+    base::{GrowError, HashMapType, HashSetType},
     tileset::{GMC_DEFAULT, GSE_DEFAULT},
 };
 use cached::{Cached, SizedCache};

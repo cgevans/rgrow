@@ -1,5 +1,5 @@
 use super::base::*;
-use crate::canvas::{Canvas, CanvasCreate, CanvasSquarable};
+use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube};
 use crate::{
     canvas::PointSafe2,
     canvas::PointSafeHere,
@@ -17,7 +17,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "python")]
 use numpy::PyArray2;
 
-pub trait State: RateStoreP + Canvas + StateStatus + Sync + Send {
+pub trait State: RateStore<Rate = Rate> + Canvas + StateStatus + Sync + Send {
     fn panicinfo(&self) -> String;
 }
 
@@ -125,15 +125,16 @@ pub trait StateStatus {
     fn time(&self) -> f64;
 }
 
-pub trait StateCreate: Sized {
-    fn create_raw(canvas: Array2<Tile>) -> Result<Self, GrowError>;
-    fn empty(shape: (usize, usize)) -> Result<Self, GrowError> {
-        Self::create_raw(Array2::zeros(shape))
-    }
+pub trait StateWithCreate: State + Sized {
+    type Params;
+    // fn new_raw(canvas: Self::RawCanvas) -> Result<Self, GrowError>;
+    fn empty(params: Self::Params) -> Result<Self, GrowError>;
+    fn get_params(&self) -> Self::Params;
+    fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self;
 }
 
 #[derive(Debug, Clone)]
-pub struct QuadTreeState<C: CanvasSquarable, T: StateTracker> {
+pub struct QuadTreeState<C: Canvas, T: StateTracker> {
     pub rates: QuadTreeSquareArray<Rate>,
     pub canvas: C,
     ntiles: NumTiles,
@@ -142,33 +143,27 @@ pub struct QuadTreeState<C: CanvasSquarable, T: StateTracker> {
     pub tracker: T,
 }
 
-impl<C: CanvasSquarable, T: StateTracker> QuadTreeState<C, T> {
+impl<C: Canvas, T: StateTracker> QuadTreeState<C, T> {
     pub fn recalc_ntiles(&mut self) {
-        self.ntiles = self.calc_ntiles();
+        self.ntiles = self.calc_n_tiles();
     }
 }
 
-// Storage for event rates,
-pub trait RateStoreP {
-    fn choose_point(&self) -> (Point, Rate);
-    fn update_point(&mut self, point: PointSafeHere, new_rate: Rate);
-    fn update_multiple(&mut self, points: &[(PointSafeHere, Rate)]);
-    fn rate_at_point(&self, point: PointSafeHere) -> Rate;
-    fn total_rate(&self) -> Rate;
-}
-impl<C: CanvasSquarable + CanvasCreate, T: StateTracker> State for QuadTreeState<C, T> {
+
+impl<C: Canvas + CanvasCreate, T: StateTracker> State for QuadTreeState<C, T> {
     fn panicinfo(&self) -> String {
         format!(
             "{:?} {:?} {}={}",
             self.rates,
             self.canvas.raw_array(),
             self.n_tiles(),
-            self.calc_ntiles()
+            self.calc_n_tiles()
         )
     }
 }
 
-impl<C: CanvasSquarable, T: StateTracker> RateStoreP for QuadTreeState<C, T> {
+impl<C: Canvas, T: StateTracker> RateStore for QuadTreeState<C, T> {
+    type Rate = Rate;
     fn choose_point(&self) -> (Point, Rate) {
         self.rates.choose_point()
     }
@@ -178,7 +173,7 @@ impl<C: CanvasSquarable, T: StateTracker> RateStoreP for QuadTreeState<C, T> {
     }
 
     fn update_point(&mut self, point: PointSafeHere, new_rate: Rate) {
-        self.rates.update_point(point.0, new_rate)
+        self.rates.update_point(point, new_rate)
     }
 
     #[inline]
@@ -191,7 +186,7 @@ impl<C: CanvasSquarable, T: StateTracker> RateStoreP for QuadTreeState<C, T> {
     }
 }
 
-impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
+impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
         self.canvas.uv_pr(p)
     }
@@ -220,12 +215,12 @@ impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
         self.canvas.inbounds(p)
     }
 
-    fn calc_ntiles(&self) -> NumTiles {
-        self.canvas.calc_ntiles()
+    fn calc_n_tiles(&self) -> NumTiles {
+        self.canvas.calc_n_tiles()
     }
 
-    fn calc_ntiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
-        self.canvas.calc_ntiles_with_tilearray(should_be_counted)
+    fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
+        self.canvas.calc_n_tiles_with_tilearray(should_be_counted)
     }
 
     fn raw_array(&self) -> ArrayView2<Tile> {
@@ -306,19 +301,17 @@ impl<C: CanvasSquarable, T: StateTracker> Canvas for QuadTreeState<C, T> {
     }
 }
 
-impl<C, T> StateCreate for QuadTreeState<C, T>
+impl<C, T> StateWithCreate for QuadTreeState<C, T>
 where
-    C: CanvasSquarable + CanvasCreate,
+    C: Canvas + CanvasCreate<Params=(usize, usize)>,
     T: StateTracker,
 {
-    fn create_raw(canvas: Array2<Tile>) -> Result<Self, GrowError> {
-        let (ys, xs) = canvas.dim();
+    type Params = (usize, usize);
 
-        let rates = QuadTreeSquareArray::new_with_size(xs, ys);
-
-        let canvas = C::from_array(canvas)?;
+    fn empty(params: Self::Params) -> Result<Self, GrowError> {
+        let rates: QuadTreeSquareArray<f64> = QuadTreeSquareArray::new_with_size(params.0, params.1);
+        let canvas = C::new_sized(params)?;
         let tracker = T::default(&canvas);
-
         Ok(QuadTreeState::<C, T> {
             rates,
             canvas,
@@ -328,11 +321,40 @@ where
             tracker,
         })
     }
+
+
+    /// Efficiently, but dangerously, copies a state into zeroed state, when certain conditions are satisfied:
+    ///
+    /// - The system must be fully unseeded kTAM: specifically, all locations with tiles must have a nonzero rate.
+    /// - The assignee state is assumed to have all zero rates, and an all zero canvas.  This is not checked!
+    ///
+    /// This is fast when the number of tiles << the size of the canvas, eg, when putting in dimers.
+    ///
+    /// If on debug, conditions should be checked (TODO)
+    fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self {
+        let max_level = self.rates.0.len() - 1; // FIXME: should not go into RateStore
+
+        self.copy_level_quad(source, max_level, (0, 0));
+
+        // General housekeeping
+        self.ntiles = source.ntiles;
+        self.total_events = source.total_events;
+        self.tracker = source.tracker.clone();
+
+        self.rates.1 = source.rates.1;
+
+        self
+    }
+
+    fn get_params(&self) -> Self::Params {
+        (self.canvas.nrows(), self.canvas.ncols())
+    }
+
 }
 
-unsafe impl<C: CanvasSquarable, T: StateTracker> Send for QuadTreeState<C, T> {}
+unsafe impl<C: Canvas, T: StateTracker> Send for QuadTreeState<C, T> {}
 
-impl<C: CanvasSquarable, T: StateTracker> StateStatus for QuadTreeState<C, T> {
+impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     #[inline(always)]
     fn n_tiles(&self) -> NumTiles {
         self.ntiles
@@ -360,34 +382,7 @@ impl<C: CanvasSquarable, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     }
 }
 
-pub trait DangerousStateClone {
-    fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self;
-    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self;
-}
-
-impl<C: Canvas + CanvasSquarable, T: StateTracker> DangerousStateClone for QuadTreeState<C, T> {
-    /// Efficiently, but dangerously, copies a state into zeroed state, when certain conditions are satisfied:
-    ///
-    /// - The system must be fully unseeded kTAM: specifically, all locations with tiles must have a nonzero rate.
-    /// - The assignee state is assumed to have all zero rates, and an all zero canvas.  This is not checked!
-    ///
-    /// This is fast when the number of tiles << the size of the canvas, eg, when putting in dimers.
-    ///
-    /// If on debug, conditions should be checked (TODO)
-    fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self {
-        let max_level = self.rates.0.len() - 1; // FIXME: should not go into RateStore
-
-        self.copy_level_quad(source, max_level, (0, 0));
-
-        // General housekeeping
-        self.ntiles = source.ntiles;
-        self.total_events = source.total_events;
-        self.tracker = source.tracker.clone();
-
-        self.rates.1 = source.rates.1;
-
-        self
-    }
+impl<C: Canvas + Canvas, T: StateTracker>  QuadTreeState<C, T> {
 
     fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self {
         // FIXME: should not go into ratestore
@@ -418,6 +413,7 @@ impl<C: Canvas + CanvasSquarable, T: StateTracker> DangerousStateClone for QuadT
         self
     }
 }
+
 pub trait StateTracked<T>
 where
     T: StateTracker,
@@ -429,7 +425,7 @@ where
 
 impl<C, T> StateTracked<T> for QuadTreeState<C, T>
 where
-    C: Canvas + CanvasSquarable,
+    C: Canvas + Canvas,
     T: StateTracker,
 {
     fn set_tracker(&mut self, tracker: T) -> &mut Self {
@@ -519,3 +515,7 @@ impl StateTracker for OrderTracker {
         }
     }
 }
+
+pub type StateSingleSquare = QuadTreeState<CanvasSquare, NullStateTracker>;
+pub type StateSinglePeriodic = QuadTreeState<CanvasPeriodic, NullStateTracker>;
+pub type StateSingleTube = QuadTreeState<CanvasTube, NullStateTracker>;

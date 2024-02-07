@@ -12,12 +12,16 @@ use crate::canvas::PointSafeHere;
 // points, beyond the points being defined by two integer coordinates; eg, they do not need to be a
 // rectilinear grid.
 pub trait RateStore {
-    fn choose_point(&self) -> (Point, Rate);
-    fn rate_at_point(&self, point: PointSafeHere) -> Rate;
-    fn update_point(&mut self, point: Point, new_rate: Rate);
-    fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]);
-    fn total_rate(&self) -> Rate;
+    type Rate: Copy;
+    fn choose_point(&self) -> (Point, Self::Rate);
+    fn rate_at_point(&self, point: PointSafeHere) -> Self::Rate;
+    fn update_point(&mut self, point: PointSafeHere, new_rate: Self::Rate);
+    fn update_multiple(&mut self, to_update: &[(PointSafeHere, Self::Rate)]);
+    fn total_rate(&self) -> Self::Rate;
 }
+
+pub trait RateTrait: Copy + std::ops::Add + num_traits::identities::Zero + std::fmt::Debug + std::ops::Mul {}
+impl RateTrait for f64 {}
 
 pub trait CreateSizedRateStore {
     /// Create a RateStore capable of holding
@@ -29,28 +33,29 @@ pub trait CreateSizedRateStore {
 /// - Square arrays in the quadtree.
 /// - Linear rate storage.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct QuadTreeSquareArray<R>(pub Vec<Array2<R>>, pub R);
+pub struct QuadTreeSquareArray<R: RateTrait>(pub Vec<Array2<R>>, pub R);
 
-impl CreateSizedRateStore for QuadTreeSquareArray<Rate> {
+impl<R: RateTrait> CreateSizedRateStore for QuadTreeSquareArray<R> {
     fn new_with_size(rows: usize, cols: usize) -> Self {
         let p = f64::log2(rows.max(cols) as f64).ceil() as u32;
 
-        let mut rates = Vec::<Array2<Rate>>::new();
+        let mut rates = Vec::<Array2<R>>::new();
 
         for i in (1..=p).rev() {
-            rates.push(Array2::<Rate>::zeros((2usize.pow(i), 2usize.pow(i))))
+            rates.push(Array2::<R>::zeros((2usize.pow(i), 2usize.pow(i))))
         }
 
-        Self(rates, 0.)
+        Self(rates, R::zero())
     }
 }
 
-impl RateStore for QuadTreeSquareArray<Rate> {
-    fn rate_at_point(&self, point: PointSafeHere) -> Rate {
+impl RateStore for QuadTreeSquareArray<f64> {
+    type Rate = f64;
+    fn rate_at_point(&self, point: PointSafeHere) -> Self::Rate {
         unsafe { *self.0[0].uget(point.0) }
     }
 
-    fn choose_point(&self) -> (Point, Rate) {
+    fn choose_point(&self) -> (Point, Self::Rate) {
         let mut threshold = self.1 * thread_rng().gen::<f64>();
 
         let mut x: usize = 0;
@@ -93,11 +98,13 @@ impl RateStore for QuadTreeSquareArray<Rate> {
     }
 
     #[inline(always)]
-    fn update_point(&mut self, mut point: Point, new_rate: Rate) {
+    fn update_point(&mut self, mut point: PointSafeHere, new_rate: Self::Rate) {
         let mut rtiter = self.0.iter_mut();
         let mut r_prev = rtiter.next().unwrap();
 
-        r_prev[point] = new_rate;
+        let mut point = point.0;
+
+        unsafe { *r_prev.uget_mut(point) = new_rate; }
 
         for r_next in rtiter {
             point = (point.0 / 2, point.1 / 2);
@@ -126,7 +133,7 @@ impl RateStore for QuadTreeSquareArray<Rate> {
     }
 }
 
-impl QuadTreeSquareArray<Rate> {
+impl<Rate: RateTrait> QuadTreeSquareArray<Rate> {
     pub fn _update_multiple_small(&mut self, to_update: &[(PointSafeHere, Rate)]) {
         let mut todo = Vec::<Point>::new();
 
@@ -201,12 +208,12 @@ impl QuadTreeSquareArray<Rate> {
 }
 
 #[inline(always)]
-fn qt_update_level(rn: &mut Array2<Rate>, rt: &Array2<Rate>, np: Point) {
+fn qt_update_level<R: RateTrait>(rn: &mut Array2<R>, rt: &Array2<R>, np: Point) {
     qt_update_level_val(unsafe { rn.uget_mut(np) }, rt, np);
 }
 
 #[inline(always)]
-fn qt_update_level_val(rn: &mut f64, rt: &Array2<Rate>, np: Point) {
+fn qt_update_level_val<R: RateTrait>(rn: &mut R, rt: &Array2<R>, np: Point) {
     let ip = (np.0 * 2, np.1 * 2);
 
     unsafe {
@@ -245,7 +252,7 @@ mod tests {
         assert_eq!(rs, rs_large);
 
         for (p, r) in allchanges.iter() {
-            rs_single.update_point(p.0, *r);
+            rs_single.update_point(*p, *r);
         }
 
         assert_eq!(rs, rs_single);

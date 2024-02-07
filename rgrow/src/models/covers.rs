@@ -162,7 +162,7 @@ impl System for StaticKTAMCover {
         self.inner.calc_mismatch_locations(state)
     }
 
-    fn state_step<S: State + ?Sized>(&self, state: &mut S, max_time_step: f64) -> StepOutcome {
+    fn take_single_step<S: State + ?Sized>(&self, state: &mut S, max_time_step: f64) -> StepOutcome {
         let time_step = -f64::ln(thread_rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);

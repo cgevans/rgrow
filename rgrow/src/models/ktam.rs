@@ -148,8 +148,8 @@ impl System for KTAM {
         }
     }
 
-    fn calc_ntiles<S: State + ?Sized>(&self, state: &S) -> crate::base::NumTiles {
-        state.calc_ntiles_with_tilearray(&self.should_be_counted)
+    fn calc_n_tiles<S: State + ?Sized>(&self, state: &S) -> crate::base::NumTiles {
+        state.calc_n_tiles_with_tilearray(&self.should_be_counted)
     }
 
     fn event_rate_at_point<S: State + ?Sized>(
@@ -1505,12 +1505,12 @@ mod tests {
 
     use crate::{
         canvas::{CanvasPeriodic, CanvasSquare, CanvasTube},
-        state::{NullStateTracker, QuadTreeState, State, StateCreate},
+        state::{NullStateTracker, QuadTreeState, State, StateWithCreate},
     };
 
     use super::*;
 
-    fn test_set_point_newktam<St: StateCreate + State>() -> Result<(), anyhow::Error> {
+    fn test_set_point_newktam<St: StateWithCreate<Params=(usize, usize)> + State>() -> Result<(), anyhow::Error> {
         let mut system = KTAM::new_sized(5, 5);
 
         system.update_system();
