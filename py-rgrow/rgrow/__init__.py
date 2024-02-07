@@ -77,21 +77,21 @@ def _system_plot_canvas(
     
     if crop:
         nz = np.nonzero(cv)
-        x1, x2 = nz[0].min(), nz[0].max()
-        y1, y2 = nz[1].min(), nz[1].max()
-        rows = x2 - x1 + 1
-        cols = y2 - y1 + 1
+        i_min, i_max = nz[0].min(), nz[0].max()
+        j_min, j_max = nz[1].min(), nz[1].max()
+        rows = i_max - i_min + 1
+        cols = j_max - j_min + 1
     else:
-        x1, y1 = 0, 0
-        x2, y2 = rows-1, cols-1
+        i_min, j_min = 0, 0
+        i_max, j_max = rows-1, cols-1
     
 
-    xg = x1 + np.tile([0.9, 0.1], cols+1).cumsum() - 1.45
-    yg = y1 + np.tile([0.9, 0.1], rows+1).cumsum() - 1.45
+    i_grid = i_min + np.tile([0.9, 0.1], rows+1).cumsum() - 1.45
+    j_grid = j_min + np.tile([0.9, 0.1], cols+1).cumsum() - 1.45
 
     colors = sys.color_canvas(state)
     if crop:
-        colors = colors[x1:x2+1, y1:y2+1, :]
+        colors = colors[i_min:i_max+1, j_min:j_max+1, :]
 
     fullcolors = np.zeros((2*rows+1, 2*cols+1, 4), dtype=np.uint8)
     fullcolors[1:-1:2, 1:-1:2, :] = colors
@@ -101,11 +101,11 @@ def _system_plot_canvas(
     mask = np.repeat(mask[:, :, np.newaxis], 4, axis=2)
     fullcolors = np.ma.array(fullcolors, mask=mask, copy=False)
 
-    ax.pcolor(xg, yg, fullcolors, zorder=2)
+    ax.pcolor(j_grid, i_grid, fullcolors, zorder=2)
 
     # reverse y
-    ax.set_ylim(x2+0.5, x1-0.7)
-    ax.set_xlim(y1-0.7, y2+0.5)
+    ax.set_ylim(i_max+0.5, i_min-0.7)
+    ax.set_xlim(j_min-0.7, j_max+0.5)
     ax.set_aspect('equal')
     # Add x ticks and labels at the top
     ax.xaxis.tick_top()
@@ -123,8 +123,8 @@ def _system_plot_canvas(
 
     if annotate_tiles:
         # If we're annotating, we assume we have space for more ticks!
-        ax.set_xticks(np.arange(y1, y2+1, 1))
-        ax.set_yticks(np.arange(x1, x2+1, 1))
+        ax.set_xticks(np.arange(j_min, j_max+1, 1))
+        ax.set_yticks(np.arange(i_min, i_max+1, 1))
 
         # Put light gray grid lines in the background
         ax.grid(True, color='lightgray', zorder=1)
@@ -134,8 +134,8 @@ def _system_plot_canvas(
         lumcolors = np.where((tile_colors) <= 0.03928, tile_colors/12.92, ((tile_colors + 0.055)/1.055)**2.4)
         lum = 0.2126 * lumcolors[:,0] + 0.7152 * lumcolors[:,1] + 0.0722 * lumcolors[:,2]
         cv = state.canvas_view
-        for i in range(x1, x2+1):
-            for j in range(y1, y2+1):
+        for i in range(i_min, i_max+1):
+            for j in range(j_min, j_max+1):
                 if cv[i,j] == 0:
                     continue
                 n = names[cv[i,j]]
@@ -148,16 +148,16 @@ def _system_plot_canvas(
 
     if annotate_mismatches:
         mml = sys.calc_mismatch_locations(state)
-        for x, y in zip(*mml.nonzero()):
-            d = mml[x,y]
+        for i, j in zip(*mml.nonzero()):
+            d = mml[i,j]
             if d > 2:
                 # will have already been marked by the other side
                 # mismatches are designated by 8*N+4*E+2*S+1*W
                 continue
             elif d == 1: # W
-                ax.add_patch(plt.Rectangle((y-.75, x-0.25), 0.5, 0.5, fill=True, color='red', zorder=3, linewidth=0))
+                ax.add_patch(plt.Rectangle((j-.75, i-0.25), 0.5, 0.5, fill=True, color='red', zorder=3, linewidth=0))
             elif d == 2: # S
-                ax.add_patch(plt.Rectangle((y-0.25, x+0.25), 0.5, 0.5, fill=True, color='red', zorder=3, linewidth=0))
+                ax.add_patch(plt.Rectangle((j-0.25, i+0.25), 0.5, 0.5, fill=True, color='red', zorder=3, linewidth=0))
                 
     return ax
 
