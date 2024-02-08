@@ -1,7 +1,15 @@
-use pyo3::{exceptions::PyValueError, prelude::*, types::{PyDict, PyType}};
+use pyo3::{
+    exceptions::PyValueError,
+    prelude::*,
+    types::{PyDict, PyType},
+};
 
-use crate::{base::GlueIdent, ffs::{BoxedFFSResult, FFSRunConfig}, python::{PyState, PySystem}, tileset::{self, Bond, CoverStrand, Tile, TileSet}};
-
+use crate::{
+    base::GlueIdent,
+    ffs::{BoxedFFSResult, FFSRunConfig},
+    python::{PyState, PySystem},
+    tileset::{self, Bond, CoverStrand, Tile, TileSet},
+};
 
 #[pymethods]
 #[cfg(feature = "python")]

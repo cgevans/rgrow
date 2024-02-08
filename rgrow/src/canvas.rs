@@ -388,7 +388,6 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct CanvasSquare(Array2<Tile>);
 
@@ -489,7 +488,6 @@ impl CanvasCreate for CanvasPeriodic {
         Ok(Self(Array2::zeros(shape)))
     }
 }
-
 
 impl Canvas for CanvasPeriodic {
     unsafe fn uv_pr(&self, p: Point) -> &Tile {

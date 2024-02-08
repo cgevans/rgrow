@@ -617,17 +617,20 @@ impl TileSet {
         };
 
         match self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT) {
-            CanvasType::Square => Ok(QuadTreeState::<CanvasSquare,NullStateTracker>::empty(shape)?.into()),
-            CanvasType::Periodic => Ok(QuadTreeState::<CanvasPeriodic,NullStateTracker>::empty(shape)?.into()),
-            CanvasType::Tube => Ok(QuadTreeState::<CanvasTube,NullStateTracker>::empty(shape)?.into()),
+            CanvasType::Square => {
+                Ok(QuadTreeState::<CanvasSquare, NullStateTracker>::empty(shape)?.into())
+            }
+            CanvasType::Periodic => {
+                Ok(QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty(shape)?.into())
+            }
+            CanvasType::Tube => {
+                Ok(QuadTreeState::<CanvasTube, NullStateTracker>::empty(shape)?.into())
+            }
         }
     }
 
     /// Create a state, and set it up with a provided DynSystem.
-    pub fn create_state_with_system(
-        &self,
-        sys: &SystemEnum,
-    ) -> Result<StateEnum, RgrowError> {
+    pub fn create_state_with_system(&self, sys: &SystemEnum) -> Result<StateEnum, RgrowError> {
         let mut state = self.create_state_empty()?;
         sys.setup_state(&mut state)?;
         Ok(state)

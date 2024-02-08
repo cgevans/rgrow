@@ -1520,7 +1520,8 @@ mod tests {
 
     use super::*;
 
-    fn test_set_point_newktam<St: StateWithCreate<Params=(usize, usize)> + State>() -> Result<(), anyhow::Error> {
+    fn test_set_point_newktam<St: StateWithCreate<Params = (usize, usize)> + State>(
+    ) -> Result<(), anyhow::Error> {
         let mut system = KTAM::new_sized(5, 5);
 
         system.update_system();

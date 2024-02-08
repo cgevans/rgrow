@@ -25,17 +25,17 @@ use crate::canvas::CanvasTube;
 use crate::ffs::BoxedFFSResult;
 use crate::ffs::FFSRun;
 use crate::ffs::FFSRunConfig;
-use crate::state::PyState;
-use crate::state::StateEnum;
-use crate::state::NullStateTracker;
-use crate::state::QuadTreeState;
-use crate::state::{State};
-use crate::tileset::CanvasType;
-use crate::tileset::TileSet;
-use crate::models::ktam::KTAM;
-use crate::models::oldktam::OldKTAM;
 use crate::models::atam::ATAM;
 use crate::models::covers::StaticKTAMCover;
+use crate::models::ktam::KTAM;
+use crate::models::oldktam::OldKTAM;
+use crate::state::NullStateTracker;
+use crate::state::PyState;
+use crate::state::QuadTreeState;
+use crate::state::State;
+use crate::state::StateEnum;
+use crate::tileset::CanvasType;
+use crate::tileset::TileSet;
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateWithCreate,
 };
@@ -266,10 +266,7 @@ impl TryFrom<&str> for ChunkSize {
 }
 
 pub trait System: Debug + Sync + Send + TileBondInfo {
-    fn new_state<St: StateWithCreate + State>(
-        &self,
-        params: St::Params,
-    ) -> Result<St, GrowError> {
+    fn new_state<St: StateWithCreate + State>(&self, params: St::Params) -> Result<St, GrowError> {
         let mut new_state = St::empty(params)?;
         self.configure_empty_state(&mut new_state)?;
         Ok(new_state)
@@ -281,7 +278,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         state.calc_n_tiles()
     }
 
-    fn take_single_step<St: State + ?Sized>(&self, state: &mut St, max_time_step: f64) -> StepOutcome {
+    fn take_single_step<St: State + ?Sized>(
+        &self,
+        state: &mut St,
+        max_time_step: f64,
+    ) -> StepOutcome {
         let time_step = -f64::ln(thread_rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
@@ -747,8 +748,9 @@ impl<S: System + SystemWithDimers> DynSystem for S {
                 Ok(BoxedFFSResult(Arc::new(Box::new(run))))
             }
             CanvasType::Periodic => {
-                let run =
-                    FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(self, config)?;
+                let run = FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(
+                    self, config,
+                )?;
                 Ok(BoxedFFSResult(Arc::new(Box::new(run))))
             }
             CanvasType::Tube => {
@@ -771,7 +773,6 @@ pub enum SystemEnum {
     ATAM,
     // StaticKTAMCover
 }
-
 
 #[enum_dispatch]
 pub trait SystemWithDimers {

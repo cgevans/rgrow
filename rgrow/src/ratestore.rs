@@ -1,11 +1,11 @@
 use std::borrow::BorrowMut;
 
+use crate::state::StateEnum;
+use enum_dispatch::enum_dispatch;
 use fnv::FnvHashSet;
 use ndarray::Array2;
 use rand::thread_rng;
 use rand::Rng;
-use enum_dispatch::enum_dispatch;
-use crate::state::StateEnum;
 
 use crate::base::{Point, Rate};
 use crate::canvas::PointSafeHere;
@@ -22,7 +22,10 @@ pub trait RateStore {
     fn total_rate(&self) -> Rate;
 }
 
-pub trait RateTrait: Copy + std::ops::Add + num_traits::identities::Zero + std::fmt::Debug + std::ops::Mul {}
+pub trait RateTrait:
+    Copy + std::ops::Add + num_traits::identities::Zero + std::fmt::Debug + std::ops::Mul
+{
+}
 impl RateTrait for f64 {}
 
 pub trait CreateSizedRateStore {
@@ -105,7 +108,9 @@ impl RateStore for QuadTreeSquareArray<f64> {
 
         let mut point = point.0;
 
-        unsafe { *r_prev.uget_mut(point) = new_rate; }
+        unsafe {
+            *r_prev.uget_mut(point) = new_rate;
+        }
 
         for r_next in rtiter {
             point = (point.0 / 2, point.1 / 2);

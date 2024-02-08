@@ -8,8 +8,8 @@ use crate::{
 };
 use ndarray::prelude::*;
 
-use std::fmt::Debug;
 use enum_dispatch::enum_dispatch;
+use std::fmt::Debug;
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -25,15 +25,14 @@ pub trait State: RateStore + Canvas + StateStatus + Sync + Send {
 #[enum_dispatch(State, StateStatus, Canvas, RateStore)]
 #[derive(Debug)]
 pub enum StateEnum {
- Square(QuadTreeState<CanvasSquare, NullStateTracker>),
- Periodic(QuadTreeState<CanvasPeriodic, NullStateTracker>),
- Tube(QuadTreeState<CanvasTube, NullStateTracker>),
+    Square(QuadTreeState<CanvasSquare, NullStateTracker>),
+    Periodic(QuadTreeState<CanvasPeriodic, NullStateTracker>),
+    Tube(QuadTreeState<CanvasTube, NullStateTracker>),
 }
 
 #[cfg_attr(feature = "python", pyclass(name = "State"))]
 #[repr(transparent)]
 pub struct PyState(pub(crate) StateEnum);
-
 
 /// A single 'assembly', or 'state', containing a canvas with tiles at locations.
 /// Generally does not store concentration or temperature information, but does store time simulated.
@@ -51,7 +50,6 @@ impl PyState {
 
         unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
     }
-
 
     /// A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
     pub fn canvas_copy<'py>(
@@ -134,7 +132,6 @@ impl<C: Canvas, T: StateTracker> QuadTreeState<C, T> {
         self.ntiles = self.calc_n_tiles();
     }
 }
-
 
 impl<C: Canvas + CanvasCreate, T: StateTracker> State for QuadTreeState<C, T> {
     fn panicinfo(&self) -> String {
@@ -288,13 +285,14 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
 
 impl<C, T> StateWithCreate for QuadTreeState<C, T>
 where
-    C: Canvas + CanvasCreate<Params=(usize, usize)>,
+    C: Canvas + CanvasCreate<Params = (usize, usize)>,
     T: StateTracker,
 {
     type Params = (usize, usize);
 
     fn empty(params: Self::Params) -> Result<Self, GrowError> {
-        let rates: QuadTreeSquareArray<f64> = QuadTreeSquareArray::new_with_size(params.0, params.1);
+        let rates: QuadTreeSquareArray<f64> =
+            QuadTreeSquareArray::new_with_size(params.0, params.1);
         let canvas = C::new_sized(params)?;
         let tracker = T::default(&canvas);
         Ok(QuadTreeState::<C, T> {
@@ -306,7 +304,6 @@ where
             tracker,
         })
     }
-
 
     /// Efficiently, but dangerously, copies a state into zeroed state, when certain conditions are satisfied:
     ///
@@ -334,7 +331,6 @@ where
     fn get_params(&self) -> Self::Params {
         (self.canvas.nrows(), self.canvas.ncols())
     }
-
 }
 
 unsafe impl<C: Canvas, T: StateTracker> Send for QuadTreeState<C, T> {}
@@ -367,8 +363,7 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     }
 }
 
-impl<C: Canvas + Canvas, T: StateTracker>  QuadTreeState<C, T> {
-
+impl<C: Canvas + Canvas, T: StateTracker> QuadTreeState<C, T> {
     fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self {
         // FIXME: should not go into ratestore
         let (y, x) = point;
@@ -500,4 +495,3 @@ impl StateTracker for OrderTracker {
         }
     }
 }
-

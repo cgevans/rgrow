@@ -64,9 +64,10 @@ System.color_canvas = _system_color_canvas  # type: ignore
 
 def _system_plot_canvas(
     sys, state, ax=None, annotate_tiles=False, annotate_mismatches=False, crop=False
-) -> 'plt.Axes':
+) -> "plt.Axes":
     import matplotlib.pyplot as plt
     import numpy as np
+
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 6), constrained_layout=True)
 
@@ -74,7 +75,6 @@ def _system_plot_canvas(
 
     rows, cols = cv.shape
 
-    
     if crop:
         nz = np.nonzero(cv)
         i_min, i_max = nz[0].min(), nz[0].max()
@@ -83,39 +83,38 @@ def _system_plot_canvas(
         cols = j_max - j_min + 1
     else:
         i_min, j_min = 0, 0
-        i_max, j_max = rows-1, cols-1
-    
+        i_max, j_max = rows - 1, cols - 1
 
-    i_grid = i_min + np.tile([0.9, 0.1], rows+1).cumsum() - 1.45
-    j_grid = j_min + np.tile([0.9, 0.1], cols+1).cumsum() - 1.45
+    i_grid = i_min + np.tile([0.9, 0.1], rows + 1).cumsum() - 1.45
+    j_grid = j_min + np.tile([0.9, 0.1], cols + 1).cumsum() - 1.45
 
     colors = sys.color_canvas(state)
     if crop:
-        colors = colors[i_min:i_max+1, j_min:j_max+1, :]
+        colors = colors[i_min : i_max + 1, j_min : j_max + 1, :]
 
-    fullcolors = np.zeros((2*rows+1, 2*cols+1, 4), dtype=np.uint8)
+    fullcolors = np.zeros((2 * rows + 1, 2 * cols + 1, 4), dtype=np.uint8)
     fullcolors[1:-1:2, 1:-1:2, :] = colors
     # mask all transparent values
     mask = fullcolors[..., 3] == 0
-    mask[0::2, 0::2] = True # FIXME: remove if adding bond colors
+    mask[0::2, 0::2] = True  # FIXME: remove if adding bond colors
     mask = np.repeat(mask[:, :, np.newaxis], 4, axis=2)
     fullcolors = np.ma.array(fullcolors, mask=mask, copy=False)
 
     ax.pcolor(j_grid, i_grid, fullcolors, zorder=2)
 
     # reverse y
-    ax.set_ylim(i_max+0.5, i_min-0.7)
-    ax.set_xlim(j_min-0.7, j_max+0.5)
-    ax.set_aspect('equal')
+    ax.set_ylim(i_max + 0.5, i_min - 0.7)
+    ax.set_xlim(j_min - 0.7, j_max + 0.5)
+    ax.set_aspect("equal")
     # Add x ticks and labels at the top
     ax.xaxis.tick_top()
-    ax.xaxis.set_label_position('top')
+    ax.xaxis.set_label_position("top")
 
     # Remove bottom and right spines
-    ax.spines['bottom'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['top'].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["top"].set_visible(False)
 
     # Face ticks in
     # ax.xaxis.set_tick_params(direction='in')
@@ -123,43 +122,72 @@ def _system_plot_canvas(
 
     if annotate_tiles:
         # If we're annotating, we assume we have space for more ticks!
-        ax.set_xticks(np.arange(j_min, j_max+1, 1))
-        ax.set_yticks(np.arange(i_min, i_max+1, 1))
+        ax.set_xticks(np.arange(j_min, j_max + 1, 1))
+        ax.set_yticks(np.arange(i_min, i_max + 1, 1))
 
         # Put light gray grid lines in the background
-        ax.grid(True, color='lightgray', zorder=1)
+        ax.grid(True, color="lightgray", zorder=1)
 
         names = sys.tile_names
         tile_colors = sys.tile_colors / 255
-        lumcolors = np.where((tile_colors) <= 0.03928, tile_colors/12.92, ((tile_colors + 0.055)/1.055)**2.4)
-        lum = 0.2126 * lumcolors[:,0] + 0.7152 * lumcolors[:,1] + 0.0722 * lumcolors[:,2]
+        lumcolors = np.where(
+            (tile_colors) <= 0.03928,
+            tile_colors / 12.92,
+            ((tile_colors + 0.055) / 1.055) ** 2.4,
+        )
+        lum = (
+            0.2126 * lumcolors[:, 0]
+            + 0.7152 * lumcolors[:, 1]
+            + 0.0722 * lumcolors[:, 2]
+        )
         cv = state.canvas_view
-        for i in range(i_min, i_max+1):
-            for j in range(j_min, j_max+1):
-                if cv[i,j] == 0:
+        for i in range(i_min, i_max + 1):
+            for j in range(j_min, j_max + 1):
+                if cv[i, j] == 0:
                     continue
-                n = names[cv[i,j]]
+                n = names[cv[i, j]]
                 # Get relative luminance of the color:
 
-                if lum[cv[i,j]] > 0.2:
-                    ax.text(j, i, n, ha='center', va='center', color='black')
+                if lum[cv[i, j]] > 0.2:
+                    ax.text(j, i, n, ha="center", va="center", color="black")
                 else:
-                    ax.text(j, i, n, ha='center', va='center', color='white')
+                    ax.text(j, i, n, ha="center", va="center", color="white")
 
     if annotate_mismatches:
         mml = sys.calc_mismatch_locations(state)
         for i, j in zip(*mml.nonzero()):
-            d = mml[i,j]
+            d = mml[i, j]
             if d > 2:
                 # will have already been marked by the other side
                 # mismatches are designated by 8*N+4*E+2*S+1*W
                 continue
-            elif d == 1: # W
-                ax.add_patch(plt.Rectangle((j-.75, i-0.25), 0.5, 0.5, fill=True, color='red', zorder=3, linewidth=0))
-            elif d == 2: # S
-                ax.add_patch(plt.Rectangle((j-0.25, i+0.25), 0.5, 0.5, fill=True, color='red', zorder=3, linewidth=0))
-                
+            elif d == 1:  # W
+                ax.add_patch(
+                    plt.Rectangle(
+                        (j - 0.75, i - 0.25),
+                        0.5,
+                        0.5,
+                        fill=True,
+                        color="red",
+                        zorder=3,
+                        linewidth=0,
+                    )
+                )
+            elif d == 2:  # S
+                ax.add_patch(
+                    plt.Rectangle(
+                        (j - 0.25, i + 0.25),
+                        0.5,
+                        0.5,
+                        fill=True,
+                        color="red",
+                        zorder=3,
+                        linewidth=0,
+                    )
+                )
+
     return ax
+
 
 System.plot_canvas = _system_plot_canvas  # type: ignore
 
@@ -340,7 +368,9 @@ class Simulation:
     def check_state(self, n: int = 0) -> int:
         """Check that the simulation has at least n states."""
         if len(self.states) < n:
-            raise ValueError(f"Simulation has {len(self.states)} states, but {n} were required.")
+            raise ValueError(
+                f"Simulation has {len(self.states)} states, but {n} were required."
+            )
 
         return n
 
@@ -538,7 +568,9 @@ class Simulation:
             require_strong_bound=require_strong_bound,
         )
 
-    def plot_state(self, state_index: int = 0, ax: "int | plt.Axes" = None) -> "plt.QuadMesh":
+    def plot_state(
+        self, state_index: int = 0, ax: "int | plt.Axes" = None
+    ) -> "plt.QuadMesh":
         """Plot a state as a pcolormesh.  Returns the pcolormesh object."""
         import matplotlib.pyplot as plt
 

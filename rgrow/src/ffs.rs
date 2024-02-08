@@ -10,7 +10,6 @@ use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
 use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
-
 use super::*;
 //use ndarray::prelude::*;
 //use ndarray::Zip;
@@ -252,7 +251,6 @@ impl TileSet {
             },
         }
     }
-
 }
 
 pub struct FFSRun<St: State + StateTracked<NullStateTracker>> {
@@ -282,8 +280,13 @@ impl<St: State + StateTracked<NullStateTracker>> FFSResult for FFSRun<St> {
     }
 }
 
-impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullStateTracker>> FFSRun<St> {
-    pub fn create<Sy: SystemWithDimers + System>(system: &mut Sy, config: &FFSRunConfig) -> Result<Self, GrowError> {
+impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullStateTracker>>
+    FFSRun<St>
+{
+    pub fn create<Sy: SystemWithDimers + System>(
+        system: &mut Sy,
+        config: &FFSRunConfig,
+    ) -> Result<Self, GrowError> {
         let level_list = Vec::new();
 
         let dimerization_rate = system
@@ -351,7 +354,9 @@ impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullSta
     }
 }
 
-impl<St: State + StateWithCreate<Params=(usize, usize)> + StateTracked<NullStateTracker>> FFSRun<St> {
+impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullStateTracker>>
+    FFSRun<St>
+{
     pub fn create_from_tileset<Sy: SystemWithDimers + System + FromTileSet>(
         tileset: &TileSet,
         config: &FFSRunConfig,
@@ -401,7 +406,9 @@ impl<St: State + StateTracked<NullStateTracker>> FFSSurface for FFSLevel<St> {
     }
 }
 
-impl<St: State + StateWithCreate<Params=(usize,usize)> + StateTracked<NullStateTracker>> FFSLevel<St> {
+impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullStateTracker>>
+    FFSLevel<St>
+{
     pub fn drop_states(&mut self) -> &Self {
         self.state_list.drain(..);
         self
@@ -549,8 +556,7 @@ impl<St: State + StateWithCreate<Params=(usize,usize)> + StateTracked<NullStateT
                 if state.n_tiles() >= config.start_size {
                     // FIXME: >= is a hack
                     // Create (retrospectively) a dimer state
-                    let mut dimer_state =
-                        St::empty(config.canvas_size)?;
+                    let mut dimer_state = St::empty(config.canvas_size)?;
                     other = match dimer.orientation {
                         Orientation::NS => dimer_state.move_sa_s(mid).0,
                         Orientation::WE => dimer_state.move_sa_e(mid).0,

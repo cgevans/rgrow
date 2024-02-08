@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Sequence, overload
 import numpy as np
 
 if TYPE_CHECKING:  # pragma: no cover
-    pass
+    import matplotlib.pyplot as plt
 
 class TileShape(Enum):
     Single = ...
@@ -36,7 +36,6 @@ class System(object):
         total_time: float | None = None,
         size_min=float | None,
     ) -> EvolveOutcome: ...
-
     @overload
     def evolve(
         self,
@@ -47,7 +46,6 @@ class System(object):
         total_time: float | None = None,
         size_min=float | None,
     ) -> list[EvolveOutcome]: ...
-
     def evolve(
         self,
         state: State | Sequence[State],
@@ -61,15 +59,19 @@ class System(object):
     def calc_mismatch_locations(self, state: State) -> np.ndarray: ...
     def name_canvas(self, state: State) -> np.ndarray: ...
     def color_canvas(self, state: State) -> np.ndarray: ...
-   
     @property
     def tile_names(self) -> list[str]: ...
-
     @property
     def tile_colors(self) -> np.ndarray: ...
     def update_all(self, state: State, needed) -> None: ...
-
-    def plot_canvas(self, state: State, ax=None, annotate_tiles=False, annotate_mismatches=False, crop=False) -> 'plt.Axes': ...
+    def plot_canvas(
+        self,
+        state: State,
+        ax=None,
+        annotate_tiles=False,
+        annotate_mismatches=False,
+        crop=False,
+    ) -> "plt.Axes": ...
 
 class FissionHandling(object): ...
 class CanvasType(object): ...
