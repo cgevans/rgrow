@@ -490,7 +490,7 @@ class Simulation:
         list[EvolveOutcome]
           The stopping condition that caused each simulation to end.
         """
-        return self.system.evolve_states(
+        return self.system.evolve(
             self.states,
             for_events=for_events,
             total_events=total_events,
@@ -556,7 +556,7 @@ class Simulation:
         list[EvolveOutcome]
           The stopping condition that caused each simulation to end.
         """
-        return self.system.evolve_states(
+        return self.system.evolve(
             [self.states[i] for i in state_indices],
             for_events=for_events,
             total_events=total_events,
@@ -569,7 +569,7 @@ class Simulation:
         )
 
     def plot_state(
-        self, state_index: int = 0, ax: "int | plt.Axes" = None
+        self, state_index: int = 0, ax: "plt.Axes | None" = None
     ) -> "plt.QuadMesh":
         """Plot a state as a pcolormesh.  Returns the pcolormesh object."""
         import matplotlib.pyplot as plt
@@ -672,7 +672,7 @@ class Simulation:
     def state_events(self, state_index: int = 0) -> int:
         """Returns the number of events simulated for a state."""
         self.check_state(state_index)
-        return self.states[state_index].events
+        return self.states[state_index].total_events
 
     def add_state(self) -> int:
         """Add a state to the simulation."""
@@ -688,7 +688,7 @@ class Simulation:
     @property
     def states_events(self) -> List[int]:
         """Returns the number of events simulated for each state."""
-        return [s.events for s in self.states]
+        return [s.total_events for s in self.states]
 
     @property
     def states_time(self) -> List[float]:
@@ -700,25 +700,25 @@ class Simulation:
         """Returns the number of tiles in each state."""
         return [s.ntiles for s in self.states]
 
-    @property
-    def tile_concs(self) -> List[float]:
-        """Returns the concentration of each tile in the system."""
-        return self.system.tile_concs()
+    # @property
+    # def tile_concs(self) -> List[float]:
+    #     """Returns the concentration of each tile in the system."""
+    #     return self.system.tile_concs()
 
     @property
     def tile_names(self) -> List[str]:
         """Returns the names of each tile in the system."""
-        return self.system.tile_names()
+        return self.system.tile_names
 
     @property
-    def tile_colors(self) -> List[tuple[int, int, int, int]]:
+    def tile_colors(self) -> np.ndarray:
         """Returns the colors of each tile in the system."""
-        return self.system.tile_colors()
+        return self.system.tile_colors
 
-    @property
-    def tile_stoics(self) -> List[int]:
-        """Returns the stoichiometry of each tile in the system."""
-        return self.system.tile_stoics()
+    # @property
+    # def tile_stoics(self) -> List[int]:
+    #     """Returns the stoichiometry of each tile in the system."""
+    #     return self.system.tile_stoics()
 
     def set_system_param(self, name: str, value: Any) -> None:
         """Sets a system parameter to a value."""
@@ -739,7 +739,7 @@ class Simulation:
     def mismatch_array(self, state_index: int = 0) -> np.ndarray:
         """Returns an array of mismatches in the state."""
         self.check_state(state_index)
-        return self.system.mismatch_array(self.states[state_index])
+        return self.system.calc_mismatch_locations(self.states[state_index])
 
 
 def _tileset_to_simulation(ts: TileSet) -> Simulation:

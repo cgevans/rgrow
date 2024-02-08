@@ -30,31 +30,30 @@ class System(object):
     def evolve(
         self,
         state: State,
+        *,
         for_events: int | None = None,
         total_events: int | None = None,
         for_time: float | None = None,
         total_time: float | None = None,
         size_min=float | None,
+        size_max=float | None,
+        for_wall_time: float | None = None,
+        require_strong_bound: bool = True,
     ) -> EvolveOutcome: ...
     @overload
     def evolve(
         self,
         state: Sequence[State],
+        *,
         for_events: int | None = None,
         total_events: int | None = None,
         for_time: float | None = None,
         total_time: float | None = None,
         size_min=float | None,
+        size_max=float | None,
+        for_wall_time: float | None = None,
+        require_strong_bound: bool = True,
     ) -> list[EvolveOutcome]: ...
-    def evolve(
-        self,
-        state: State | Sequence[State],
-        for_events: int | None = None,
-        total_events: int | None = None,
-        for_time: float | None = None,
-        total_time: float | None = None,
-        size_min=float | None,
-    ) -> EvolveOutcome | list[EvolveOutcome]: ...
     def calc_mismatches(self, state: State) -> int: ...
     def calc_mismatch_locations(self, state: State) -> np.ndarray: ...
     def name_canvas(self, state: State) -> np.ndarray: ...
@@ -73,7 +72,7 @@ class System(object):
         crop=False,
     ) -> "plt.Axes": ...
     def get_param(self, name: str) -> Any: ...
-    def set_param(self, name: str, value: Any) -> None: ...
+    def set_param(self, name: str, value: Any): ...
 
 class FissionHandling(object): ...
 class CanvasType(object): ...
