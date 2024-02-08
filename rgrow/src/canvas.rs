@@ -1,4 +1,5 @@
 use super::base::{GrowError, GrowResult, NumTiles, Point, Tile};
+use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +14,7 @@ pub struct PointSafe2(pub Point);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
 pub struct PointSafeHere(pub Point);
 
+#[enum_dispatch]
 pub trait Canvas: std::fmt::Debug + Sync + Send {
     /// # Safety
     /// Assumes that the point is inbounds.  Should not normally be used unwrapped.

@@ -4,6 +4,8 @@ use fnv::FnvHashSet;
 use ndarray::Array2;
 use rand::thread_rng;
 use rand::Rng;
+use enum_dispatch::enum_dispatch;
+use crate::state::StateEnum;
 
 use crate::base::{Point, Rate};
 use crate::canvas::PointSafeHere;
@@ -11,13 +13,13 @@ use crate::canvas::PointSafeHere;
 // choice of a point based on those rates.  It makes no assumptions about relationships between the
 // points, beyond the points being defined by two integer coordinates; eg, they do not need to be a
 // rectilinear grid.
+#[enum_dispatch]
 pub trait RateStore {
-    type Rate: Copy;
-    fn choose_point(&self) -> (Point, Self::Rate);
-    fn rate_at_point(&self, point: PointSafeHere) -> Self::Rate;
-    fn update_point(&mut self, point: PointSafeHere, new_rate: Self::Rate);
-    fn update_multiple(&mut self, to_update: &[(PointSafeHere, Self::Rate)]);
-    fn total_rate(&self) -> Self::Rate;
+    fn choose_point(&self) -> (Point, Rate);
+    fn rate_at_point(&self, point: PointSafeHere) -> Rate;
+    fn update_point(&mut self, point: PointSafeHere, new_rate: Rate);
+    fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]);
+    fn total_rate(&self) -> Rate;
 }
 
 pub trait RateTrait: Copy + std::ops::Add + num_traits::identities::Zero + std::fmt::Debug + std::ops::Mul {}
@@ -50,12 +52,11 @@ impl<R: RateTrait> CreateSizedRateStore for QuadTreeSquareArray<R> {
 }
 
 impl RateStore for QuadTreeSquareArray<f64> {
-    type Rate = f64;
-    fn rate_at_point(&self, point: PointSafeHere) -> Self::Rate {
+    fn rate_at_point(&self, point: PointSafeHere) -> Rate {
         unsafe { *self.0[0].uget(point.0) }
     }
 
-    fn choose_point(&self) -> (Point, Self::Rate) {
+    fn choose_point(&self) -> (Point, Rate) {
         let mut threshold = self.1 * thread_rng().gen::<f64>();
 
         let mut x: usize = 0;
@@ -98,7 +99,7 @@ impl RateStore for QuadTreeSquareArray<f64> {
     }
 
     #[inline(always)]
-    fn update_point(&mut self, mut point: PointSafeHere, new_rate: Self::Rate) {
+    fn update_point(&mut self, mut point: PointSafeHere, new_rate: Rate) {
         let mut rtiter = self.0.iter_mut();
         let mut r_prev = rtiter.next().unwrap();
 

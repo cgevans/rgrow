@@ -6,8 +6,8 @@ fn pyrgrow(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<rgrow::tileset::TileSet>()?;
     m.add_class::<rgrow::tileset::TileShape>()?;
 
-    m.add_class::<rgrow::system::BoxedSystem>()?;
-    m.add_class::<rgrow::state::BoxedState>()?;
+    m.add_class::<rgrow::python::PySystem>()?;
+    m.add_class::<rgrow::python::PyState>()?;
 
     m.add_class::<rgrow::ffs::BoxedFFSResult>()?;
     m.add_class::<rgrow::ffs::FFSLevelRef>()?;

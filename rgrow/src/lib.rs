@@ -22,6 +22,12 @@ pub mod ratestore;
 
 pub mod models;
 
-pub mod cffi;
+#[cfg(feature = "python")]
+pub mod python;
+
+#[cfg(feature = "python")]
+pub mod pytileset;
+
+// pub mod cffi;
 
 // pub mod newsystem;

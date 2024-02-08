@@ -5,16 +5,16 @@ use anyhow::{Context, Result};
 use std::fs::File;
 
 use rgrow::{
-    canvas::{CanvasPeriodic, PointSafe2},
+    canvas::{Canvas, CanvasPeriodic, PointSafe2},
     state::{NullStateTracker, QuadTreeState, StateStatus},
-    system::{EvolveBounds, FissionHandling, System},
+    system::{DynSystem, EvolveBounds, FissionHandling, System},
     tileset::{FromTileSet, Seed, Size, TileSet},
 };
 
 fn test_sim(ts: &TileSet) -> Result<()> {
     let (sys, mut state) = ts.create_system_and_state()?;
     sys.evolve(
-        &mut *state,
+        &mut state,
         EvolveBounds {
             for_events: Some(10),
             ..Default::default()
@@ -67,7 +67,7 @@ fn atam_test() -> Result<()> {
     let (sys, mut state) = ts.create_system_and_state()?;
 
     sys.evolve(
-        &mut *state,
+        &mut state,
         EvolveBounds {
             size_max: Some(500),
             for_events: Some(2000),
@@ -98,7 +98,8 @@ fn ktam_test() -> Result<()> {
     sys.g_se = 8.1;
     sys.update_system();
 
-    sys.evolve(
+    System::evolve(
+        &sys,
         &mut st,
         EvolveBounds {
             for_events: Some(20000),
@@ -112,7 +113,8 @@ fn ktam_test() -> Result<()> {
     sys.g_se = 7.8;
     sys.update_system();
 
-    sys.evolve(
+    System::evolve(
+        &sys,
         &mut st,
         EvolveBounds {
             for_events: Some(100000),
@@ -141,7 +143,7 @@ fn ktam_barish_test() -> Result<()> {
     let (sys, mut state) = ts.create_system_and_state()?;
 
     sys.evolve(
-        &mut *state,
+        &mut state,
         EvolveBounds {
             for_events: Some(20000),
             size_max: Some(220),
@@ -168,7 +170,8 @@ fn oldktam_test() -> Result<()> {
 
     let mut st = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((64, 64))?;
 
-    sys.evolve(
+    System::evolve(
+        &sys,
         &mut st,
         EvolveBounds {
             for_events: Some(20000),
@@ -182,7 +185,8 @@ fn oldktam_test() -> Result<()> {
     ts.gse = Some(7.8);
     let sys = rgrow::models::oldktam::OldKTAM::from_tileset(&ts)?;
 
-    sys.evolve(
+    System::evolve(
+        &sys,
         &mut st,
         EvolveBounds {
             for_events: Some(100000),
@@ -205,7 +209,7 @@ fn simple_fission_test() -> Result<()> {
     ts.fission = Some(FissionHandling::NoFission);
     let (sys, mut state) = ts.create_system_and_state()?;
     sys.evolve(
-        &mut *state,
+        &mut state,
         EvolveBounds {
             for_time: Some(1000.),
             ..Default::default()
@@ -216,7 +220,7 @@ fn simple_fission_test() -> Result<()> {
     ts.fission = Some(FissionHandling::KeepSeeded);
     let (sys, mut state) = ts.create_system_and_state()?;
     sys.evolve(
-        &mut *state,
+        &mut state,
         EvolveBounds {
             for_time: Some(1000.),
             ..Default::default()

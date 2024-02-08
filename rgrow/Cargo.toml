@@ -65,6 +65,7 @@ numpy = { workspace = true, optional = true }
 pyo3 = { workspace = true, optional = true }
 rand = { workspace = true }
 ndarray = { workspace = true }
+enum_dispatch = "0.3"
 
 [dependencies.clap]
 version = "4"

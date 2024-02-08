@@ -5,16 +5,15 @@ use crate::colors::get_color_or_random;
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
-#[cfg(feature = "python")]
-use crate::state::BoxedState;
 use crate::state::{NullStateTracker, QuadTreeState, State, StateWithCreate};
-use crate::system::{BoxedSystem, DynSystem, EvolveBounds};
+use crate::system::{DynSystem, EvolveBounds};
 
 #[cfg(feature = "python")]
 use crate::ffs::{BoxedFFSResult, FFSRunConfig};
 
 use self::base::GrowError;
-use self::state::{StateSinglePeriodic, StateSingleSquare, StateSingleTube};
+use self::state::StateEnum;
+use self::system::SystemEnum;
 
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;
@@ -602,49 +601,49 @@ impl TileSet {
         }
     }
 
-    pub fn create_dynsystem(&self) -> Result<BoxedSystem, RgrowError> {
+    pub fn create_dynsystem(&self) -> Result<SystemEnum, RgrowError> {
         Ok(match self.model.unwrap_or(MODEL_DEFAULT) {
-            Model::KTAM => BoxedSystem(Box::new(KTAM::from_tileset(self)?)),
-            Model::ATAM => BoxedSystem(Box::new(ATAM::from_tileset(self)?)),
-            Model::OldKTAM => BoxedSystem(Box::new(OldKTAM::from_tileset(self)?)),
+            Model::KTAM => SystemEnum::KTAM(KTAM::from_tileset(self)?),
+            Model::ATAM => SystemEnum::ATAM(ATAM::from_tileset(self)?),
+            Model::OldKTAM => SystemEnum::OldKTAM(OldKTAM::from_tileset(self)?),
         })
     }
 
     /// Creates an empty state, without any setup by a System.
-    pub fn create_state_empty(&self) -> Result<Box<dyn State>, RgrowError> {
+    pub fn create_state_empty(&self) -> Result<StateEnum, RgrowError> {
         let shape = match self.size.unwrap_or(SIZE_DEFAULT) {
             Size::Single(i) => (i, i),
             Size::Pair(i) => i,
         };
 
         match self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT) {
-            CanvasType::Square => Ok(Box::new(StateSingleSquare::empty(shape)?)),
-            CanvasType::Periodic => Ok(Box::new(StateSinglePeriodic::empty(shape)?)),
-            CanvasType::Tube => Ok(Box::new(StateSingleTube::empty(shape)?)),
+            CanvasType::Square => Ok(QuadTreeState::<CanvasSquare,NullStateTracker>::empty(shape)?.into()),
+            CanvasType::Periodic => Ok(QuadTreeState::<CanvasPeriodic,NullStateTracker>::empty(shape)?.into()),
+            CanvasType::Tube => Ok(QuadTreeState::<CanvasTube,NullStateTracker>::empty(shape)?.into()),
         }
     }
 
     /// Create a state, and set it up with a provided DynSystem.
     pub fn create_state_with_system(
         &self,
-        sys: &dyn DynSystem,
-    ) -> Result<Box<dyn State>, RgrowError> {
+        sys: &SystemEnum,
+    ) -> Result<StateEnum, RgrowError> {
         let mut state = self.create_state_empty()?;
-        sys.setup_state(state.deref_mut())?;
+        sys.setup_state(&mut state)?;
         Ok(state)
     }
 
     /// Create a system and state
-    pub fn create_system_and_state(&self) -> Result<(BoxedSystem, Box<dyn State>), RgrowError> {
+    pub fn create_system_and_state(&self) -> Result<(SystemEnum, StateEnum), RgrowError> {
         let mut sys = self.create_dynsystem()?;
-        let state = self.create_state_with_system(sys.deref_mut())?;
+        let state = self.create_state_with_system(&sys)?;
         Ok((sys, state))
     }
 
     #[cfg(feature = "ui")]
-    pub fn run_window(&self) -> Result<Box<dyn State>, RgrowError> {
+    pub fn run_window(&self) -> Result<StateEnum, RgrowError> {
         let (sys, mut state) = self.create_system_and_state()?;
-        sys.evolve_in_window(state.deref_mut(), self.block, self.get_bounds())?;
+        sys.evolve_in_window(&mut state, self.block, self.get_bounds())?;
         Ok(state)
     }
 
@@ -653,174 +652,6 @@ impl TileSet {
             size_max: self.smax,
             ..Default::default()
         }
-    }
-}
-
-#[pymethods]
-#[cfg(feature = "python")]
-impl TileSet {
-    #[new]
-    #[pyo3(signature = (tiles, bonds=Vec::default(), glues=Vec::default(), **kwargs))]
-    fn new(
-        tiles: Vec<Tile>,
-        bonds: Vec<Bond>,
-        glues: Vec<(GlueIdent, GlueIdent, f64)>,
-        kwargs: Option<&PyDict>,
-    ) -> PyResult<TileSet> {
-        let mut tileset = tileset::TileSet {
-            tiles: tiles,
-            bonds: bonds,
-            glues: glues
-                .iter()
-                .map(|x| (x.0.clone(), x.1.clone(), x.2))
-                .collect(),
-            ..Default::default()
-        };
-        if let Some(x) = kwargs {
-            for (k, v) in x.iter() {
-                let key = k.extract::<String>()?;
-                match key.as_str() {
-                    "Gse" | "gse" => tileset.gse = Some(v.extract()?),
-                    "Gmc" | "gmc" => tileset.gmc = Some(v.extract()?),
-                    "alpha" => tileset.alpha = Some(v.extract()?),
-                    "threshold" => tileset.threshold = Some(v.extract()?),
-                    "seed" => tileset.seed = Some(v.extract()?),
-                    "size" => tileset.size = Some(v.extract()?),
-                    "tau" => tileset.tau = Some(v.extract()?),
-                    "smax" => tileset.smax = Some(v.extract()?),
-                    "update_rate" => tileset.update_rate = Some(v.extract()?),
-                    "k_f" | "kf" => tileset.kf = Some(v.extract()?),
-                    "fission" => tileset.fission = Some(v.extract::<&str>()?.try_into()?),
-                    "block" => tileset.block = Some(v.extract()?),
-                    "chunk_handling" => {
-                        tileset.chunk_handling = Some(v.extract::<&str>()?.try_into()?)
-                    }
-                    "chunk_size" => tileset.chunk_size = Some(v.extract::<&str>()?.try_into()?),
-                    "canvas_type" => tileset.canvas_type = Some(v.extract::<&str>()?.try_into()?),
-                    "hdoubletiles" => tileset.hdoubletiles = Some(v.extract()?),
-                    "vdoubletiles" => tileset.vdoubletiles = Some(v.extract()?),
-                    "model" => tileset.model = Some(v.extract::<&str>()?.try_into()?),
-                    "cover_strands" => {
-                        tileset.cover_strands = Some(v.extract::<Vec<CoverStrand>>()?)
-                    }
-                    v => Python::with_gil(|py| {
-                        let user_warning = py.get_type::<pyo3::exceptions::PyUserWarning>();
-                        PyErr::warn(py, user_warning, &format!("Ignoring unknown key {v}."), 0)
-                            .unwrap();
-                        ()
-                    }),
-                }
-            }
-        }
-        Ok(tileset)
-    }
-
-    /// Parses a JSON string into a TileSet.
-    #[pyo3(name = "from_json")]
-    #[classmethod]
-    fn py_from_json(_cls: &PyType, data: &str) -> PyResult<Self> {
-        let tileset = tileset::TileSet::from_json(data);
-        match tileset {
-            Ok(tileset) => Ok(tileset),
-            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                err.to_string(),
-            )),
-        }
-    }
-
-    /// Creates a TileSet from a dict by exporting to json, then parsing the json.
-    /// FIXME: implement this without the json trip.
-    #[pyo3(name = "from_dict")]
-    #[classmethod]
-    fn py_from_dict(_cls: &PyType, data: PyObject) -> PyResult<Self> {
-        let json: String = Python::with_gil(|py| {
-            let json = PyModule::import(py, "json")?;
-            json.call_method1("dumps", (data,))?.extract::<String>()
-        })?;
-
-        let tileset = tileset::TileSet::from_json(&json);
-        match tileset {
-            Ok(tileset) => Ok(tileset),
-            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                err.to_string(),
-            )),
-        }
-    }
-
-    /// Parses a file (JSON, YAML, etc) into a TileSet
-    #[pyo3(name = "from_file")]
-    #[classmethod]
-    fn py_from_file(_cls: &PyType, path: &str) -> PyResult<Self> {
-        let ts = tileset::TileSet::from_file(path)
-            .map_err(|err| PyErr::new::<PyValueError, _>(err.to_string()))?;
-        Ok(ts)
-    }
-
-    #[pyo3(name = "create_system")]
-    fn py_create_system(&self) -> PyResult<BoxedSystem> {
-        let sys = self.create_dynsystem()?;
-        Ok(sys)
-    }
-
-    #[pyo3(name = "create_state")]
-    fn py_create_state(&self, system: Option<&BoxedSystem>) -> PyResult<BoxedState> {
-        let sys_ref;
-        let sys;
-        if system.is_none() {
-            sys = self.create_dynsystem()?;
-            sys_ref = &sys;
-        } else {
-            sys_ref = system.unwrap();
-        }
-        Ok(self.create_state_with_system(&**sys_ref)?.into())
-    }
-
-    #[pyo3(name = "create_system_and_state")]
-    fn py_create_system_and_state(&self) -> PyResult<(BoxedSystem, BoxedState)> {
-        let (sys, state) = self.create_system_and_state()?;
-        Ok((sys, state.into()))
-    }
-
-    /// Creates a simulation, and runs it in a UI.  Returns the :any:`Simulation` when
-    /// finished.
-    #[cfg(feature = "ui")]
-    #[pyo3(name = "run_window")]
-    fn py_run_window(&self) -> PyResult<BoxedState> {
-        let s = self.run_window();
-
-        let st =
-            s.map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))?;
-        Ok(st.into())
-    }
-
-    /// Runs FFS.
-    #[allow(clippy::too_many_arguments)]
-    #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), **kwargs))]
-    fn py_run_ffs(
-        &self,
-        config: FFSRunConfig,
-        kwargs: Option<&PyDict>,
-        py: Python<'_>,
-    ) -> PyResult<BoxedFFSResult> {
-        let mut c = config;
-
-        if let Some(dict) = kwargs {
-            for (k, v) in dict.iter() {
-                c._py_set(&k.extract::<String>()?, v, py)?;
-            }
-        }
-
-        let res = py.allow_threads(|| self.run_ffs(&c));
-        match res {
-            Ok(res) => Ok(BoxedFFSResult(res.into())),
-            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                err.to_string(),
-            )),
-        }
-    }
-
-    fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
 

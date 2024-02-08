@@ -9,7 +9,7 @@ use crate::{
 use ndarray::prelude::*;
 
 use std::fmt::Debug;
-use std::ops::{Deref, DerefMut};
+use enum_dispatch::enum_dispatch;
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -17,44 +17,29 @@ use pyo3::prelude::*;
 #[cfg(feature = "python")]
 use numpy::PyArray2;
 
-pub trait State: RateStore<Rate = Rate> + Canvas + StateStatus + Sync + Send {
+#[enum_dispatch]
+pub trait State: RateStore + Canvas + StateStatus + Sync + Send {
     fn panicinfo(&self) -> String;
 }
 
-#[repr(transparent)]
+#[enum_dispatch(State, StateStatus, Canvas, RateStore)]
+#[derive(Debug)]
+pub enum StateEnum {
+ Square(QuadTreeState<CanvasSquare, NullStateTracker>),
+ Periodic(QuadTreeState<CanvasPeriodic, NullStateTracker>),
+ Tube(QuadTreeState<CanvasTube, NullStateTracker>),
+}
+
 #[cfg_attr(feature = "python", pyclass(name = "State"))]
-pub struct BoxedState(Box<dyn State>);
+#[repr(transparent)]
+pub struct PyState(pub(crate) StateEnum);
 
-impl Deref for BoxedState {
-    type Target = dyn State;
-    fn deref(&self) -> &Self::Target {
-        &*self.0
-    }
-}
-
-impl DerefMut for BoxedState {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.0
-    }
-}
-
-impl From<Box<dyn State>> for BoxedState {
-    fn from(value: Box<dyn State>) -> Self {
-        Self(value)
-    }
-}
-
-impl From<BoxedState> for Box<dyn State> {
-    fn from(value: BoxedState) -> Self {
-        value.0
-    }
-}
 
 /// A single 'assembly', or 'state', containing a canvas with tiles at locations.
 /// Generally does not store concentration or temperature information, but does store time simulated.
 #[cfg(feature = "python")]
 #[pymethods]
-impl BoxedState {
+impl PyState {
     #[getter]
     /// A direct, mutable view of the state's canvas.  This is potentially unsafe.
     pub fn canvas_view<'py>(
@@ -116,6 +101,7 @@ impl BoxedState {
     }
 }
 
+#[enum_dispatch]
 pub trait StateStatus {
     fn n_tiles(&self) -> NumTiles;
     fn total_events(&self) -> NumEvents;
@@ -163,7 +149,6 @@ impl<C: Canvas + CanvasCreate, T: StateTracker> State for QuadTreeState<C, T> {
 }
 
 impl<C: Canvas, T: StateTracker> RateStore for QuadTreeState<C, T> {
-    type Rate = Rate;
     fn choose_point(&self) -> (Point, Rate) {
         self.rates.choose_point()
     }
@@ -516,6 +501,3 @@ impl StateTracker for OrderTracker {
     }
 }
 
-pub type StateSingleSquare = QuadTreeState<CanvasSquare, NullStateTracker>;
-pub type StateSinglePeriodic = QuadTreeState<CanvasPeriodic, NullStateTracker>;
-pub type StateSingleTube = QuadTreeState<CanvasTube, NullStateTracker>;

@@ -1,3 +1,4 @@
+use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
 #[cfg(feature = "python")]
 use numpy::IntoPyArray;
@@ -24,15 +25,17 @@ use crate::canvas::CanvasTube;
 use crate::ffs::BoxedFFSResult;
 use crate::ffs::FFSRun;
 use crate::ffs::FFSRunConfig;
-use crate::state::BoxedState;
+use crate::state::PyState;
+use crate::state::StateEnum;
 use crate::state::NullStateTracker;
 use crate::state::QuadTreeState;
-use crate::state::State;
-use crate::state::StateSinglePeriodic;
-use crate::state::StateSingleSquare;
-use crate::state::StateSingleTube;
+use crate::state::{State};
 use crate::tileset::CanvasType;
 use crate::tileset::TileSet;
+use crate::models::ktam::KTAM;
+use crate::models::oldktam::OldKTAM;
+use crate::models::atam::ATAM;
+use crate::models::covers::StaticKTAMCover;
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateWithCreate,
 };
@@ -632,41 +635,38 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     }
 }
 
+#[enum_dispatch]
 pub trait DynSystem: Sync + Send + TileBondInfo {
     fn evolve(
         &self,
-        state: &mut dyn State,
+        state: &mut StateEnum,
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError>;
 
     #[cfg(feature = "use_rayon")]
     fn evolve_states(
         &mut self,
-        states: &mut [&mut dyn State],
+        states: &mut [&mut StateEnum],
         bounds: EvolveBounds,
     ) -> Vec<Result<EvolveOutcome, GrowError>>;
 
-    fn setup_state(&self, state: &mut dyn State) -> Result<(), GrowError>;
-
-    fn setup_boxedstate(&self, state: &mut BoxedState) -> Result<(), GrowError> {
-        self.setup_state(&mut **state)
-    }
+    fn setup_state(&self, state: &mut StateEnum) -> Result<(), GrowError>;
 
     #[cfg(feature = "ui")]
     fn evolve_in_window(
         &self,
-        state: &mut dyn State,
+        state: &mut StateEnum,
         block: Option<usize>,
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError>;
 
-    fn calc_mismatches(&self, state: &dyn State) -> usize;
-    fn calc_mismatch_locations(&self, state: &dyn State) -> Array2<usize>;
+    fn calc_mismatches(&self, state: &StateEnum) -> usize;
+    fn calc_mismatch_locations(&self, state: &StateEnum) -> Array2<usize>;
 
     fn set_param(&mut self, name: &str, value: Box<dyn Any>) -> Result<NeededUpdate, GrowError>;
     fn get_param(&self, name: &str) -> Result<Box<dyn Any>, GrowError>;
 
-    fn update_all(&self, state: &mut dyn State, needed: &NeededUpdate);
+    fn update_all(&self, state: &mut StateEnum, needed: &NeededUpdate);
 
     fn run_ffs(
         &mut self,
@@ -678,7 +678,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
 impl<S: System + SystemWithDimers> DynSystem for S {
     fn evolve(
         &self,
-        state: &mut dyn State,
+        state: &mut StateEnum,
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError> {
         self.evolve(state, bounds)
@@ -687,7 +687,7 @@ impl<S: System + SystemWithDimers> DynSystem for S {
     #[cfg(feature = "use_rayon")]
     fn evolve_states(
         &mut self,
-        states: &mut [&mut dyn State],
+        states: &mut [&mut StateEnum],
         bounds: EvolveBounds,
     ) -> Vec<Result<EvolveOutcome, GrowError>> {
         use rayon::prelude::*;
@@ -697,25 +697,25 @@ impl<S: System + SystemWithDimers> DynSystem for S {
             .collect()
     }
 
-    fn setup_state(&self, state: &mut dyn State) -> Result<(), GrowError> {
+    fn setup_state(&self, state: &mut StateEnum) -> Result<(), GrowError> {
         self.configure_empty_state(state)
     }
 
     #[cfg(feature = "ui")]
     fn evolve_in_window(
         &self,
-        state: &mut dyn State,
+        state: &mut StateEnum,
         block: Option<usize>,
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError> {
         self.evolve_in_window(state, block, bounds)
     }
 
-    fn calc_mismatches(&self, state: &dyn State) -> usize {
+    fn calc_mismatches(&self, state: &StateEnum) -> usize {
         self.calc_mismatches(state)
     }
 
-    fn calc_mismatch_locations(&self, state: &dyn State) -> Array2<usize> {
+    fn calc_mismatch_locations(&self, state: &StateEnum) -> Array2<usize> {
         self.calc_mismatch_locations(state)
     }
 
@@ -727,7 +727,7 @@ impl<S: System + SystemWithDimers> DynSystem for S {
         self.get_param(name)
     }
 
-    fn update_all(&self, state: &mut dyn State, needed: &NeededUpdate) {
+    fn update_all(&self, state: &mut StateEnum, needed: &NeededUpdate) {
         self.update_all(state, needed)
     }
 
@@ -739,222 +739,39 @@ impl<S: System + SystemWithDimers> DynSystem for S {
         match canvas_type.unwrap_or(CanvasType::Periodic) {
             CanvasType::Square => {
                 let run =
-                    FFSRun::<StateSingleSquare>::create(self, config)?;
+                    FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create(self, config)?;
                 Ok(BoxedFFSResult(Arc::new(Box::new(run))))
             }
             CanvasType::Periodic => {
                 let run =
-                    FFSRun::<StateSinglePeriodic>::create(self, config)?;
+                    FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(self, config)?;
                 Ok(BoxedFFSResult(Arc::new(Box::new(run))))
             }
             CanvasType::Tube => {
                 let run =
-                    FFSRun::<StateSingleTube>::create(self, config)?;
+                    FFSRun::<QuadTreeState<CanvasTube, NullStateTracker>>::create(self, config)?;
                 Ok(BoxedFFSResult(Arc::new(Box::new(run))))
             }
         }
     }
 }
 
-#[cfg(feature = "python")]
-#[derive(FromPyObject)]
-pub enum PyStateOrStates<'py> {
-    #[pyo3(transparent)]
-    State(&'py PyCell<BoxedState>),
-    #[pyo3(transparent)]
-    States(Vec<&'py PyCell<BoxedState>>),
+#[enum_dispatch(DynSystem, TileBondInfo, SystemWithDimers)]
+pub enum SystemEnum {
+    KTAM,
+    OldKTAM,
+    ATAM,
+    // StaticKTAMCover
 }
 
-#[repr(transparent)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow", name = "System"))]
-pub struct BoxedSystem(pub Box<dyn DynSystem>);
 
-impl DerefMut for BoxedSystem {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.0
-    }
-}
-
-impl Deref for BoxedSystem {
-    type Target = dyn DynSystem;
-
-    fn deref(&self) -> &Self::Target {
-        &*self.0
-    }
-}
-
-#[cfg(feature = "python")]
-#[pymethods]
-impl BoxedSystem {
-    #[allow(clippy::too_many_arguments)]
-    #[pyo3(
-        name = "evolve",
-        signature = (state,
-                    for_events=None,
-                    total_events=None,
-                    for_time=None,
-                    total_time=None,
-                    size_min=None,
-                    size_max=None,
-                    for_wall_time=None,
-                    require_strong_bound=true)
-    )]
-    /// Evolve a state (or states), with some bounds on the simulation.
-    /// 
-    /// If evolving multiple states, the bounds are applied per-state.
-    pub fn py_evolve<'py>(
-        &mut self,
-        state: PyStateOrStates<'py>,
-        for_events: Option<u64>,
-        total_events: Option<u64>,
-        for_time: Option<f64>,
-        total_time: Option<f64>,
-        size_min: Option<u32>,
-        size_max: Option<u32>,
-        for_wall_time: Option<f64>,
-        require_strong_bound: bool,
-        py: Python<'py>,
-    ) -> PyResult<PyObject> {
-        let bounds = EvolveBounds {
-            for_events,
-            for_time,
-            total_events,
-            total_time,
-            size_min,
-            size_max,
-            for_wall_time: for_wall_time.map(Duration::from_secs_f64),
-        };
-
-        if require_strong_bound & !bounds.is_strongly_bounded() {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "No strong bounds specified.",
-            ));
-        }
-
-        if !bounds.is_weakly_bounded() {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "No weak bounds specified.",
-            ));
-        }
-
-        match state {
-            PyStateOrStates::State(pystate) => {
-                let state = &mut **pystate.borrow_mut();
-                Ok(py.allow_threads(|| self.0.evolve(state, bounds))?.into_py(py))
-            }
-            PyStateOrStates::States(pystates) => {
-                let mut refs = pystates
-                    .into_iter()
-                    .map(|x| x.borrow_mut())
-                    .collect::<Vec<_>>();
-                let mut states = refs.iter_mut().map(|x| x.deref_mut()).collect::<Vec<_>>();
-                let out = py.allow_threads(|| {
-                    states
-                        .par_iter_mut()
-                        .map(|state| self.0.evolve(&mut ***state, bounds))
-                        .collect::<Vec<_>>()
-                });
-                let o: Result<Vec<EvolveOutcome>, PyErr> = out
-                    .into_iter()
-                    .map(|x| x.map_err(|y| pyo3::exceptions::PyValueError::new_err(y.to_string())))
-                    .collect();
-                o.map(|x| x.into_py(py))
-            }
-        }
-    }
-
-    fn calc_mismatches(&self, state: &BoxedState) -> usize {
-        self.0.calc_mismatches(&**state)
-    }
-
-    fn calc_mismatch_locations<'py>(
-        this: &'py PyCell<Self>,
-        state: &BoxedState,
-        py: Python<'py>,
-    ) -> PyResult<&'py PyArray2<usize>> {
-        let t = this.borrow();
-        let ra = t.0.calc_mismatch_locations(&**state);
-        Ok(PyArray2::from_array(py, &ra))
-    }
-
-    fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
-        Ok(self.0.set_param(param_name, value.0)?)
-    }
-
-    /// Names of tiles, per number.
-    // #[getter]
-    // fn tile_names(&self, py: Python<'_>) -> PyArray1<PyFixedUnicode<MAX_NAME_LENGTH>> {
-    //     PyArray1::from_vec(py, self.0.tile_names()).into()
-    // }
-
-    #[getter]
-    fn tile_names(&self) -> Vec<String> {
-        self.0.tile_names().iter().map(|x| x.to_string()).collect()
-    }
-
-    fn tile_number(&self, tile_name: &str) -> Option<Tile> {
-        self.0.tile_names()
-            .iter()
-            .position(|x| *x == tile_name)
-            .map(|x| x as Tile)
-    }
-
-    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.0.tile_color(tile_number)
-    }
-
-    #[getter]
-    fn tile_colors(&self, py: Python<'_>) -> Py<PyArray2<u8>> {
-        let colors = self.0.tile_colors();
-        let mut arr = Array2::zeros((colors.len(), 4));
-        for (i, c) in colors.iter().enumerate() {
-            arr[[i, 0]] = c[0];
-            arr[[i, 1]] = c[1];
-            arr[[i, 2]] = c[2];
-            arr[[i, 3]] = c[3];
-        }
-        arr.into_pyarray(py).to_owned()
-    }
-
-    fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
-        Ok(RustAny(self.0.get_param(param_name)?))
-    }
-
-    fn update_all(&self, state: &mut BoxedState, needed: &NeededUpdate) {
-        self.0.update_all(&mut **state, needed)
-    }
-
-    #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), canvas_type = None, **kwargs))]
-    fn py_run_ffs(
-        &mut self,
-        config: FFSRunConfig,
-        canvas_type: Option<CanvasType>,
-        kwargs: Option<&PyDict>,
-        py: Python<'_>,
-    ) -> PyResult<BoxedFFSResult> {
-        let mut c = config;
-
-        if let Some(dict) = kwargs {
-            for (k, v) in dict.iter() {
-                c._py_set(&k.extract::<String>()?, v, py)?;
-            }
-        }
-
-        let res = py.allow_threads(|| self.0.run_ffs(&c, canvas_type));
-        match res {
-            Ok(res) => Ok(res),
-            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                err.to_string(),
-            )),
-        }
-    }
-}
-
-pub trait SystemWithDimers: System {
+#[enum_dispatch]
+pub trait SystemWithDimers {
     /// Returns information on dimers that the system can form, similarly useful for starting out a state.
     fn calc_dimers(&self) -> Vec<DimerInfo>;
 }
 
+#[enum_dispatch]
 pub trait TileBondInfo {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4];
     fn tile_name(&self, tile_number: Tile) -> &str;
