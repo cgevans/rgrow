@@ -14,10 +14,10 @@ numpy = "^0.20"
 enum_dispatch = "0.3"
 
 [workspace.package]
-version = "0.12.2"
+version = "0.13.0-a1"
 authors = ["Constantine Evans <const@costi.net>"]
 edition = "2021"
-repository = "https://github.com/evansfmm/rgrow"
+repository = "https://github.com/cgevans/rgrow"
 license = "BSD-3-Clause"
 categories = ["science", "simulation"]
 

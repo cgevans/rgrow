@@ -95,7 +95,7 @@ pub enum PyStateOrStates<'py> {
 }
 
 #[repr(transparent)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow", name = "System"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow", name = "System", subclass))]
 pub struct PySystem(pub SystemEnum);
 
 #[cfg(feature = "python")]

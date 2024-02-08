@@ -1,6 +1,12 @@
 # 0.13.0
 
 - Restructured API to allow separate, easier-to-use Systems and States.
+- Refactored Python API.
+- Using enum_dispatch rather than dynamic traits and boxes.
+- Added Python plotting function.
+- Improved Python typing.
+- Fixed tube canvas implementation.
+- Added more mutable parameters to kTAM.
 
 # 0.12.2
 
