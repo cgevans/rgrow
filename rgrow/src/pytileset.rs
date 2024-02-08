@@ -141,7 +141,7 @@ impl TileSet {
     #[cfg(feature = "ui")]
     #[pyo3(name = "run_window")]
     fn py_run_window(&self) -> PyResult<PyState> {
-        use pyo3::{PyErr, PyResult};
+        use pyo3::PyErr;
 
         use crate::python::PyState;
 

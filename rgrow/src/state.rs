@@ -11,12 +11,6 @@ use ndarray::prelude::*;
 use enum_dispatch::enum_dispatch;
 use std::fmt::Debug;
 
-#[cfg(feature = "python")]
-use pyo3::prelude::*;
-
-#[cfg(feature = "python")]
-use numpy::PyArray2;
-
 #[enum_dispatch]
 pub trait State: RateStore + Canvas + StateStatus + Sync + Send {
     fn panicinfo(&self) -> String;

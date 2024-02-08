@@ -8,9 +8,6 @@ use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, StateWithCreate};
 use crate::system::{DynSystem, EvolveBounds};
 
-#[cfg(feature = "python")]
-use crate::ffs::{BoxedFFSResult, FFSRunConfig};
-
 use self::state::StateEnum;
 use self::system::SystemEnum;
 
@@ -33,11 +30,6 @@ use system::{ChunkHandling, ChunkSize};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
-
-#[cfg(feature = "python")]
-use pyo3::exceptions::PyValueError;
-#[cfg(feature = "python")]
-use pyo3::types::{PyDict, PyType};
 
 use thiserror;
 

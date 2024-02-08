@@ -1,17 +1,5 @@
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
-#[cfg(feature = "python")]
-use numpy::IntoPyArray;
-#[cfg(feature = "python")]
-use numpy::PyArray1;
-#[cfg(feature = "python")]
-use numpy::PyArray3;
-#[cfg(feature = "python")]
-use numpy::PyFixedString;
-#[cfg(feature = "python")]
-use numpy::PyFixedUnicode;
-#[cfg(feature = "python")]
-use pyo3::types::PyDict;
 use rand::thread_rng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -57,12 +45,6 @@ use pixels::{Pixels, SurfaceTexture};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
-
-#[cfg(feature = "python")]
-use crate::base::RustAny;
-
-#[cfg(feature = "python")]
-use numpy::PyArray2;
 
 #[derive(Clone, Debug)]
 pub enum Event {
