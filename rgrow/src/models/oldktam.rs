@@ -828,6 +828,16 @@ impl System for OldKTAM {
 
         arr
     }
+
+    fn system_info(&self) -> String {
+        format!(
+            "OldkTAM with {} tiles, G_mc = {:?}, G_se = {:?}, α = {}",
+            self.tile_names.len(),
+            self.g_mc,
+            self.g_se,
+            self.alpha
+        )
+    }
 }
 
 impl SystemWithDimers for OldKTAM {

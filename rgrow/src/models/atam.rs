@@ -378,6 +378,15 @@ impl System for ATAM {
 
         mismatch_locations
     }
+
+    fn system_info(&self) -> String {
+        format!(
+            "aTAM with {} tiles, {} glues, at threshold τ={}.",
+            self.tile_stoics.len(),
+            self.glue_strengths.len(),
+            self.threshold
+        )
+    }
 }
 
 impl ATAM {

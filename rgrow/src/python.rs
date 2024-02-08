@@ -1,24 +1,24 @@
 use std::ops::DerefMut;
 use std::time::Duration;
 
-use ndarray::Array2;
-use pyo3::prelude::*;
-use numpy::{IntoPyArray, PyArray2};
-use pyo3::types::PyDict;
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use crate::base::{NumEvents, NumTiles, RustAny, Tile};
 use crate::canvas::Canvas;
 use crate::ffs::{BoxedFFSResult, FFSRunConfig};
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus};
-use crate::system::{DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, TileBondInfo};
+use crate::system::{
+    DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, TileBondInfo,
+};
 use crate::tileset::CanvasType;
-
+use ndarray::Array2;
+use numpy::{IntoPyArray, PyArray2};
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 #[cfg_attr(feature = "python", pyclass(name = "State"))]
 #[repr(transparent)]
 pub struct PyState(pub(crate) StateEnum);
-
 
 /// A single 'assembly', or 'state', containing a canvas with tiles at locations.
 /// Generally does not store concentration or temperature information, but does store time simulated.
@@ -36,7 +36,6 @@ impl PyState {
 
         unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
     }
-
 
     /// A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
     pub fn canvas_copy<'py>(
@@ -86,8 +85,6 @@ impl PyState {
     }
 }
 
-
-
 #[cfg(feature = "python")]
 #[derive(FromPyObject)]
 pub enum PyStateOrStates<'py> {
@@ -115,10 +112,11 @@ impl PySystem {
                     size_min=None,
                     size_max=None,
                     for_wall_time=None,
-                    require_strong_bound=true)
+                    require_strong_bound=true,
+                    show_window=false,)
     )]
     /// Evolve a state (or states), with some bounds on the simulation.
-    /// 
+    ///
     /// If evolving multiple states, the bounds are applied per-state.
     pub fn py_evolve<'py>(
         &mut self,
@@ -131,6 +129,7 @@ impl PySystem {
         size_max: Option<u32>,
         for_wall_time: Option<f64>,
         require_strong_bound: bool,
+        show_window: bool,
         py: Python<'py>,
     ) -> PyResult<PyObject> {
         let bounds = EvolveBounds {
@@ -158,9 +157,22 @@ impl PySystem {
         match state {
             PyStateOrStates::State(pystate) => {
                 let state = &mut pystate.borrow_mut().0;
-                Ok(py.allow_threads(|| self.0.evolve(state, bounds))?.into_py(py))
+                if show_window {
+                    Ok(py
+                        .allow_threads(|| self.0.evolve_in_window(state, None, bounds))?
+                        .into_py(py))
+                } else {
+                    Ok(py
+                        .allow_threads(|| self.0.evolve(state, bounds))?
+                        .into_py(py))
+                }
             }
             PyStateOrStates::States(pystates) => {
+                if show_window {
+                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        "Cannot show window with multiple states.",
+                    ));
+                }
                 let mut refs = pystates
                     .into_iter()
                     .map(|x| x.borrow_mut())
@@ -211,7 +223,8 @@ impl PySystem {
     }
 
     fn tile_number(&self, tile_name: &str) -> Option<Tile> {
-        self.0.tile_names()
+        self.0
+            .tile_names()
             .iter()
             .position(|x| *x == tile_name)
             .map(|x| x as Tile)
@@ -266,5 +279,8 @@ impl PySystem {
             )),
         }
     }
-}
 
+    fn __repr__(&self) -> String {
+        format!("System({})", self.0.system_info())
+    }
+}

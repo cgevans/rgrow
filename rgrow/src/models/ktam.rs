@@ -665,6 +665,16 @@ impl System for KTAM {
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }
+
+    fn system_info(&self) -> String {
+        format!(
+            "kTAM with {} tiles and {} glues, G_se = {}, α = {}",
+            self.tile_names.len(),
+            self.glue_strengths.len(),
+            self.g_se,
+            self.alpha
+        )
+    }
 }
 
 impl SystemWithDimers for KTAM {

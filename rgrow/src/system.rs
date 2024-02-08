@@ -275,6 +275,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         Ok(new_state)
     }
 
+    fn system_info(&self) -> String;
+
     fn calc_n_tiles<St: State + ?Sized>(&self, state: &St) -> NumTiles {
         state.calc_n_tiles()
     }
@@ -533,7 +535,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
                 (scale * (width as usize)) as i32,
                 ((scale * (height as usize)) + 30) as i32,
             )
-            .with_label("rgrow v0.11.3");
+            .with_label("rgrow");
 
         win.make_resizable(true);
 
@@ -668,6 +670,8 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
 
     fn update_all(&self, state: &mut StateEnum, needed: &NeededUpdate);
 
+    fn system_info(&self) -> String;
+
     fn run_ffs(
         &mut self,
         config: &FFSRunConfig,
@@ -753,6 +757,10 @@ impl<S: System + SystemWithDimers> DynSystem for S {
                 Ok(BoxedFFSResult(Arc::new(Box::new(run))))
             }
         }
+    }
+
+    fn system_info(&self) -> String {
+        self.system_info()
     }
 }
 

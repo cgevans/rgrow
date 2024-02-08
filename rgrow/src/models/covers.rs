@@ -219,6 +219,10 @@ impl System for StaticKTAMCover {
         state.add_events(1);
         self
     }
+
+    fn system_info(&self) -> String {
+        format!("StaticKTAMCover wrapping {}", self.inner.system_info())
+    }
 }
 
 impl SystemWithDimers for StaticKTAMCover {
