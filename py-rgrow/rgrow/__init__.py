@@ -223,7 +223,7 @@ class Bond:
         elif isinstance(a, tuple):
             return Bond(*a)
         else:
-            return Bond(a, *args, **kwargs)
+            return Bond(a, *args, **kwargs)  # type: ignore
 
 
 def _conv_bond_list(q: Sequence[Any]):
