@@ -15,7 +15,7 @@ use super::*;
 //use ndarray::Zip;
 use base::{NumTiles, Rate};
 
-use ndarray::{Array2, ArrayView2};
+use ndarray::ArrayView2;
 #[cfg(feature = "python")]
 use numpy::{PyArray2, ToPyArray};
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
@@ -509,7 +509,7 @@ impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullSta
         let mut dimer_state_list = Vec::with_capacity(config.min_configs);
 
         let weights: Vec<_> = dimers.iter().map(|d| d.formation_rate).collect();
-        let chooser = WeightedIndex::new(&weights).unwrap();
+        let chooser = WeightedIndex::new(weights).unwrap();
 
         if config.canvas_size.0 < 4 || config.canvas_size.1 < 4 {
             panic!("Canvas size too small for dimers");
@@ -624,6 +624,7 @@ fn variance_over_mean2(num_success: usize, num_trials: usize) -> f64 {
 }
 
 #[cfg_attr(feature = "python", pyclass(name = "FFSResult"))]
+#[allow(dead_code)] // This is used in the python interface
 pub struct BoxedFFSResult(pub(crate) Arc<Box<dyn ffs::FFSResult>>);
 
 #[cfg(feature = "python")]
@@ -681,6 +682,7 @@ impl BoxedFFSResult {
 }
 
 #[cfg_attr(feature = "python", pyclass)]
+#[allow(dead_code)] // This is used in the python interface
 pub struct FFSLevelRef {
     res: Arc<Box<dyn ffs::FFSResult>>,
     level: usize,

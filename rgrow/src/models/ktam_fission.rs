@@ -60,7 +60,7 @@ pub struct GroupInfo {
 }
 
 impl GroupInfo {
-    fn new(start_points: &Vec<&PointSafe2>, now_empty: &[PointSafe2]) -> Self {
+    fn new(start_points: &[&PointSafe2], now_empty: &[PointSafe2]) -> Self {
         let groupmerges = (0usize..=start_points.len()).collect();
 
         let mut map = HashMapType::default();
@@ -124,7 +124,7 @@ impl GroupInfo {
         let mut rng = rand::thread_rng();
 
         let sizes: Vec<usize> = mpl.iter().map(|x| x.len()).collect();
-        let dist = WeightedIndex::new(&sizes).unwrap();
+        let dist = WeightedIndex::new(sizes).unwrap();
 
         let keep = dist.sample(&mut rng);
 
@@ -279,7 +279,7 @@ impl KTAM {
             //println!("Ring check failed");
         }
 
-        let start_points = (*possible_start_points)
+        let start_points: Vec<_> = (*possible_start_points)
             .iter()
             .filter(|x| canvas.tile_at_point(**x) != 0)
             .collect();
@@ -289,8 +289,8 @@ impl KTAM {
         let mut queue = VecDeque::new();
 
         // Put all the starting points in the queue.
-        for (_i, point) in start_points.iter().enumerate() {
-            queue.push_back(**point);
+        for &&point in start_points.iter() {
+            queue.push_back(point);
         }
 
         //println!("Start queue {:?}", queue);

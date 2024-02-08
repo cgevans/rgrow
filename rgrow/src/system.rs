@@ -16,7 +16,6 @@ use rand::thread_rng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::base::CanvasLength;
 use crate::base::RgrowError;
 use crate::base::StringConvError;
 use crate::canvas::CanvasPeriodic;
@@ -26,16 +25,15 @@ use crate::ffs::BoxedFFSResult;
 use crate::ffs::FFSRun;
 use crate::ffs::FFSRunConfig;
 use crate::models::atam::ATAM;
-use crate::models::covers::StaticKTAMCover;
+
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::NullStateTracker;
-use crate::state::PyState;
 use crate::state::QuadTreeState;
 use crate::state::State;
 use crate::state::StateEnum;
 use crate::tileset::CanvasType;
-use crate::tileset::TileSet;
+
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateWithCreate,
 };
@@ -45,19 +43,17 @@ use crate::canvas::PointSafe2;
 
 use std::any::Any;
 use std::fmt::Debug;
-use std::ops::Deref;
-use std::ops::DerefMut;
+
 use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(feature = "ui")]
 use fltk::{app, prelude::*, window::Window};
 
+#[cfg(feature = "use_rayon")]
 use rayon::prelude::*;
 
 use pixels::{Pixels, SurfaceTexture};
-
-const MAX_NAME_LENGTH: usize = 64;
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -364,7 +360,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         states: &mut [St],
         bounds: EvolveBounds,
     ) -> Vec<Result<EvolveOutcome, GrowError>> {
-        use rayon::prelude::*;
         states
             .par_iter_mut()
             .map(|state| self.evolve(state, bounds))
@@ -695,7 +690,6 @@ impl<S: System + SystemWithDimers> DynSystem for S {
         states: &mut [&mut StateEnum],
         bounds: EvolveBounds,
     ) -> Vec<Result<EvolveOutcome, GrowError>> {
-        use rayon::prelude::*;
         states
             .par_iter_mut()
             .map(|state| self.evolve(*state, bounds))

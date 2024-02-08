@@ -43,31 +43,6 @@ pub fn get_color_or_random(cs: &Option<&str>) -> Result<[u8; 4], ColorError> {
     }
 }
 
-#[cfg(test)]
-mod test {
-    #[test]
-    fn test_color_styles() -> anyhow::Result<()> {
-        assert_eq!(super::get_color("red")?, [255, 0, 0, 255]);
-        assert_eq!(super::get_color("0xff0000")?, [255, 0, 0, 255]);
-        assert_eq!(super::get_color("#ff0000")?, [255, 0, 0, 255]);
-        assert_eq!(super::get_color("@ff0000")?, [255, 0, 0, 255]);
-        Ok(())
-    }
-
-    #[test]
-    fn test_get_color_or_random() -> anyhow::Result<()> {
-        assert_eq!(super::get_color_or_random(&Some("red"))?, [255, 0, 0, 255]);
-        assert_eq!(super::get_color_or_random(&None)?.len(), 4);
-        Ok(())
-    }
-
-    #[test]
-    fn test_invalid_color() -> anyhow::Result<()> {
-        assert!(super::get_color("invalid").is_err());
-        Ok(())
-    }
-}
-
 pub(crate) static COLORS: phf::Map<&'static str, [u8; 4]> = phf_map! {
     "snow" => [255, 250, 250, 0xff],
 "ghost white" => [248, 248, 255, 0xff],
@@ -858,3 +833,28 @@ pub(crate) static COLORS: phf::Map<&'static str, [u8; 4]> = phf_map! {
 "darkcyan" => [0, 139, 139, 0xff],
 "lightgreen" => [0x90, 0xee, 0x90, 0xff],
 };
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_color_styles() -> anyhow::Result<()> {
+        assert_eq!(super::get_color("red")?, [255, 0, 0, 255]);
+        assert_eq!(super::get_color("0xff0000")?, [255, 0, 0, 255]);
+        assert_eq!(super::get_color("#ff0000")?, [255, 0, 0, 255]);
+        assert_eq!(super::get_color("@ff0000")?, [255, 0, 0, 255]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_color_or_random() -> anyhow::Result<()> {
+        assert_eq!(super::get_color_or_random(&Some("red"))?, [255, 0, 0, 255]);
+        assert_eq!(super::get_color_or_random(&None)?.len(), 4);
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_color() -> anyhow::Result<()> {
+        assert!(super::get_color("invalid").is_err());
+        Ok(())
+    }
+}

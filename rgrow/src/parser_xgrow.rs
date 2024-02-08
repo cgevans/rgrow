@@ -356,7 +356,8 @@ fn xgrow_args(input: &str) -> IResult<&str, (tileset::TileSet, GlueVec)> {
     if let Some(tileset::Seed::Single(x, y, ref t)) = args.seed {
         if ((x > size - 3) || (y > size - 3))
             || (x < 2)
-            || (y < 2) && (args.canvas_type == Some(CanvasType::Square) || args.canvas_type == None)
+            || (y < 2)
+                && (args.canvas_type == Some(CanvasType::Square) || args.canvas_type.is_none())
         {
             let nx = (x).clamp(2, size - 3);
             let ny = (y).clamp(2, size - 3);

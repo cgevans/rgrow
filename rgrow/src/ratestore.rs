@@ -102,7 +102,7 @@ impl RateStore for QuadTreeSquareArray<f64> {
     }
 
     #[inline(always)]
-    fn update_point(&mut self, mut point: PointSafeHere, new_rate: Rate) {
+    fn update_point(&mut self, point: PointSafeHere, new_rate: Rate) {
         let mut rtiter = self.0.iter_mut();
         let mut r_prev = rtiter.next().unwrap();
 

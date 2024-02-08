@@ -5,13 +5,12 @@ use crate::colors::get_color_or_random;
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
-use crate::state::{NullStateTracker, QuadTreeState, State, StateWithCreate};
+use crate::state::{NullStateTracker, QuadTreeState, StateWithCreate};
 use crate::system::{DynSystem, EvolveBounds};
 
 #[cfg(feature = "python")]
 use crate::ffs::{BoxedFFSResult, FFSRunConfig};
 
-use self::base::GrowError;
 use self::state::StateEnum;
 use self::system::SystemEnum;
 
@@ -28,7 +27,7 @@ use serde_json;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::io::{self, Read};
-use std::ops::DerefMut;
+
 use std::path::Path;
 use system::{ChunkHandling, ChunkSize};
 
@@ -638,7 +637,7 @@ impl TileSet {
 
     /// Create a system and state
     pub fn create_system_and_state(&self) -> Result<(SystemEnum, StateEnum), RgrowError> {
-        let mut sys = self.create_dynsystem()?;
+        let sys = self.create_dynsystem()?;
         let state = self.create_state_with_system(&sys)?;
         Ok((sys, state))
     }
