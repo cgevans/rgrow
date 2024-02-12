@@ -116,7 +116,8 @@ impl PySystem {
                     size_max=None,
                     for_wall_time=None,
                     require_strong_bound=true,
-                    show_window=false,)
+                    show_window=false,
+                    parallel=true)
     )]
     /// Evolve a state (or states), with some bounds on the simulation.
     ///
@@ -133,6 +134,7 @@ impl PySystem {
         for_wall_time: Option<f64>,
         require_strong_bound: bool,
         show_window: bool,
+        parallel: bool,
         py: Python<'py>,
     ) -> PyResult<PyObject> {
         let bounds = EvolveBounds {
@@ -181,12 +183,19 @@ impl PySystem {
                     .map(|x| x.borrow_mut())
                     .collect::<Vec<_>>();
                 let mut states = refs.iter_mut().map(|x| x.deref_mut()).collect::<Vec<_>>();
-                let out = py.allow_threads(|| {
+                let out = if parallel {
+                    py.allow_threads(|| {
+                        states
+                            .par_iter_mut()
+                            .map(|state| self.0.evolve(&mut state.0, bounds))
+                            .collect::<Vec<_>>()
+                    })
+                } else {
                     states
-                        .par_iter_mut()
+                        .iter_mut()
                         .map(|state| self.0.evolve(&mut state.0, bounds))
                         .collect::<Vec<_>>()
-                });
+                };
                 let o: Result<Vec<EvolveOutcome>, PyErr> = out
                     .into_iter()
                     .map(|x| x.map_err(|y| pyo3::exceptions::PyValueError::new_err(y.to_string())))

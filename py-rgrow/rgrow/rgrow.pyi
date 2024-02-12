@@ -39,6 +39,8 @@ class System(object):
         size_max=float | None,
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
+        show_window: bool = False,
+        parallel: bool = True,
     ) -> EvolveOutcome: ...
     @overload
     def evolve(
@@ -53,6 +55,8 @@ class System(object):
         size_max=float | None,
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
+        show_window: bool = False,
+        parallel: bool = True,
     ) -> list[EvolveOutcome]: ...
     def calc_mismatches(self, state: State) -> int: ...
     def calc_mismatch_locations(self, state: State) -> np.ndarray: ...

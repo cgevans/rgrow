@@ -23,8 +23,8 @@ impl TileSet {
         kwargs: Option<&PyDict>,
     ) -> PyResult<TileSet> {
         let mut tileset = TileSet {
-            tiles: tiles,
-            bonds: bonds,
+            tiles,
+            bonds,
             glues: glues
                 .iter()
                 .map(|x| (x.0.clone(), x.1.clone(), x.2))
@@ -62,7 +62,6 @@ impl TileSet {
                         let user_warning = py.get_type::<pyo3::exceptions::PyUserWarning>();
                         PyErr::warn(py, user_warning, &format!("Ignoring unknown key {v}."), 0)
                             .unwrap();
-                        ()
                     }),
                 }
             }
