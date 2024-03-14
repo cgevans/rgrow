@@ -548,7 +548,7 @@ impl Canvas for CanvasPeriodic {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CanvasTube(Array2<Tile>);
 
 impl CanvasCreate for CanvasTube {

@@ -10,12 +10,17 @@ use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
 use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
+use self::state::{StateEnum, StateStatus};
+
+use fltk::surface;
+use polars::prelude::*;
+
 use super::*;
 //use ndarray::prelude::*;
 //use ndarray::Zip;
 use base::{NumTiles, Rate};
 
-use ndarray::ArrayView2;
+use ndarray::{s, ArrayView2};
 #[cfg(feature = "python")]
 use numpy::{PyArray2, ToPyArray};
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
@@ -26,6 +31,13 @@ use rand::{thread_rng, Rng};
 use pyo3::exceptions::PyTypeError;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+use self::python::PyState;
+#[cfg(feature = "python")]
+use numpy::{IntoPyArray, PyArray1};
+#[cfg(feature = "python")]
+use pyo3_polars::PyDataFrame;
 
 use state::{State, StateWithCreate};
 
@@ -196,10 +208,15 @@ pub trait FFSResult: Send + Sync {
     fn forward_vec(&self) -> &Vec<f64>;
     fn dimerization_rate(&self) -> f64;
     fn surfaces(&self) -> Vec<&dyn FFSSurface>;
+    fn get_surface(&self, i: usize) -> &dyn FFSSurface;
 }
 
 pub trait FFSSurface: Send + Sync {
     fn get_config(&self, i: usize) -> ArrayView2<Tile>;
+    fn get_state(&self, i: usize) -> &dyn State;
+    fn states(&self) -> Vec<&dyn State> {
+        (0..self.num_configs()).map(|i| self.get_state(i)).collect()
+    }
     fn configs(&self) -> Vec<ArrayView2<Tile>> {
         (0..self.num_configs())
             .map(|i| self.get_config(i))
@@ -253,13 +270,13 @@ impl TileSet {
     }
 }
 
-pub struct FFSRun<St: State + StateTracked<NullStateTracker>> {
+pub struct FFSRun<St: State> {
     pub level_list: Vec<FFSLevel<St>>,
     pub dimerization_rate: f64,
     pub forward_prob: Vec<f64>,
 }
 
-impl<St: State + StateTracked<NullStateTracker>> FFSResult for FFSRun<St> {
+impl<St: State> FFSResult for FFSRun<St> {
     fn nucleation_rate(&self) -> Rate {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
@@ -273,6 +290,10 @@ impl<St: State + StateTracked<NullStateTracker>> FFSResult for FFSRun<St> {
             .iter()
             .map(|level| level as &dyn FFSSurface)
             .collect()
+    }
+
+    fn get_surface(&self, i: usize) -> &dyn FFSSurface {
+        self.level_list.get(i).unwrap()
     }
 
     fn dimerization_rate(&self) -> f64 {
@@ -375,7 +396,37 @@ impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullSta
     }
 }
 
-pub struct FFSLevel<St: State + StateTracked<NullStateTracker>> {
+fn _bounded_nonzero_region_of_array<'a>(
+    arr: &'a ArrayView2<Tile>,
+) -> (ArrayView2<'a, Tile>, usize, usize, usize, usize) {
+    let mut mini = arr.nrows();
+    let mut minj = arr.ncols();
+    let mut maxi = 0;
+    let mut maxj = 0;
+
+    for ((i, j), v) in arr.indexed_iter() {
+        if *v != 0 {
+            if i < mini {
+                mini = i;
+            }
+            if i > maxi {
+                maxi = i;
+            }
+            if j < minj {
+                minj = j;
+            }
+            if j > maxj {
+                maxj = j;
+            }
+        }
+    }
+
+    let subarr = arr.slice(s![mini..maxi + 1, minj..maxj + 1]);
+
+    (subarr, mini, minj, maxi, maxj)
+}
+
+pub struct FFSLevel<St: State> {
     pub state_list: Vec<St>,
     pub previous_list: Vec<usize>,
     pub p_r: f64,
@@ -384,9 +435,13 @@ pub struct FFSLevel<St: State + StateTracked<NullStateTracker>> {
     pub target_size: NumTiles,
 }
 
-impl<St: State + StateTracked<NullStateTracker>> FFSSurface for FFSLevel<St> {
+impl<St: State> FFSSurface for FFSLevel<St> {
     fn get_config(&self, i: usize) -> ArrayView2<Tile> {
         self.state_list[i].raw_array()
+    }
+
+    fn get_state(&self, i: usize) -> &dyn State {
+        self.state_list.get(i).unwrap()
     }
 
     fn num_configs(&self) -> usize {
@@ -638,8 +693,8 @@ impl BoxedFFSResult {
     }
 
     #[getter]
-    fn get_forward_vec(&self) -> Vec<f64> {
-        self.0.forward_vec().clone()
+    fn get_forward_vec<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
+        self.0.forward_vec().to_pyarray(py)
     }
 
     #[getter]
@@ -658,6 +713,62 @@ impl BoxedFFSResult {
                 level: i,
             })
             .collect()
+    }
+
+    fn surfaces_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
+        let mut sizes = Vec::new();
+        let mut times = Vec::new();
+        let mut previndices = Vec::new();
+        let mut canvases = Vec::new();
+        let mut arr_mini = Vec::new();
+        let mut arr_minj = Vec::new();
+        let mut arr_maxi = Vec::new();
+        let mut arr_maxj = Vec::new();
+        let mut surfaceindex = Vec::new();
+        let mut configindex = Vec::new();
+
+        for (i, surface) in self.0.surfaces().iter().enumerate() {
+            for (j, state) in surface.states().iter().enumerate() {
+                sizes.push(state.n_tiles());
+                times.push(state.time());
+                let ss = &state.raw_array();
+                let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(ss);
+                canvases.push(m.iter().collect::<Series>());
+                surfaceindex.push(i as u64);
+                configindex.push(j as u64);
+                arr_mini.push(mini as u64);
+                arr_minj.push(minj as u64);
+                arr_maxi.push(maxi as u64);
+                arr_maxj.push(maxj as u64);
+            }
+            previndices.extend(surface.previous_list().iter().map(|x| *x as u64));
+        }
+
+        let mut df = df!(
+            "surface_index" => surfaceindex,
+            "config_index" => configindex,
+            "size" => sizes,
+            "time" => times,
+            "previous_config" => previndices,
+            "canvas" => canvases,
+            "min_i" => arr_mini,
+            "min_j" => arr_minj,
+            "max_i" => arr_maxi,
+            "max_j" => arr_maxj,
+        )
+        .unwrap();
+
+        df = df
+            .lazy()
+            .select([
+                col("*"),
+                (col("max_i") - col("min_i")).alias("shape_i"),
+                (col("max_j") - col("min_j")).alias("shape_j"),
+            ])
+            .collect()
+            .unwrap();
+
+        Ok(PyDataFrame(df))
     }
 
     fn __str__(&self) -> String {
@@ -693,7 +804,8 @@ pub struct FFSLevelRef {
 impl FFSLevelRef {
     #[getter]
     fn get_configs<'py>(&self, py: Python<'py>) -> Vec<&'py PyArray2<crate::base::Tile>> {
-        self.res.surfaces()[self.level]
+        self.res
+            .get_surface(self.level)
             .configs()
             .iter()
             .map(|x| x.to_pyarray(py))
@@ -702,6 +814,86 @@ impl FFSLevelRef {
 
     #[getter]
     fn get_previous_indices(&self) -> Vec<usize> {
-        self.res.surfaces()[self.level].previous_list()
+        self.res.get_surface(self.level).previous_list()
+    }
+
+    #[getter]
+    fn level(&self) -> usize {
+        self.level
+    }
+
+    fn get_state(&self, i: usize) -> FFSStateRef {
+        FFSStateRef {
+            res: self.res.clone(),
+            level: self.level,
+            state: i,
+        }
+    }
+}
+
+#[cfg_attr(feature = "python", pyclass)]
+#[allow(dead_code)] // This is used in the python interface
+pub struct FFSStateRef {
+    res: Arc<Box<dyn ffs::FFSResult>>,
+    level: usize,
+    state: usize,
+}
+
+#[cfg(feature = "python")]
+impl FFSStateRef {
+    fn get_st(&self) -> &dyn State {
+        self.res.get_surface(self.level).get_state(self.state)
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl FFSStateRef {
+    pub fn time(&self) -> f64 {
+        self.get_st().time()
+    }
+
+    pub fn total_events(&self) -> base::NumEvents {
+        self.get_st().total_events()
+    }
+
+    pub fn n_tiles(&self) -> NumTiles {
+        self.get_st().n_tiles()
+    }
+
+    #[getter]
+    /// A direct, mutable view of the state's canvas.  This is potentially unsafe.
+    pub fn canvas_view<'py>(
+        this: &'py PyCell<Self>,
+        _py: Python<'py>,
+    ) -> PyResult<&'py PyArray2<crate::base::Tile>> {
+        let t = this.borrow();
+        let ra = t.get_st().raw_array();
+
+        unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
+    }
+
+    /// A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
+    pub fn canvas_copy<'py>(
+        this: &'py PyCell<Self>,
+        py: Python<'py>,
+    ) -> PyResult<&'py PyArray2<crate::base::Tile>> {
+        let t = this.borrow();
+        let ra = t.get_st().raw_array();
+
+        Ok(PyArray2::from_array(py, &ra))
+    }
+
+    pub fn __repr__(&self) -> String {
+        let s = self.get_st();
+        format!(
+            "FFSStateRef(n_tiles={}, time={} s, events={}, size=({}, {}), total_rate={})",
+            s.n_tiles(),
+            s.time(),
+            s.total_events(),
+            s.ncols(),
+            s.nrows(),
+            s.total_rate()
+        )
     }
 }

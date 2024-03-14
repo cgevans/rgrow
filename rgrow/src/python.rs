@@ -11,7 +11,7 @@ use crate::system::{
 };
 use crate::tileset::CanvasType;
 use ndarray::Array2;
-use numpy::{IntoPyArray, PyArray2};
+use numpy::{IntoPyArray, PyArray1, PyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -230,7 +230,7 @@ impl PySystem {
     // }
 
     #[getter]
-    fn tile_names(&self) -> Vec<String> {
+    fn tile_names(&self) -> PyArray1<String> {
         self.0.tile_names().iter().map(|x| x.to_string()).collect()
     }
 

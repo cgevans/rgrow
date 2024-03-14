@@ -17,7 +17,7 @@ pub trait State: RateStore + Canvas + StateStatus + Sync + Send {
 }
 
 #[enum_dispatch(State, StateStatus, Canvas, RateStore)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StateEnum {
     Square(QuadTreeState<CanvasSquare, NullStateTracker>),
     Periodic(QuadTreeState<CanvasPeriodic, NullStateTracker>),
@@ -246,6 +246,7 @@ where
         // General housekeeping
         self.ntiles = source.ntiles;
         self.total_events = source.total_events;
+        self.time = source.time;
         self.tracker = source.tracker.clone();
 
         self.rates.1 = source.rates.1;
