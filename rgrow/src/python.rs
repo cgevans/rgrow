@@ -230,7 +230,7 @@ impl PySystem {
     // }
 
     #[getter]
-    fn tile_names(&self) -> PyArray1<String> {
+    fn tile_names(&self) -> Vec<String> {
         self.0.tile_names().iter().map(|x| x.to_string()).collect()
     }
 
