@@ -3,7 +3,8 @@ __all__ = [
     "TileSet",
     "Simulation",
     "EvolveOutcome",
-    "FFSLevel",
+    # "FFSLevel",
+    "EvolveBounds",
     "FFSResult",
     "FFSRunConfig",
 ]
@@ -19,6 +20,7 @@ from .rgrow import (
     FFSRunConfig,
     System,
     State,
+    EvolveBounds,
 )
 import attrs
 import attr
@@ -53,17 +55,25 @@ def _system_name_canvas(self: System, state: State) -> np.ndarray:
 System.name_canvas = _system_name_canvas  # type: ignore
 
 
-def _system_color_canvas(self: System, state: State) -> np.ndarray:
+def _system_color_canvas(self: System, state: State | np.ndarray) -> np.ndarray:
     """Returns the current canvas for state, as an array of tile colors."""
 
-    return self.tile_colors[state.canvas_view]
+    if isinstance(state, State):
+        return self.tile_colors[state.canvas_view]
+    else:
+        return self.tile_colors[state]
 
 
 System.color_canvas = _system_color_canvas  # type: ignore
 
 
 def _system_plot_canvas(
-    sys, state, ax=None, annotate_tiles=False, annotate_mismatches=False, crop=False
+    sys: System,
+    state: State | np.ndarray,
+    ax=None,
+    annotate_tiles=False,
+    annotate_mismatches=False,
+    crop=False,
 ) -> "plt.Axes":
     import matplotlib.pyplot as plt
     import numpy as np
@@ -71,7 +81,10 @@ def _system_plot_canvas(
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 6), constrained_layout=True)
 
-    cv = state.canvas_view
+    if isinstance(state, State):
+        cv = state.canvas_view
+    else:
+        cv = state
 
     rows, cols = cv.shape
 
@@ -140,7 +153,6 @@ def _system_plot_canvas(
             + 0.7152 * lumcolors[:, 1]
             + 0.0722 * lumcolors[:, 2]
         )
-        cv = state.canvas_view
         for i in range(i_min, i_max + 1):
             for j in range(j_min, j_max + 1):
                 if cv[i, j] == 0:
@@ -339,8 +351,46 @@ class TileSet:
                 del d[k]
         return cls(**d)
 
-    def run_ffs(self, **kwargs) -> FFSResult:
-        return self._to_rg_tileset().run_ffs(**kwargs)
+    def run_ffs(
+        self,
+        constant_variance: bool = True,
+        var_per_mean2: float = 0.01,
+        min_configs: int = 100,
+        max_configs: int = 100000,
+        early_cutoff: bool = True,
+        cutoff_probability: float = 0.99,
+        cutoff_number: int = 4,
+        min_cutoff_size: int = 30,
+        init_bound: EvolveBounds = EvolveBounds(for_time=1e7),
+        subseq_bound: EvolveBounds = EvolveBounds(for_time=1e7),
+        start_size: int = 3,
+        size_step: int = 1,
+        keep_configs: bool = False,
+        min_nuc_rate: float | None = None,
+        canvas_size: tuple[int, int] = (64, 64),
+        target_size: int = 100,
+        config: FFSRunConfig | None = None,  # FIXME
+        **kwargs,
+    ) -> FFSResult:
+        return self._to_rg_tileset().run_ffs(
+            constant_variance=constant_variance,
+            var_per_mean2=var_per_mean2,
+            min_configs=min_configs,
+            max_configs=max_configs,
+            early_cutoff=early_cutoff,
+            cutoff_probability=cutoff_probability,
+            cutoff_number=cutoff_number,
+            min_cutoff_size=min_cutoff_size,
+            init_bound=init_bound,
+            subseq_bound=subseq_bound,
+            start_size=start_size,
+            size_step=size_step,
+            keep_configs=keep_configs,
+            min_nuc_rate=min_nuc_rate,
+            canvas_size=canvas_size,
+            target_size=target_size,
+            **kwargs,
+        )
 
 
 class Simulation:

@@ -772,7 +772,7 @@ impl ProcessedTileSet {
         }
 
         let ntiles = tileset.tiles.len();
-        let mut tile_names = Vec::with_capacity(ntiles + 1);
+        let mut tile_names: Vec<String> = Vec::with_capacity(ntiles + 1);
         let mut tile_colors = Vec::with_capacity(ntiles + 1);
         let mut tile_stoics = Vec::with_capacity(ntiles + 1);
         let mut tile_edges = Vec::with_capacity((ntiles + 1) * 4);

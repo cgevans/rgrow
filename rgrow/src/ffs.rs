@@ -10,9 +10,6 @@ use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
 use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
-use self::state::{StateEnum, StateStatus};
-
-use fltk::surface;
 use polars::prelude::*;
 
 use super::*;
@@ -226,6 +223,7 @@ pub trait FFSSurface: Send + Sync {
     fn num_configs(&self) -> usize;
     fn num_trials(&self) -> usize;
     fn target_size(&self) -> NumTiles;
+    fn p_r(&self) -> f64;
 }
 
 impl TileSet {
@@ -458,6 +456,10 @@ impl<St: State> FFSSurface for FFSLevel<St> {
 
     fn previous_list(&self) -> Vec<usize> {
         self.previous_list.clone()
+    }
+
+    fn p_r(&self) -> f64 {
+        self.p_r
     }
 }
 
@@ -716,6 +718,21 @@ impl BoxedFFSResult {
     }
 
     fn surfaces_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
+        let surfaces = self.0.surfaces();
+
+        let d = df!(
+            "level" => 0..surfaces.len() as u64,
+            "n_configs" => surfaces.iter().map(|x| x.num_configs() as u64).collect::<Vec<u64>>(),
+            "n_trials" => surfaces.iter().map(|x| x.num_trials() as u64).collect::<Vec<u64>>(),
+            "target_size" => surfaces.iter().map(|x| x.target_size() as u64).collect::<Vec<u64>>(),
+            "p_r" => surfaces.iter().map(|x| x.p_r() as f64).collect::<Vec<f64>>(),
+        )
+        .unwrap();
+
+        Ok(PyDataFrame(d))
+    }
+
+    fn configs_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
         let mut sizes = Vec::new();
         let mut times = Vec::new();
         let mut previndices = Vec::new();
@@ -762,8 +779,8 @@ impl BoxedFFSResult {
             .lazy()
             .select([
                 col("*"),
-                (col("max_i") - col("min_i")).alias("shape_i"),
-                (col("max_j") - col("min_j")).alias("shape_j"),
+                (col("max_i") - col("min_i") + lit(1)).alias("shape_i"),
+                (col("max_j") - col("min_j") + lit(1)).alias("shape_j"),
             ])
             .collect()
             .unwrap();
