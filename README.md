@@ -19,7 +19,7 @@ pip install rgrow
 To install directly from git using Pip:
 
 ```bash
-pip install "git+https://github.com/evansfmm/rgrow.git#subdirectory=py-rgrow"
+pip install "git+https://github.com/cgevans/rgrow.git#subdirectory=py-rgrow"
 ```
 
 or check out the repository, and use
