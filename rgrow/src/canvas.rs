@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub trait CanvasCreate: Sized + Canvas {
     type Params;
     fn new_sized(shape: Self::Params) -> GrowResult<Self>;
+    fn from_array(arr: Array2<Tile>) -> GrowResult<Self>;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug, Serialize, Deserialize)]
@@ -397,6 +398,10 @@ impl CanvasCreate for CanvasSquare {
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
         Ok(Self(Array2::zeros(shape)))
     }
+
+    fn from_array(arr: Array2<Tile>) -> GrowResult<Self> {
+        Ok(Self(arr))
+    }
 }
 
 impl Canvas for CanvasSquare {
@@ -487,6 +492,10 @@ impl CanvasCreate for CanvasPeriodic {
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
         Ok(Self(Array2::zeros(shape)))
     }
+
+    fn from_array(arr: Array2<Tile>) -> GrowResult<Self> {
+        Ok(Self(arr))
+    }
 }
 
 impl Canvas for CanvasPeriodic {
@@ -560,6 +569,14 @@ impl CanvasCreate for CanvasTube {
             Err(GrowError::WrongCanvasSize(width, shape.1))
         } else {
             Ok(Self(Array2::zeros(shape)))
+        }
+    }
+
+    fn from_array(arr: Array2<Tile>) -> GrowResult<Self> {
+        if arr.shape()[0] % 2 != 0 {
+            Err(GrowError::WrongCanvasSize(arr.shape()[0], arr.shape()[1]))
+        } else {
+            Ok(Self(arr))
         }
     }
 }

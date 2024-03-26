@@ -630,7 +630,7 @@ impl System for KTAM {
                 let tile_concs = value
                     .downcast_ref::<Array1<f64>>()
                     .ok_or(GrowError::WrongParameterType(name.to_string()))?;
-                self.tile_concs = tile_concs.clone();
+                self.tile_concs.clone_from(tile_concs);
                 self.update_system();
                 Ok(NeededUpdate::NonZero)
             }
@@ -638,7 +638,7 @@ impl System for KTAM {
                 let glue_strengths = value
                     .downcast_ref::<Array1<f64>>()
                     .ok_or(GrowError::WrongParameterType(name.to_string()))?;
-                self.glue_strengths = glue_strengths.clone();
+                self.glue_strengths.clone_from(glue_strengths);
                 self.update_system();
                 Ok(NeededUpdate::NonZero)
             }
@@ -646,7 +646,7 @@ impl System for KTAM {
                 let glue_links = value
                     .downcast_ref::<Array2<f64>>()
                     .ok_or(GrowError::WrongParameterType(name.to_string()))?;
-                self.glue_links = glue_links.clone();
+                self.glue_links.clone_from(glue_links);
                 self.update_system();
                 Ok(NeededUpdate::NonZero)
             }

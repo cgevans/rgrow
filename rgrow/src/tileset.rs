@@ -8,8 +8,9 @@ use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, StateWithCreate};
 use crate::system::{DynSystem, EvolveBounds};
 
-use self::state::StateEnum;
-use self::system::SystemEnum;
+use self::canvas::CanvasCreate;
+use self::state::{StateEnum};
+use self::system::{NeededUpdate, SystemEnum};
 
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;
@@ -607,17 +608,32 @@ impl TileSet {
             Size::Pair(i) => i,
         };
 
-        match self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT) {
+        let kind = self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT);
+
+        Ok(StateEnum::empty(shape, kind)?)
+    }
+
+    /// Creates an empty state, without any setup by a System.
+    pub fn create_state_from_canvas(&self, canvas: Array2<u32>) -> Result<StateEnum, RgrowError> {
+        let kind = self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT);
+
+        let mut st = match kind {
             CanvasType::Square => {
-                Ok(QuadTreeState::<CanvasSquare, NullStateTracker>::empty(shape)?.into())
+                QuadTreeState::<CanvasSquare, NullStateTracker>::from_array(canvas)?.into()
             }
             CanvasType::Periodic => {
-                Ok(QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty(shape)?.into())
+                QuadTreeState::<CanvasPeriodic, NullStateTracker>::from_array(canvas)?.into()
             }
             CanvasType::Tube => {
-                Ok(QuadTreeState::<CanvasTube, NullStateTracker>::empty(shape)?.into())
+                QuadTreeState::<CanvasTube, NullStateTracker>::from_array(canvas)?.into()
             }
-        }
+        };
+
+        let sys = self.create_dynsystem()?;
+
+        sys.update_all(&mut st, &NeededUpdate::All);
+
+        Ok(st)
     }
 
     /// Create a state, and set it up with a provided DynSystem.

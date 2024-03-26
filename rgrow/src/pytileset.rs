@@ -1,3 +1,4 @@
+use numpy::PyArray2;
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
@@ -135,6 +136,12 @@ impl TileSet {
         Ok((PySystem(sys), PyState(state)))
     }
 
+    #[pyo3(name = "create_state_from_canvas")]
+    fn py_create_state_from_canvas(&self, canvas: &PyArray2<u32>) -> PyResult<PyState> {
+        let state = self.create_state_from_canvas(canvas.to_owned_array())?;
+        Ok(PyState(state))
+    }
+
     /// Creates a simulation, and runs it in a UI.  Returns the :any:`Simulation` when
     /// finished.
     #[cfg(feature = "ui")]
@@ -178,6 +185,6 @@ impl TileSet {
     }
 
     fn __repr__(&self) -> String {
-        self.to_string()
+        "aoeuaeou".to_string()
     }
 }

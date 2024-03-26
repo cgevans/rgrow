@@ -1,5 +1,6 @@
 use super::base::*;
 use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube};
+use crate::tileset::CanvasType;
 use crate::{
     canvas::PointSafe2,
     canvas::PointSafeHere,
@@ -19,9 +20,23 @@ pub trait State: RateStore + Canvas + StateStatus + Sync + Send {
 #[enum_dispatch(State, StateStatus, Canvas, RateStore)]
 #[derive(Debug, Clone)]
 pub enum StateEnum {
-    Square(QuadTreeState<CanvasSquare, NullStateTracker>),
-    Periodic(QuadTreeState<CanvasPeriodic, NullStateTracker>),
-    Tube(QuadTreeState<CanvasTube, NullStateTracker>),
+    SquareNoTracking(QuadTreeState<CanvasSquare, NullStateTracker>),
+    PeriodicNoTracking(QuadTreeState<CanvasPeriodic, NullStateTracker>),
+    TubeNoTracking(QuadTreeState<CanvasTube, NullStateTracker>),
+}
+
+impl StateEnum {
+    pub fn empty(shape: (usize, usize), kind: CanvasType) -> Result<StateEnum, GrowError> {
+        Ok(match kind {
+            CanvasType::Square => {
+                QuadTreeState::<CanvasSquare, NullStateTracker>::empty(shape)?.into()
+            }
+            CanvasType::Periodic => {
+                QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty(shape)?.into()
+            }
+            CanvasType::Tube => QuadTreeState::<CanvasTube, NullStateTracker>::empty(shape)?.into(),
+        })
+    }
 }
 
 #[enum_dispatch]
@@ -38,6 +53,7 @@ pub trait StateWithCreate: State + Sized {
     type Params;
     // fn new_raw(canvas: Self::RawCanvas) -> Result<Self, GrowError>;
     fn empty(params: Self::Params) -> Result<Self, GrowError>;
+    fn from_array(arr: Array2<Tile>) -> Result<Self, GrowError>;
     fn get_params(&self) -> Self::Params;
     fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self;
 }
@@ -219,6 +235,22 @@ where
         let rates: QuadTreeSquareArray<f64> =
             QuadTreeSquareArray::new_with_size(params.0, params.1);
         let canvas = C::new_sized(params)?;
+        let tracker = T::default(&canvas);
+        Ok(QuadTreeState::<C, T> {
+            rates,
+            canvas,
+            ntiles: 0,
+            total_events: 0,
+            time: 0.,
+            tracker,
+        })
+    }
+
+    fn from_array(arr: Array2<Tile>) -> Result<Self, GrowError> {
+        let shape = arr.shape();
+        let rates: QuadTreeSquareArray<f64> =
+            QuadTreeSquareArray::new_with_size(shape[0], shape[1]);
+        let canvas = C::from_array(arr)?;
         let tracker = T::default(&canvas);
         Ok(QuadTreeState::<C, T> {
             rates,
