@@ -8,7 +8,6 @@ use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState, StateWithCreate};
 use crate::system::{DynSystem, EvolveBounds};
 
-use self::canvas::CanvasCreate;
 use self::state::{OrderTracker, StateEnum};
 use self::system::{NeededUpdate, SystemEnum};
 
@@ -693,7 +692,7 @@ impl TileSet {
         Ok(state)
     }
 
-    fn get_bounds(&self) -> EvolveBounds {
+    pub fn get_bounds(&self) -> EvolveBounds {
         EvolveBounds {
             size_max: self.smax,
             ..Default::default()

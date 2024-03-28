@@ -14,7 +14,7 @@ numpy = "^0.20"
 enum_dispatch = "0.3"
 
 [workspace.package]
-version = "0.13.0"
+version = "0.13.1"
 authors = ["Constantine Evans <const@costi.net>"]
 edition = "2021"
 repository = "https://github.com/cgevans/rgrow"

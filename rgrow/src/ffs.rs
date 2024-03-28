@@ -10,6 +10,7 @@ use crate::state::{NullStateTracker, QuadTreeState};
 use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
+#[cfg(feature = "python")]
 use polars::prelude::*;
 
 use super::*;
@@ -29,13 +30,14 @@ use pyo3::exceptions::PyTypeError;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-use self::base::RustAny;
+
 #[cfg(feature = "python")]
-use self::python::PyState;
-use self::state::{OrderTracker, StateTracker};
+use self::base::RustAny;
+
+use self::state::{OrderTracker};
 use self::tileset::TrackingType;
 #[cfg(feature = "python")]
-use numpy::{IntoPyArray, PyArray1};
+use numpy::{PyArray1};
 #[cfg(feature = "python")]
 use pyo3_polars::PyDataFrame;
 

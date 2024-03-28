@@ -494,9 +494,9 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     #[cfg(not(feature = "ui"))]
     fn evolve_in_window<St: State + ?Sized>(
         &self,
-        state: &mut St,
+        _state: &mut St,
         _block: Option<usize>,
-        bounds: EvolveBounds,
+        _bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError> {
         Err(RgrowError::NoUI)
     }

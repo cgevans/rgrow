@@ -11,7 +11,7 @@ use crate::system::{
 };
 use crate::tileset::CanvasType;
 use ndarray::Array2;
-use numpy::{IntoPyArray, PyArray1, PyArray2};
+use numpy::{IntoPyArray, PyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
