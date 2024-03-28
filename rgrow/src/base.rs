@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 
-#[cfg(feature = "python")]
 use std::any::Any;
 
 #[cfg(feature = "python")]
@@ -73,6 +72,8 @@ pub enum RgrowError {
     Pixel(#[from] pixels::Error),
     #[error(transparent)]
     IO(#[from] std::io::Error),
+    #[error("No UI is available.")]
+    NoUI
 }
 
 #[cfg(feature = "python")]
@@ -141,7 +142,7 @@ impl core::fmt::Debug for Ident {
 pub type GlueIdent = Ident;
 pub type TileIdent = Ident;
 
-#[cfg(feature = "python")]
+
 pub struct RustAny(pub Box<dyn Any>);
 
 #[cfg(feature = "python")]

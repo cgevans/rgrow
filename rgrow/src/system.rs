@@ -38,10 +38,13 @@ use std::time::Duration;
 #[cfg(feature = "ui")]
 use fltk::{app, prelude::*, window::Window};
 
+#[cfg(feature = "ui")]
+use pixels::{Pixels, SurfaceTexture};
+
+
 #[cfg(feature = "use_rayon")]
 use rayon::prelude::*;
 
-use pixels::{Pixels, SurfaceTexture};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -73,6 +76,7 @@ pub enum NeededUpdate {
     All,
 }
 
+#[cfg(feature = "ui")]
 thread_local! {
     pub static APP: fltk::app::App = app::App::default()
 }
@@ -487,6 +491,16 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         todo!();
     }
 
+    #[cfg(not(feature = "ui"))]
+    fn evolve_in_window<St: State + ?Sized>(
+        &self,
+        state: &mut St,
+        _block: Option<usize>,
+        bounds: EvolveBounds,
+    ) -> Result<EvolveOutcome, RgrowError> {
+        Err(RgrowError::NoUI)
+    }
+
     #[cfg(feature = "ui")]
     fn evolve_in_window<St: State + ?Sized>(
         &self,
@@ -632,7 +646,6 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
 
     fn setup_state(&self, state: &mut StateEnum) -> Result<(), GrowError>;
 
-    #[cfg(feature = "ui")]
     fn evolve_in_window(
         &self,
         state: &mut StateEnum,
@@ -682,7 +695,6 @@ impl<S: System + SystemWithDimers> DynSystem for S {
         self.configure_empty_state(state)
     }
 
-    #[cfg(feature = "ui")]
     fn evolve_in_window(
         &self,
         state: &mut StateEnum,
