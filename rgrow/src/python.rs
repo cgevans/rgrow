@@ -5,7 +5,7 @@ use crate::base::{NumEvents, NumTiles, RustAny, Tile};
 use crate::canvas::Canvas;
 use crate::ffs::{BoxedFFSResult, FFSRunConfig};
 use crate::ratestore::RateStore;
-use crate::state::{StateEnum, StateStatus};
+use crate::state::{StateEnum, StateStatus, TrackerData};
 use crate::system::{
     DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, TileBondInfo,
 };
@@ -46,6 +46,15 @@ impl PyState {
         let ra = t.0.raw_array();
 
         Ok(PyArray2::from_array(py, &ra))
+    }
+
+    pub fn tracking_copy<'py>(
+        this: &'py PyCell<Self>,
+    ) -> PyResult<RustAny> {
+        let t = this.borrow();
+        let ra = t.0.get_tracker_data();
+
+        Ok(ra)
     }
 
     /// The number of tiles in the state.

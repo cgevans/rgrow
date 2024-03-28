@@ -265,6 +265,7 @@ class TileSet:
     chunk_handling: Optional[str] = None
     chunk_size: Optional[str] = None
     canvas_type: Optional[str] = None
+    tracking: Optional[str] = None
     hdoubletiles: Optional[List[Tuple[str | int, str | int]]] = None
     vdoubletiles: Optional[List[Tuple[str | int, str | int]]] = None
     model: Optional[str] = None
@@ -288,6 +289,7 @@ class TileSet:
                 "chunk_handling",
                 "chunk_size",
                 "canvas_type",
+                "tracking",
                 "cover_strands",
                 "hdoubletiles",
                 "vdoubletiles",

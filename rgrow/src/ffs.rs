@@ -6,7 +6,7 @@ use crate::base::{GrowError, RgrowError, Tile};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
-use crate::state::{NullStateTracker, QuadTreeState, StateTracked};
+use crate::state::{NullStateTracker, QuadTreeState};
 use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
@@ -29,8 +29,11 @@ use pyo3::exceptions::PyTypeError;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
+use self::base::RustAny;
 #[cfg(feature = "python")]
 use self::python::PyState;
+use self::state::{OrderTracker, StateTracker};
+use self::tileset::TrackingType;
 #[cfg(feature = "python")]
 use numpy::{IntoPyArray, PyArray1};
 #[cfg(feature = "python")]
@@ -228,42 +231,72 @@ pub trait FFSSurface: Send + Sync {
 
 impl TileSet {
     pub fn run_ffs(&self, config: &FFSRunConfig) -> Result<Box<dyn FFSResult>, RgrowError> {
-        match self.model.unwrap_or(Model::KTAM) {
-            Model::KTAM => match self.canvas_type.unwrap_or(CanvasType::Periodic) {
-                CanvasType::Square => Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasSquare, NullStateTracker>,
-                >::create_from_tileset::<KTAM>(
-                    self, config
-                )?)),
-                CanvasType::Periodic => Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasPeriodic, NullStateTracker>,
-                >::create_from_tileset::<KTAM>(
-                    self, config
-                )?)),
-                CanvasType::Tube => Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasTube, NullStateTracker>,
-                >::create_from_tileset::<KTAM>(
-                    self, config
-                )?)),
-            },
-            Model::ATAM => Err(GrowError::FFSCannotRunATAM.into()),
-            Model::OldKTAM => match self.canvas_type.unwrap_or(CanvasType::Periodic) {
-                CanvasType::Square => Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasSquare, NullStateTracker>,
-                >::create_from_tileset::<OldKTAM>(
-                    self, config
-                )?)),
-                CanvasType::Periodic => Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasPeriodic, NullStateTracker>,
-                >::create_from_tileset::<OldKTAM>(
-                    self, config
-                )?)),
-                CanvasType::Tube => Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasTube, NullStateTracker>,
-                >::create_from_tileset::<OldKTAM>(
-                    self, config
-                )?)),
-            },
+        let canvas_type = self.canvas_type.unwrap_or(CanvasType::Periodic);
+        let model = self.model.unwrap_or(Model::KTAM);
+        let tracking = self.tracking.unwrap_or(TrackingType::None);
+
+        match (model, canvas_type, tracking) {
+            (Model::KTAM, CanvasType::Square, TrackingType::None) => Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasSquare, NullStateTracker>,
+            >::create_from_tileset::<KTAM>(
+                self, config
+            )?)),
+            (Model::KTAM, CanvasType::Square, TrackingType::Order) =>  Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasSquare, OrderTracker>,
+            >::create_from_tileset::<KTAM>(
+                self, config
+            )?)),
+            (Model::KTAM, CanvasType::Periodic, TrackingType::None) => Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasPeriodic, NullStateTracker>,
+            >::create_from_tileset::<KTAM>(
+                self, config
+            )?)),
+            (Model::KTAM, CanvasType::Periodic, TrackingType::Order) => Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasPeriodic, OrderTracker>,
+            >::create_from_tileset::<KTAM>(
+                self, config
+            )?)),
+            (Model::KTAM, CanvasType::Tube, TrackingType::None) => Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasTube, NullStateTracker>,
+            >::create_from_tileset::<KTAM>(
+                self, config
+            )?)),
+            (Model::KTAM, CanvasType::Tube, TrackingType::Order) => Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasTube, OrderTracker>,
+            >::create_from_tileset::<KTAM>(
+                self, config
+            )?)),
+            (Model::ATAM, _, _) => Err(GrowError::FFSCannotRunATAM.into()),
+            (Model::OldKTAM, CanvasType::Square, TrackingType::None) => Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasSquare, NullStateTracker>,
+            >::create_from_tileset::<OldKTAM>(
+                self, config
+            )?)),
+            (Model::OldKTAM, CanvasType::Square, TrackingType::Order) =>  Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasSquare, OrderTracker>,
+            >::create_from_tileset::<OldKTAM>(
+                self, config
+            )?)),
+            (Model::OldKTAM, CanvasType::Periodic, TrackingType::None) => Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasPeriodic, NullStateTracker>,
+            >::create_from_tileset::<OldKTAM>(
+                self, config
+            )?)),
+            (Model::OldKTAM, CanvasType::Periodic, TrackingType::Order) => Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasPeriodic, OrderTracker>,
+            >::create_from_tileset::<OldKTAM>(
+                self, config
+            )?)),
+            (Model::OldKTAM, CanvasType::Tube, TrackingType::None) => Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasTube, NullStateTracker>,
+            >::create_from_tileset::<OldKTAM>(
+                self, config
+            )?)),
+            (Model::OldKTAM, CanvasType::Tube, TrackingType::Order) => Ok(Box::new(FFSRun::<
+                QuadTreeState<CanvasTube, OrderTracker>,
+            >::create_from_tileset::<OldKTAM>(
+                self, config
+            )?)),
         }
     }
 }
@@ -299,7 +332,7 @@ impl<St: State> FFSResult for FFSRun<St> {
     }
 }
 
-impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullStateTracker>>
+impl<St: State + StateWithCreate<Params = (usize, usize)>>
     FFSRun<St>
 {
     pub fn create<Sy: SystemWithDimers + System>(
@@ -373,7 +406,7 @@ impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullSta
     }
 }
 
-impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullStateTracker>>
+impl<St: State + StateWithCreate<Params = (usize, usize)>>
     FFSRun<St>
 {
     pub fn create_from_tileset<Sy: SystemWithDimers + System + FromTileSet>(
@@ -463,7 +496,7 @@ impl<St: State> FFSSurface for FFSLevel<St> {
     }
 }
 
-impl<St: State + StateWithCreate<Params = (usize, usize)> + StateTracked<NullStateTracker>>
+impl<St: State + StateWithCreate<Params = (usize, usize)>>
     FFSLevel<St>
 {
     pub fn drop_states(&mut self) -> &Self {
@@ -899,6 +932,15 @@ impl FFSStateRef {
         let ra = t.get_st().raw_array();
 
         Ok(PyArray2::from_array(py, &ra))
+    }
+
+    pub fn tracking_copy<'py>(
+        this: &'py PyCell<Self>,
+    ) -> PyResult<RustAny> {
+        let t = this.borrow();
+        let ra = t.get_st().get_tracker_data();
+
+        Ok(ra)
     }
 
     pub fn __repr__(&self) -> String {

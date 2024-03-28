@@ -1,6 +1,6 @@
 use super::base::*;
 use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube};
-use crate::tileset::CanvasType;
+use crate::tileset::{CanvasType, TrackingType};
 use crate::{
     canvas::PointSafe2,
     canvas::PointSafeHere,
@@ -13,28 +13,52 @@ use enum_dispatch::enum_dispatch;
 use std::fmt::Debug;
 
 #[enum_dispatch]
-pub trait State: RateStore + Canvas + StateStatus + Sync + Send {
+pub trait State: RateStore + Canvas + StateStatus + Sync + Send + TrackerData {
     fn panicinfo(&self) -> String;
 }
 
-#[enum_dispatch(State, StateStatus, Canvas, RateStore)]
+#[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData)]
 #[derive(Debug, Clone)]
 pub enum StateEnum {
     SquareNoTracking(QuadTreeState<CanvasSquare, NullStateTracker>),
     PeriodicNoTracking(QuadTreeState<CanvasPeriodic, NullStateTracker>),
     TubeNoTracking(QuadTreeState<CanvasTube, NullStateTracker>),
+    SquareOrderTracking(QuadTreeState<CanvasSquare, OrderTracker>),
+    PeriodicOrderTracking(QuadTreeState<CanvasPeriodic, OrderTracker>),
+    TubeOrderTracking(QuadTreeState<CanvasTube, OrderTracker>),
 }
 
 impl StateEnum {
-    pub fn empty(shape: (usize, usize), kind: CanvasType) -> Result<StateEnum, GrowError> {
+    pub fn empty(
+        shape: (usize, usize),
+        kind: CanvasType,
+        tracking: TrackingType,
+    ) -> Result<StateEnum, GrowError> {
         Ok(match kind {
-            CanvasType::Square => {
-                QuadTreeState::<CanvasSquare, NullStateTracker>::empty(shape)?.into()
-            }
-            CanvasType::Periodic => {
-                QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty(shape)?.into()
-            }
-            CanvasType::Tube => QuadTreeState::<CanvasTube, NullStateTracker>::empty(shape)?.into(),
+            CanvasType::Square => match tracking {
+                TrackingType::None => {
+                    QuadTreeState::<CanvasSquare, NullStateTracker>::empty(shape)?.into()
+                }
+                TrackingType::Order => {
+                    QuadTreeState::<CanvasSquare, OrderTracker>::empty(shape)?.into()
+                }
+            },
+            CanvasType::Periodic => match tracking {
+                TrackingType::None => {
+                    QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty(shape)?.into()
+                }
+                TrackingType::Order => {
+                    QuadTreeState::<CanvasPeriodic, OrderTracker>::empty(shape)?.into()
+                }
+            },
+            CanvasType::Tube => match tracking {
+                TrackingType::None => {
+                    QuadTreeState::<CanvasTube, NullStateTracker>::empty(shape)?.into()
+                }
+                TrackingType::Order => {
+                    QuadTreeState::<CanvasTube, OrderTracker>::empty(shape)?.into()
+                }
+            },
         })
     }
 }
@@ -380,10 +404,25 @@ where
         self
     }
 }
+
+#[enum_dispatch]
+
+pub trait TrackerData {
+    fn get_tracker_data(&self) -> RustAny;
+}
+
+impl<C: Canvas, T: StateTracker> TrackerData for QuadTreeState<C, T> {
+    fn get_tracker_data(&self) -> RustAny {
+        self.tracker.get_tracker_data()
+    }
+}
+
 pub trait StateTracker: Clone + Debug + Sync + Send {
     fn default(canvas: &dyn Canvas) -> Self;
 
     fn record_single_event(&mut self, event: &system::Event) -> &mut Self;
+
+    fn get_tracker_data(&self) -> RustAny;
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -396,6 +435,10 @@ impl StateTracker for NullStateTracker {
 
     fn record_single_event(&mut self, _event: &system::Event) -> &mut Self {
         self
+    }
+
+    fn get_tracker_data(&self) -> RustAny {
+        RustAny(Box::new(()))
     }
 }
 
@@ -451,5 +494,9 @@ impl StateTracker for OrderTracker {
                 self
             }
         }
+    }
+
+    fn get_tracker_data(&self) -> RustAny {
+        RustAny(Box::new(self.arr.clone()))
     }
 }

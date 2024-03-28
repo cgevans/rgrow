@@ -9,7 +9,7 @@ use crate::state::{NullStateTracker, QuadTreeState, StateWithCreate};
 use crate::system::{DynSystem, EvolveBounds};
 
 use self::canvas::CanvasCreate;
-use self::state::{StateEnum};
+use self::state::{OrderTracker, StateEnum};
 use self::system::{NeededUpdate, SystemEnum};
 
 use super::base::{CanvasLength, Glue};
@@ -295,6 +295,7 @@ struct SerdeTileSet {
     pub(self) chunk_handling: Option<ChunkHandling>,
     pub(self) chunk_size: Option<ChunkSize>,
     pub(self) canvas_type: Option<CanvasType>,
+    pub(self) tracking: Option<TrackingType>,
     #[serde(alias = "doubletiles")]
     pub(self) hdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
     pub(self) vdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
@@ -329,6 +330,7 @@ pub struct TileSet {
     pub chunk_handling: Option<ChunkHandling>,
     pub chunk_size: Option<ChunkSize>,
     pub canvas_type: Option<CanvasType>,
+    pub tracking: Option<TrackingType>,
     pub hdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
     pub vdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
     pub model: Option<Model>,
@@ -356,6 +358,7 @@ impl From<SerdeTileSet> for TileSet {
             chunk_handling,
             chunk_size,
             canvas_type,
+            tracking,
             hdoubletiles,
             vdoubletiles,
             model,
@@ -382,6 +385,7 @@ impl From<SerdeTileSet> for TileSet {
             chunk_handling,
             chunk_size,
             canvas_type,
+            tracking,
             hdoubletiles,
             vdoubletiles,
             model,
@@ -407,6 +411,7 @@ impl From<SerdeTileSet> for TileSet {
             tile_set.chunk_handling = options.chunk_handling.or(tile_set.chunk_handling);
             tile_set.chunk_size = options.chunk_size.or(tile_set.chunk_size);
             tile_set.canvas_type = options.canvas_type.or(tile_set.canvas_type);
+            tile_set.tracking = options.tracking.or(tile_set.tracking);
             tile_set.hdoubletiles = options.hdoubletiles.or(tile_set.hdoubletiles);
             tile_set.vdoubletiles = options.vdoubletiles.or(tile_set.vdoubletiles);
             tile_set.model = options.model.or(tile_set.model);
@@ -465,6 +470,7 @@ impl Display for TileSet {
         writeln!(f, "        chunk_handling: {:?}", self.chunk_handling)?;
         writeln!(f, "        chunk_size: {:?}", self.chunk_size)?;
         writeln!(f, "        canvas_type: {:?}", self.canvas_type)?;
+        writeln!(f, "        tracking: {:?}", self.tracking)?;
         writeln!(f, "        hdoubletiles: {:?}", self.hdoubletiles)?;
         writeln!(f, "        vdoubletiles: {:?}", self.vdoubletiles)?;
         writeln!(f, "        model: {:?}", self.model)?;
@@ -504,6 +510,13 @@ pub enum CanvasType {
     Tube,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
+#[cfg_attr(feature = "python", pyclass)]
+pub enum TrackingType {
+    None,
+    Order
+}
+
 impl TryFrom<&str> for CanvasType {
     type Error = StringConvError;
 
@@ -513,6 +526,18 @@ impl TryFrom<&str> for CanvasType {
             "periodic" => Ok(CanvasType::Periodic),
             "tube" => Ok(CanvasType::Tube),
             _ => Err(StringConvError(format!("Unknown canvas type {}.  Valid options are \"square\", \"periodic\", and \"tube\".", value))),
+        }
+    }
+}
+
+impl TryFrom<&str> for TrackingType {
+    type Error = StringConvError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "none" => Ok(TrackingType::None),
+            "order" => Ok(TrackingType::Order),
+            _ => Err(StringConvError(format!("Unknown tracking type {}.  Valid options are \"none\" and \"order\".", value))),
         }
     }
 }
@@ -609,23 +634,34 @@ impl TileSet {
         };
 
         let kind = self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT);
+        let tracking = self.tracking.unwrap_or(TrackingType::None);
 
-        Ok(StateEnum::empty(shape, kind)?)
+        Ok(StateEnum::empty(shape, kind, tracking)?)
     }
 
     /// Creates an empty state, without any setup by a System.
     pub fn create_state_from_canvas(&self, canvas: Array2<u32>) -> Result<StateEnum, RgrowError> {
         let kind = self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT);
+        let tracking = self.tracking.unwrap_or(TrackingType::None);
 
-        let mut st = match kind {
-            CanvasType::Square => {
+        let mut st = match (kind, tracking) {
+            (CanvasType::Square, TrackingType::None) => {
                 QuadTreeState::<CanvasSquare, NullStateTracker>::from_array(canvas)?.into()
             }
-            CanvasType::Periodic => {
+            (CanvasType::Periodic, TrackingType::None) => {
                 QuadTreeState::<CanvasPeriodic, NullStateTracker>::from_array(canvas)?.into()
             }
-            CanvasType::Tube => {
+            (CanvasType::Tube, TrackingType::None) => {
                 QuadTreeState::<CanvasTube, NullStateTracker>::from_array(canvas)?.into()
+            }
+            (CanvasType::Square, TrackingType::Order) => {
+                QuadTreeState::<CanvasSquare, OrderTracker>::from_array(canvas)?.into()
+            }
+            (CanvasType::Periodic, TrackingType::Order) => {
+                QuadTreeState::<CanvasPeriodic, OrderTracker>::from_array(canvas)?.into()
+            }
+            (CanvasType::Tube, TrackingType::Order) => {
+                QuadTreeState::<CanvasTube, OrderTracker>::from_array(canvas)?.into()
             }
         };
 
