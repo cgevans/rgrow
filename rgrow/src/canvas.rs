@@ -592,7 +592,7 @@ impl Canvas for CanvasTube {
 
     fn u_move_point_n(&self, p: Point) -> Point {
         if p.0 == 0 {
-            (self.nrows() - 1, p.1 - (self.nrows() / 2))
+            (self.nrows() - 1, p.1 - 2)
         } else {
             (p.0 - 1, p.1)
         }
@@ -600,7 +600,7 @@ impl Canvas for CanvasTube {
 
     fn u_move_point_e(&self, p: Point) -> Point {
         if p.0 == 0 {
-            (self.nrows() - 1, p.1 - (self.nrows() / 2) + 1)
+            (self.nrows() - 1, p.1 - 1)
         } else {
             (p.0 - 1, p.1 + 1)
         }
@@ -608,7 +608,7 @@ impl Canvas for CanvasTube {
 
     fn u_move_point_s(&self, p: Point) -> Point {
         if p.0 == self.nrows() - 1 {
-            (0, p.1 + (self.nrows() / 2))
+            (0, p.1 + 2)
         } else {
             (p.0 + 1, p.1)
         }
@@ -616,7 +616,7 @@ impl Canvas for CanvasTube {
 
     fn u_move_point_w(&self, p: Point) -> Point {
         if p.0 == self.nrows() - 1 {
-            (0, p.1 + (self.nrows() / 2) - 1)
+            (0, p.1 + 1)
         } else {
             (p.0 + 1, p.1 - 1)
         }
