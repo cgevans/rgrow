@@ -28,13 +28,13 @@ def test_full_simulation(canvas_type):
         "size": (64, 128),
     }
 
-    ts = TileSet(tiles, bonds, options=options)  # noqa: F841
+    ts = TileSet(tiles, bonds, **options)  # noqa: F841
 
-    sim = ts.to_simulation()
+    sim, state = ts.create_system_and_state()
 
-    sim.evolve(for_events=10000)
+    sim.evolve(state, for_events=10000)
 
-    assert sim.state_ntiles(0) > 60
+    assert state.ntiles > 60
 
 
 @pytest.mark.parametrize("canvas_type", ["square", "periodic"])
@@ -62,10 +62,10 @@ def test_atam(canvas_type):
         "size": 100,
     }
 
-    ts = TileSet(tiles, bonds, options=options)
+    ts = TileSet(tiles, bonds, **options)
 
-    sim = ts.to_simulation()
+    sim, state = ts.create_system_and_state()
 
-    sim.evolve(for_events=3600)
+    sim.evolve(state, for_events=3600)
 
-    assert sim.state_ntiles() == 3601
+    assert state.ntiles == 3601

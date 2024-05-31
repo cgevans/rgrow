@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::any::Any;
 
 #[cfg(feature = "python")]
-use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyArrayMethods};
 use serde::{Deserialize, Serialize};
 use thiserror;
 

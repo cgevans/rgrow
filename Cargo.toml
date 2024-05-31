@@ -6,12 +6,13 @@ resolver = "2"
 [workspace.dependencies]
 ndarray = {version = "^0.15", features = ["serde"]}
 rand = {version = "^0", features = ["small_rng"]}
-# See https://github.com/serde-rs/serde/issues/2538
-serde = {version = "^1.0.185", features=["derive"]} #  <= 1.0.171
-pyo3 = {version = "^0.20", features = ["extension-module", "multiple-pymethods"]}
+serde = {version = "^1.0.185", features=["derive"]}
+pyo3 = {version = "^0.21", features = ["extension-module", "multiple-pymethods", "gil-refs"]}
 rayon = { version = "1" }
-numpy = "^0.20"
+numpy = "^0.21"
 enum_dispatch = "0.3"
+pyo3-polars = "^0.14"
+polars = {version = "^0.40", features = ["lazy"]}
 
 [workspace.package]
 version = "0.13.1"

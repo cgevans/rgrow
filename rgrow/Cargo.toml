@@ -66,8 +66,8 @@ pyo3 = { workspace = true, optional = true }
 rand = { workspace = true }
 ndarray = { workspace = true }
 enum_dispatch = "0.3"
-polars = { version = "0.38.2", features = ["lazy"] }
-pyo3-polars = "0.12.0"
+polars = { workspace = true }
+pyo3-polars = {workspace = true}
 
 [dependencies.clap]
 version = "4"
