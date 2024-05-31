@@ -519,6 +519,7 @@ impl System for KTAM {
             }
         }
         state.add_events(1);
+        state.record_event(&event);
         self
     }
 

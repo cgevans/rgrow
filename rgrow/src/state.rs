@@ -71,6 +71,7 @@ pub trait StateStatus {
     fn reset_events(&mut self);
     fn add_time(&mut self, time: f64);
     fn time(&self) -> f64;
+    fn record_event(&mut self, event: &system::Event);
 }
 
 pub trait StateWithCreate: State + Sized {
@@ -343,6 +344,10 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     fn reset_events(&mut self) {
         self.total_events = 0;
     }
+
+    fn record_event(&mut self, event: &system::Event) {
+        self.tracker.record_single_event(event);
+    }
 }
 
 impl<C: Canvas + Canvas, T: StateTracker> QuadTreeState<C, T> {
@@ -376,16 +381,15 @@ impl<C: Canvas + Canvas, T: StateTracker> QuadTreeState<C, T> {
     }
 }
 
-pub trait StateTracked<T>
+pub trait StateTrackSet<T>
 where
     T: StateTracker,
 {
     fn set_tracker(&mut self, tracker: T) -> &mut Self;
     fn tracker(&mut self) -> &T;
-    fn record_event(&mut self, event: &system::Event) -> &mut Self;
 }
 
-impl<C, T> StateTracked<T> for QuadTreeState<C, T>
+impl<C, T> StateTrackSet<T> for QuadTreeState<C, T>
 where
     C: Canvas + Canvas,
     T: StateTracker,
@@ -397,11 +401,6 @@ where
 
     fn tracker(&mut self) -> &T {
         &self.tracker
-    }
-
-    fn record_event(&mut self, event: &system::Event) -> &mut Self {
-        self.tracker.record_single_event(event);
-        self
     }
 }
 
@@ -497,6 +496,6 @@ impl StateTracker for OrderTracker {
     }
 
     fn get_tracker_data(&self) -> RustAny {
-        RustAny(Box::new(self.arr.clone()))
+        RustAny(Box::new(self.arr.to_owned()))
     }
 }

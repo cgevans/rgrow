@@ -1,3 +1,9 @@
+# 0.13.1
+
+- Allow Python compilation without ui.
+- Fix attachment order tracking.
+- Fix tube canvas N/S boundaries.
+
 # 0.13.0
 
 - Restructured API to allow separate, easier-to-use Systems and States.
