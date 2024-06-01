@@ -23,5 +23,5 @@ license = "BSD-3-Clause"
 categories = ["science", "simulation"]
 
 [profile.release]
-debug = true
+# debug = true
 # lto = true
