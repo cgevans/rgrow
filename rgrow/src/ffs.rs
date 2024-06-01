@@ -34,10 +34,10 @@ use pyo3::prelude::*;
 #[cfg(feature = "python")]
 use self::base::RustAny;
 
-use self::state::{OrderTracker};
+use self::state::OrderTracker;
 use self::tileset::TrackingType;
 #[cfg(feature = "python")]
-use numpy::{PyArray1};
+use numpy::PyArray1;
 #[cfg(feature = "python")]
 use pyo3_polars::PyDataFrame;
 
@@ -99,7 +99,7 @@ impl Default for FFSRunConfig {
 
 #[cfg(feature = "python")]
 impl FFSRunConfig {
-    pub fn _py_set(&mut self, k: &str, v: &PyAny, _py: Python) -> PyResult<()> {
+    pub fn _py_set(&mut self, k: &str, v: Bound<'_, PyAny>) -> PyResult<()> {
         match k {
             "constant_variance" => self.constant_variance = v.extract()?,
             "var_per_mean2" => self.var_per_mean2 = v.extract()?,
@@ -730,8 +730,8 @@ impl BoxedFFSResult {
     }
 
     #[getter]
-    fn get_forward_vec<'py>(&self, py: Python<'py>) -> &'py PyArray1<f64> {
-        self.0.forward_vec().to_pyarray(py)
+    fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py,PyArray1<f64>> {
+        self.0.forward_vec().to_pyarray_bound(py)
     }
 
     #[getter]
@@ -760,7 +760,7 @@ impl BoxedFFSResult {
             "n_configs" => surfaces.iter().map(|x| x.num_configs() as u64).collect::<Vec<u64>>(),
             "n_trials" => surfaces.iter().map(|x| x.num_trials() as u64).collect::<Vec<u64>>(),
             "target_size" => surfaces.iter().map(|x| x.target_size() as u64).collect::<Vec<u64>>(),
-            "p_r" => surfaces.iter().map(|x| x.p_r() as f64).collect::<Vec<f64>>(),
+            "p_r" => surfaces.iter().map(|x| x.p_r()).collect::<Vec<f64>>(),
         )
         .unwrap();
 
@@ -855,12 +855,12 @@ pub struct FFSLevelRef {
 #[pymethods]
 impl FFSLevelRef {
     #[getter]
-    fn get_configs<'py>(&self, py: Python<'py>) -> Vec<&'py PyArray2<crate::base::Tile>> {
+    fn get_configs<'py>(&self, py: Python<'py>) -> Vec<Bound<'py, PyArray2<crate::base::Tile>>> {
         self.res
             .get_surface(self.level)
             .configs()
             .iter()
-            .map(|x| x.to_pyarray(py))
+            .map(|x| x.to_pyarray_bound(py))
             .collect()
     }
 
@@ -916,30 +916,31 @@ impl FFSStateRef {
     #[getter]
     /// A direct, mutable view of the state's canvas.  This is potentially unsafe.
     pub fn canvas_view<'py>(
-        this: &'py PyCell<Self>,
+        this: Bound<'py, Self>,
         _py: Python<'py>,
-    ) -> PyResult<&'py PyArray2<crate::base::Tile>> {
+    ) -> PyResult<Bound<'py, PyArray2<crate::base::Tile>>> {
         let t = this.borrow();
         let ra = t.get_st().raw_array();
 
-        unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
+        unsafe { Ok(PyArray2::borrow_from_array_bound(&ra, this.into_any())) }
     }
 
     /// A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
     pub fn canvas_copy<'py>(
-        this: &'py PyCell<Self>,
+        this: &Bound<'py, Self>,
         py: Python<'py>,
-    ) -> PyResult<&'py PyArray2<crate::base::Tile>> {
+    ) -> PyResult<Bound<'py, PyArray2<crate::base::Tile>>> {
         let t = this.borrow();
         let ra = t.get_st().raw_array();
 
-        Ok(PyArray2::from_array(py, &ra))
+        Ok(PyArray2::from_array_bound(py, &ra))
     }
 
     pub fn tracking_copy<'py>(
-        this: &'py PyCell<Self>,
+        this: Py<Self>,
+        py: Python<'py>
     ) -> PyResult<RustAny> {
-        let t = this.borrow();
+        let t = this.borrow(py);
         let ra = t.get_st().get_tracker_data();
 
         Ok(ra)

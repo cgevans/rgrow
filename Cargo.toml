@@ -7,7 +7,7 @@ resolver = "2"
 ndarray = {version = "^0.15", features = ["serde"]}
 rand = {version = "^0", features = ["small_rng"]}
 serde = {version = "^1.0.185", features=["derive"]}
-pyo3 = {version = "^0.21", features = ["extension-module", "multiple-pymethods", "gil-refs"]}
+pyo3 = {version = "^0.21", features = ["extension-module", "multiple-pymethods"]}
 rayon = { version = "1" }
 numpy = "^0.21"
 enum_dispatch = "0.3"

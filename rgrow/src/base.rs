@@ -191,13 +191,13 @@ impl IntoPy<PyObject> for RustAny {
         } else if let Some(val) = self.0.downcast_ref::<String>() {
             val.into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array1<f64>>() {
-            PyArray1::from_array(py, val).into_py(py)
+            PyArray1::from_array_bound(py, val).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array2<f64>>() {
-            PyArray2::from_array(py, val).into_py(py)
+            PyArray2::from_array_bound(py, val).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array1<u64>>() {
-            PyArray1::from_array(py, val).into_py(py)
+            PyArray1::from_array_bound(py, val).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array2<u64>>() {
-            PyArray2::from_array(py, val).into_py(py)
+            PyArray2::from_array_bound(py, val).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<(u64, u64)>() {
             (val.0, val.1).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<(usize, usize, Ident)>() {

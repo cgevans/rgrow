@@ -28,28 +28,28 @@ impl PyState {
     #[getter]
     /// A direct, mutable view of the state's canvas.  This is potentially unsafe.
     pub fn canvas_view<'py>(
-        this: &'py PyCell<Self>,
+        this: Bound<'py, Self>,
         _py: Python<'py>,
-    ) -> PyResult<&'py PyArray2<crate::base::Tile>> {
+    ) -> PyResult<Bound<'py, PyArray2<crate::base::Tile>>> {
         let t = this.borrow();
         let ra = t.0.raw_array();
 
-        unsafe { Ok(PyArray2::borrow_from_array(&ra, this)) }
+        unsafe { Ok(PyArray2::borrow_from_array_bound(&ra, this.into_any())) }
     }
 
     /// A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
     pub fn canvas_copy<'py>(
-        this: &'py PyCell<Self>,
+        this: &Bound<'py, Self>,
         py: Python<'py>,
-    ) -> PyResult<&'py PyArray2<crate::base::Tile>> {
+    ) -> PyResult<Bound<'py, PyArray2<crate::base::Tile>>> {
         let t = this.borrow();
         let ra = t.0.raw_array();
 
-        Ok(PyArray2::from_array(py, &ra))
+        Ok(PyArray2::from_array_bound(py, &ra))
     }
 
     pub fn tracking_copy<'py>(
-        this: &'py PyCell<Self>,
+        this: &Bound<'py, Self>,
     ) -> PyResult<RustAny> {
         let t = this.borrow();
         let ra = t.0.get_tracker_data();
@@ -98,9 +98,9 @@ impl PyState {
 #[derive(FromPyObject)]
 pub enum PyStateOrStates<'py> {
     #[pyo3(transparent)]
-    State(&'py PyCell<PyState>),
+    State(Bound<'py, PyState>),
     #[pyo3(transparent)]
-    States(Vec<&'py PyCell<PyState>>),
+    States(Vec<Bound<'py, PyState>>),
 }
 
 #[repr(transparent)]
@@ -219,13 +219,13 @@ impl PySystem {
     }
 
     fn calc_mismatch_locations<'py>(
-        this: &'py PyCell<Self>,
+        this: &Bound<'py, Self>,
         state: &PyState,
         py: Python<'py>,
-    ) -> PyResult<&'py PyArray2<usize>> {
+    ) -> PyResult<Bound<'py, PyArray2<usize>>> {
         let t = this.borrow();
         let ra = t.0.calc_mismatch_locations(&state.0);
-        Ok(PyArray2::from_array(py, &ra))
+        Ok(PyArray2::from_array_bound(py, &ra))
     }
 
     fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
@@ -256,7 +256,7 @@ impl PySystem {
     }
 
     #[getter]
-    fn tile_colors(&self, py: Python<'_>) -> Py<PyArray2<u8>> {
+    fn tile_colors<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<u8>> {
         let colors = self.0.tile_colors();
         let mut arr = Array2::zeros((colors.len(), 4));
         for (i, c) in colors.iter().enumerate() {
@@ -265,7 +265,7 @@ impl PySystem {
             arr[[i, 2]] = c[2];
             arr[[i, 3]] = c[3];
         }
-        arr.into_pyarray(py).to_owned()
+        arr.into_pyarray_bound(py)
     }
 
     fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
@@ -277,18 +277,18 @@ impl PySystem {
     }
 
     #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), canvas_type = None, **kwargs))]
-    fn py_run_ffs(
+    fn py_run_ffs<'py>(
         &mut self,
         config: FFSRunConfig,
         canvas_type: Option<CanvasType>,
-        kwargs: Option<&PyDict>,
+        kwargs: Option<Bound<'py, PyDict>>,
         py: Python<'_>,
     ) -> PyResult<BoxedFFSResult> {
         let mut c = config;
 
         if let Some(dict) = kwargs {
             for (k, v) in dict.iter() {
-                c._py_set(&k.extract::<String>()?, v, py)?;
+                c._py_set(&k.extract::<String>()?, v)?;
             }
         }
 

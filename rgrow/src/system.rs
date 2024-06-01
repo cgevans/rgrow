@@ -406,7 +406,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     }
 
     fn perform_event<St: State + ?Sized>(&self, state: &mut St, event: &Event) -> &Self {
-        state.record_event(&event);
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
@@ -426,6 +425,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
                 }
             }
         };
+        state.record_event(event);
         state.add_events(1);
         self
     }

@@ -1,4 +1,4 @@
-use numpy::PyArray2;
+use numpy::{PyArray2, PyArrayMethods};
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
@@ -21,7 +21,7 @@ impl TileSet {
         tiles: Vec<Tile>,
         bonds: Vec<Bond>,
         glues: Vec<(GlueIdent, GlueIdent, f64)>,
-        kwargs: Option<&PyDict>,
+        kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<TileSet> {
         let mut tileset = TileSet {
             tiles,
@@ -61,8 +61,8 @@ impl TileSet {
                         tileset.cover_strands = Some(v.extract::<Vec<CoverStrand>>()?)
                     }
                     v => Python::with_gil(|py| {
-                        let user_warning = py.get_type::<pyo3::exceptions::PyUserWarning>();
-                        PyErr::warn(py, user_warning, &format!("Ignoring unknown key {v}."), 0)
+                        let user_warning = py.get_type_bound::<pyo3::exceptions::PyUserWarning>();
+                        PyErr::warn_bound(py, &user_warning, &format!("Ignoring unknown key {v}."), 0)
                             .unwrap();
                     }),
                 }
@@ -74,7 +74,7 @@ impl TileSet {
     /// Parses a JSON string into a TileSet.
     #[pyo3(name = "from_json")]
     #[classmethod]
-    fn py_from_json(_cls: &PyType, data: &str) -> PyResult<Self> {
+    fn py_from_json(_cls: &Bound<'_, PyType>, data: &str) -> PyResult<Self> {
         let tileset = tileset::TileSet::from_json(data);
         match tileset {
             Ok(tileset) => Ok(tileset),
@@ -88,9 +88,9 @@ impl TileSet {
     /// FIXME: implement this without the json trip.
     #[pyo3(name = "from_dict")]
     #[classmethod]
-    fn py_from_dict(_cls: &PyType, data: PyObject) -> PyResult<Self> {
+    fn py_from_dict(_cls: &Bound<'_, PyType>, data: PyObject) -> PyResult<Self> {
         let json: String = Python::with_gil(|py| {
-            let json = PyModule::import(py, "json")?;
+            let json = PyModule::import_bound(py, "json")?;
             json.call_method1("dumps", (data,))?.extract::<String>()
         })?;
 
@@ -106,7 +106,7 @@ impl TileSet {
     /// Parses a file (JSON, YAML, etc) into a TileSet
     #[pyo3(name = "from_file")]
     #[classmethod]
-    fn py_from_file(_cls: &PyType, path: &str) -> PyResult<Self> {
+    fn py_from_file(_cls: &Bound<'_, PyType>, path: &str) -> PyResult<Self> {
         let ts = tileset::TileSet::from_file(path)
             .map_err(|err| PyErr::new::<PyValueError, _>(err.to_string()))?;
         Ok(ts)
@@ -138,7 +138,7 @@ impl TileSet {
     }
 
     #[pyo3(name = "create_state_from_canvas")]
-    fn py_create_state_from_canvas(&self, canvas: &PyArray2<u32>) -> PyResult<PyState> {
+    fn py_create_state_from_canvas(&self, canvas: &Bound<'_, PyArray2<u32>>) -> PyResult<PyState> {
         let state = self.create_state_from_canvas(canvas.to_owned_array())?;
         Ok(PyState(state))
     }
@@ -162,17 +162,17 @@ impl TileSet {
     /// Runs FFS.
     #[allow(clippy::too_many_arguments)]
     #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), **kwargs))]
-    fn py_run_ffs(
+    fn py_run_ffs<'py>(
         &self,
         config: FFSRunConfig,
-        kwargs: Option<&PyDict>,
-        py: Python<'_>,
+        kwargs: Option<&Bound<'py, PyDict>>,
+        py: Python<'py>,
     ) -> PyResult<BoxedFFSResult> {
         let mut c = config;
 
         if let Some(dict) = kwargs {
             for (k, v) in dict.iter() {
-                c._py_set(&k.extract::<String>()?, v, py)?;
+                c._py_set(&k.extract::<String>()?, v)?;
             }
         }
 
