@@ -3,7 +3,7 @@
 - Allow Python compilation without ui.
 - Fix attachment order tracking.
 - Fix tube canvas N/S boundaries.
-- PyO3 0.21 (not fully updated to new API yet).
+- PyO3 0.21, with new Bound API.
 - Fix python tests.
 
 # 0.13.0

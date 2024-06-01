@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 
 #[pymodule]
 #[pyo3(name = "rgrow")]
-fn pyrgrow(_py: Python, m: &PyModule) -> PyResult<()> {
+fn pyrgrow(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<rgrow::tileset::TileSet>()?;
     m.add_class::<rgrow::tileset::TileShape>()?;
 

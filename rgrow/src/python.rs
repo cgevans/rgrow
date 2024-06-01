@@ -48,8 +48,8 @@ impl PyState {
         Ok(PyArray2::from_array_bound(py, &ra))
     }
 
-    pub fn tracking_copy<'py>(
-        this: &Bound<'py, Self>,
+    pub fn tracking_copy(
+        this: &Bound<Self>,
     ) -> PyResult<RustAny> {
         let t = this.borrow();
         let ra = t.0.get_tracker_data();
@@ -277,11 +277,11 @@ impl PySystem {
     }
 
     #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), canvas_type = None, **kwargs))]
-    fn py_run_ffs<'py>(
+    fn py_run_ffs(
         &mut self,
         config: FFSRunConfig,
         canvas_type: Option<CanvasType>,
-        kwargs: Option<Bound<'py, PyDict>>,
+        kwargs: Option<Bound<PyDict>>,
         py: Python<'_>,
     ) -> PyResult<BoxedFFSResult> {
         let mut c = config;

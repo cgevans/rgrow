@@ -936,11 +936,10 @@ impl FFSStateRef {
         Ok(PyArray2::from_array_bound(py, &ra))
     }
 
-    pub fn tracking_copy<'py>(
-        this: Py<Self>,
-        py: Python<'py>
+    pub fn tracking_copy(
+        this: &Bound<Self>,
     ) -> PyResult<RustAny> {
-        let t = this.borrow(py);
+        let t = this.borrow();
         let ra = t.get_st().get_tracker_data();
 
         Ok(ra)
