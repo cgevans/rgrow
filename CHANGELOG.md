@@ -4,6 +4,7 @@
 - Add Python typing for FFS results.
 - Distinguish stored states and number of configurations for FFS surfaces.
 - Make FFS state references more useful.
+- Fix rayon use in Python (parallel execution).
 
 # 0.13.1
 

@@ -32,7 +32,7 @@ pyo3-polars = {workspace = true}
 
 [dependencies.rgrow]
 path = "../rgrow"
-features = ["python"]
+features = ["python", "use_rayon"]
 default-features = false
 
 [dependencies.pyo3]

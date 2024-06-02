@@ -12,6 +12,7 @@ use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
 #[cfg(feature = "python")]
 use polars::prelude::*;
+#[cfg(feature = "python")]
 use python::PyState;
 
 use super::*;
