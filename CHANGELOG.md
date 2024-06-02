@@ -1,3 +1,9 @@
+# 0.14.0
+
+- Allow state references to be cloned into normal states (useful for FFS results).
+- Add Python typing for FFS results.
+- Distinguish stored states and number of configurations for FFS surfaces.
+
 # 0.13.1
 
 - Allow Python compilation without ui.

@@ -17,7 +17,50 @@ pub trait State: RateStore + Canvas + StateStatus + Sync + Send + TrackerData {
     fn panicinfo(&self) -> String;
 }
 
-#[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData)]
+#[enum_dispatch]
+pub trait ClonableState: State {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        panic!("Not implemented")
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasSquare, OrderTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::SquareOrderTracking(self.clone())
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasSquare, NullStateTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::SquareNoTracking(self.clone())
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasPeriodic, OrderTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::PeriodicOrderTracking(self.clone())
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasPeriodic, NullStateTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::PeriodicNoTracking(self.clone())
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasTube, OrderTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::TubeOrderTracking(self.clone())
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasTube, NullStateTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::TubeNoTracking(self.clone())
+    }
+}
+
+#[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData, CloneAsStateEnum)]
 #[derive(Debug, Clone)]
 pub enum StateEnum {
     SquareNoTracking(QuadTreeState<CanvasSquare, NullStateTracker>),

@@ -12,6 +12,7 @@ use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
 #[cfg(feature = "python")]
 use polars::prelude::*;
+use python::PyState;
 
 use super::*;
 //use ndarray::prelude::*;
@@ -40,7 +41,7 @@ use numpy::PyArray1;
 #[cfg(feature = "python")]
 use pyo3_polars::PyDataFrame;
 
-use state::{State, StateWithCreate};
+use state::{ClonableState, StateWithCreate};
 
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
@@ -214,16 +215,17 @@ pub trait FFSResult: Send + Sync {
 
 pub trait FFSSurface: Send + Sync {
     fn get_config(&self, i: usize) -> ArrayView2<Tile>;
-    fn get_state(&self, i: usize) -> &dyn State;
-    fn states(&self) -> Vec<&dyn State> {
-        (0..self.num_configs()).map(|i| self.get_state(i)).collect()
+    fn get_state(&self, i: usize) -> &dyn ClonableState;
+    fn states(&self) -> Vec<&dyn ClonableState> {
+        (0..self.num_stored_states()).map(|i| self.get_state(i)).collect()
     }
     fn configs(&self) -> Vec<ArrayView2<Tile>> {
-        (0..self.num_configs())
+        (0..self.num_stored_states())
             .map(|i| self.get_config(i))
             .collect()
     }
     fn previous_list(&self) -> Vec<usize>;
+    fn num_stored_states(&self) -> usize;
     fn num_configs(&self) -> usize;
     fn num_trials(&self) -> usize;
     fn target_size(&self) -> NumTiles;
@@ -318,13 +320,13 @@ impl TileSet {
     }
 }
 
-pub struct FFSRun<St: State> {
+pub struct FFSRun<St: ClonableState> {
     pub level_list: Vec<FFSLevel<St>>,
     pub dimerization_rate: f64,
     pub forward_prob: Vec<f64>,
 }
 
-impl<St: State> FFSResult for FFSRun<St> {
+impl<St: ClonableState> FFSResult for FFSRun<St> {
     fn nucleation_rate(&self) -> Rate {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
@@ -349,7 +351,7 @@ impl<St: State> FFSResult for FFSRun<St> {
     }
 }
 
-impl<St: State + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
+impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
     pub fn create<Sy: SystemWithDimers + System>(
         system: &mut Sy,
         config: &FFSRunConfig,
@@ -421,7 +423,7 @@ impl<St: State + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
     }
 }
 
-impl<St: State + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
+impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
     pub fn create_from_tileset<Sy: SystemWithDimers + System + FromTileSet>(
         tileset: &TileSet,
         config: &FFSRunConfig,
@@ -470,7 +472,7 @@ fn _bounded_nonzero_region_of_array<'a>(
     (subarr, mini, minj, maxi, maxj)
 }
 
-pub struct FFSLevel<St: State> {
+pub struct FFSLevel<St: ClonableState> {
     pub state_list: Vec<St>,
     pub previous_list: Vec<usize>,
     pub p_r: f64,
@@ -479,12 +481,12 @@ pub struct FFSLevel<St: State> {
     pub target_size: NumTiles,
 }
 
-impl<St: State> FFSSurface for FFSLevel<St> {
+impl<St: ClonableState> FFSSurface for FFSLevel<St> {
     fn get_config(&self, i: usize) -> ArrayView2<Tile> {
         self.state_list[i].raw_array()
     }
 
-    fn get_state(&self, i: usize) -> &dyn State {
+    fn get_state(&self, i: usize) -> &dyn ClonableState {
         self.state_list.get(i).unwrap()
     }
 
@@ -507,9 +509,13 @@ impl<St: State> FFSSurface for FFSLevel<St> {
     fn p_r(&self) -> f64 {
         self.p_r
     }
+    
+    fn num_stored_states(&self) -> usize {
+        self.state_list.len()
+    }
 }
 
-impl<St: State + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> {
+impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> {
     pub fn drop_states(&mut self) -> &Self {
         self.state_list.drain(..);
         self
@@ -874,6 +880,21 @@ impl FFSLevelRef {
     }
 
     #[getter]
+    fn get_states<'py>(&self) -> Vec<FFSStateRef> {
+        self.res
+            .get_surface(self.level)
+            .states()
+            .iter()
+            .enumerate()
+            .map(|(i, x)| FFSStateRef {
+                res: self.res.clone(),
+                level: self.level,
+                state: i,
+            })
+            .collect()
+    }
+
+    #[getter]
     fn get_previous_indices(&self) -> Vec<usize> {
         self.res.get_surface(self.level).previous_list()
     }
@@ -890,6 +911,21 @@ impl FFSLevelRef {
             state: i,
         }
     }
+
+    fn has_stored_states(&self) -> bool {
+        self.res.get_surface(self.level).num_stored_states() > 0
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "FFSLevelRef(n_configs={}, n_trials={}, target_size={}, p_r={}, has_stored_states={})",
+            self.res.get_surface(self.level).num_configs(),
+            self.res.get_surface(self.level).num_trials(),
+            self.res.get_surface(self.level).target_size(),
+            self.res.get_surface(self.level).p_r(),
+            self.has_stored_states()
+        )
+    }
 }
 
 #[cfg_attr(feature = "python", pyclass)]
@@ -902,7 +938,7 @@ pub struct FFSStateRef {
 
 #[cfg(feature = "python")]
 impl FFSStateRef {
-    fn get_st(&self) -> &dyn State {
+    fn get_st(&self) -> &dyn ClonableState {
         self.res.get_surface(self.level).get_state(self.state)
     }
 }
@@ -922,6 +958,10 @@ impl FFSStateRef {
         self.get_st().n_tiles()
     }
 
+    pub fn clone_state(&self) -> PyState {
+        PyState(self.get_st().clone_as_stateenum())
+    }
+
     #[getter]
     /// A direct, mutable view of the state's canvas.  This is potentially unsafe.
     pub fn canvas_view<'py>(
@@ -936,7 +976,7 @@ impl FFSStateRef {
 
     /// A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
     pub fn canvas_copy<'py>(
-        this: &Bound<'py, Self>,
+        this: &Bound<Self>,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyArray2<crate::base::Tile>>> {
         let t = this.borrow();
