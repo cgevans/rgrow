@@ -21,6 +21,7 @@ from .rgrow import (
     System,
     State,
     EvolveBounds,
+    FFSStateRef
 )
 import attrs
 import attr
@@ -33,7 +34,7 @@ if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.colors
 
 
-def _system_name_canvas(self: System, state: State) -> np.ndarray:
+def _system_name_canvas(self: System, state: State | FFSStateRef) -> np.ndarray:
     """Returns the current canvas for state, as an array of tile names.
     'empty' indicates empty locations; numbers are translated to strings.
 
@@ -55,10 +56,10 @@ def _system_name_canvas(self: System, state: State) -> np.ndarray:
 System.name_canvas = _system_name_canvas  # type: ignore
 
 
-def _system_color_canvas(self: System, state: State | np.ndarray) -> np.ndarray:
+def _system_color_canvas(self: System, state: State | np.ndarray | FFSStateRef) -> np.ndarray:
     """Returns the current canvas for state, as an array of tile colors."""
 
-    if isinstance(state, State):
+    if isinstance(state, (State, FFSStateRef)):
         return self.tile_colors[state.canvas_view]
     else:
         return self.tile_colors[state]
@@ -69,7 +70,7 @@ System.color_canvas = _system_color_canvas  # type: ignore
 
 def _system_plot_canvas(
     sys: System,
-    state: State | np.ndarray,
+    state: State | np.ndarray | FFSStateRef,
     ax=None,
     annotate_tiles=False,
     annotate_mismatches=False,
@@ -81,7 +82,7 @@ def _system_plot_canvas(
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 6), constrained_layout=True)
 
-    if isinstance(state, State):
+    if isinstance(state, (State, FFSStateRef)):
         cv = state.canvas_view
     else:
         cv = state

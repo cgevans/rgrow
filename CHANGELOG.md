@@ -3,6 +3,7 @@
 - Allow state references to be cloned into normal states (useful for FFS results).
 - Add Python typing for FFS results.
 - Distinguish stored states and number of configurations for FFS surfaces.
+- Make FFS state references more useful.
 
 # 0.13.1
 

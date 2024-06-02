@@ -11,6 +11,7 @@ fn pyrgrow(m: &Bound<PyModule>) -> PyResult<()> {
 
     m.add_class::<rgrow::ffs::BoxedFFSResult>()?;
     m.add_class::<rgrow::ffs::FFSLevelRef>()?;
+    m.add_class::<rgrow::ffs::FFSStateRef>()?;
 
     m.add_class::<rgrow::ffs::FFSRunConfig>()?;
     m.add_class::<rgrow::system::EvolveBounds>()?;

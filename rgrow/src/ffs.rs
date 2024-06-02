@@ -930,6 +930,7 @@ impl FFSLevelRef {
 
 #[cfg_attr(feature = "python", pyclass)]
 #[allow(dead_code)] // This is used in the python interface
+#[derive(Clone)]
 pub struct FFSStateRef {
     res: Arc<Box<dyn ffs::FFSResult>>,
     level: usize,

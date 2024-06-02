@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use crate::base::{NumEvents, NumTiles, RustAny, Tile};
 use crate::canvas::Canvas;
-use crate::ffs::{BoxedFFSResult, FFSRunConfig};
+use crate::ffs::{BoxedFFSResult, FFSRunConfig, FFSStateRef};
 use crate::ratestore::RateStore;
-use crate::state::{StateEnum, StateStatus, TrackerData};
+use crate::state::{ClonableState, StateEnum, StateStatus, TrackerData};
 use crate::system::{
     DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, TileBondInfo,
 };
@@ -103,12 +103,26 @@ pub enum PyStateOrStates<'py> {
     States(Vec<Bound<'py, PyState>>),
 }
 
+#[cfg(feature = "python")]
+#[derive(FromPyObject)]
+
+pub enum PyStateOrRef<'py> {
+    State(Bound<'py, PyState>),
+    Ref(Bound<'py, FFSStateRef>),
+}
+
 #[repr(transparent)]
 #[cfg_attr(
     feature = "python",
     pyclass(module = "rgrow", name = "System", subclass)
 )]
 pub struct PySystem(pub SystemEnum);
+
+impl From<FFSStateRef> for PyState {
+    fn from(state: FFSStateRef) -> Self {
+        state.clone_state()
+    }
+}
 
 #[cfg(feature = "python")]
 #[pymethods]
@@ -214,17 +228,23 @@ impl PySystem {
         }
     }
 
-    fn calc_mismatches(&self, state: &PyState) -> usize {
-        self.0.calc_mismatches(&state.0)
+    fn calc_mismatches(&self, state: PyStateOrRef) -> usize {
+        match state {
+            PyStateOrRef::State(s) => self.0.calc_mismatches(&s.borrow().0),
+            PyStateOrRef::Ref(s) => self.0.calc_mismatches(&s.borrow().clone_state().0),
+        }
     }
 
     fn calc_mismatch_locations<'py>(
         this: &Bound<'py, Self>,
-        state: &PyState,
+        state: PyStateOrRef,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyArray2<usize>>> {
         let t = this.borrow();
-        let ra = t.0.calc_mismatch_locations(&state.0);
+        let ra = match state {
+            PyStateOrRef::State(s) => t.0.calc_mismatch_locations(&s.borrow().0),
+            PyStateOrRef::Ref(s) => t.0.calc_mismatch_locations(&s.borrow().clone_state().0),
+        };
         Ok(PyArray2::from_array_bound(py, &ra))
     }
 
