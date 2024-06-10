@@ -311,8 +311,8 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
 
             pixel.copy_from_slice(
                 &(if (tv > 0)
-                    & (blockx > edge_size - 1)
-                    & (blocky > edge_size - 1)
+                    & (blockx + 1 > edge_size)
+                    & (blocky + 1 > edge_size)
                     & (blockx < edge_size + tile_size)
                     & (blocky < edge_size + tile_size)
                 {
@@ -349,26 +349,26 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
 
             pixel.copy_from_slice(
                 &(if (tv > 0)
-                    & (blockx > edge_size - 1)
-                    & (blocky > edge_size - 1)
+                    & (blockx + 1 > edge_size)
+                    & (blocky + 1 > edge_size)
                     & (blockx < edge_size + tile_size)
                     & (blocky < edge_size + tile_size)
                 {
                     colors[tv as usize]
                 } else if ((blockx < edge_size)
-                    & (blocky > edge_size - 1)
+                    & (blocky + 1 > edge_size)
                     & (blocky < edge_size + tile_size)
                     & (mismatches[(y, x)] & 0b0001 == 0b0001))
                     | ((blockx >= edge_size + tile_size)
-                        & (blocky > edge_size - 1)
+                        & (blocky + 1 > edge_size)
                         & (blocky < edge_size + tile_size)
                         & (mismatches[(y, x)] & 0b0100 == 0b0100))
                     | ((blocky < edge_size)
-                        & (blockx > edge_size - 1)
+                        & (blockx + 1 > edge_size)
                         & (blockx < edge_size + tile_size)
                         & (mismatches[(y, x)] & 0b1000 == 0b1000))
                     | ((blocky >= edge_size + tile_size)
-                        & (blockx > edge_size - 1)
+                        & (blockx + 1 > edge_size)
                         & (blockx < edge_size + tile_size)
                         & (mismatches[(y, x)] & 0b010 == 0b010))
                 {
@@ -698,8 +698,8 @@ impl Canvas for CanvasTube {
 
             pixel.copy_from_slice(
                 &(if (tv > 0)
-                    & (blockx > edge_size - 1)
-                    & (blocky > edge_size - 1)
+                    & (blockx + 1 > edge_size)
+                    & (blocky + 1 > edge_size)
                     & (blockx < edge_size + tile_size)
                     & (blocky < edge_size + tile_size)
                 {
@@ -743,26 +743,26 @@ impl Canvas for CanvasTube {
 
             pixel.copy_from_slice(
                 &(if (tv > 0)
-                    & (blockx > edge_size - 1)
-                    & (blocky > edge_size - 1)
+                    & (blockx + 1 > edge_size)
+                    & (blocky + 1 > edge_size)
                     & (blockx < edge_size + tile_size)
                     & (blocky < edge_size + tile_size)
                 {
                     colors[tv as usize]
                 } else if ((blockx < edge_size)
-                    & (blocky > edge_size - 1)
+                    & (blocky + 1 > edge_size)
                     & (blocky < edge_size + tile_size)
                     & (mismatches[(y, x)] & 0b0001 == 0b0001))
                     | ((blockx >= edge_size + tile_size)
-                        & (blocky > edge_size - 1)
+                        & (blocky + 1 > edge_size)
                         & (blocky < edge_size + tile_size)
                         & (mismatches[(y, x)] & 0b0100 == 0b0100))
                     | ((blocky < edge_size)
-                        & (blockx > edge_size - 1)
+                        & (blockx + 1 > edge_size)
                         & (blockx < edge_size + tile_size)
                         & (mismatches[(y, x)] & 0b1000 == 0b1000))
                     | ((blocky >= edge_size + tile_size)
-                        & (blockx > edge_size - 1)
+                        & (blockx + 1 > edge_size)
                         & (blockx < edge_size + tile_size)
                         & (mismatches[(y, x)] & 0b010 == 0b010))
                 {
