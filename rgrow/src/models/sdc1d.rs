@@ -1,7 +1,14 @@
 /*
+* Important Notes
+*
+* Given some PointSafe2, in this model, it will represnt two things
+* 1. Which of the scaffolds has an event happening
+* 2. In which position of the scaffold said event will take place
+*
 * TODO:
 * - There are quite a few expects that need to be handled better
-*
+* - _find_monomer_attachment_possibilities_at_point is missing one parameter (because im unsure as
+* to what it does)
 * */
 
 use std::{
@@ -68,13 +75,9 @@ pub struct SDC {
     /// Constant G_se (TODO: Elaborate)
     pub g_se: Energy,
     pub alpha: Energy,
-    /// FIXME: Change this to a vector
+    /// FIXME: Change this to a vector to avoid hashing time
     ///
     /// Set of tiles that can stick to scaffold gap with a given glue
-    ///
-    /// IMPROVEMENT: If the glue numbers are not random, meaning they are 0, 1, 2, 3, ..., n rather
-    /// than random unsigned integers, then we could make an array. If random unsigned integers are
-    /// used, that may result in a lot of empty space in the array.
     pub friends_btm: HashMap<Glue, HashSet<Tile>>,
     /// The energy with which two strands will bond
     ///
@@ -93,6 +96,7 @@ impl SDC {
         // change
     }
 
+    /// Fill the energy_bonds array
     fn _make_energy_array(&mut self) {
         let num_of_strands = self.strands.len();
 
@@ -128,27 +132,46 @@ impl SDC {
     pub fn monomer_detachment_rate_at_point<S: State + ?Sized>(
         &self,
         state: &S,
-        scaffol_point: PointSafe2,
+        scaffold_point: PointSafe2,
     ) -> Rate {
-        let strand = state.tile_at_point(scaffol_point);
+        let strand = state.tile_at_point(scaffold_point);
 
         // There is no strand, thus nothing to be detached
         if strand == 0 {
             return 0.0;
         }
 
-        let bond_energy = self.bond_energy_of_strand(state, scaffol_point, strand);
+        let bond_energy = self.bond_energy_of_strand(state, scaffold_point, strand);
         self.kf * (U0 * (-bond_energy + self.alpha).exp())
+    }
+
+    pub fn choose_monomer_attachment_at_point<S: State + ?Sized>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        acc: Rate,
+    ) -> (bool, Rate, Event) {
+        self.find_monomer_attachment_possibilities_at_point(state, acc, point)
+    }
+
+    pub fn choose_monomer_detachment_at_point<S: State + ?Sized>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        mut acc: Rate,
+    ) -> (bool, Rate, Event) {
+        acc -= self.monomer_detachment_rate_at_point(state, point);
+
+        if acc > 0.0 {
+            return (false, acc, Event::None);
+        }
+        todo!()
     }
 
     ///       x y z <- attached strands (potentially empty)
     /// _ _ _ _ _ _ _ _ _ _  <- Scaffold
     ///         ^ point
-    ///
-    /// Should this function take in account the fact that monomers that have a good connection
-    /// with its neightbours will be more likely to attach ? Or are all attachements equally
-    /// likely here ?
-    fn _find_monomer_attachment_possibilities_at_point<S: State + ?Sized>(
+    fn find_monomer_attachment_possibilities_at_point<S: State + ?Sized>(
         &self,
         state: &S,
         mut acc: Rate,
@@ -185,7 +208,7 @@ impl SDC {
     ) -> f64 {
         // If we set acc = 0, would it not be the case that we just attach to the first tile we can
         // ?
-        match self._find_monomer_attachment_possibilities_at_point(state, 0.0, scaffold_coord) {
+        match self.find_monomer_attachment_possibilities_at_point(state, 0.0, scaffold_coord) {
             (false, acc, _) => -acc,
             _ => panic!(),
         }
@@ -237,10 +260,21 @@ impl System for SDC {
     fn choose_event_at_point<St: State + ?Sized>(
         &self,
         state: &St,
-        p: crate::canvas::PointSafe2,
+        point: crate::canvas::PointSafe2,
         acc: crate::base::Rate,
     ) -> crate::system::Event {
-        todo!();
+        // TODO: Missing choose monomer detachment
+
+        match self.choose_monomer_attachment_at_point(state, point, acc) {
+            (true, _, event) => event,
+            (false, acc, _) => panic!(
+                "Rate: {:?}, {:?}, {:?}, {:?}",
+                acc,
+                point,
+                state,
+                state.raw_array()
+            ),
+        }
     }
 
     fn perform_event<St: State + ?Sized>(
