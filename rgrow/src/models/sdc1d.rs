@@ -382,7 +382,14 @@ impl System for SDC {
     }
 
     fn get_param(&self, name: &str) -> Result<Box<dyn std::any::Any>, crate::base::GrowError> {
-        todo!()
+        match name {
+            "g_se" => Ok(Box::new(self.g_se)),
+            "alpha" => Ok(Box::new(self.alpha)),
+            "kf" => Ok(Box::new(self.kf)),
+            "strand_concentrations" => Ok(Box::new(self.strand_concentration.clone())),
+            "glue_links" => Ok(Box::new(self.glue_links.clone())),
+            _ => Err(GrowError::NoParameter(name.to_string())),
+        }
     }
 
     fn system_info(&self) -> String {
