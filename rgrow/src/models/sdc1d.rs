@@ -1,3 +1,9 @@
+macro_rules! type_alias {
+    ($($t:ty => $($i:ident),*);* $(;)?) => {
+        $($(type $i = $t;)*)*
+    };
+}
+
 /*
 * Important Notes
 *
@@ -7,8 +13,9 @@
 *
 * TODO:
 * - There are quite a few expects that need to be handled better
-* - _find_monomer_attachment_possibilities_at_point is missing one parameter (because im unsure as
+* - find_monomer_attachment_possibilities_at_point is missing one parameter (because im unsure as
 * to what it does)
+* - Replace all use of index for glues to WEST_GLUE_INDEX ...
 * */
 
 use std::{
@@ -17,20 +24,14 @@ use std::{
 };
 
 use crate::{
-    base::{Energy, Glue, Rate, Tile},
-    canvas::PointSafe2,
+    base::{Energy, Glue, GrowError, Rate, Tile},
+    canvas::{PointSafe2, PointSafeHere},
     state::State,
-    system::{Event, System, TileBondInfo},
+    system::{Event, NeededUpdate, System, TileBondInfo},
 };
 
 use ndarray::prelude::{Array1, Array2};
 use serde::{Deserialize, Serialize};
-
-macro_rules! type_alias {
-    ($($t:ty => $($i:ident),*);* $(;)?) => {
-        $($(type $i = $t;)*)*
-    };
-}
 
 type_alias!( f64 => Strength, RatePerConc, Conc );
 
@@ -42,9 +43,12 @@ const U0: f64 = 1.0e9;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC {
+    /// The anchor tiles for each of the scaffolds
+    ///
+    /// To get the anchor tile of the nth scaffold, anchor_tiles.get(n)
+    pub anchor_tiles: Vec<(PointSafe2, Tile)>,
     pub strand_names: Vec<String>,
     pub glue_names: Vec<String>,
-
     /// Colors of the scaffolds, strands can only stick if the
     /// colors are a perfect match
     ///
@@ -90,16 +94,44 @@ pub struct SDC {
 impl SDC {
     fn update_system(&mut self) {
         // Fill the energy array
-        self._make_energy_array();
+        self.fill_energy_array();
 
-        // I dont think that we need to update the hasmap in this system, as it will never
-        // change
+        // TODO: Do we also need to update friends here?
+    }
+
+    fn polymer_update<S: State + ?Sized>(&self, points: &Vec<PointSafe2>, state: &mut S) {
+        let mut points_to_update = points
+            .iter()
+            .flat_map(|&point| {
+                [
+                    PointSafeHere(point.0),
+                    state.move_sa_w(point),
+                    state.move_sa_e(point),
+                ]
+            })
+            .collect::<Vec<PointSafeHere>>();
+
+        points_to_update.sort_unstable();
+        points_to_update.dedup();
+        self.update_points(state, &points_to_update)
+    }
+
+    fn update_monomer_point<S: State + ?Sized>(&self, state: &mut S, scaffold_point: &PointSafe2) {
+        let points = [
+            state.move_sa_w(*scaffold_point),
+            state.move_sa_e(*scaffold_point),
+            PointSafeHere(scaffold_point.0),
+        ]
+        .map(|point| (point, self.event_rate_at_point(state, point)));
+
+        state.update_multiple(&points);
     }
 
     /// Fill the energy_bonds array
-    fn _make_energy_array(&mut self) {
+    fn fill_energy_array(&mut self) {
         let num_of_strands = self.strands.len();
 
+        // For each *possible* pair of strands, calculate the energy bond
         for strand_f in 0..(num_of_strands as usize) {
             let (f_west_glue, f_east_glue) = {
                 let glues = self.glues.row(strand_f);
@@ -118,6 +150,7 @@ impl SDC {
                 // strand_f    strand_s
                 self.energy_bonds[(strand_f, strand_s)] =
                     self.g_se * self.glue_links[(f_east_glue, s_west_glue)];
+
                 // Case 2: First strands is to the east of second
                 // strand_s    strand_f
                 self.energy_bonds[(strand_s, strand_f)] =
@@ -126,9 +159,6 @@ impl SDC {
         }
     }
 
-    /// The detachment rate is given by
-    ///
-    /// TODO: Document the formula here
     pub fn monomer_detachment_rate_at_point<S: State + ?Sized>(
         &self,
         state: &S,
@@ -136,8 +166,11 @@ impl SDC {
     ) -> Rate {
         let strand = state.tile_at_point(scaffold_point);
 
+        let anchor_tile = self.anchor_tiles[(scaffold_point.0).0];
+
+        // If we are trying to detach the anchor tile
         // There is no strand, thus nothing to be detached
-        if strand == 0 {
+        if strand == 0 || anchor_tile.0 == scaffold_point {
             return 0.0;
         }
 
@@ -165,12 +198,15 @@ impl SDC {
         if acc > 0.0 {
             return (false, acc, Event::None);
         }
-        todo!()
+
+        (true, acc, Event::MonomerDetachment(point))
     }
 
     ///       x y z <- attached strands (potentially empty)
     /// _ _ _ _ _ _ _ _ _ _  <- Scaffold
     ///         ^ point
+    ///
+    /// TODO: Add just_calc parameter
     fn find_monomer_attachment_possibilities_at_point<S: State + ?Sized>(
         &self,
         state: &S,
@@ -186,10 +222,9 @@ impl SDC {
         }
 
         let scaffold_glue = self.scaffold.get(point.0).expect("Invalid Index");
-        let friends = match self.friends_btm.get(scaffold_glue) {
-            Some(hashset) => hashset,
-            None => todo!(),
-        };
+
+        let empty_map = HashSet::default();
+        let friends = self.friends_btm.get(scaffold_glue).unwrap_or(&empty_map);
 
         for &strand in friends {
             acc -= self.kf * self.strand_concentration[strand as usize];
@@ -232,11 +267,20 @@ impl SDC {
 
 impl System for SDC {
     fn update_after_event<St: State + ?Sized>(&self, state: &mut St, event: &crate::system::Event) {
-        todo!();
-    }
-
-    fn calc_n_tiles<St: State + ?Sized>(&self, state: &St) -> crate::base::NumTiles {
-        todo!();
+        match event {
+            Event::None => todo!(),
+            Event::MonomerAttachment(scaffold_point, _)
+            | Event::MonomerDetachment(scaffold_point)
+            | Event::MonomerChange(scaffold_point, _) => {
+                // TODO: Make sure that this is all that needs be done for update
+                self.update_monomer_point(state, scaffold_point)
+            }
+            Event::PolymerDetachment(v) => self.polymer_update(v, state),
+            Event::PolymerAttachment(t) | Event::PolymerChange(t) => self.polymer_update(
+                &t.iter().map(|(p, _)| *p).collect::<Vec<PointSafe2>>(),
+                state,
+            ),
+        }
     }
 
     fn event_rate_at_point<St: State + ?Sized>(
@@ -250,10 +294,10 @@ impl System for SDC {
 
         let scaffold_coord = PointSafe2(p.0);
         match state.tile_at_point(scaffold_coord) as u32 {
-            // Empty tile
-            0 => self.monomer_detachment_rate_at_point(state, scaffold_coord),
-            // Full tile
-            _ => self.total_monomer_attachment_rate_at_poin(state, scaffold_coord),
+            // If the tile is empty, we will return the rate at which attachment can occur
+            0 => self.total_monomer_attachment_rate_at_poin(state, scaffold_coord),
+            // If the tile is full, we will return the rate at which detachment can occur
+            _ => self.monomer_detachment_rate_at_point(state, scaffold_coord),
         }
     }
 
@@ -263,66 +307,78 @@ impl System for SDC {
         point: crate::canvas::PointSafe2,
         acc: crate::base::Rate,
     ) -> crate::system::Event {
-        // TODO: Missing choose monomer detachment
-
-        match self.choose_monomer_attachment_at_point(state, point, acc) {
+        match self.choose_monomer_detachment_at_point(state, point, acc) {
             (true, _, event) => event,
-            (false, acc, _) => panic!(
-                "Rate: {:?}, {:?}, {:?}, {:?}",
-                acc,
-                point,
-                state,
-                state.raw_array()
-            ),
+            (false, acc, _) => match self.choose_monomer_attachment_at_point(state, point, acc) {
+                (true, _, event) => event,
+                (false, acc, _) => panic!(
+                    "Rate: {:?}, {:?}, {:?}, {:?}",
+                    acc,
+                    point,
+                    state,
+                    state.raw_array()
+                ),
+            },
         }
     }
 
-    fn perform_event<St: State + ?Sized>(
-        &self,
-        state: &mut St,
-        event: &crate::system::Event,
-    ) -> &Self {
-        match event {
-            // Cannot do nothing
-            Event::None => panic!("Being asked to perform null event."),
-
-            // Attachments
-            Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
-                state.set_sa(point, tile)
-            }
-
-            Event::PolymerAttachment(v) | Event::PolymerChange(v) => {
-                v.iter().for_each(|(point, tile)| state.set_sa(point, tile))
-            }
-
-            // Detachments
-            Event::MonomerDetachment(point) => state.set_sa(point, &0),
-            Event::PolymerDetachment(vector) => {
-                for point in vector {
-                    state.set_sa(point, &0);
-                }
-            }
-        };
-
-        state.add_events(1);
-        state.record_event(event);
-        self
-    }
-
     fn seed_locs(&self) -> Vec<(crate::canvas::PointSafe2, Tile)> {
-        panic!("This model does not contain seed tiles")
+        self.anchor_tiles.clone()
     }
 
+    // TODO: Array containing locations to "bad connections"
     fn calc_mismatch_locations<St: State + ?Sized>(&self, state: &St) -> Array2<usize> {
         todo!()
     }
 
     fn set_param(
         &mut self,
-        _name: &str,
-        _value: Box<dyn std::any::Any>,
+        name: &str,
+        value: Box<dyn std::any::Any>,
     ) -> Result<crate::system::NeededUpdate, crate::base::GrowError> {
-        todo!();
+        match name {
+            "g_se" => {
+                let g_se = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.g_se = *g_se;
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
+            "alpha" => {
+                let alpha = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.alpha = *alpha;
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
+            "kf" => {
+                let kf = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.kf = *kf;
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
+            "strand_concentrations" => {
+                let tile_concs = value
+                    .downcast_ref::<Array1<f64>>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.strand_concentration.clone_from(tile_concs);
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
+            "glue_links" => {
+                let glue_links = value
+                    .downcast_ref::<Array2<f64>>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.glue_links.clone_from(glue_links);
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
+            _ => Err(GrowError::NoParameter(name.to_string())),
+        }
     }
 
     fn get_param(&self, name: &str) -> Result<Box<dyn std::any::Any>, crate::base::GrowError> {
