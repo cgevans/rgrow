@@ -279,6 +279,7 @@ impl TileSet {
                 )?,
             )),
             (Model::ATAM, _, _) => Err(GrowError::FFSCannotRunATAM.into()),
+            (Model::SDC, _, _) => Err(GrowError::FFSCannotRunATAM.into()), // FIXME: generalize error
             (Model::OldKTAM, CanvasType::Square, TrackingType::None) => {
                 Ok(Box::new(FFSRun::<
                     QuadTreeState<CanvasSquare, NullStateTracker>,

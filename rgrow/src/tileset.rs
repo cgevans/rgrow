@@ -5,6 +5,7 @@ use crate::colors::get_color_or_random;
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
+use crate::models::sdc1d::SDC;
 use crate::state::{NullStateTracker, QuadTreeState, StateWithCreate};
 use crate::system::{DynSystem, EvolveBounds};
 
@@ -549,6 +550,8 @@ pub enum Model {
     ATAM,
     #[serde(alias = "OldkTAM", alias = "oldktam")]
     OldKTAM,
+    #[serde(alias = "SDC1D", alias = "sdc1d")]
+    SDC
 }
 
 use std::convert::TryFrom;
@@ -622,6 +625,7 @@ impl TileSet {
             Model::KTAM => SystemEnum::KTAM(KTAM::from_tileset(self)?),
             Model::ATAM => SystemEnum::ATAM(ATAM::from_tileset(self)?),
             Model::OldKTAM => SystemEnum::OldKTAM(OldKTAM::from_tileset(self)?),
+            Model::SDC => SystemEnum::SDC(SDC::from_tileset(self)?),
         })
     }
 

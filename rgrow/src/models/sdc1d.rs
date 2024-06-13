@@ -27,7 +27,7 @@ use crate::{
     base::{Energy, Glue, GrowError, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
-    system::{Event, NeededUpdate, System, TileBondInfo},
+    system::{Event, NeededUpdate, System, TileBondInfo}, tileset::FromTileSet,
 };
 
 use ndarray::prelude::{Array1, Array2};
@@ -424,5 +424,11 @@ impl TileBondInfo for SDC {
 
     fn bond_names(&self) -> Vec<&str> {
         self.glue_names.iter().map(|x| x.as_str()).collect()
+    }
+}
+
+impl FromTileSet for SDC {
+    fn from_tileset(tileset: &crate::tileset::TileSet) -> Result<Self, crate::base::RgrowError> {
+        todo!()
     }
 }

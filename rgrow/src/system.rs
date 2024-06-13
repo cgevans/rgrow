@@ -16,6 +16,7 @@ use crate::models::atam::ATAM;
 
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
+use crate::models::sdc1d::SDC;
 use crate::state::NullStateTracker;
 use crate::state::QuadTreeState;
 use crate::state::State;
@@ -759,6 +760,7 @@ pub enum SystemEnum {
     KTAM,
     OldKTAM,
     ATAM,
+    SDC
     // StaticKTAMCover
 }
 
@@ -766,6 +768,12 @@ pub enum SystemEnum {
 pub trait SystemWithDimers {
     /// Returns information on dimers that the system can form, similarly useful for starting out a state.
     fn calc_dimers(&self) -> Vec<DimerInfo>;
+}
+
+impl SystemWithDimers for SDC {
+    fn calc_dimers(&self) -> Vec<DimerInfo> {
+        panic!("Not implemented")
+    }
 }
 
 #[enum_dispatch]
