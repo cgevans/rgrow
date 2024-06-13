@@ -663,6 +663,8 @@ impl System for KTAM {
             "tile_concs" => Ok(Box::new(self.tile_concs.clone())),
             "glue_strengths" => Ok(Box::new(self.glue_strengths.clone())),
             "glue_links" => Ok(Box::new(self.glue_links.clone())),
+            "energy_ns" => Ok(Box::new(self.energy_ns.clone())),
+            "energy_we" => Ok(Box::new(self.energy_we.clone())),
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }
@@ -688,7 +690,7 @@ impl SystemWithDimers for KTAM {
 
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
             if *e > 0. {
-                let biconc = self.tile_concs[t1] * self.tile_concs[t2];
+                let biconc = self.tile_concs[t1] * self.tile_concs[t2] / 1.0e9;
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
@@ -701,7 +703,7 @@ impl SystemWithDimers for KTAM {
 
         for ((t1, t2), e) in self.energy_we.indexed_iter() {
             if *e > 0. {
-                let biconc = f64::exp(2. * self.alpha) * self.tile_concs[t1] * self.tile_concs[t2];
+                let biconc = self.tile_concs[t1] * self.tile_concs[t2] / 1.0e9;
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
