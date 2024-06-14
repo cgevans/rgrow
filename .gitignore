@@ -28,3 +28,4 @@ Cargo.lock
 .coverage
 coverage.xml
 coverage.lcov
+**/.hypothesis/*

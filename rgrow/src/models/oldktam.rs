@@ -902,7 +902,7 @@ impl FromTileSet for OldKTAM {
             proc.tile_stoics,
             proc.tile_edges,
             proc.glue_strengths,
-            proc.gluelinks,
+            proc.glue_links,
             tileset.gse.unwrap_or(GSE_DEFAULT),
             tileset.gmc.unwrap_or(GMC_DEFAULT),
             tileset.alpha,

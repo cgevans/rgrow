@@ -1,3 +1,8 @@
+# 0.14.1
+
+- Fix dimer formation rates in kTAM model.
+- Fix k_f specification in kTAM model.
+
 # 0.14.0
 
 - Allow state references to be cloned into normal states (useful for FFS results).
