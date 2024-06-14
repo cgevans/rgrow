@@ -31,12 +31,12 @@ use crate::base::{Glue, Tile};
 type Conc = f64;
 type Strength = f64;
 
-// Rate per concentration (M/s)
+/// Rate per concentration (M/s)
 type RatePerConc = f64;
 
 type Energy = f64;
 
-// Rate (1/s)
+/// Rate (1/s)
 type Rate = f64;
 
 trait NonZero {
