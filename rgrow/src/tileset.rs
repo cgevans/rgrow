@@ -564,6 +564,7 @@ impl TryFrom<&str> for Model {
             "ktam" => Ok(Model::KTAM),
             "atam" => Ok(Model::ATAM),
             "oldktam" => Ok(Model::OldKTAM),
+            "sdc1d" => Ok(Model::SDC),
             _ => Err(StringConvError(format!(
                 "Unknown model {}. Valid options are kTAM, aTAM, and oldkTAM.",
                 s
@@ -964,7 +965,7 @@ impl ProcessedTileSet {
             tile_stoics: Array1::from_vec(tile_stoics),
             tile_names,
             tile_colors,
-            glue_names: Vec::new(),
+            glue_names: Vec::new(),  // FIXME
             glue_strengths,
             has_duples,
             glue_map,

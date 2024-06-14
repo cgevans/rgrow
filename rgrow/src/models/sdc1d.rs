@@ -27,7 +27,8 @@ use crate::{
     base::{Energy, Glue, GrowError, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
-    system::{Event, NeededUpdate, System, TileBondInfo}, tileset::FromTileSet,
+    system::{Event, NeededUpdate, System, TileBondInfo},
+    tileset::{FromTileSet, ProcessedTileSet, Size},
 };
 
 use ndarray::prelude::{Array1, Array2};
@@ -57,8 +58,7 @@ pub struct SDC {
     pub scaffold: Array2<Glue>,
     /// All strands in the system, they are represented by tiles
     /// with only glue on the south, west, and east (nothing can stuck to the top of a strand)
-    pub strands: Array1<Tile>,
-
+    // pub strands: Array1<Tile>,
     pub strand_concentration: Array1<Conc>,
     /// Glues of a given strand by id
     ///
@@ -129,7 +129,7 @@ impl SDC {
 
     /// Fill the energy_bonds array
     fn fill_energy_array(&mut self) {
-        let num_of_strands = self.strands.len();
+        let num_of_strands = self.strand_names.len();
 
         // For each *possible* pair of strands, calculate the energy bond
         for strand_f in 0..(num_of_strands as usize) {
@@ -396,7 +396,7 @@ impl System for SDC {
         format!(
             "1 dimensional SDC with scaffold of len {} and {} strands",
             self.scaffold.len(),
-            self.strands.len(),
+            self.strand_names.len(),
         )
     }
 }
@@ -429,6 +429,59 @@ impl TileBondInfo for SDC {
 
 impl FromTileSet for SDC {
     fn from_tileset(tileset: &crate::tileset::TileSet) -> Result<Self, crate::base::RgrowError> {
-        todo!()
+        // This gives us parsed names / etc for tiles and glues.  It makes some wrong assumptions (like
+        // that each tile has four edges), but it will do for now.
+        let pc = ProcessedTileSet::from_tileset(tileset)?;
+
+        // Combine glue strengths (between like numbers) and glue links (between two numbers)
+        let n_glues = pc.glue_strengths.len();
+        let mut glue_links = Array2::zeros((n_glues, n_glues));
+        for (i, strength) in pc.glue_strengths.indexed_iter() {
+            glue_links[(i, i)] = *strength;
+        }
+        for (i, j, strength) in pc.gluelinks.iter() {
+            glue_links[(*i, *j)] = *strength;
+        }
+
+        // Just generate the stuff that will be filled by the model.
+        let energy_bonds = Array2::<f64>::zeros((pc.tile_names.len(), pc.tile_names.len()));
+        let friends_btm = HashMap::new();
+
+        // We'll default to 64 scaffolds.
+        let (n_scaffolds, scaffold_length) = match tileset.size {
+            Some(Size::Single(x)) => (64, x),
+            Some(Size::Pair((j, x))) => (j, x),
+            None => panic!("Size not specified for SDC model.")
+        };
+
+        // The tileset input doesn't have a way to specify scaffolds right now.  This generates a buch of 'fake' scaffolds
+        // each with just glues 0 to scaffold_length, which we can at least play around with.
+        let mut scaffold = Array2::<Glue>::zeros((n_scaffolds, scaffold_length));
+        for ((i, j), v) in scaffold.indexed_iter_mut() {
+            *v = j;
+        }
+
+        let alpha = tileset.alpha.unwrap_or(0.0);
+
+        // We'll set strand concentrations using stoic and the traditional kTAM Gmc, where
+        // conc = stoic * u0 * exp(-Gmc + alpha) and u0 = 1M, but we really should just have
+        // a way to specify concentrations directly.
+        let strand_concentration = pc.tile_stoics.mapv(|x| x * (-tileset.gmc.unwrap_or(16.0) + alpha).exp());
+
+        Ok(SDC {
+            strand_names: pc.tile_names,
+            glue_names: pc.glue_names,
+            glue_links,
+            colors: pc.tile_colors,
+            glues: pc.tile_edges,
+            anchor_tiles: Vec::new(),
+            scaffold,
+            strand_concentration,
+            kf: tileset.kf.unwrap_or(1.0e6),
+            g_se: tileset.gse.unwrap_or(5.0),
+            alpha,
+            friends_btm,
+            energy_bonds,
+        })
     }
 }
