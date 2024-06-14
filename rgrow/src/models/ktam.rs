@@ -822,11 +822,11 @@ impl KTAM {
         g_se: f64,
         g_mc: f64,
         alpha: Option<f64>,
-        _k_f: Option<f64>,
+        k_f: Option<f64>,
         seed: Option<Seed>,
         fission_handling: Option<FissionHandling>,
-        _chunk_handling: Option<ChunkHandling>,
-        _chunk_size: Option<ChunkSize>,
+        _chunk_handling: Option<ChunkHandling>, // Fixme
+        _chunk_size: Option<ChunkSize>, // Fixme
         tile_names: Option<Vec<String>>,
         tile_colors: Option<Vec<[u8; 4]>>,
     ) -> Self {
@@ -843,6 +843,10 @@ impl KTAM {
         ktam.tile_concs = tile_stoics;
         ktam.seed = seed.unwrap_or(ktam.seed);
         ktam.tile_names = tile_names.unwrap_or(ktam.tile_names);
+
+        ktam.kf = k_f.unwrap_or(ktam.kf);
+
+        
 
         ktam.tile_colors = match tile_colors {
             Some(tc) => tc,
