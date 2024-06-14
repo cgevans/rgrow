@@ -202,9 +202,9 @@ impl SDC {
         (true, acc, Event::MonomerDetachment(point))
     }
 
-    ///       x y z <- attached strands (potentially empty)
-    /// _ _ _ _ _ _ _ _ _ _  <- Scaffold
-    ///         ^ point
+    /// |      x y z <- attached strands (potentially empty)
+    /// |_ _ _ _ _ _ _ _ _ _  <- Scaffold
+    /// |        ^ point
     ///
     /// TODO: Add just_calc parameter
     fn find_monomer_attachment_possibilities_at_point<S: State + ?Sized>(
