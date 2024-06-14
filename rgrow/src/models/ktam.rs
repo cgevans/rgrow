@@ -1502,7 +1502,7 @@ impl FromTileSet for KTAM {
 
         newkt.set_duples(proc.hdoubletiles, proc.vdoubletiles);
 
-        for (g1, g2, s) in proc.gluelinks {
+        for (g1, g2, s) in proc.glue_links {
             newkt.glue_links[(g2, g1)] = s;
             newkt.glue_links[(g1, g2)] = s;
         }

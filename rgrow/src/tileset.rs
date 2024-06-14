@@ -717,7 +717,7 @@ pub(crate) struct ProcessedTileSet {
 
     pub(crate) seed: Vec<(base::CanvasLength, base::CanvasLength, base::Tile)>,
 
-    pub(crate) gluelinks: Vec<(Glue, Glue, f64)>,
+    pub(crate) glue_links: Vec<(Glue, Glue, f64)>,
 
     glue_map: GlueNameMap,
 }
@@ -964,13 +964,13 @@ impl ProcessedTileSet {
             glue_strengths,
             has_duples,
             glue_map,
-            gluelinks: Vec::new(),
+            glue_links: Vec::new(),
             hdoubletiles: hdoubles,
             vdoubletiles: vdoubles,
             seed: Vec::new(),
         };
 
-        s.gluelinks = tileset
+        s.glue_links = tileset
             .glues
             .iter()
             .map(|(g1, g2, st)| (s.gpmap(g1), s.gpmap(g2), *st))

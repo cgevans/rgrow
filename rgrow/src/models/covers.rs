@@ -450,7 +450,7 @@ impl FromTileSet for StaticKTAMCover {
             proc.tile_stoics,
             tile_edges,
             proc.glue_strengths,
-            proc.gluelinks,
+            proc.glue_links,
             tsc.gse.unwrap_or(GSE_DEFAULT),
             tsc.gmc.unwrap_or(GMC_DEFAULT),
             tsc.alpha,
