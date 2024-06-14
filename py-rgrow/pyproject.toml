@@ -3,6 +3,13 @@ name = "rgrow"
 dependencies = ["numpy ~= 1.26", "attrs ~= 23.2", "matplotlib ~= 3.8.2"]
 requires-python = ">=3.9"
 
+[project.optional-dependencies]
+
+testing = [
+    "pytest",
+    "hypothesis"
+]
+
 [build-system]
 requires = ["maturin~=1.4"]
 build-backend = "maturin"
