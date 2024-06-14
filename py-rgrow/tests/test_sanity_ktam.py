@@ -1,5 +1,5 @@
 from rgrow import Tile, TileSet, Bond  # noqa: F841
-import pytest
+import pytest # noqa: F401
 from pytest import approx
 import hypothesis.strategies as st
 from hypothesis import given
