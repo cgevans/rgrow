@@ -439,7 +439,7 @@ impl FromTileSet for SDC {
         for (i, strength) in pc.glue_strengths.indexed_iter() {
             glue_links[(i, i)] = *strength;
         }
-        for (i, j, strength) in pc.gluelinks.iter() {
+        for (i, j, strength) in pc.glue_links.iter() {
             glue_links[(*i, *j)] = *strength;
         }
 
