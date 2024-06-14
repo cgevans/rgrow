@@ -388,6 +388,7 @@ impl System for SDC {
             "kf" => Ok(Box::new(self.kf)),
             "strand_concentrations" => Ok(Box::new(self.strand_concentration.clone())),
             "glue_links" => Ok(Box::new(self.glue_links.clone())),
+            "energy_bonds" => Ok(Box::new(self.energy_bonds.clone())),
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }
