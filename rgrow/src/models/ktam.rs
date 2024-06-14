@@ -3,10 +3,11 @@
 ///
 /// Implementation notes:
 ///
-/// - Concentration is stored *in nM*, as this is most likely to result in reasonable values.
+/// - Concentration is stored in M.
 /// - Concentration, rather than stoichiometry and $G_{mc}$ values, are stored internally.
 /// - As with Xgrow, duples are treated as two tiles, where the right/bottom tile is "fake".
 /// - Unlike Xgrow, there is no *requirement* that there be a seed.
+/// - Dimer detachment is not currently implemented.
 use super::ktam_fission::*;
 use crate::{
     base::{GrowError, RgrowError},
@@ -91,7 +92,9 @@ pub struct KTAM {
     /// Strengths of links between different glues (eg, glue 1 binding to
     /// glue 2).  Should be symmetric.  Will be added with glue_strengths.
     pub glue_links: Array2<Strength>,
+    /// kTAM $G_{se}$ value (unitless, positive is favorable)
     pub g_se: Energy,
+    /// kTAM $\alpha$ value (unitless, positive is favorable)
     pub alpha: Energy,
     /// Rate constant for monomer attachment events, in M/s.
     pub kf: RatePerConc,
