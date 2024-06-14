@@ -41,10 +41,8 @@ use fltk::{app, prelude::*, window::Window};
 #[cfg(feature = "ui")]
 use pixels::{Pixels, SurfaceTexture};
 
-
 #[cfg(feature = "use_rayon")]
 use rayon::prelude::*;
-
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -186,17 +184,29 @@ pub enum EvolveOutcome {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "python", pyclass)]
+
 pub enum Orientation {
     NS,
     WE,
 }
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
+
 pub struct DimerInfo {
     pub t1: Tile,
     pub t2: Tile,
     pub orientation: Orientation,
     pub formation_rate: Rate,
     pub equilibrium_conc: f64,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl DimerInfo {
+    pub fn __repr__(&self) -> String {
+        format!("{:?}", self)
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]

@@ -2,12 +2,12 @@ use std::ops::DerefMut;
 use std::time::Duration;
 
 use crate::base::{NumEvents, NumTiles, RustAny, Tile};
-use crate::canvas::Canvas;
+use crate::canvas::{Canvas, PointSafeHere};
 use crate::ffs::{BoxedFFSResult, FFSRunConfig, FFSStateRef};
 use crate::ratestore::RateStore;
 use crate::state::{ClonableState, StateEnum, StateStatus, TrackerData};
 use crate::system::{
-    DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, TileBondInfo,
+    DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, SystemWithDimers, TileBondInfo
 };
 use crate::tileset::CanvasType;
 use ndarray::Array2;
@@ -46,6 +46,10 @@ impl PyState {
         let ra = t.0.raw_array();
 
         Ok(PyArray2::from_array_bound(py, &ra))
+    }
+
+    pub fn rate_at_point(&self, point: (usize, usize)) -> f64 {
+        self.0.rate_at_point(PointSafeHere(point)) // FIXME: check on bounds
     }
 
     pub fn tracking_copy(
@@ -235,6 +239,10 @@ impl PySystem {
         }
     }
 
+    fn calc_dimers(&self) -> Vec<DimerInfo> {
+        self.0.calc_dimers()
+    }
+
     fn calc_mismatch_locations<'py>(
         this: &Bound<'py, Self>,
         state: PyStateOrRef,
@@ -292,6 +300,7 @@ impl PySystem {
         Ok(RustAny(self.0.get_param(param_name)?))
     }
 
+    #[pyo3(signature = (state, needed = &NeededUpdate::All))]
     fn update_all(&self, state: &mut PyState, needed: &NeededUpdate) {
         self.0.update_all(&mut state.0, needed)
     }

@@ -3,10 +3,11 @@
 ///
 /// Implementation notes:
 ///
-/// - Concentration is stored *in nM*, as this is most likely to result in reasonable values.
+/// - Concentration is stored in M.
 /// - Concentration, rather than stoichiometry and $G_{mc}$ values, are stored internally.
 /// - As with Xgrow, duples are treated as two tiles, where the right/bottom tile is "fake".
 /// - Unlike Xgrow, there is no *requirement* that there be a seed.
+/// - Dimer detachment is not currently implemented.
 use super::ktam_fission::*;
 use crate::{
     base::{GrowError, RgrowError},
@@ -27,10 +28,16 @@ use std::collections::HashMap;
 
 use crate::base::{Glue, Tile};
 
+/// Concentration (M)
 type Conc = f64;
 type Strength = f64;
+
+/// Rate per concentration (M/s)
 type RatePerConc = f64;
+
 type Energy = f64;
+
+/// Rate (1/s)
 type Rate = f64;
 
 trait NonZero {
@@ -45,8 +52,8 @@ impl NonZero for Tile {
 
 const FAKE_EVENT_RATE: f64 = 1e-20;
 
-fn energy_exp_times_u0(x: f64) -> Conc {
-    1.0e9 * x.exp()
+fn energy_exp_times_u0(x: Energy) -> Conc {
+    x.exp()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -75,7 +82,7 @@ impl Default for TileShape {
 pub struct KTAM {
     /// Tile names, as strings.  Only used for reference.
     pub tile_names: Vec<String>,
-    /// Tile concentrations, actual (not modified by alpha/Gse/etc) in nM.
+    /// Tile concentrations, actual (not modified by alpha/Gse/etc) in M.
     pub tile_concs: Array1<Conc>,
     /// Glues (by number) on tile edges.
     pub tile_edges: Array2<Glue>,
@@ -85,8 +92,11 @@ pub struct KTAM {
     /// Strengths of links between different glues (eg, glue 1 binding to
     /// glue 2).  Should be symmetric.  Will be added with glue_strengths.
     pub glue_links: Array2<Strength>,
+    /// kTAM $G_{se}$ value (unitless, positive is favorable)
     pub g_se: Energy,
+    /// kTAM $\alpha$ value (unitless, positive is favorable)
     pub alpha: Energy,
+    /// Rate constant for monomer attachment events, in M/s.
     pub kf: RatePerConc,
     pub double_to_right: Array1<Tile>,
     pub double_to_bottom: Array1<Tile>,
@@ -690,12 +700,12 @@ impl SystemWithDimers for KTAM {
 
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
             if *e > 0. {
-                let biconc = self.tile_concs[t1] * self.tile_concs[t2] / 1.0e9;
+                let biconc = self.tile_concs[t1] * self.tile_concs[t2];
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::NS,
-                    formation_rate: self.kf * biconc / 1e9, // FIXME: 1e9 because we're using nM for concs
+                    formation_rate: self.kf * biconc,
                     equilibrium_conc: biconc * f64::exp(*e - self.alpha),
                 });
             }
@@ -703,12 +713,12 @@ impl SystemWithDimers for KTAM {
 
         for ((t1, t2), e) in self.energy_we.indexed_iter() {
             if *e > 0. {
-                let biconc = self.tile_concs[t1] * self.tile_concs[t2] / 1.0e9;
+                let biconc = self.tile_concs[t1] * self.tile_concs[t2];
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::WE,
-                    formation_rate: self.kf * biconc / 1e9, // FIXME: 1e9 because we're using nM for concs
+                    formation_rate: self.kf * biconc,
                     equilibrium_conc: biconc * f64::exp(*e - self.alpha),
                 });
             }
@@ -766,7 +776,7 @@ impl KTAM {
             glue_links: Array2::zeros((nglues + 1, nglues + 1)),
             g_se: (9.),
             alpha: (0.),
-            kf: (1e-3),
+            kf: (1e6),
             double_to_right: Array1::zeros(ntiles + 1),
             double_to_bottom: Array1::zeros(ntiles + 1),
             seed: Seed::None(),
@@ -815,28 +825,31 @@ impl KTAM {
         g_se: f64,
         g_mc: f64,
         alpha: Option<f64>,
-        _k_f: Option<f64>,
+        k_f: Option<f64>,
         seed: Option<Seed>,
         fission_handling: Option<FissionHandling>,
-        _chunk_handling: Option<ChunkHandling>,
-        _chunk_size: Option<ChunkSize>,
+        _chunk_handling: Option<ChunkHandling>, // Fixme
+        _chunk_size: Option<ChunkSize>, // Fixme
         tile_names: Option<Vec<String>>,
         tile_colors: Option<Vec<[u8; 4]>>,
     ) -> Self {
         let ntiles = tile_stoics.len() as Tile;
 
-        tile_stoics.map_inplace(|x| *x *= 1.0e9 * (-g_mc + alpha.unwrap_or(0.)).exp());
 
-        let mut ktam = Self::new_sized(tile_stoics.len() as Tile - 1, glue_strengths.len() - 1);
+        let mut ktam = Self::new_sized(ntiles - 1, glue_strengths.len() - 1);
 
-        ktam.tile_concs = tile_stoics;
         ktam.tile_edges = tile_edges;
         ktam.glue_strengths = glue_strengths;
         ktam.g_se = g_se;
         ktam.alpha = alpha.unwrap_or(ktam.alpha);
+        tile_stoics.map_inplace(|x| *x *= (-g_mc + ktam.alpha).exp());
+        ktam.tile_concs = tile_stoics;
         ktam.seed = seed.unwrap_or(ktam.seed);
-        //ktam.tile_colors = tile_colors.unwrap_or(ktam.tile_colors);
         ktam.tile_names = tile_names.unwrap_or(ktam.tile_names);
+
+        ktam.kf = k_f.unwrap_or(ktam.kf);
+
+        
 
         ktam.tile_colors = match tile_colors {
             Some(tc) => tc,
