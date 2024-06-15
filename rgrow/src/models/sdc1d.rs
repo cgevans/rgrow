@@ -24,7 +24,7 @@ use std::{
 };
 
 use crate::{
-    base::{Energy, Glue, GrowError, Rate,false Tile},
+    base::{Energy, Glue, GrowError, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{Event, NeededUpdate, System, TileBondInfo},
