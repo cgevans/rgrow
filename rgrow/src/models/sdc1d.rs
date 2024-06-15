@@ -24,7 +24,7 @@ use std::{
 };
 
 use crate::{
-    base::{Energy, Glue, GrowError, Rate, Tile},
+    base::{Energy, Glue, GrowError, Rate,false Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{Event, NeededUpdate, System, TileBondInfo},
@@ -184,7 +184,7 @@ impl SDC {
         point: PointSafe2,
         acc: Rate,
     ) -> (bool, Rate, Event) {
-        self.find_monomer_attachment_possibilities_at_point(state, acc, point)
+        self.find_monomer_attachment_possibilities_at_point(state, acc, point, false)
     }
 
     pub fn choose_monomer_detachment_at_point<S: State + ?Sized>(
@@ -206,12 +206,12 @@ impl SDC {
     /// |_ _ _ _ _ _ _ _ _ _  <- Scaffold
     /// |        ^ point
     ///
-    /// TODO: Add just_calc parameter
     fn find_monomer_attachment_possibilities_at_point<S: State + ?Sized>(
         &self,
         state: &S,
         mut acc: Rate,
         scaffold_coord: PointSafe2,
+        just_calc: bool,
     ) -> (bool, Rate, Event) {
         let point = scaffold_coord.into();
         let tile = state.tile_at_point(point);
@@ -228,7 +228,7 @@ impl SDC {
 
         for &strand in friends {
             acc -= self.kf * self.strand_concentration[strand as usize];
-            if acc <= 0.0 {
+            if acc <= 0.0 && (!just_calc) {
                 return (true, acc, Event::MonomerAttachment(point, strand));
             }
         }
@@ -243,7 +243,8 @@ impl SDC {
     ) -> f64 {
         // If we set acc = 0, would it not be the case that we just attach to the first tile we can
         // ?
-        match self.find_monomer_attachment_possibilities_at_point(state, 0.0, scaffold_coord) {
+        match self.find_monomer_attachment_possibilities_at_point(state, 0.0, scaffold_coord, true)
+        {
             (false, acc, _) => -acc,
             _ => panic!(),
         }
@@ -452,7 +453,7 @@ impl FromTileSet for SDC {
         let (n_scaffolds, scaffold_length) = match tileset.size {
             Some(Size::Single(x)) => (64, x),
             Some(Size::Pair((j, x))) => (j, x),
-            None => panic!("Size not specified for SDC model.")
+            None => panic!("Size not specified for SDC model."),
         };
 
         // The tileset input doesn't have a way to specify scaffolds right now.  This generates a buch of 'fake' scaffolds
@@ -467,7 +468,9 @@ impl FromTileSet for SDC {
         // We'll set strand concentrations using stoic and the traditional kTAM Gmc, where
         // conc = stoic * u0 * exp(-Gmc + alpha) and u0 = 1M, but we really should just have
         // a way to specify concentrations directly.
-        let strand_concentration = pc.tile_stoics.mapv(|x| x * (-tileset.gmc.unwrap_or(16.0) + alpha).exp());
+        let strand_concentration = pc
+            .tile_stoics
+            .mapv(|x| x * (-tileset.gmc.unwrap_or(16.0) + alpha).exp());
 
         Ok(SDC {
             strand_names: pc.tile_names,
