@@ -447,7 +447,6 @@ impl FromTileSet for SDC {
 
         // Just generate the stuff that will be filled by the model.
         let energy_bonds = Array2::<f64>::zeros((pc.tile_names.len(), pc.tile_names.len()));
-        let friends_btm = HashMap::new();
 
         // We'll default to 64 scaffolds.
         let (n_scaffolds, scaffold_length) = match tileset.size {
@@ -472,7 +471,12 @@ impl FromTileSet for SDC {
             .tile_stoics
             .mapv(|x| x * (-tileset.gmc.unwrap_or(16.0) + alpha).exp());
 
-        Ok(SDC {
+        let mut friends_btm = HashMap::new();
+        for (t, &b) in pc.tile_edges.index_axis(ndarray::Axis(1), BOTTOM_GLUE_INDEX).indexed_iter() {
+            friends_btm.entry(b).or_insert(HashSet::new()).insert(t as u32);
+        }
+
+        let mut sys = SDC {
             strand_names: pc.tile_names,
             glue_names: pc.glue_names,
             glue_links,
@@ -486,6 +490,10 @@ impl FromTileSet for SDC {
             alpha,
             friends_btm,
             energy_bonds,
-        })
+        };
+
+        sys.update_system();
+
+        Ok(sys)
     }
 }
