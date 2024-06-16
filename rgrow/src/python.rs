@@ -96,6 +96,10 @@ impl PyState {
             self.0.total_rate()
         )
     }
+
+    pub fn print_debug(&self) {
+        println!("{:?}", self.0);
+    }
 }
 
 #[cfg(feature = "python")]
@@ -332,5 +336,9 @@ impl PySystem {
 
     fn __repr__(&self) -> String {
         format!("System({})", self.0.system_info())
+    }
+
+    pub fn print_debug(&self) {
+        println!("{:?}", self.0);
     }
 }

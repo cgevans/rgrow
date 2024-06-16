@@ -766,6 +766,7 @@ impl<S: System + SystemWithDimers> DynSystem for S {
 }
 
 #[enum_dispatch(DynSystem, TileBondInfo, SystemWithDimers)]
+#[derive(Debug, Clone)]
 pub enum SystemEnum {
     KTAM,
     OldKTAM,
