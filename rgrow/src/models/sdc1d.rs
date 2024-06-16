@@ -166,11 +166,11 @@ impl SDC {
     ) -> Rate {
         let strand = state.tile_at_point(scaffold_point);
 
-        let anchor_tile = self.anchor_tiles[(scaffold_point.0).0];
+        // let anchor_tile = self.anchor_tiles[(scaffold_point.0).0]; // FIXME: disabled anchor tiles for now
 
         // If we are trying to detach the anchor tile
         // There is no strand, thus nothing to be detached
-        if strand == 0 || anchor_tile.0 == scaffold_point {
+        if strand == 0 /*|| anchor_tile.0 == scaffold_point */{ // FIXME: disabled anchor tiles for now
             return 0.0;
         }
 
