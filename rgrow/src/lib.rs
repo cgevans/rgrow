@@ -28,6 +28,8 @@ pub mod python;
 #[cfg(feature = "python")]
 pub mod pytileset;
 
+pub mod newtileset;
+
 // pub mod cffi;
 
 // pub mod newsystem;

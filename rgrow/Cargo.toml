@@ -68,6 +68,7 @@ ndarray = { workspace = true }
 enum_dispatch = "0.3"
 polars = { workspace = true }
 pyo3-polars = {workspace = true}
+config = { workspace = true }
 
 [dependencies.clap]
 version = "4"
