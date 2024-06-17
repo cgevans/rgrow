@@ -149,12 +149,12 @@ impl SDC {
                 // Case 1: First strands is to the west of second
                 // strand_f    strand_s
                 self.energy_bonds[(strand_f, strand_s)] =
-                    self.g_se * self.glue_links[(f_east_glue, s_west_glue)];
+                    -self.glue_links[(f_east_glue, s_west_glue)];
 
                 // Case 2: First strands is to the east of second
                 // strand_s    strand_f
                 self.energy_bonds[(strand_s, strand_f)] =
-                    self.g_se * self.glue_links[(f_west_glue, s_east_glue)];
+                    -self.glue_links[(f_west_glue, s_east_glue)];
             }
         }
     }
@@ -170,12 +170,15 @@ impl SDC {
 
         // If we are trying to detach the anchor tile
         // There is no strand, thus nothing to be detached
-        if strand == 0 /*|| anchor_tile.0 == scaffold_point */{ // FIXME: disabled anchor tiles for now
+        if strand == 0
+        /*|| anchor_tile.0 == scaffold_point */
+        {
+            // FIXME: disabled anchor tiles for now
             return 0.0;
         }
 
         let bond_energy = self.bond_energy_of_strand(state, scaffold_point, strand);
-        self.kf * (U0 * (-bond_energy + self.alpha).exp())
+        self.kf * bond_energy.exp()
     }
 
     pub fn choose_monomer_attachment_at_point<S: State + ?Sized>(
@@ -338,22 +341,6 @@ impl System for SDC {
         value: Box<dyn std::any::Any>,
     ) -> Result<crate::system::NeededUpdate, crate::base::GrowError> {
         match name {
-            "g_se" => {
-                let g_se = value
-                    .downcast_ref::<f64>()
-                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
-                self.g_se = *g_se;
-                self.update_system();
-                Ok(NeededUpdate::NonZero)
-            }
-            "alpha" => {
-                let alpha = value
-                    .downcast_ref::<f64>()
-                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
-                self.alpha = *alpha;
-                self.update_system();
-                Ok(NeededUpdate::NonZero)
-            }
             "kf" => {
                 let kf = value
                     .downcast_ref::<f64>()
@@ -384,8 +371,6 @@ impl System for SDC {
 
     fn get_param(&self, name: &str) -> Result<Box<dyn std::any::Any>, crate::base::GrowError> {
         match name {
-            "g_se" => Ok(Box::new(self.g_se)),
-            "alpha" => Ok(Box::new(self.alpha)),
             "kf" => Ok(Box::new(self.kf)),
             "strand_concentrations" => Ok(Box::new(self.strand_concentration.clone())),
             "glue_links" => Ok(Box::new(self.glue_links.clone())),
@@ -472,8 +457,15 @@ impl FromTileSet for SDC {
             .mapv(|x| x * (-tileset.gmc.unwrap_or(16.0) + alpha).exp());
 
         let mut friends_btm = HashMap::new();
-        for (t, &b) in pc.tile_edges.index_axis(ndarray::Axis(1), BOTTOM_GLUE_INDEX).indexed_iter() {
-            friends_btm.entry(b).or_insert(HashSet::new()).insert(t as u32);
+        for (t, &b) in pc
+            .tile_edges
+            .index_axis(ndarray::Axis(1), BOTTOM_GLUE_INDEX)
+            .indexed_iter()
+        {
+            friends_btm
+                .entry(b)
+                .or_insert(HashSet::new())
+                .insert(t as u32);
         }
 
         let mut sys = SDC {
