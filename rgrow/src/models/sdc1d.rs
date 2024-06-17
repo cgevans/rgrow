@@ -40,8 +40,6 @@ const WEST_GLUE_INDEX: usize = 0;
 const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
 
-const U0: f64 = 1.0e9;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC {
     /// The anchor tiles for each of the scaffolds
@@ -76,9 +74,6 @@ pub struct SDC {
     pub colors: Vec<[u8; 4]>,
     /// The (de)attachment rates will depend on this constant(for the system) value
     pub kf: RatePerConc,
-    /// Constant G_se (TODO: Elaborate)
-    pub g_se: Energy,
-    pub alpha: Energy,
     /// FIXME: Change this to a vector to avoid hashing time
     ///
     /// Set of tiles that can stick to scaffold gap with a given glue
@@ -478,8 +473,6 @@ impl FromTileSet for SDC {
             scaffold,
             strand_concentration,
             kf: tileset.kf.unwrap_or(1.0e6),
-            g_se: tileset.gse.unwrap_or(5.0),
-            alpha,
             friends_btm,
             energy_bonds,
         };
