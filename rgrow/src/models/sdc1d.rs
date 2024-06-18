@@ -67,8 +67,6 @@ pub struct SDC {
     ///     (n) -- [left glue, bottom glue, right glue]
     /// ]
     pub glues: Array2<Glue>,
-    /// Binding strength between two glues
-    pub glue_links: Array2<Strength>,
     /// Each strand will be given a color so that it can be easily identified
     /// when illustrated
     pub colors: Vec<[u8; 4]>,
@@ -78,20 +76,56 @@ pub struct SDC {
     ///
     /// Set of tiles that can stick to scaffold gap with a given glue
     pub friends_btm: HashMap<Glue, HashSet<Tile>>,
+    /// H in the formula to genereate the glue strengths
+    pub enthalpy_matrix: Array2<f64>,
+    /// S in the formula to geenrate the glue strengths
+    pub entropy_matrix: Array2<f64>,
+    /// Temperature of the system in kelvin
+    temperature: f64,
     /// The energy with which two strands will bond
     ///
     /// This array is indexed as follows. Given strands x and y, where x is to the west of y
     /// (meaning that the east of x forms a bond with the west of y), the energy of said bond
     /// is given by energy_bonds[(x, y)]
     energy_bonds: Array2<Energy>,
+    /// Binding strength between two glues
+    glue_links: Array2<Strength>,
 }
 
 impl SDC {
     fn update_system(&mut self) {
-        // Fill the energy array
+        // Note that order is important, we need to generate the glue matrix first, then using
+        // the data generated there, the energy array is filled, etc...
+        self.generate_glue_matrix();
         self.fill_energy_array();
+        self.generate_friends();
+    }
 
-        // TODO: Do we also need to update friends here?
+    fn generate_friends(&mut self) {
+        let mut friends_btm = HashMap::new();
+        for (t, &b) in self
+            .glues
+            .index_axis(ndarray::Axis(1), BOTTOM_GLUE_INDEX)
+            .indexed_iter()
+        {
+            friends_btm
+                .entry(b)
+                .or_insert(HashSet::new())
+                .insert(t as u32);
+        }
+        self.friends_btm = friends_btm;
+    }
+
+    /// The strenght of glues a, b is given by:
+    ///
+    /// G(a, b) =  H(a,b) - T * S(a, b)
+    fn generate_glue_matrix(&mut self) {
+        self.glue_links = &self.enthalpy_matrix - self.temperature * &self.entropy_matrix;
+    }
+
+    pub fn change_temperature_to(&mut self, kelvin: f64) {
+        self.temperature = kelvin;
+        self.update_system();
     }
 
     fn polymer_update<S: State + ?Sized>(&self, points: &Vec<PointSafe2>, state: &mut S) {
@@ -451,18 +485,6 @@ impl FromTileSet for SDC {
             .tile_stoics
             .mapv(|x| x * (-tileset.gmc.unwrap_or(16.0) + alpha).exp());
 
-        let mut friends_btm = HashMap::new();
-        for (t, &b) in pc
-            .tile_edges
-            .index_axis(ndarray::Axis(1), BOTTOM_GLUE_INDEX)
-            .indexed_iter()
-        {
-            friends_btm
-                .entry(b)
-                .or_insert(HashSet::new())
-                .insert(t as u32);
-        }
-
         let mut sys = SDC {
             strand_names: pc.tile_names,
             glue_names: pc.glue_names,
@@ -473,21 +495,23 @@ impl FromTileSet for SDC {
             scaffold,
             strand_concentration,
             kf: tileset.kf.unwrap_or(1.0e6),
-            friends_btm,
+            enthalpy_matrix: todo!(),
+            entropy_matrix: todo!(),
+            temperature: todo!(),
+            friends_btm: HashMap::new(),
             energy_bonds,
         };
 
+        // This will generate the friends hashamp, as well as the glues, and the energy bonds
         sys.update_system();
 
         Ok(sys)
     }
 }
 
-
 // Here is potentially another way to process this, though not done.  Feel free to delete or modify.
 
 use std::hash::Hash;
-
 
 use bimap::BiHashMap;
 
@@ -568,7 +592,9 @@ impl SDC {
 
         let mut tile_glues_int = Array2::<usize>::zeros((params.tile_glues.len(), 3));
 
-        for (tgl, mut r) in std::iter::zip(params.tile_glues.iter(), tile_glues_int.outer_iter_mut()) {
+        for (tgl, mut r) in
+            std::iter::zip(params.tile_glues.iter(), tile_glues_int.outer_iter_mut())
+        {
             for (i, t) in tgl.iter().enumerate() {
                 match t {
                     None => {
@@ -605,8 +631,7 @@ impl SDC {
                     glue_s[[i, j]] = v.1;
                     glue_h[[j, i]] = v.0;
                     glue_s[[j, i]] = v.1;
-                
-                },
+                }
                 RefOrPair::Pair(r1, r2) => {
                     let i = *glue_name_map.get_by_left(r1).unwrap(); // FIXME: fails if glue not found
                     let j = *glue_name_map.get_by_left(r2).unwrap(); // FIXME: fails if glue not found
@@ -614,22 +639,90 @@ impl SDC {
                     glue_s[[i, j]] = v.1;
                     glue_h[[j, i]] = v.0;
                     glue_s[[j, i]] = v.1;
-                },
+                }
             }
-        };
+        }
 
-        SDC {
+        let mut sdc = SDC {
             anchor_tiles: Vec::new(),
-            strand_names: params.tile_names.iter().map(|x| x.clone().unwrap_or("".to_string())).collect(),
+            strand_names: params
+                .tile_names
+                .iter()
+                .map(|x| x.clone().unwrap_or("".to_string()))
+                .collect(),
             glue_names: todo!(),
             scaffold: todo!(),
+            enthalpy_matrix: glue_h,
+            entropy_matrix: glue_s,
+            temperature: params.temperature,
             strand_concentration: Array1::from(params.tile_concentration),
             glues: tile_glues_int,
-            glue_links: glue_h - params.temperature * glue_s,
             colors: Vec::new(),
             kf: params.k_f,
-            friends_btm: todo!(),
-            energy_bonds: todo!(),
-        }
+            // The ones below should be generated by the update system function
+            //
+            // It may be cleaner to have a "new" function that takes just what is needed as a
+            // param and generates the rest
+            glue_links: glue_h - params.temperature * glue_s,
+            friends_btm: HashMap::new(),
+            energy_bonds: Array2::<f64>::zeros((params.tile_names.len(), params.tile_names.len())),
+        };
+
+        sdc.update_system();
+        sdc
+    }
+}
+
+#[cfg(test)]
+mod test_sdc_model {
+    use ndarray::array;
+
+    use super::*;
+    #[test]
+    fn test_update_system() {
+        // a lot of the parameters here make no sense, but they wont be used in the tests so it
+        // doesnt matter
+        let mut sdc = SDC {
+            anchor_tiles: Vec::new(),
+            strand_names: Vec::new(),
+            glue_names: Vec::new(),
+            scaffold: Array2::<usize>::zeros((5, 5)),
+            strand_concentration: Array1::<f64>::zeros(5),
+            glues: array![
+                [0, 0, 0],
+                [1, 3, 12],
+                [6, 8, 12],
+                [31, 3, 45],
+                [8, 4, 2],
+                [1, 1, 78],
+                [4, 8, 1],
+            ],
+            colors: Vec::new(),
+            kf: 0.0,
+            friends_btm: HashMap::new(),
+            entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]],
+            enthalpy_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]],
+            temperature: 5.,
+            energy_bonds: Array2::<f64>::zeros((5, 5)),
+            glue_links: Array2::<f64>::zeros((5, 5)),
+        };
+
+        sdc.update_system();
+
+        // Check that the glue matrix is being generated as expected
+        let expeced_glue_matrix = array![[-1.0, -9., -23.], [-19., -4., -26.], [-13., 31., -73.]];
+        assert_eq!(expeced_glue_matrix, sdc.glue_links);
+
+        // TODO Check that the energy bonds are being generated as expected
+
+        // Check that the friends hashmap is being generated as expected
+        let expected_friends = HashMap::from([
+            (0, HashSet::from([0])),
+            (1, HashSet::from([5])),
+            (3, HashSet::from([1, 3])),
+            (4, HashSet::from([4])),
+            (8, HashSet::from([2, 6])),
+        ]);
+        assert_eq!(expected_friends, sdc.friends_btm);
     }
 }
