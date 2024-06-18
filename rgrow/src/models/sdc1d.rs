@@ -27,7 +27,7 @@ use crate::{
     base::{Energy, Glue, GrowError, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
-    system::{Event, NeededUpdate, System, TileBondInfo},
+    system::{Event, NeededUpdate, System, SystemEnum, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, Size},
 };
 
@@ -581,6 +581,15 @@ fn comp(a: &str) -> String {
 
 fn base(a: &str) -> &str {
     a.trim_end_matches('*')
+}
+
+// This is not a smart way of doing this, but it works for now!
+#[cfg(python)]
+#[pymethods]
+impl SystemEnum {
+    fn new_sdc(params: SDCParams) -> SystemEnum {
+        SystemEnum::SDC(SDC::from_params(params))
+    }
 }
 
 impl SDC {
