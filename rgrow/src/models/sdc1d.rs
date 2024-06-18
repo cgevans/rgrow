@@ -482,3 +482,154 @@ impl FromTileSet for SDC {
         Ok(sys)
     }
 }
+
+
+// Here is potentially another way to process this, though not done.  Feel free to delete or modify.
+
+use std::hash::Hash;
+
+
+use bimap::BiHashMap;
+
+#[cfg(python)]
+use pyo3::prelude::*;
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(python, derive(FromPyObject))]
+pub enum RefOrPair {
+    Ref(String),
+    Pair(String, String),
+}
+
+impl From<String> for RefOrPair {
+    fn from(r: String) -> Self {
+        RefOrPair::Ref(r)
+    }
+}
+
+impl From<(String, String)> for RefOrPair {
+    fn from(p: (String, String)) -> Self {
+        RefOrPair::Pair(p.0, p.1)
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(python, derive(FromPyObject))]
+pub enum SingleOrMultiScaffold {
+    Single(Vec<String>),
+    Multi(Vec<Vec<String>>),
+}
+
+impl From<Vec<String>> for SingleOrMultiScaffold {
+    fn from(v: Vec<String>) -> Self {
+        SingleOrMultiScaffold::Single(v)
+    }
+}
+
+impl From<Vec<Vec<String>>> for SingleOrMultiScaffold {
+    fn from(v: Vec<Vec<String>>) -> Self {
+        SingleOrMultiScaffold::Multi(v)
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(python, derive(FromPyObject))]
+pub struct SDCParams {
+    pub tile_glues: Vec<Vec<Option<String>>>,
+    pub tile_concentration: Vec<f64>,
+    pub tile_names: Vec<Option<String>>,
+    pub tile_colors: Vec<Option<String>>,
+    pub scaffold: SingleOrMultiScaffold,
+    pub glue_h_s: HashMap<RefOrPair, (f64, f64)>,
+    pub k_f: f64,
+    pub k_n: f64,
+    pub k_c: f64,
+    pub temperature: f64,
+}
+
+fn comp(a: &str) -> String {
+    if a.ends_with('*') {
+        a.trim_end_matches('*').to_string()
+    } else {
+        format!("{}*", a)
+    }
+}
+
+fn base(a: &str) -> &str {
+    a.trim_end_matches('*')
+}
+
+impl SDC {
+    pub fn from_params(params: SDCParams) -> Self {
+        let mut glue_name_map = BiHashMap::new();
+
+        let mut gluenum = 1;
+        let mut max_gluenum = 1;
+
+        let mut tile_glues_int = Array2::<usize>::zeros((params.tile_glues.len(), 3));
+
+        for (tgl, mut r) in std::iter::zip(params.tile_glues.iter(), tile_glues_int.outer_iter_mut()) {
+            for (i, t) in tgl.iter().enumerate() {
+                match t {
+                    None => {
+                        r[i] = 0;
+                    }
+                    Some(s) => {
+                        let j = glue_name_map.get_by_left(s);
+                        match j {
+                            Some(j) => {
+                                r[i] = *j;
+                            }
+                            None => {
+                                glue_name_map.insert(base(s).to_string(), gluenum);
+                                glue_name_map.insert(format!("{}*", base(s)), gluenum + 1);
+                                r[i] = *glue_name_map.get_by_left(s).unwrap(); // FIXME: will fail if ** is in name, and is inefficient
+                                gluenum += 2;
+                                max_gluenum = max_gluenum.max(gluenum);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut glue_h = Array2::<f64>::zeros((max_gluenum, max_gluenum));
+        let mut glue_s = Array2::<f64>::zeros((max_gluenum, max_gluenum));
+
+        for (k, &v) in params.glue_h_s.iter() {
+            match k {
+                RefOrPair::Ref(r) => {
+                    let i = *glue_name_map.get_by_left(&comp(r)).unwrap(); // FIXME: fails if glue not found
+                    let j = *glue_name_map.get_by_left(base(r)).unwrap(); // FIXME: fails if glue not found
+                    glue_h[[i, j]] = v.0;
+                    glue_s[[i, j]] = v.1;
+                    glue_h[[j, i]] = v.0;
+                    glue_s[[j, i]] = v.1;
+                
+                },
+                RefOrPair::Pair(r1, r2) => {
+                    let i = *glue_name_map.get_by_left(r1).unwrap(); // FIXME: fails if glue not found
+                    let j = *glue_name_map.get_by_left(r2).unwrap(); // FIXME: fails if glue not found
+                    glue_h[[i, j]] = v.0;
+                    glue_s[[i, j]] = v.1;
+                    glue_h[[j, i]] = v.0;
+                    glue_s[[j, i]] = v.1;
+                },
+            }
+        };
+
+        SDC {
+            anchor_tiles: Vec::new(),
+            strand_names: params.tile_names.iter().map(|x| x.clone().unwrap_or("".to_string())).collect(),
+            glue_names: todo!(),
+            scaffold: todo!(),
+            strand_concentration: Array1::from(params.tile_concentration),
+            glues: tile_glues_int,
+            glue_links: glue_h - params.temperature * glue_s,
+            colors: Vec::new(),
+            kf: params.k_f,
+            friends_btm: todo!(),
+            energy_bonds: todo!(),
+        }
+    }
+}
