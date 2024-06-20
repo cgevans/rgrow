@@ -758,6 +758,7 @@ mod test_sdc_model {
             delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]],
             temperature: 5.,
             strand_energy_bonds: Array2::<f64>::zeros((5, 5)),
+            scaffold_energy_bonds: Array1::<f64>::zeros(5),
             glue_links: Array2::<f64>::zeros((5, 5)),
         };
 
