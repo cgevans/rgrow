@@ -56,7 +56,7 @@ impl From<char> for DnaNucleotideBase {
     }
 }
 
-/// For some given pair a, b, find (Delta G at 37 degrees C, Delta S)
+/// For some given pair 5' - a, b - 3', find (Delta G at 37 degrees C, Delta S)
 ///
 /// By default the values found in santalucia_thermodynamics_2004 are used
 #[inline(always)]
@@ -67,14 +67,14 @@ fn dG_dS(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> (f64, f64) {
     match (a, b) {
         (T, T) | (A, A) => (-1.0, -0.0213),
         (C, C) | (G, G) => (-1.84, -0.0199),
-        (G, T) | (A, C) => (-1.45, -0.0227),
-        (C, A) | (T, G) => (-1.44, -0.0224),
-        (G, A) | (T, C) => (-1.28, -0.0210),
-        (C, T) | (A, G) => (-1.30, -0.0222),
-        (A, T) => (-0.58, -0.0213),
-        (T, A) => (-0.88, -0.0204),
-        (G, C) => (-2.17, -0.0272),
-        (C, G) => (-2.24, -0.0244),
+        (G, T) | (A, C) => (-1.44, -0.0224),
+        (C, A) | (T, G) => (-1.45, -0.0227),
+        (G, A) | (T, C) => (-1.30, -0.0222),
+        (C, T) | (A, G) => (-1.28, -0.0210),
+        (T, A) => (-0.58, -0.0213),
+        (A, T) => (-0.88, -0.0204),
+        (C, G) => (-2.17, -0.0272),
+        (G, C) => (-2.24, -0.0244),
     }
 }
 
@@ -92,14 +92,18 @@ fn dna_strength(dna: impl Iterator<Item = DnaNucleotideBase>, temperature: f64) 
     .expect("DNA must have length of at least 2")
 }
 
-/// Get delta g for some string dna sequence and its "perfect match"
-pub fn string_dna_delta_g(dna_sequence: String, temperature: f64) -> f64 {
+/// Get delta g for some string dna sequence and its "perfect match".  For example:
+///
+/// ```rust
+/// use rgrow::utils::string_dna_delta_g;
+/// let seq = "cgatg";
+/// assert_eq!(string_dna_delta_g(seq, 37.0), -5.8);
+/// ```
+///
+pub fn string_dna_delta_g(dna_sequence: &str, temperature: f64) -> f64 {
     dna_strength(
         // Convert dna_sequence string into an iterator of nucleotide bases
-        dna_sequence
-            .chars()
-            .into_iter()
-            .map(DnaNucleotideBase::from),
+        dna_sequence.chars().map(DnaNucleotideBase::from),
         temperature,
     )
 }
@@ -107,7 +111,9 @@ pub fn string_dna_delta_g(dna_sequence: String, temperature: f64) -> f64 {
 #[cfg(test)]
 mod test_utils {
 
+    use super::string_dna_delta_g;
     use super::two_window_fold;
+    use approx::assert_ulps_eq;
 
     #[test]
     fn test_sliding_window() {
@@ -125,5 +131,100 @@ mod test_utils {
     }
 
     #[test]
-    fn test_dna_strength() {}
+    #[allow(non_snake_case)]
+    fn test_dna_strength() {
+        // random sequences
+        let seqs = [
+            "cg",
+            "cttcgccac",
+            "gacggcattatgtc",
+            "ct",
+            "tc",
+            "aatacgacggccag",
+            "caga",
+            "ttaaccctta",
+            "actatg",
+            "cttaatccgagaataaaaa",
+            "gccggggttaaaac",
+            "tacaaagggtg",
+            "tgg",
+            "tggtcgccatctcccgt",
+            "ccgttcctagat",
+            "agttagagcttttggacta",
+            "cacctttccgcagg",
+            "tttaacttctc",
+            "gcgccct",
+            "tatttcgtaacttgcacat",
+        ];
+
+        /*
+        Values are taken from stickydesign 0.9.0.a3, using
+
+        ```python
+        # T is temperature, x is sequence
+        -sd.EnergeticsBasic(temperature=T).matching_uniform(sd.endarray([x],'S'))[0]-1.96+(T-37)*0.0057
+        ```
+
+        The correction here is because stickydesign includes the initiation penalty
+        from SantaLucia.  It's actually unclear whether that should be included here,
+        or in other places where it has been included in the past.  It's worth a discussion.
+         */
+
+        let dG_at_37 = [
+            -2.17,
+            -12.719999999999999,
+            -17.970000000000002,
+            -1.28,
+            -1.3,
+            -19.630000000000003,
+            -4.03,
+            -10.560000000000002,
+            -5.63,
+            -20.39,
+            -19.23,
+            -13.32,
+            -3.29,
+            -25.78,
+            -14.91,
+            -22.57,
+            -20.130000000000003,
+            -11.18,
+            -11.61,
+            -22.58,
+        ];
+
+        let dG_at_50 = [-1.8164,
+        -10.365699999999999,
+        -14.2065,
+        -1.0070000000000001,
+        -1.0114,
+        -15.8301,
+        -3.1733000000000002,
+        -8.0939,
+        -4.2286,
+        -15.3434,
+        -15.557500000000003,
+        -10.526299999999997,
+        -2.7362,
+        -21.144200000000005,
+        -11.8056,
+        -17.513,
+        -16.4133,
+        -8.381099999999998,
+        -9.8316,
+        -17.396900000000002];
+
+        for (&seq, &dG) in seqs.iter().zip(dG_at_37.iter()) {
+            let result = string_dna_delta_g(seq, 37.0);
+            println!("{}", seq);
+            assert_ulps_eq!(dG, result, max_ulps = 10);
+        }
+
+        for (&seq, &dG) in seqs.iter().zip(dG_at_50.iter()) {
+            let result = string_dna_delta_g(seq, 50.0);
+            println!("{}", seq);
+            assert_ulps_eq!(dG, result, max_ulps = 10);
+        }
+
+    }
 }
