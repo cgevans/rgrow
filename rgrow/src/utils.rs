@@ -1,3 +1,16 @@
+/*
+* A G A A A
+* --------->
+* <---------
+* T C T T T
+*
+* dG =
+*   g(T, C) + (temp - 37) s(T, C)
+*   + g(C, A) + (temp - 37) s(C, A)
+*   + g(A, A) + (temp - 37) s(A, A)
+*   + g(A, T) + (temp - 37) s(A, T)
+* */
+
 /// 2-sliding window generic implementatin for any iterator with a fold function
 ///
 /// None will be returned if the iterator is too short
@@ -47,22 +60,21 @@ impl From<char> for DnaNucleotideBase {
 ///
 /// By default the values found in santalucia_thermodynamics_2004 are used
 #[inline(always)]
+#[allow(non_snake_case)]
 fn dG_dS(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> (f64, f64) {
     // Full name made the match statment horrible
     use DnaNucleotideBase::*;
     match (a, b) {
-        (T, T) => (-1.0, -0.0213),
-        (T, A) => (-0.88, -0.0204),
+        (T, T) | (A, A) => (-1.0, -0.0213),
+        (C, C) | (G, G) => (-1.84, -0.0199),
+        (G, T) | (A, C) => (-1.45, -0.0227),
+        (C, A) | (T, G) => (-1.44, -0.0224),
+        (G, A) | (T, C) => (-1.28, -0.0210),
+        (C, T) | (A, G) => (-1.30, -0.0222),
         (A, T) => (-0.58, -0.0213),
-        (G, T) => (-1.45, -0.0227),
-        (C, A) => (-1.44, -0.0224),
-        (G, A) => (-1.28, -0.0210),
-        (C, T) => (-1.30, -0.0222),
+        (T, A) => (-0.88, -0.0204),
         (G, C) => (-2.17, -0.0272),
         (C, G) => (-2.24, -0.0244),
-        (C, C) => (-1.84, -0.0199),
-        // TODO:Is there missing data that needs to be filled ?
-        _ => panic!("Could not get dG/dS of pair!!!"),
     }
 }
 
@@ -94,7 +106,6 @@ pub fn string_dna_delta_g(dna_sequence: String, temperature: f64) -> f64 {
 
 #[cfg(test)]
 mod test_utils {
-    use crate::utils::string_dna_delta_g;
 
     use super::two_window_fold;
 
