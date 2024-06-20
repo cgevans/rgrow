@@ -410,6 +410,20 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         self
     }
 
+    fn set_safe_points<St: State + ?Sized>(
+        &self,
+        state: &mut St,
+        changelist: &[(PointSafe2, Tile)],
+    ) -> &Self {
+        // for (point, _) in changelist {
+        //     assert!(state.inbounds(*point))
+        // }
+        let event = Event::PolymerChange(changelist.to_vec());
+        self.perform_event(state, &event)
+            .update_after_event(state, &event);
+        self
+    }
+
     fn configure_empty_state<St: State + ?Sized>(&self, state: &mut St) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;
@@ -418,7 +432,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     }
 
     /// Perform a particular event/change to a state.  Do not update the state's time/etc,
-    /// or rates, which should be done in update_after_event and take_single_step. 
+    /// or rates, which should be done in update_after_event and take_single_step.
     fn perform_event<St: State + ?Sized>(&self, state: &mut St, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
