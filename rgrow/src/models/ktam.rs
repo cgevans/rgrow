@@ -183,22 +183,25 @@ impl System for KTAM {
                 } else {
                     self.total_monomer_attachment_rate_at_point(state, p)
                 }
-            },
+            }
             ChunkHandling::Detach => {
                 if t.nonzero() {
-                    self.monomer_detachment_rate_at_point(state, p) + self.chunk_detach_rate(state, p, t)
+                    self.monomer_detachment_rate_at_point(state, p)
+                        + self.chunk_detach_rate(state, p, t)
                 } else {
                     self.total_monomer_attachment_rate_at_point(state, p)
                 }
-            },
+            }
+            #[allow(unreachable_code)]
             ChunkHandling::Equilibrium => {
                 if t.nonzero() {
-                    self.monomer_detachment_rate_at_point(state, p) + self.chunk_detach_rate(state, p, t)
+                    self.monomer_detachment_rate_at_point(state, p)
+                        + self.chunk_detach_rate(state, p, t)
                 } else {
                     todo!("Chunk attach rate");
                     self.total_monomer_attachment_rate_at_point(state, p)
                 }
-            },
+            }
         }
     }
 
@@ -209,13 +212,9 @@ impl System for KTAM {
         acc: crate::base::Rate,
     ) -> Event {
         match self.choose_detachment_at_point(state, p, acc) {
-            (true, _, event) => {
-                event
-            }
+            (true, _, event) => event,
             (false, acc, _) => match self.choose_attachment_at_point(state, p, acc) {
-                (true, _, event) => {
-                    event
-                }
+                (true, _, event) => event,
                 (false, acc, _) => {
                     panic!(
                         "Rate: {:?}, {:?}, {:?}, {:?}",
@@ -848,8 +847,8 @@ impl KTAM {
         k_f: Option<f64>,
         seed: Option<Seed>,
         fission_handling: Option<FissionHandling>,
-        _chunk_handling: Option<ChunkHandling>, // Fixme
-        _chunk_size: Option<ChunkSize>,         // Fixme
+        chunk_handling: Option<ChunkHandling>, 
+        chunk_size: Option<ChunkSize>,         
         tile_names: Option<Vec<String>>,
         tile_colors: Option<Vec<[u8; 4]>>,
     ) -> Self {
@@ -865,6 +864,8 @@ impl KTAM {
         ktam.tile_concs = tile_stoics;
         ktam.seed = seed.unwrap_or(ktam.seed);
         ktam.tile_names = tile_names.unwrap_or(ktam.tile_names);
+        ktam.chunk_handling = chunk_handling.unwrap_or(ktam.chunk_handling);
+        ktam.chunk_size = chunk_size.unwrap_or(ktam.chunk_size);
 
         ktam.kf = k_f.unwrap_or(ktam.kf);
 
@@ -1096,7 +1097,7 @@ impl KTAM {
             // FIXME: may slow things down
             if self.is_seed(p) || ((self.has_duples) && self.is_fake_duple(state.tile_at_point(p)))
             {
-                (true, acc, Event::None)
+                return (true, acc, Event::None)
             } else {
                 let mut possible_starts = Vec::new();
                 let mut now_empty = Vec::new();
@@ -1122,7 +1123,7 @@ impl KTAM {
 
                 now_empty.push(p);
 
-                match self.determine_fission(state, &possible_starts, &now_empty) {
+                return match self.determine_fission(state, &possible_starts, &now_empty) {
                     FissionResult::NoFission => (true, acc, Event::MonomerDetachment(p)),
                     FissionResult::FissionGroups(g) => {
                         //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
@@ -1151,11 +1152,62 @@ impl KTAM {
                             ),
                         }
                     }
+                };
+            }
+        }
+
+        if (self.chunk_handling == ChunkHandling::Detach)
+            || (self.chunk_handling == ChunkHandling::Equilibrium)
+        {
+            // FIXME: is comparison right here vs match?
+            let mut possible_starts = Vec::new();
+            let mut now_empty = Vec::new();
+            let tile = { state.tile_at_point(p) };
+
+            if tile == 0 {
+                return (false, acc, Event::None);
+            } // FIXME: not quite right, if chunk_detachment rate is nonzero but tile is zero (should be impossible)
+
+            self.choose_chunk_detachment(
+                state,
+                p,
+                tile,
+                &mut acc,
+                &mut now_empty,
+                &mut possible_starts,
+            );
+
+            return match self.determine_fission(state, &possible_starts, &now_empty) {
+                FissionResult::NoFission => (true, acc, Event::PolymerDetachment(now_empty)),
+                FissionResult::FissionGroups(g) => {
+                    //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
+                    match self.fission_handling {
+                        FissionHandling::NoFission => (true, acc, Event::None),
+                        FissionHandling::JustDetach => (true, acc, Event::PolymerDetachment(now_empty)),
+                        FissionHandling::KeepSeeded => {
+                            let sl = self._seed_locs();
+                            (
+                                true,
+                                acc,
+                                Event::PolymerDetachment(g.choose_deletions_seed_unattached(sl)),
+                            )
+                        }
+                        FissionHandling::KeepLargest => (
+                            true,
+                            acc,
+                            Event::PolymerDetachment(g.choose_deletions_keep_largest_group()),
+                        ),
+                        FissionHandling::KeepWeighted => (
+                            true,
+                            acc,
+                            Event::PolymerDetachment(g.choose_deletions_size_weighted()),
+                        ),
+                    }
                 }
             }
-        } else {
-            (false, acc, Event::None)
         }
+
+        return (false, acc, Event::None);
     }
 
     pub fn total_monomer_attachment_rate_at_point<S: State + ?Sized>(
@@ -1484,7 +1536,6 @@ impl KTAM {
         }
     }
 
-
     // Dimer detachment rates are written manually.
     fn dimer_s_detach_rate<C: State + ?Sized>(
         &self,
@@ -1494,7 +1545,8 @@ impl KTAM {
         ts: Energy,
     ) -> Rate {
         let p2 = canvas.move_sh_s(p);
-        if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 }) | self.is_seed(PointSafe2(p2)) {
+        if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 }) | self.is_seed(PointSafe2(p2))
+        {
             0.0
         } else {
             let t2 = unsafe { canvas.uv_p(p2) };
@@ -1502,7 +1554,7 @@ impl KTAM {
                 self.kf
                     * Rate::exp(
                         -ts - self.bond_energy_of_tile_type_at_point(canvas, PointSafe2(p2), t2) // FIXME
-                        + 2. * self.get_energy_ns(t, t2),
+                        + 2. * self.get_energy_ns(t, t2) + 2.*self.alpha,
                     )
             }
         }
@@ -1517,7 +1569,8 @@ impl KTAM {
         ts: Energy,
     ) -> Rate {
         let p2 = canvas.move_sh_e(p);
-        if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 } | self.is_seed(PointSafe2(p2))) {
+        if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 } | self.is_seed(PointSafe2(p2)))
+        {
             0.0
         } else {
             let t2 = unsafe { canvas.uv_p(p2) };
@@ -1525,7 +1578,7 @@ impl KTAM {
                 self.kf
                     * Rate::exp(
                         -ts - self.bond_energy_of_tile_type_at_point(canvas, PointSafe2(p2), t2) // FIXME
-                        + 2. * self.get_energy_we(t, t2),
+                        + 2. * self.get_energy_we(t, t2) + 2.*self.alpha,
                     )
             }
         }
