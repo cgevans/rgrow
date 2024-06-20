@@ -84,10 +84,14 @@ fn dG_dS(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> (f64, f64) {
 ///
 /// the sum of all neighbours a, b -- dG_(37 degrees C) (a, b) - (temperature - 37) dS(a, b)
 fn dna_strength(dna: impl Iterator<Item = DnaNucleotideBase>, temperature: f64) -> f64 {
-    two_window_fold(dna, |acc, (a, b)| {
+    let (total_dg, total_ds) = dna_dg_ds(dna);
+    total_dg - (temperature - 37.0) * total_ds
+}
+
+fn dna_dg_ds(dna: impl Iterator<Item = DnaNucleotideBase>) -> (f64, f64) {
+    two_window_fold(dna, |(acc_dg, acc_ds), (a, b)| {
         let (dg, ds) = dG_dS(a, b);
-        // Calculate the sum of dG(a, b) - (T - 37) * dS(a, b)
-        acc + (dg - (temperature - 37.) * ds)
+        (dg + acc_dg, ds + acc_ds)
     })
     .expect("DNA must have length of at least 2")
 }
@@ -193,26 +197,28 @@ mod test_utils {
             -22.58,
         ];
 
-        let dG_at_50 = [-1.8164,
-        -10.365699999999999,
-        -14.2065,
-        -1.0070000000000001,
-        -1.0114,
-        -15.8301,
-        -3.1733000000000002,
-        -8.0939,
-        -4.2286,
-        -15.3434,
-        -15.557500000000003,
-        -10.526299999999997,
-        -2.7362,
-        -21.144200000000005,
-        -11.8056,
-        -17.513,
-        -16.4133,
-        -8.381099999999998,
-        -9.8316,
-        -17.396900000000002];
+        let dG_at_50 = [
+            -1.8164,
+            -10.365699999999999,
+            -14.2065,
+            -1.0070000000000001,
+            -1.0114,
+            -15.8301,
+            -3.1733000000000002,
+            -8.0939,
+            -4.2286,
+            -15.3434,
+            -15.557500000000003,
+            -10.526299999999997,
+            -2.7362,
+            -21.144200000000005,
+            -11.8056,
+            -17.513,
+            -16.4133,
+            -8.381099999999998,
+            -9.8316,
+            -17.396900000000002,
+        ];
 
         for (&seq, &dG) in seqs.iter().zip(dG_at_37.iter()) {
             let result = string_dna_delta_g(seq, 37.0);
@@ -225,6 +231,5 @@ mod test_utils {
             println!("{}", seq);
             assert_ulps_eq!(dG, result, max_ulps = 10);
         }
-
     }
 }
