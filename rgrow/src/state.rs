@@ -24,6 +24,7 @@ pub trait ClonableState: State {
     }
 }
 
+
 impl ClonableState for QuadTreeState<CanvasSquare, OrderTracker> {
     fn clone_as_stateenum(&self) -> StateEnum {
         StateEnum::SquareOrderTracking(self.clone())
@@ -32,7 +33,7 @@ impl ClonableState for QuadTreeState<CanvasSquare, OrderTracker> {
 
 impl ClonableState for QuadTreeState<CanvasSquare, NullStateTracker> {
     fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::SquareNoTracking(self.clone())
+        StateEnum::SquareCanvasNullTracker(self.clone())
     }
 }
 
@@ -44,7 +45,7 @@ impl ClonableState for QuadTreeState<CanvasPeriodic, OrderTracker> {
 
 impl ClonableState for QuadTreeState<CanvasPeriodic, NullStateTracker> {
     fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::PeriodicNoTracking(self.clone())
+        StateEnum::PeriodicCanvasNoTracker(self.clone())
     }
 }
 
@@ -96,11 +97,12 @@ impl ClonableState for QuadTreeState<CanvasTube, PrintEventTracker> {
     }
 }
 
+
 #[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData, CloneAsStateEnum)]
 #[derive(Debug, Clone)]
 pub enum StateEnum {
-    SquareNoTracking(QuadTreeState<CanvasSquare, NullStateTracker>),
-    PeriodicNoTracking(QuadTreeState<CanvasPeriodic, NullStateTracker>),
+    SquareCanvasNullTracker(QuadTreeState<CanvasSquare, NullStateTracker>),
+    PeriodicCanvasNoTracker(QuadTreeState<CanvasPeriodic, NullStateTracker>),
     TubeNoTracking(QuadTreeState<CanvasTube, NullStateTracker>),
     SquareOrderTracking(QuadTreeState<CanvasSquare, OrderTracker>),
     PeriodicOrderTracking(QuadTreeState<CanvasPeriodic, OrderTracker>),
@@ -553,7 +555,7 @@ pub struct OrderTracker {
 impl StateTracker for OrderTracker {
     fn default(canvas: &dyn Canvas) -> Self {
         OrderTracker {
-            order: 0,
+            order: 1,
             arr: Array2::<NumEvents>::zeros((canvas.nrows(), canvas.ncols())),
         }
     }

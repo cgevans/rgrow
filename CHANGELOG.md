@@ -1,3 +1,7 @@
+# 0.15.0
+
+- Start order tracking at 1 (0 is a site that was never filled).
+
 # 0.14.1
 
 - Fix dimer formation rates in kTAM model.
