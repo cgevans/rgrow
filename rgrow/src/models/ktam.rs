@@ -109,6 +109,9 @@ pub struct KTAM {
     pub(crate) energy_ns: Array2<Energy>,
     pub(crate) energy_we: Array2<Energy>,
 
+    pub chunk_size: ChunkSize,
+    pub chunk_handling: ChunkHandling,
+
     /// Each "friends" hashset gives the potential tile attachments
     /// at point P if tile T is in that direction.  Eg, friends_e[T]
     /// is a set of tiles that might attach at point P if T is east of
@@ -780,6 +783,8 @@ impl KTAM {
             seed: Seed::None(),
             tile_colors: Vec::new(),
             fission_handling: FissionHandling::NoFission,
+            chunk_handling: ChunkHandling::None,
+            chunk_size: ChunkSize::Single,
             energy_ns: Array2::zeros((ntiles + 1, ntiles + 1)),
             energy_we: Array2::zeros((ntiles + 1, ntiles + 1)),
             friends_n: Vec::new(),
@@ -827,12 +832,11 @@ impl KTAM {
         seed: Option<Seed>,
         fission_handling: Option<FissionHandling>,
         _chunk_handling: Option<ChunkHandling>, // Fixme
-        _chunk_size: Option<ChunkSize>, // Fixme
+        _chunk_size: Option<ChunkSize>,         // Fixme
         tile_names: Option<Vec<String>>,
         tile_colors: Option<Vec<[u8; 4]>>,
     ) -> Self {
         let ntiles = tile_stoics.len() as Tile;
-
 
         let mut ktam = Self::new_sized(ntiles - 1, glue_strengths.len() - 1);
 
@@ -846,8 +850,6 @@ impl KTAM {
         ktam.tile_names = tile_names.unwrap_or(ktam.tile_names);
 
         ktam.kf = k_f.unwrap_or(ktam.kf);
-
-        
 
         ktam.tile_colors = match tile_colors {
             Some(tc) => tc,
@@ -1414,51 +1416,55 @@ impl KTAM {
         state: &S,
         p: &PointSafe2,
     ) -> Vec<PointSafeHere> {
-        // match self.chunk_size {
-        // ChunkSize::Single => {
-        let mut points = Vec::with_capacity(13);
-        points.extend_from_slice(&[
-            state.move_sa_n(*p),
-            state.move_sa_w(*p),
-            PointSafeHere(p.0),
-            state.move_sa_e(*p),
-            state.move_sa_s(*p),
-            state.move_sa_nn(*p),
-            state.move_sa_ne(*p),
-            state.move_sa_ee(*p),
-            state.move_sa_se(*p),
-            state.move_sa_ss(*p),
-            state.move_sa_sw(*p),
-            state.move_sa_ww(*p),
-            state.move_sa_nw(*p),
-        ]);
-        points
-        //     }
-        //     ChunkSize::Dimer => {
-        //         let mut points = Vec::with_capacity(10);
-        //         points.extend_from_slice(&[
-        //             state.move_sa_n(*p),
-        //             state.move_sa_w(*p),
-        //             PointSafeHere(p.0),
-        //             state.move_sa_e(*p),
-        //             state.move_sa_s(*p),
-        //             state.move_sa_nw(*p),
-        //             state.move_sa_ne(*p),
-        //             state.move_sa_sw(*p),
-        //         ]);
-
-        //         let w = state.move_sa_w(*p);
-        //         let n = state.move_sa_n(*p);
-
-        //         if state.inbounds(w.0) {
-        //             points.push(PointSafeHere(state.move_sh_w(w)));
-        //         }
-        //         if state.inbounds(n.0) {
-        //             points.push(PointSafeHere(state.move_sh_n(n)));
-        //         }
-        //         points
-        //     }
-        // }
+        match self.chunk_size {
+            ChunkSize::Single => {
+                let mut points = Vec::with_capacity(13);
+                points.extend_from_slice(&[
+                    // Single moves (no dimer chunks, no duples)
+                    state.move_sa_n(*p),
+                    state.move_sa_w(*p),
+                    PointSafeHere(p.0),
+                    state.move_sa_e(*p),
+                    state.move_sa_s(*p),
+                ]);
+                if self.has_duples {
+                    points.extend_from_slice(&[
+                        state.move_sa_nn(*p),
+                        state.move_sa_ne(*p),
+                        state.move_sa_ee(*p),
+                        state.move_sa_se(*p),
+                        state.move_sa_ss(*p),
+                        state.move_sa_sw(*p),
+                        state.move_sa_ww(*p),
+                        state.move_sa_nw(*p),
+                    ]);
+                };
+                points
+            }
+            ChunkSize::Dimer => {
+                let mut points = Vec::with_capacity(13);
+                if self.has_duples {
+                    todo!("Dimer chunks not yet implemented for systems with duples")
+                }
+                points.extend_from_slice(&[
+                    // Single moves (no dimer chunks, no duples)
+                    state.move_sa_n(*p),
+                    state.move_sa_w(*p),
+                    PointSafeHere(p.0),
+                    state.move_sa_e(*p),
+                    state.move_sa_s(*p),
+                    state.move_sa_nn(*p),
+                    state.move_sa_ne(*p),
+                    state.move_sa_ee(*p),
+                    state.move_sa_se(*p),
+                    state.move_sa_ss(*p),
+                    state.move_sa_sw(*p),
+                    state.move_sa_ww(*p),
+                    state.move_sa_nw(*p),
+                ]);
+                points
+            }
+        }
     }
 }
 
