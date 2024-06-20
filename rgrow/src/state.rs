@@ -177,6 +177,7 @@ pub trait StateStatus {
     fn add_time(&mut self, time: f64);
     fn time(&self) -> f64;
     fn record_event(&mut self, event: &system::Event);
+    fn reset_tracking_assuming_empty_state(&mut self);
 }
 
 pub trait StateWithCreate: State + Sized {
@@ -453,6 +454,10 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     fn record_event(&mut self, event: &system::Event) {
         self.tracker.record_single_event(event, self.time);
     }
+
+    fn reset_tracking_assuming_empty_state(&mut self) {
+        self.tracker.reset_assuming_empty_state()
+    }
 }
 
 impl<C: Canvas + Canvas, T: StateTracker> QuadTreeState<C, T> {
@@ -527,6 +532,12 @@ pub trait StateTracker: Clone + Debug + Sync + Send {
     fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self;
 
     fn get_tracker_data(&self) -> RustAny;
+
+    fn reset(&mut self);
+
+    fn reset_assuming_empty_state(&mut self) {
+        self.reset()
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -540,6 +551,8 @@ impl StateTracker for NullStateTracker {
     fn record_single_event(&mut self, _event: &system::Event, _time: f64) -> &mut Self {
         self
     }
+
+    fn reset(&mut self) {}
 
     fn get_tracker_data(&self) -> RustAny {
         RustAny(Box::new(()))
@@ -558,6 +571,15 @@ impl StateTracker for OrderTracker {
             order: 1,
             arr: Array2::<NumEvents>::zeros((canvas.nrows(), canvas.ncols())),
         }
+    }
+
+    fn reset(&mut self) {
+        self.order = 1;
+        self.arr.fill(0);
+    }
+
+    fn reset_assuming_empty_state(&mut self) {
+        self.order = 1;
     }
 
     fn record_single_event(&mut self, event: &system::Event, _time: f64) -> &mut Self {
@@ -613,8 +635,16 @@ pub struct LastAttachTimeTracker {
 impl StateTracker for LastAttachTimeTracker {
     fn default(canvas: &dyn Canvas) -> Self {
         LastAttachTimeTracker {
-            arr: Array2::<f64>::zeros((canvas.nrows(), canvas.ncols())),
+            arr: Array2::<f64>::from_elem((canvas.nrows(), canvas.ncols()), f64::NAN),
         }
+    }
+
+    fn reset(&mut self) {
+        self.arr.fill(f64::NAN);
+    }
+
+    fn reset_assuming_empty_state(&mut self) {
+
     }
 
     fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self {
@@ -625,7 +655,7 @@ impl StateTracker for LastAttachTimeTracker {
                 self
             }
             system::Event::MonomerDetachment(p) => {
-                self.arr[p.0] = 0.;
+                self.arr[p.0] = f64::NAN;
                 self
             }
             system::Event::MonomerChange(p, _t) => {
@@ -646,7 +676,7 @@ impl StateTracker for LastAttachTimeTracker {
             }
             system::Event::PolymerDetachment(vec) => {
                 for p in vec {
-                    self.arr[p.0] = 0.;
+                    self.arr[p.0] = f64::NAN;
                 }
                 self
             }
@@ -664,6 +694,10 @@ pub struct PrintEventTracker();
 impl StateTracker for PrintEventTracker {
     fn default(_state: &dyn Canvas) -> Self {
         PrintEventTracker()
+    }
+
+    fn reset(&mut self) {
+        // Default is to do nothing
     }
 
     fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self {

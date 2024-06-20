@@ -650,6 +650,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             while state.n_tiles() == 0 {
                 let i_old_state = chooser.sample(&mut rng);
                 let dimer = &dimers[i_old_state];
+                state.reset_tracking_assuming_empty_state();
 
                 other = match dimer.orientation {
                     Orientation::NS => PointSafe2(state.move_sa_s(mid).0),
