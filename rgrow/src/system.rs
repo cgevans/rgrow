@@ -209,7 +209,7 @@ impl DimerInfo {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "python", pyclass)]
 pub enum ChunkHandling {
     #[serde(alias = "none")]
