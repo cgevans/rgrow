@@ -175,10 +175,30 @@ impl System for KTAM {
         }
         let p = PointSafe2(p.0);
         let t = state.tile_at_point(p);
-        if t.nonzero() {
-            self.monomer_detachment_rate_at_point(state, p)
-        } else {
-            self.total_monomer_attachment_rate_at_point(state, p)
+
+        match self.chunk_handling {
+            ChunkHandling::None => {
+                if t.nonzero() {
+                    self.monomer_detachment_rate_at_point(state, p)
+                } else {
+                    self.total_monomer_attachment_rate_at_point(state, p)
+                }
+            },
+            ChunkHandling::Detach => {
+                if t.nonzero() {
+                    self.monomer_detachment_rate_at_point(state, p) + self.chunk_detach_rate(state, p, t)
+                } else {
+                    self.total_monomer_attachment_rate_at_point(state, p)
+                }
+            },
+            ChunkHandling::Equilibrium => {
+                if t.nonzero() {
+                    self.monomer_detachment_rate_at_point(state, p) + self.chunk_detach_rate(state, p, t)
+                } else {
+                    todo!("Chunk attach rate");
+                    self.total_monomer_attachment_rate_at_point(state, p)
+                }
+            },
         }
     }
 
@@ -188,15 +208,12 @@ impl System for KTAM {
         p: PointSafe2,
         acc: crate::base::Rate,
     ) -> Event {
-        // println!("{:?}", acc);
         match self.choose_detachment_at_point(state, p, acc) {
             (true, _, event) => {
-                // println!("{:?} {:?}", acc, event);
                 event
             }
             (false, acc, _) => match self.choose_attachment_at_point(state, p, acc) {
                 (true, _, event) => {
-                    // println!("{:?} {:?}", acc, event);
                     event
                 }
                 (false, acc, _) => {
@@ -1463,6 +1480,138 @@ impl KTAM {
                     state.move_sa_nw(*p),
                 ]);
                 points
+            }
+        }
+    }
+
+
+    // Dimer detachment rates are written manually.
+    fn dimer_s_detach_rate<C: State + ?Sized>(
+        &self,
+        canvas: &C,
+        p: PointSafeHere,
+        t: Tile,
+        ts: Energy,
+    ) -> Rate {
+        let p2 = canvas.move_sh_s(p);
+        if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 }) | self.is_seed(PointSafe2(p2)) {
+            0.0
+        } else {
+            let t2 = unsafe { canvas.uv_p(p2) };
+            {
+                self.kf
+                    * Rate::exp(
+                        -ts - self.bond_energy_of_tile_type_at_point(canvas, PointSafe2(p2), t2) // FIXME
+                        + 2. * self.get_energy_ns(t, t2),
+                    )
+            }
+        }
+    }
+
+    // Dimer detachment rates are written manually.
+    fn dimer_e_detach_rate<C: State + ?Sized>(
+        &self,
+        canvas: &C,
+        p: PointSafeHere,
+        t: Tile,
+        ts: Energy,
+    ) -> Rate {
+        let p2 = canvas.move_sh_e(p);
+        if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 } | self.is_seed(PointSafe2(p2))) {
+            0.0
+        } else {
+            let t2 = unsafe { canvas.uv_p(p2) };
+            {
+                self.kf
+                    * Rate::exp(
+                        -ts - self.bond_energy_of_tile_type_at_point(canvas, PointSafe2(p2), t2) // FIXME
+                        + 2. * self.get_energy_we(t, t2),
+                    )
+            }
+        }
+    }
+
+    fn chunk_detach_rate<C: State + ?Sized>(&self, canvas: &C, p: PointSafe2, t: Tile) -> Rate {
+        match self.chunk_size {
+            ChunkSize::Single => 0.0,
+            ChunkSize::Dimer => {
+                let ts = { self.bond_energy_of_tile_type_at_point(canvas, p, t) }; // FIXME
+                self.dimer_s_detach_rate(canvas, PointSafeHere(p.0), t, ts)
+                    + self.dimer_e_detach_rate(canvas, PointSafeHere(p.0), t, ts)
+            }
+        }
+    }
+
+    fn choose_chunk_detachment<C: State + ?Sized>(
+        &self,
+        canvas: &C,
+        p: PointSafe2,
+        tile: Tile,
+        acc: &mut Rate,
+        now_empty: &mut Vec<PointSafe2>,
+        possible_starts: &mut Vec<PointSafe2>,
+    ) {
+        match self.chunk_size {
+            ChunkSize::Single => panic!("In choose_chunk_detachment for ChunkSize::Single"),
+            ChunkSize::Dimer => {
+                let ts = { self.bond_energy_of_tile_type_at_point(canvas, p, tile) };
+                *acc -= self.dimer_s_detach_rate(canvas, PointSafeHere(p.0), tile, ts);
+                if *acc <= 0. {
+                    let p2 = PointSafe2(canvas.move_sa_s(p).0);
+                    let t2 = { canvas.tile_at_point(p2) };
+                    now_empty.push(p);
+                    now_empty.push(p2);
+                    // North tile adjacents
+                    if self.get_energy_ns(canvas.tile_to_n(p), tile) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
+                    };
+                    if self.get_energy_we(canvas.tile_to_w(p), tile) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_w(p).0))
+                    };
+                    if self.get_energy_we(tile, canvas.tile_to_e(p)) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_e(p).0))
+                    };
+                    // South tile adjacents
+                    if self.get_energy_ns(t2, canvas.tile_to_s(p2)) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
+                    };
+                    if self.get_energy_we(canvas.tile_to_w(p2), t2) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_w(p2).0))
+                    };
+                    if self.get_energy_we(t2, canvas.tile_to_e(p2)) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
+                    };
+                    return;
+                }
+                *acc -= self.dimer_e_detach_rate(canvas, PointSafeHere(p.0), tile, ts);
+                if *acc <= 0. {
+                    let p2 = PointSafe2(canvas.move_sa_e(p).0);
+                    let t2 = { canvas.tile_at_point(p2) };
+                    now_empty.push(p);
+                    now_empty.push(p2);
+                    // West tile adjacents
+                    if self.get_energy_we(canvas.tile_to_w(p), tile) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_w(p).0))
+                    };
+                    if self.get_energy_ns(canvas.tile_to_n(p), tile) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
+                    };
+                    if self.get_energy_ns(tile, canvas.tile_to_s(p)) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_s(p).0))
+                    };
+                    // East tile adjacents
+                    if self.get_energy_we(t2, canvas.tile_to_e(p2)) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
+                    };
+                    if self.get_energy_ns(canvas.tile_to_n(p2), t2) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_n(p2).0))
+                    };
+                    if self.get_energy_ns(t2, canvas.tile_to_s(p2)) > 0. {
+                        possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
+                    };
+                    return;
+                }
+                panic!("{acc:#?}")
             }
         }
     }

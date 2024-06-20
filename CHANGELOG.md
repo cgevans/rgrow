@@ -1,6 +1,9 @@
 # 0.15.0
 
 - Start order tracking at 1 (0 is a site that was never filled).
+- Added LastAttachTime tracker: keeps track of the last attachment/change event in a location.
+- Added PrintEvent tracker for debugging, which prints every event.
+- Implement dimer chunk detachment properly for kTAM model (already in oldkTAM).
 
 # 0.14.1
 
