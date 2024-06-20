@@ -624,18 +624,6 @@ pub struct SDCParams {
     pub temperature: f64,
 }
 
-fn comp(a: &str) -> String {
-    if a.ends_with('*') {
-        a.trim_end_matches('*').to_string()
-    } else {
-        format!("{}*", a)
-    }
-}
-
-fn base(a: &str) -> &str {
-    a.trim_end_matches('*')
-}
-
 // This is not a smart way of doing this, but it works for now!
 #[cfg(python)]
 #[pymethods]
@@ -645,9 +633,21 @@ impl SystemEnum {
     }
 }
 
+/// Return the orignial, and its inverse
+fn self_and_inverse(value: &String) -> (String, String) {
+    // Remove all the stars at the end
+    let filtered = value.trim_end_matches("*");
+    let star_count = value.len() - filtered.len();
+    if star_count % 2 == 0 {
+        (filtered.to_string(), format!("{}*", filtered.to_string()))
+    } else {
+        (format!("{}*", filtered).to_string(), filtered.to_string())
+    }
+}
+
 impl SDC {
     pub fn from_params(params: SDCParams) -> Self {
-        let mut glue_name_map = BiHashMap::new();
+        let mut glue_name_map = BiHashMap::<String, usize>::new();
 
         let mut gluenum = 1;
         let mut max_gluenum = 1;
@@ -659,19 +659,18 @@ impl SDC {
         {
             for (i, t) in tgl.iter().enumerate() {
                 match t {
-                    None => {
-                        r[i] = 0;
-                    }
+                    None => r[i] = 0,
                     Some(s) => {
-                        let j = glue_name_map.get_by_left(s);
+                        let (s_equiv, s_equiv_inverse) = self_and_inverse(s);
+                        let j = glue_name_map.get_by_left(&s_equiv);
                         match j {
                             Some(j) => {
                                 r[i] = *j;
                             }
                             None => {
-                                glue_name_map.insert(base(s).to_string(), gluenum);
-                                glue_name_map.insert(format!("{}*", base(s)), gluenum + 1);
-                                r[i] = *glue_name_map.get_by_left(s).unwrap(); // FIXME: will fail if ** is in name, and is inefficient
+                                glue_name_map.insert(s_equiv, gluenum);
+                                glue_name_map.insert(s_equiv_inverse, gluenum + 1);
+                                r[i] = gluenum;
                                 gluenum += 2;
                                 max_gluenum = max_gluenum.max(gluenum);
                             }
@@ -686,24 +685,22 @@ impl SDC {
         let mut glue_s = Array2::<f64>::zeros((max_gluenum, max_gluenum));
 
         for (k, &v) in params.glue_dg_s.iter() {
-            match k {
-                RefOrPair::Ref(r) => {
-                    let i = *glue_name_map.get_by_left(&comp(r)).unwrap(); // FIXME: fails if glue not found
-                    let j = *glue_name_map.get_by_left(base(r)).unwrap(); // FIXME: fails if glue not found
-                    glue_delta_g[[i, j]] = v.0;
-                    glue_s[[i, j]] = v.1;
-                    glue_delta_g[[j, i]] = v.0;
-                    glue_s[[j, i]] = v.1;
-                }
+            let (i, j) = match k {
+                RefOrPair::Ref(r) => self_and_inverse(r),
                 RefOrPair::Pair(r1, r2) => {
-                    let i = *glue_name_map.get_by_left(r1).unwrap(); // FIXME: fails if glue not found
-                    let j = *glue_name_map.get_by_left(r2).unwrap(); // FIXME: fails if glue not found
-                    glue_delta_g[[i, j]] = v.0;
-                    glue_s[[i, j]] = v.1;
-                    glue_delta_g[[j, i]] = v.0;
-                    glue_s[[j, i]] = v.1;
+                    let (r1, _) = self_and_inverse(r1);
+                    let (r2, _) = self_and_inverse(r2);
+                    (r1, r2)
                 }
-            }
+            };
+
+            let i = *glue_name_map.get_by_left(&i).unwrap(); // FIXME: fails if glue not found
+            let j = *glue_name_map.get_by_left(&j).unwrap(); // FIXME: fails if glue not found
+
+            glue_delta_g[[i, j]] = v.0;
+            glue_delta_g[[j, i]] = v.0;
+            glue_s[[i, j]] = v.1;
+            glue_s[[j, i]] = v.1;
         }
 
         SDC::new(
@@ -783,5 +780,26 @@ mod test_sdc_model {
             (8, HashSet::from([2, 6])),
         ]);
         assert_eq!(expected_friends, sdc.friends_btm);
+    }
+
+    #[test]
+    fn test_self_and_inverse() {
+        let input = vec!["some*str", "some*str*", "some*str**"];
+
+        let acc = input
+            .into_iter()
+            .map(|str| self_and_inverse(&str.to_string()))
+            .collect::<Vec<(String, String)>>();
+
+        let expected = vec![
+            ("some*str", "some*str*"),
+            ("some*str*", "some*str"),
+            ("some*str", "some*str*"),
+        ]
+        .iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect::<Vec<(String, String)>>();
+
+        assert_eq!(acc, expected);
     }
 }
