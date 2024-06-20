@@ -26,8 +26,9 @@ use std::{
 use crate::{
     base::{Energy, Glue, GrowError, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
+    colors::get_color_or_random,
     state::State,
-    system::{Event, NeededUpdate, System, SystemEnum, TileBondInfo},
+    system::{Event, NeededUpdate, System, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, Size},
 };
 
@@ -571,7 +572,7 @@ use bimap::BiHashMap;
 use pyo3::prelude::*;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(python, derive(FromPyObject))]
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub enum RefOrPair {
     Ref(String),
     Pair(String, String),
@@ -590,7 +591,7 @@ impl From<(String, String)> for RefOrPair {
 }
 
 #[derive(Debug)]
-#[cfg_attr(python, derive(FromPyObject))]
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub enum SingleOrMultiScaffold {
     Single(Vec<String>),
     Multi(Vec<Vec<String>>),
@@ -609,7 +610,7 @@ impl From<Vec<Vec<String>>> for SingleOrMultiScaffold {
 }
 
 #[derive(Debug)]
-#[cfg_attr(python, derive(FromPyObject))]
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub struct SDCParams {
     pub tile_glues: Vec<Vec<Option<String>>>,
     pub tile_concentration: Vec<f64>,
@@ -622,15 +623,6 @@ pub struct SDCParams {
     pub k_n: f64,
     pub k_c: f64,
     pub temperature: f64,
-}
-
-// This is not a smart way of doing this, but it works for now!
-#[cfg(python)]
-#[pymethods]
-impl SystemEnum {
-    fn new_sdc(params: SDCParams) -> SystemEnum {
-        SystemEnum::SDC(SDC::from_params(params))
-    }
 }
 
 /// Return the orignial, and its inverse
@@ -703,6 +695,30 @@ impl SDC {
             glue_s[[j, i]] = v.1;
         }
 
+        let mut glue_names = Array1::<String>::from_elem(max_gluenum + 1, "".to_string());
+        for (s, i) in glue_name_map.iter() {
+            glue_names[*i] = s.clone();
+        }
+
+        let scaffold = match params.scaffold {
+            SingleOrMultiScaffold::Single(s) => {
+                let mut scaffold = Array2::<Glue>::zeros((64, s.len()));
+                for (i, g) in s.iter().enumerate() {
+                    scaffold
+                        .index_axis_mut(ndarray::Axis(1), i)
+                        .fill(*glue_name_map.get_by_left(g).unwrap());
+                }
+                scaffold
+            }
+            SingleOrMultiScaffold::Multi(_m) => todo!(),
+        };
+
+        let colors = params
+            .tile_colors
+            .iter()
+            .map(|c| get_color_or_random(&c.as_ref().map(|x| x.as_str())).unwrap())
+            .collect();
+
         SDC::new(
             Vec::new(),
             params
@@ -711,11 +727,11 @@ impl SDC {
                 .enumerate()
                 .map(|(n, os)| os.unwrap_or(n.to_string()))
                 .collect(),
-            todo!(),
-            todo!(),
+            glue_names.into_iter().collect(), // FIXME: consider types here
+            scaffold,
             Array1::from(params.tile_concentration),
             tile_glues_int,
-            Vec::new(),
+            colors,
             params.k_f,
             glue_delta_g,
             glue_s,

@@ -4,6 +4,7 @@ use std::time::Duration;
 use crate::base::{NumEvents, NumTiles, RustAny, Tile};
 use crate::canvas::{Canvas, PointSafeHere};
 use crate::ffs::{BoxedFFSResult, FFSRunConfig, FFSStateRef};
+use crate::models::sdc1d::{SDC,SDCParams};
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TrackerData};
 use crate::system::{
@@ -345,5 +346,10 @@ impl PySystem {
 
     pub fn print_debug(&self) {
         println!("{:?}", self.0);
+    }
+
+    #[staticmethod]
+    fn new_sdc(params: SDCParams) -> PySystem {
+        PySystem(SystemEnum::SDC(SDC::from_params(params)))
     }
 }
