@@ -91,6 +91,8 @@ pub struct SDC {
     /// (meaning that the east of x forms a bond with the west of y), the energy of said bond
     /// is given by energy_bonds[(x, y)]
     strand_energy_bonds: Array2<Energy>,
+    /// The energy with which a strand attached to scaffold
+    scaffold_energy_bonds: Array1<Energy>,
     /// Binding strength between two glues
     glue_links: Array2<Strength>,
 }
@@ -127,6 +129,7 @@ impl SDC {
             friends_btm: HashMap::new(),
             glue_links: Array2::<f64>::zeros((strand_count, strand_count)),
             strand_energy_bonds: Array2::<f64>::zeros((strand_count, strand_count)),
+            scaffold_energy_bonds: Array1::<f64>::zeros(strand_count),
         };
         s.update_system();
         s
@@ -201,9 +204,13 @@ impl SDC {
 
         // For each *possible* pair of strands, calculate the energy bond
         for strand_f in 0..(num_of_strands as usize) {
-            let (f_west_glue, f_east_glue) = {
+            let (f_west_glue, f_btm_glue, f_east_glue) = {
                 let glues = self.glues.row(strand_f);
-                (glues[WEST_GLUE_INDEX], glues[EAST_GLUE_INDEX])
+                (
+                    glues[WEST_GLUE_INDEX],
+                    glues[BOTTOM_GLUE_INDEX],
+                    glues[EAST_GLUE_INDEX],
+                )
             };
 
             for strand_s in 0..(num_of_strands as usize) {
@@ -224,6 +231,9 @@ impl SDC {
                 self.strand_energy_bonds[(strand_s, strand_f)] =
                     -self.glue_links[(f_west_glue, s_east_glue)];
             }
+
+            // Calculate the binding strength of the starnd with the scaffold
+            self.scaffold_energy_bonds[strand_f] = -self.glue_links[(f_btm_glue, f_btm_glue)];
         }
     }
 
@@ -333,7 +343,8 @@ impl SDC {
             state.tile_to_e(scaffold_point) as usize,
         );
 
-        self.strand_energy_bonds[(strand as usize, e)]
+        self.scaffold_energy_bonds[strand as usize]
+            + self.strand_energy_bonds[(strand as usize, e)]
             + self.strand_energy_bonds[(w, strand as usize)]
     }
 }
@@ -540,6 +551,7 @@ impl FromTileSet for SDC {
             temperature: todo!(),
             friends_btm: HashMap::new(),
             strand_energy_bonds: energy_bonds,
+            scaffold_energy_bonds: todo!(),
         };
 
         // This will generate the friends hashamp, as well as the glues, and the energy bonds
