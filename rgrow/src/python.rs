@@ -5,7 +5,7 @@ use crate::base::{NumEvents, NumTiles, RustAny, Tile};
 use crate::canvas::{Canvas, PointSafeHere};
 use crate::ffs::{BoxedFFSResult, FFSRunConfig, FFSStateRef};
 use crate::ratestore::RateStore;
-use crate::state::{ClonableState, StateEnum, StateStatus, TrackerData};
+use crate::state::{StateEnum, StateStatus, TrackerData};
 use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, SystemWithDimers, TileBondInfo
 };
@@ -25,6 +25,11 @@ pub struct PyState(pub(crate) StateEnum);
 #[cfg(feature = "python")]
 #[pymethods]
 impl PyState {
+    #[new]
+    pub fn empty(shape: (usize, usize), kind: &str, tracking: &str) -> PyResult<Self> {
+        Ok(PyState(StateEnum::empty(shape, kind.try_into()?, tracking.try_into()?)?))
+    }
+
     #[getter]
     /// A direct, mutable view of the state's canvas.  This is potentially unsafe.
     pub fn canvas_view<'py>(
