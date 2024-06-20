@@ -220,8 +220,6 @@ impl System for StaticKTAMCover {
                 }
             }
         }
-        state.add_events(1);
-        state.record_event(event);
         self
     }
 

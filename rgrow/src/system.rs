@@ -289,6 +289,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         self.perform_event(state, &event);
         self.update_after_event(state, &event);
         state.add_time(time_step);
+        state.add_events(1);
+        state.record_event(&event);
         StepOutcome::HadEventAt(time_step)
     }
 
@@ -415,6 +417,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         Ok(())
     }
 
+    /// Perform a particular event/change to a state.  Do not update the state's time/etc,
+    /// or rates, which should be done in update_after_event and take_single_step. 
     fn perform_event<St: State + ?Sized>(&self, state: &mut St, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
@@ -435,8 +439,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
                 }
             }
         };
-        state.record_event(event);
-        state.add_events(1);
         self
     }
 

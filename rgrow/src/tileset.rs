@@ -17,6 +17,7 @@ use super::*;
 use anyhow::Context;
 use base::{NumEvents, NumTiles};
 use bimap::BiMap;
+use state::{LastAttachTimeTracker, PrintEventTracker};
 use core::fmt;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -513,7 +514,9 @@ pub enum CanvasType {
 #[cfg_attr(feature = "python", pyclass)]
 pub enum TrackingType {
     None,
-    Order
+    Order,
+    LastAttachTime,
+    PrintEvent
 }
 
 impl TryFrom<&str> for CanvasType {
@@ -536,6 +539,8 @@ impl TryFrom<&str> for TrackingType {
         match value.to_lowercase().as_str() {
             "none" => Ok(TrackingType::None),
             "order" => Ok(TrackingType::Order),
+            "lastattach" => Ok(TrackingType::LastAttachTime),
+            "printevent" => Ok(TrackingType::PrintEvent),
             _ => Err(StringConvError(format!("Unknown tracking type {}.  Valid options are \"none\" and \"order\".", value))),
         }
     }
@@ -661,6 +666,24 @@ impl TileSet {
             }
             (CanvasType::Tube, TrackingType::Order) => {
                 QuadTreeState::<CanvasTube, OrderTracker>::from_array(canvas)?.into()
+            }
+            (CanvasType::Square, TrackingType::LastAttachTime) => {
+                QuadTreeState::<CanvasSquare, LastAttachTimeTracker>::from_array(canvas)?.into()
+            }
+            (CanvasType::Periodic, TrackingType::LastAttachTime) => {
+                QuadTreeState::<CanvasPeriodic, LastAttachTimeTracker>::from_array(canvas)?.into()
+            }
+            (CanvasType::Tube, TrackingType::LastAttachTime) => {
+                QuadTreeState::<CanvasTube, LastAttachTimeTracker>::from_array(canvas)?.into()
+            }
+            (CanvasType::Square, TrackingType::PrintEvent) => {
+                QuadTreeState::<CanvasSquare, PrintEventTracker>::from_array(canvas)?.into()
+            }
+            (CanvasType::Periodic, TrackingType::PrintEvent) => {
+                QuadTreeState::<CanvasPeriodic, PrintEventTracker>::from_array(canvas)?.into()
+            }
+            (CanvasType::Tube, TrackingType::PrintEvent) => {
+                QuadTreeState::<CanvasTube, PrintEventTracker>::from_array(canvas)?.into()
             }
         };
 

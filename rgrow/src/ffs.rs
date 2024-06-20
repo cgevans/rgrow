@@ -317,6 +317,7 @@ impl TileSet {
                     self, config,
                 )?,
             )),
+            _ => todo!()
         }
     }
 }
@@ -887,7 +888,7 @@ impl FFSLevelRef {
             .states()
             .iter()
             .enumerate()
-            .map(|(i, x)| FFSStateRef {
+            .map(|(i, _x)| FFSStateRef {
                 res: self.res.clone(),
                 level: self.level,
                 state: i,
