@@ -210,7 +210,7 @@ impl DimerInfo {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "python", pyclass)]
 pub enum ChunkHandling {
     #[serde(alias = "none")]
@@ -290,6 +290,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         self.perform_event(state, &event);
         self.update_after_event(state, &event);
         state.add_time(time_step);
+        state.add_events(1);
+        state.record_event(&event);
         StepOutcome::HadEventAt(time_step)
     }
 
@@ -409,6 +411,20 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         self
     }
 
+    fn set_safe_points<St: State + ?Sized>(
+        &self,
+        state: &mut St,
+        changelist: &[(PointSafe2, Tile)],
+    ) -> &Self {
+        // for (point, _) in changelist {
+        //     assert!(state.inbounds(*point))
+        // }
+        let event = Event::PolymerChange(changelist.to_vec());
+        self.perform_event(state, &event)
+            .update_after_event(state, &event);
+        self
+    }
+
     fn configure_empty_state<St: State + ?Sized>(&self, state: &mut St) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;
@@ -416,6 +432,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         Ok(())
     }
 
+    /// Perform a particular event/change to a state.  Do not update the state's time/etc,
+    /// or rates, which should be done in update_after_event and take_single_step.
     fn perform_event<St: State + ?Sized>(&self, state: &mut St, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
@@ -436,8 +454,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
                 }
             }
         };
-        state.record_event(event);
-        state.add_events(1);
         self
     }
 

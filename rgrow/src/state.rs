@@ -24,6 +24,7 @@ pub trait ClonableState: State {
     }
 }
 
+
 impl ClonableState for QuadTreeState<CanvasSquare, OrderTracker> {
     fn clone_as_stateenum(&self) -> StateEnum {
         StateEnum::SquareOrderTracking(self.clone())
@@ -32,7 +33,7 @@ impl ClonableState for QuadTreeState<CanvasSquare, OrderTracker> {
 
 impl ClonableState for QuadTreeState<CanvasSquare, NullStateTracker> {
     fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::SquareNoTracking(self.clone())
+        StateEnum::SquareCanvasNullTracker(self.clone())
     }
 }
 
@@ -44,7 +45,7 @@ impl ClonableState for QuadTreeState<CanvasPeriodic, OrderTracker> {
 
 impl ClonableState for QuadTreeState<CanvasPeriodic, NullStateTracker> {
     fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::PeriodicNoTracking(self.clone())
+        StateEnum::PeriodicCanvasNoTracker(self.clone())
     }
 }
 
@@ -60,15 +61,58 @@ impl ClonableState for QuadTreeState<CanvasTube, NullStateTracker> {
     }
 }
 
+impl ClonableState for QuadTreeState<CanvasSquare, LastAttachTimeTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::SquareLastAttachTimeTracking(self.clone())
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasPeriodic, LastAttachTimeTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::PeriodicLastAttachTimeTracking(self.clone())
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasTube, LastAttachTimeTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::TubeLastAttachTimeTracking(self.clone())
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasSquare, PrintEventTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::SquarePrintEventTracking(self.clone())
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasPeriodic, PrintEventTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::PeriodicPrintEventTracking(self.clone())
+    }
+}
+
+impl ClonableState for QuadTreeState<CanvasTube, PrintEventTracker> {
+    fn clone_as_stateenum(&self) -> StateEnum {
+        StateEnum::TubePrintEventTracking(self.clone())
+    }
+}
+
+
 #[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData, CloneAsStateEnum)]
 #[derive(Debug, Clone)]
 pub enum StateEnum {
-    SquareNoTracking(QuadTreeState<CanvasSquare, NullStateTracker>),
-    PeriodicNoTracking(QuadTreeState<CanvasPeriodic, NullStateTracker>),
+    SquareCanvasNullTracker(QuadTreeState<CanvasSquare, NullStateTracker>),
+    PeriodicCanvasNoTracker(QuadTreeState<CanvasPeriodic, NullStateTracker>),
     TubeNoTracking(QuadTreeState<CanvasTube, NullStateTracker>),
     SquareOrderTracking(QuadTreeState<CanvasSquare, OrderTracker>),
     PeriodicOrderTracking(QuadTreeState<CanvasPeriodic, OrderTracker>),
     TubeOrderTracking(QuadTreeState<CanvasTube, OrderTracker>),
+    SquareLastAttachTimeTracking(QuadTreeState<CanvasSquare, LastAttachTimeTracker>),
+    PeriodicLastAttachTimeTracking(QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>),
+    TubeLastAttachTimeTracking(QuadTreeState<CanvasTube, LastAttachTimeTracker>),
+    SquarePrintEventTracking(QuadTreeState<CanvasSquare, PrintEventTracker>),
+    PeriodicPrintEventTracking(QuadTreeState<CanvasPeriodic, PrintEventTracker>),
+    TubePrintEventTracking(QuadTreeState<CanvasTube, PrintEventTracker>),
 }
 
 impl StateEnum {
@@ -85,6 +129,12 @@ impl StateEnum {
                 TrackingType::Order => {
                     QuadTreeState::<CanvasSquare, OrderTracker>::empty(shape)?.into()
                 }
+                TrackingType::LastAttachTime => {
+                    QuadTreeState::<CanvasSquare, LastAttachTimeTracker>::empty(shape)?.into()
+                }
+                TrackingType::PrintEvent => {
+                    QuadTreeState::<CanvasSquare, PrintEventTracker>::empty(shape)?.into()
+                }
             },
             CanvasType::Periodic => match tracking {
                 TrackingType::None => {
@@ -93,6 +143,12 @@ impl StateEnum {
                 TrackingType::Order => {
                     QuadTreeState::<CanvasPeriodic, OrderTracker>::empty(shape)?.into()
                 }
+                TrackingType::LastAttachTime => {
+                    QuadTreeState::<CanvasPeriodic, LastAttachTimeTracker>::empty(shape)?.into()
+                }
+                TrackingType::PrintEvent => {
+                    QuadTreeState::<CanvasPeriodic, PrintEventTracker>::empty(shape)?.into()
+                }
             },
             CanvasType::Tube => match tracking {
                 TrackingType::None => {
@@ -100,6 +156,12 @@ impl StateEnum {
                 }
                 TrackingType::Order => {
                     QuadTreeState::<CanvasTube, OrderTracker>::empty(shape)?.into()
+                }
+                TrackingType::LastAttachTime => {
+                    QuadTreeState::<CanvasTube, LastAttachTimeTracker>::empty(shape)?.into()
+                }
+                TrackingType::PrintEvent => {
+                    QuadTreeState::<CanvasTube, PrintEventTracker>::empty(shape)?.into()
                 }
             },
         })
@@ -115,6 +177,7 @@ pub trait StateStatus {
     fn add_time(&mut self, time: f64);
     fn time(&self) -> f64;
     fn record_event(&mut self, event: &system::Event);
+    fn reset_tracking_assuming_empty_state(&mut self);
 }
 
 pub trait StateWithCreate: State + Sized {
@@ -389,7 +452,11 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     }
 
     fn record_event(&mut self, event: &system::Event) {
-        self.tracker.record_single_event(event);
+        self.tracker.record_single_event(event, self.time);
+    }
+
+    fn reset_tracking_assuming_empty_state(&mut self) {
+        self.tracker.reset_assuming_empty_state()
     }
 }
 
@@ -462,9 +529,15 @@ impl<C: Canvas, T: StateTracker> TrackerData for QuadTreeState<C, T> {
 pub trait StateTracker: Clone + Debug + Sync + Send {
     fn default(canvas: &dyn Canvas) -> Self;
 
-    fn record_single_event(&mut self, event: &system::Event) -> &mut Self;
+    fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self;
 
     fn get_tracker_data(&self) -> RustAny;
+
+    fn reset(&mut self);
+
+    fn reset_assuming_empty_state(&mut self) {
+        self.reset()
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -475,9 +548,11 @@ impl StateTracker for NullStateTracker {
         Self
     }
 
-    fn record_single_event(&mut self, _event: &system::Event) -> &mut Self {
+    fn record_single_event(&mut self, _event: &system::Event, _time: f64) -> &mut Self {
         self
     }
+
+    fn reset(&mut self) {}
 
     fn get_tracker_data(&self) -> RustAny {
         RustAny(Box::new(()))
@@ -493,12 +568,21 @@ pub struct OrderTracker {
 impl StateTracker for OrderTracker {
     fn default(canvas: &dyn Canvas) -> Self {
         OrderTracker {
-            order: 0,
+            order: 1,
             arr: Array2::<NumEvents>::zeros((canvas.nrows(), canvas.ncols())),
         }
     }
 
-    fn record_single_event(&mut self, event: &system::Event) -> &mut Self {
+    fn reset(&mut self) {
+        self.order = 1;
+        self.arr.fill(0);
+    }
+
+    fn reset_assuming_empty_state(&mut self) {
+        self.order = 1;
+    }
+
+    fn record_single_event(&mut self, event: &system::Event, _time: f64) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -540,5 +624,88 @@ impl StateTracker for OrderTracker {
 
     fn get_tracker_data(&self) -> RustAny {
         RustAny(Box::new(self.arr.to_owned()))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LastAttachTimeTracker {
+    pub arr: Array2<f64>,
+}
+
+impl StateTracker for LastAttachTimeTracker {
+    fn default(canvas: &dyn Canvas) -> Self {
+        LastAttachTimeTracker {
+            arr: Array2::<f64>::from_elem((canvas.nrows(), canvas.ncols()), f64::NAN),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.arr.fill(f64::NAN);
+    }
+
+    fn reset_assuming_empty_state(&mut self) {
+
+    }
+
+    fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self {
+        match event {
+            system::Event::None => self,
+            system::Event::MonomerAttachment(p, _t) => {
+                self.arr[p.0] = time;
+                self
+            }
+            system::Event::MonomerDetachment(p) => {
+                self.arr[p.0] = f64::NAN;
+                self
+            }
+            system::Event::MonomerChange(p, _t) => {
+                self.arr[p.0] = time;
+                self
+            }
+            system::Event::PolymerChange(vec) => {
+                for (p, _t) in vec {
+                    self.arr[p.0] = time;
+                }
+                self
+            }
+            system::Event::PolymerAttachment(vec) => {
+                for (p, _t) in vec {
+                    self.arr[p.0] = time;
+                }
+                self
+            }
+            system::Event::PolymerDetachment(vec) => {
+                for p in vec {
+                    self.arr[p.0] = f64::NAN;
+                }
+                self
+            }
+        }
+    }
+
+    fn get_tracker_data(&self) -> RustAny {
+        RustAny(Box::new(self.arr.to_owned()))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PrintEventTracker();
+
+impl StateTracker for PrintEventTracker {
+    fn default(_state: &dyn Canvas) -> Self {
+        PrintEventTracker()
+    }
+
+    fn reset(&mut self) {
+        // Default is to do nothing
+    }
+
+    fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self {
+        println!("{}: {:?}", time, event);
+        self
+    }
+
+    fn get_tracker_data(&self) -> RustAny {
+        RustAny(Box::new(()))
     }
 }

@@ -2,8 +2,9 @@ from rgrow import Tile, TileSet, Bond  # noqa: F841
 import pytest # noqa: F401
 from pytest import approx
 import hypothesis.strategies as st
-from hypothesis import given
+from hypothesis import given, settings
 import numpy as np
+import math
 
 
 @given(
@@ -117,3 +118,67 @@ def test_basic_rates_oldktam(gse, concs_nM, alpha, kf, stoic, bond_strength):
     assert state.rate_at_point((6,6)) == approx(kf * np.exp( -gse + alpha))
 
     assert state.rate_at_point((6,5)) == approx(kf * stoic * concs_nM / 1e9)
+
+# FIXME: should perhaps not be so slow
+@settings(deadline=None)
+@given(
+    gse=st.floats(4, 12),
+    ep=st.floats(1, 3),
+    alpha=st.floats(-10, 10),
+    kf=st.floats(1e3, 1e9),
+)
+def test_ktam_we_dimer_detach_rates(gse, alpha, kf, ep):
+    kf = 10**6
+    alpha = 0
+    gse = 8.1
+    gmc = 2*gse - ep
+
+    Rn = pytest.approx(kf * math.exp(-3*gse + alpha))
+
+    ts = TileSet(
+        [
+            Tile([0,"d",0,0]),
+            Tile(["a","b","c","d"], stoic=1),
+            Tile(["a","q","c","b"], stoic=100000),
+            Tile([0,0,0,"q"])
+        ],
+        [Bond("b", 2)],
+        seed=[(2, 2, 1),(2,5,4)],
+        size=8,
+        tracking='lastattach',
+        chunk_handling='none',
+        chunk_size='dimer',
+        gse=gse,
+        gmc=gmc,
+        alpha=alpha,
+        kf=10**6
+    )
+
+    sys, state = ts.create_system_and_state()
+    sys.evolve(state, size_max=4, require_strong_bound=False)
+    assert state.rate_at_point((2,3)) == Rn
+    assert state.rate_at_point((2,4)) == Rn
+
+    ts = TileSet(
+        [
+            Tile([0,"d",0,0]),
+            Tile(["a","b","c","d"], stoic=1),
+            Tile(["a","q","c","b"], stoic=100000),
+            Tile([0,0,0,"q"])
+        ],
+        [Bond("b", 2)],
+        seed=[(2, 2, 1),(2,5,4)],
+        size=8,
+        tracking='lastattach',
+        chunk_handling='detach',
+        chunk_size='dimer',
+        gse=gse,
+        gmc=gmc,
+        alpha=alpha,
+        kf=10**6
+    )
+
+    sys, state = ts.create_system_and_state()
+    sys.evolve(state, size_max=4, require_strong_bound=False)
+    assert state.rate_at_point((2,3)) == pytest.approx(kf * math.exp(-2*gse + 2*alpha) + kf * math.exp(-3*gse + alpha))
+    assert state.rate_at_point((2,4)) == Rn

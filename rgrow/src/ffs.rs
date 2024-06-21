@@ -318,6 +318,7 @@ impl TileSet {
                     self, config,
                 )?,
             )),
+            _ => todo!()
         }
     }
 }
@@ -629,7 +630,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
         let mut tile_list = Vec::with_capacity(config.min_configs);
 
-        let mut other: (usize, usize);
+        let mut other: PointSafe2;
 
         let cvar = if config.constant_variance {
             config.var_per_mean2
@@ -650,12 +651,15 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             while state.n_tiles() == 0 {
                 let i_old_state = chooser.sample(&mut rng);
                 let dimer = &dimers[i_old_state];
+                state.reset_tracking_assuming_empty_state();
 
                 other = match dimer.orientation {
-                    Orientation::NS => state.move_sa_s(mid).0,
-                    Orientation::WE => state.move_sa_e(mid).0,
+                    Orientation::NS => PointSafe2(state.move_sa_s(mid).0),
+                    Orientation::WE => PointSafe2(state.move_sa_e(mid).0),
                 };
-                system.set_points(&mut state, &[(mid.0, dimer.t1), (other, dimer.t2)]);
+                let cl = [(mid, dimer.t1), (other, dimer.t2)];
+                system.set_safe_points(&mut state, &cl);
+                state.record_event(&system::Event::PolymerAttachment(cl.to_vec()));
 
                 debug_assert_eq!(system.calc_n_tiles(&state), state.n_tiles());
 
@@ -666,11 +670,9 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     // FIXME: >= is a hack
                     // Create (retrospectively) a dimer state
                     let mut dimer_state = St::empty(config.canvas_size)?;
-                    other = match dimer.orientation {
-                        Orientation::NS => dimer_state.move_sa_s(mid).0,
-                        Orientation::WE => dimer_state.move_sa_e(mid).0,
-                    };
-                    system.set_points(&mut dimer_state, &[(mid.0, dimer.t1), (other, dimer.t2)]);
+
+                    system.set_safe_points(&mut dimer_state, &cl);
+                    dimer_state.record_event(&system::Event::PolymerAttachment(cl.to_vec()));
 
                     state_list.push(state);
 
@@ -888,7 +890,7 @@ impl FFSLevelRef {
             .states()
             .iter()
             .enumerate()
-            .map(|(i, x)| FFSStateRef {
+            .map(|(i, _x)| FFSStateRef {
                 res: self.res.clone(),
                 level: self.level,
                 state: i,

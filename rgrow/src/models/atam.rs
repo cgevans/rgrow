@@ -288,8 +288,6 @@ impl System for ATAM {
                 }
             }
         };
-        state.add_events(1);
-        state.record_event(event);
         self
     }
 
