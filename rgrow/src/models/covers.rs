@@ -47,7 +47,7 @@ pub struct StaticKTAMCover {
 }
 
 impl System for StaticKTAMCover {
-    fn update_after_event<S: State + ?Sized>(&self, state: &mut S, event: &Event) {
+    fn update_after_event<S: State >(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => {
                 panic!("Being asked to update after a dead event.")
@@ -112,7 +112,7 @@ impl System for StaticKTAMCover {
         }
     }
 
-    fn event_rate_at_point<S: State + ?Sized>(&self, state: &S, p: PointSafeHere) -> Rate {
+    fn event_rate_at_point<S: State >(&self, state: &S, p: PointSafeHere) -> Rate {
         let t = state.v_sh(p);
 
         if !state.inbounds(p.0) {
@@ -131,7 +131,7 @@ impl System for StaticKTAMCover {
         }
     }
 
-    fn choose_event_at_point<S: State + ?Sized>(
+    fn choose_event_at_point<S: State >(
         &self,
         state: &S,
         p: PointSafe2,
@@ -158,11 +158,11 @@ impl System for StaticKTAMCover {
         self.inner.seed_locs()
     }
 
-    fn calc_mismatch_locations<S: State + ?Sized>(&self, state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations<S: State >(&self, state: &S) -> Array2<usize> {
         self.inner.calc_mismatch_locations(state)
     }
 
-    fn take_single_step<S: State + ?Sized>(
+    fn take_single_step<S: State >(
         &self,
         state: &mut S,
         max_time_step: f64,
@@ -185,7 +185,7 @@ impl System for StaticKTAMCover {
         StepOutcome::HadEventAt(time_step)
     }
 
-    fn set_safe_point<S: State + ?Sized>(
+    fn set_safe_point<S: State >(
         &self,
         state: &mut S,
         point: PointSafe2,
@@ -200,7 +200,7 @@ impl System for StaticKTAMCover {
         self
     }
 
-    fn perform_event<S: State + ?Sized>(&self, state: &mut S, event: &Event) -> &Self {
+    fn perform_event<S: State >(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
@@ -235,7 +235,7 @@ impl SystemWithDimers for StaticKTAMCover {
 }
 
 impl StaticKTAMCover {
-    fn cover_to_composite_rate<S: State + ?Sized>(
+    fn cover_to_composite_rate<S: State >(
         &self,
         state: &S,
         p: PointSafe2,
@@ -257,7 +257,7 @@ impl StaticKTAMCover {
 
         total_rate
     }
-    fn choose_cover_to_composite<S: State + ?Sized>(
+    fn choose_cover_to_composite<S: State >(
         &self,
         state: &S,
         p: PointSafe2,
@@ -281,7 +281,7 @@ impl StaticKTAMCover {
 
         PossibleChoice::Remainder(acc)
     }
-    fn composite_to_cover_rate<S: State + ?Sized>(
+    fn composite_to_cover_rate<S: State >(
         &self,
         state: &S,
         p: PointSafe2,
@@ -301,7 +301,7 @@ impl StaticKTAMCover {
 
         total_rate
     }
-    fn choose_composite_to_cover<S: State + ?Sized>(
+    fn choose_composite_to_cover<S: State >(
         &self,
         state: &S,
         p: PointSafe2,

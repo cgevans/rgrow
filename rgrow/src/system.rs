@@ -266,11 +266,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
 
     fn system_info(&self) -> String;
 
-    fn calc_n_tiles<St: State + ?Sized>(&self, state: &St) -> NumTiles {
+    fn calc_n_tiles<St: State >(&self, state: &St) -> NumTiles {
         state.calc_n_tiles()
     }
 
-    fn take_single_step<St: State + ?Sized>(
+    fn take_single_step<St: State >(
         &self,
         state: &mut St,
         max_time_step: f64,
@@ -294,7 +294,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         StepOutcome::HadEventAt(time_step)
     }
 
-    fn evolve<St: State + ?Sized>(
+    fn evolve<St: State >(
         &self,
         state: &mut St,
         bounds: EvolveBounds,
@@ -364,7 +364,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
             .collect()
     }
 
-    fn set_point<St: State + ?Sized>(
+    fn set_point<St: State >(
         &self,
         state: &mut St,
         point: Point,
@@ -377,7 +377,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         }
     }
 
-    fn set_safe_point<St: State + ?Sized>(
+    fn set_safe_point<St: State >(
         &self,
         state: &mut St,
         point: PointSafe2,
@@ -391,7 +391,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         self
     }
 
-    fn set_points<St: State + ?Sized>(
+    fn set_points<St: State >(
         &self,
         state: &mut St,
         changelist: &[(Point, Tile)],
@@ -410,7 +410,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         self
     }
 
-    fn set_safe_points<St: State + ?Sized>(
+    fn set_safe_points<St: State >(
         &self,
         state: &mut St,
         changelist: &[(PointSafe2, Tile)],
@@ -424,7 +424,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         self
     }
 
-    fn configure_empty_state<St: State + ?Sized>(&self, state: &mut St) -> Result<(), GrowError> {
+    fn configure_empty_state<St: State >(&self, state: &mut St) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;
         }
@@ -433,7 +433,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
 
     /// Perform a particular event/change to a state.  Do not update the state's time/etc,
     /// or rates, which should be done in update_after_event and take_single_step.
-    fn perform_event<St: State + ?Sized>(&self, state: &mut St, event: &Event) -> &Self {
+    fn perform_event<St: State >(&self, state: &mut St, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
@@ -456,14 +456,14 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         self
     }
 
-    fn update_after_event<St: State + ?Sized>(&self, state: &mut St, event: &Event);
+    fn update_after_event<St: State >(&self, state: &mut St, event: &Event);
 
     /// Returns the total event rate at a given point.  These should correspond with the events chosen by `choose_event_at_point`.
-    fn event_rate_at_point<St: State + ?Sized>(&self, state: &St, p: PointSafeHere) -> Rate;
+    fn event_rate_at_point<St: State >(&self, state: &St, p: PointSafeHere) -> Rate;
 
     /// Given a point, and an accumulated random rate choice `acc` (which should be less than the total rate at the point),
     /// return the event that should take place.
-    fn choose_event_at_point<St: State + ?Sized>(
+    fn choose_event_at_point<St: State >(
         &self,
         state: &St,
         p: PointSafe2,
@@ -474,15 +474,15 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;
 
     /// Returns an array of mismatch locations.  At each point, mismatches are designated by 8*N+4*E+2*S+1*W.
-    fn calc_mismatch_locations<St: State + ?Sized>(&self, state: &St) -> Array2<usize>;
+    fn calc_mismatch_locations<St: State >(&self, state: &St) -> Array2<usize>;
 
-    fn calc_mismatches<St: State + ?Sized>(&self, state: &St) -> usize {
+    fn calc_mismatches<St: State >(&self, state: &St) -> usize {
         let mut arr = self.calc_mismatch_locations(state);
         arr.map_inplace(|x| *x = (*x & 0b01) + ((*x & 0b10) / 2));
         arr.sum()
     }
 
-    fn update_points<St: State + ?Sized>(&self, state: &mut St, points: &[PointSafeHere]) {
+    fn update_points<St: State >(&self, state: &mut St, points: &[PointSafeHere]) {
         let p = points
             .iter()
             .map(|p| (*p, self.event_rate_at_point(state, *p)))
@@ -491,7 +491,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
         state.update_multiple(&p);
     }
 
-    fn update_all<St: State + ?Sized>(&self, state: &mut St, needed: &NeededUpdate) {
+    fn update_all<St: State >(&self, state: &mut St, needed: &NeededUpdate) {
         let ncols = state.ncols();
         let nrows = state.nrows();
 
@@ -518,7 +518,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     }
 
     #[cfg(not(feature = "ui"))]
-    fn evolve_in_window<St: State + ?Sized>(
+    fn evolve_in_window<St: State >(
         &self,
         _state: &mut St,
         _block: Option<usize>,
@@ -528,7 +528,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     }
 
     #[cfg(feature = "ui")]
-    fn evolve_in_window<St: State + ?Sized>(
+    fn evolve_in_window<St: State >(
         &self,
         state: &mut St,
         block: Option<usize>,
