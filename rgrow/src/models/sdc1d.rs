@@ -600,18 +600,18 @@ impl From<(String, String)> for RefOrPair {
 #[derive(Debug)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub enum SingleOrMultiScaffold {
-    Single(Vec<String>),
-    Multi(Vec<Vec<String>>),
+    Single(Vec<Option<String>>),
+    Multi(Vec<Vec<Option<String>>>),
 }
 
-impl From<Vec<String>> for SingleOrMultiScaffold {
-    fn from(v: Vec<String>) -> Self {
+impl From<Vec<Option<String>>> for SingleOrMultiScaffold {
+    fn from(v: Vec<Option<String>>) -> Self {
         SingleOrMultiScaffold::Single(v)
     }
 }
 
-impl From<Vec<Vec<String>>> for SingleOrMultiScaffold {
-    fn from(v: Vec<Vec<String>>) -> Self {
+impl From<Vec<Vec<Option<String>>>> for SingleOrMultiScaffold {
+    fn from(v: Vec<Vec<Option<String>>>) -> Self {
         SingleOrMultiScaffold::Multi(v)
     }
 }
@@ -734,10 +734,14 @@ impl SDC {
         let scaffold = match params.scaffold {
             SingleOrMultiScaffold::Single(s) => {
                 let mut scaffold = Array2::<Glue>::zeros((64, s.len()));
-                for (i, g) in s.iter().enumerate() {
-                    scaffold
-                        .index_axis_mut(ndarray::Axis(1), i)
-                        .fill(*glue_name_map.get_by_left(g).unwrap());
+                for (i, maybe_g) in s.iter().enumerate() {
+                    if let Some(g) = maybe_g {
+                        scaffold
+                            .index_axis_mut(ndarray::Axis(1), i)
+                            .fill(*glue_name_map.get_by_left(g).unwrap());
+                    } else {
+                        scaffold.index_axis_mut(ndarray::Axis(1), i).fill(0);
+                    }
                 }
                 scaffold
             }
