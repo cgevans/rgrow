@@ -209,9 +209,9 @@ impl SDC {
     /// Fill the energy_bonds array
     fn fill_energy_array(&mut self) {
         let num_of_strands = self.strand_names.len();
-
+        println!("{:?}", self);
         // For each *possible* pair of strands, calculate the energy bond
-        for strand_f in 0..(num_of_strands as usize) {
+        for strand_f in 1..(num_of_strands as usize) { // 1: no point in calculating for 0
             let (f_west_glue, f_btm_glue, f_east_glue) = {
                 let glues = self.glues.row(strand_f);
                 (
@@ -238,6 +238,11 @@ impl SDC {
                 // strand_s    strand_f
                 self.strand_energy_bonds[(strand_s, strand_f)] =
                     self.glue_links[(f_west_glue, s_east_glue)];
+            }
+
+            // I suppose maybe we'd have weird strands with no position domain?
+            if f_btm_glue == 0 {
+                continue;
             }
 
             let b_inverse = if f_btm_glue % 2 == 1 { f_btm_glue + 1 } else { f_btm_glue - 1 };
