@@ -1062,11 +1062,7 @@ impl KTAM {
         }
     }
 
-    pub fn monomer_detachment_rate_at_point<S: State>(
-        &self,
-        state: &S,
-        p: PointSafe2,
-    ) -> Rate {
+    pub fn monomer_detachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
         // If the point is a seed, then there is no detachment rate.
         // ODD HACK: we set a very low detachment rate for seeds and duple bottom/right, to allow
         // rate-based copying.  We ignore these below.
@@ -1441,29 +1437,36 @@ impl KTAM {
     }
 
     fn _update_monomer_points<S: State>(&self, state: &mut S, p: &PointSafe2) {
-        let points = [
-            self.get_pr_at_offset(state, *p, (-1, 0)),
-            self.get_pr_at_offset(state, *p, (0, -1)),
-            self.get_pr_at_offset(state, *p, (0, 0)),
-            self.get_pr_at_offset(state, *p, (0,1)),
-            self.get_pr_at_offset(state, *p, (1,0)),
-            self.get_pr_at_offset(state, *p, (-2,0)),
-            self.get_pr_at_offset(state, *p, (-1,1)),
-            self.get_pr_at_offset(state, *p, (0,2)),
-            self.get_pr_at_offset(state, *p, (1,1)),
-            self.get_pr_at_offset(state, *p, (2,0)),
-            self.get_pr_at_offset(state, *p, (1,-1)),
-            self.get_pr_at_offset(state, *p, (-2,0)),
-            self.get_pr_at_offset(state, *p, (-1,-1)),
-        ];
-        state.update_multiple(&points, Some((p.0, ((-2, 2), (-2, 2)))));
+        if self.has_duples | (self.chunk_size == ChunkSize::Single) {
+            let points = [
+                self.get_pr_at_offset(state, *p, (-1, 0)),
+                self.get_pr_at_offset(state, *p, (0, -1)),
+                self.get_pr_at_offset(state, *p, (0, 0)),
+                self.get_pr_at_offset(state, *p, (0, 1)),
+                self.get_pr_at_offset(state, *p, (1, 0)),
+                self.get_pr_at_offset(state, *p, (-2, 0)),
+                self.get_pr_at_offset(state, *p, (-1, 1)),
+                self.get_pr_at_offset(state, *p, (0, 2)),
+                self.get_pr_at_offset(state, *p, (1, 1)),
+                self.get_pr_at_offset(state, *p, (2, 0)),
+                self.get_pr_at_offset(state, *p, (1, -1)),
+                self.get_pr_at_offset(state, *p, (-2, 0)),
+                self.get_pr_at_offset(state, *p, (-1, -1)),
+            ];
+            state.update_multiple(&points, Some((p.0, ((-2, 2), (-2, 2)))));
+        } else {
+            let points = [
+                self.get_pr_at_offset(state, *p, (-1, 0)),
+                self.get_pr_at_offset(state, *p, (0, -1)),
+                self.get_pr_at_offset(state, *p, (0, 0)),
+                self.get_pr_at_offset(state, *p, (0, 1)),
+                self.get_pr_at_offset(state, *p, (1, 0)),
+            ];
+            state.update_multiple(&points, Some((p.0, ((-1, 1), (-1, 1)))));
+        }
     }
 
-    fn points_to_update_around<S: State>(
-        &self,
-        state: &S,
-        p: &PointSafe2,
-    ) -> Vec<PointSafeHere> {
+    fn points_to_update_around<S: State>(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
         match self.chunk_size {
             ChunkSize::Single => {
                 let mut points = Vec::with_capacity(13);
