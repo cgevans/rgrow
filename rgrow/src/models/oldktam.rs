@@ -613,8 +613,8 @@ impl System for OldKTAM {
                 now_empty.push(p);
 
                 match self.determine_fission(canvas, &possible_starts, &now_empty) {
-                    super::oldktam_fission::FissionResult::NoFission => Event::MonomerDetachment(p),
-                    super::oldktam_fission::FissionResult::FissionGroups(g) => {
+                    super::fission_base::FissionResult::NoFission => Event::MonomerDetachment(p),
+                    super::fission_base::FissionResult::FissionGroups(g) => {
                         //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
                         match self.fission_handling {
                             FissionHandling::NoFission => Event::None,
@@ -650,10 +650,10 @@ impl System for OldKTAM {
                 }
 
                 match self.determine_fission(canvas, &possible_starts, &now_empty) {
-                    super::oldktam_fission::FissionResult::NoFission => {
+                    super::fission_base::FissionResult::NoFission => {
                         Event::PolymerDetachment(now_empty)
                     }
-                    super::oldktam_fission::FissionResult::FissionGroups(g) => {
+                    super::fission_base::FissionResult::FissionGroups(g) => {
                         //println!("Fission handling {:?} {:?}", p, tile);
                         match self.fission_handling {
                             FissionHandling::NoFission => Event::None,

@@ -7,3 +7,5 @@ pub mod oldktam;
 pub mod oldktam_fission;
 
 pub mod covers;
+
+pub mod fission_base;
