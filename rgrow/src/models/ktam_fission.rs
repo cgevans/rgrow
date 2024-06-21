@@ -1,11 +1,11 @@
+use super::fission_base::*;
 use super::ktam::KTAM;
 use crate::canvas::PointSafe2;
 use crate::state::State;
 use std::collections::VecDeque;
-use super::fission_base::*;
 
 impl KTAM {
-    pub fn determine_fission<S: State >(
+    pub fn determine_fission<S: State>(
         &self,
         canvas: &S,
         possible_start_points: &[PointSafe2],

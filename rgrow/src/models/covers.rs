@@ -47,7 +47,7 @@ pub struct StaticKTAMCover {
 }
 
 impl System for StaticKTAMCover {
-    fn update_after_event<S: State >(&self, state: &mut S, event: &Event) {
+    fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => {
                 panic!("Being asked to update after a dead event.")
@@ -112,7 +112,7 @@ impl System for StaticKTAMCover {
         }
     }
 
-    fn event_rate_at_point<S: State >(&self, state: &S, p: PointSafeHere) -> Rate {
+    fn event_rate_at_point<S: State>(&self, state: &S, p: PointSafeHere) -> Rate {
         let t = state.v_sh(p);
 
         if !state.inbounds(p.0) {
@@ -131,12 +131,7 @@ impl System for StaticKTAMCover {
         }
     }
 
-    fn choose_event_at_point<S: State >(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        acc: Rate,
-    ) -> Event {
+    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: Rate) -> Event {
         let t = state.tile_at_point(p);
 
         match self.tile_is_cover[t as usize] {
@@ -158,15 +153,11 @@ impl System for StaticKTAMCover {
         self.inner.seed_locs()
     }
 
-    fn calc_mismatch_locations<S: State >(&self, state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations<S: State>(&self, state: &S) -> Array2<usize> {
         self.inner.calc_mismatch_locations(state)
     }
 
-    fn take_single_step<S: State >(
-        &self,
-        state: &mut S,
-        max_time_step: f64,
-    ) -> StepOutcome {
+    fn take_single_step<S: State>(&self, state: &mut S, max_time_step: f64) -> StepOutcome {
         let time_step = -f64::ln(thread_rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
@@ -185,12 +176,7 @@ impl System for StaticKTAMCover {
         StepOutcome::HadEventAt(time_step)
     }
 
-    fn set_safe_point<S: State >(
-        &self,
-        state: &mut S,
-        point: PointSafe2,
-        tile: Tile,
-    ) -> &Self {
+    fn set_safe_point<S: State>(&self, state: &mut S, point: PointSafe2, tile: Tile) -> &Self {
         state.set_sa(&point, &tile);
 
         let event = Event::MonomerAttachment(point, tile);
@@ -200,7 +186,7 @@ impl System for StaticKTAMCover {
         self
     }
 
-    fn perform_event<S: State >(&self, state: &mut S, event: &Event) -> &Self {
+    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
@@ -235,12 +221,7 @@ impl SystemWithDimers for StaticKTAMCover {
 }
 
 impl StaticKTAMCover {
-    fn cover_to_composite_rate<S: State >(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        t: Tile,
-    ) -> Rate {
+    fn cover_to_composite_rate<S: State>(&self, state: &S, p: PointSafe2, t: Tile) -> Rate {
         let cc = &self.cover_attach_info[t as usize];
 
         let mut total_rate = 0.;
@@ -257,7 +238,7 @@ impl StaticKTAMCover {
 
         total_rate
     }
-    fn choose_cover_to_composite<S: State >(
+    fn choose_cover_to_composite<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -281,12 +262,7 @@ impl StaticKTAMCover {
 
         PossibleChoice::Remainder(acc)
     }
-    fn composite_to_cover_rate<S: State >(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        t: Tile,
-    ) -> Rate {
+    fn composite_to_cover_rate<S: State>(&self, state: &S, p: PointSafe2, t: Tile) -> Rate {
         let cc = &self.composite_detach_info[t as usize];
 
         let mut total_rate = 0.;
@@ -301,7 +277,7 @@ impl StaticKTAMCover {
 
         total_rate
     }
-    fn choose_composite_to_cover<S: State >(
+    fn choose_composite_to_cover<S: State>(
         &self,
         state: &S,
         p: PointSafe2,

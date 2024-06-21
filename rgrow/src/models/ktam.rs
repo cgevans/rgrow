@@ -132,7 +132,7 @@ pub struct KTAM {
 }
 
 impl System for KTAM {
-    fn update_after_event<S: State >(&self, state: &mut S, event: &Event) {
+    fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => todo!(),
             Event::MonomerAttachment(p, _)
@@ -161,11 +161,11 @@ impl System for KTAM {
         }
     }
 
-    fn calc_n_tiles<S: State >(&self, state: &S) -> crate::base::NumTiles {
+    fn calc_n_tiles<S: State>(&self, state: &S) -> crate::base::NumTiles {
         state.calc_n_tiles_with_tilearray(&self.should_be_counted)
     }
 
-    fn event_rate_at_point<S: State >(
+    fn event_rate_at_point<S: State>(
         &self,
         state: &S,
         p: crate::canvas::PointSafeHere,
@@ -205,7 +205,7 @@ impl System for KTAM {
         }
     }
 
-    fn choose_event_at_point<S: State >(
+    fn choose_event_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -228,7 +228,7 @@ impl System for KTAM {
         }
     }
 
-    fn perform_event<S: State >(&self, state: &mut S, event: &Event) -> &Self {
+    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) => {
@@ -554,7 +554,7 @@ impl System for KTAM {
         self._seed_locs()
     }
 
-    fn calc_mismatch_locations<S: State >(&self, state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations<S: State>(&self, state: &S) -> Array2<usize> {
         let threshold = 0.5; // Todo: fix this
         let mut mismatch_locations = Array2::<usize>::zeros((state.nrows(), state.ncols()));
 
@@ -1046,11 +1046,7 @@ impl KTAM {
         }
     }
 
-    pub fn monomer_detachment_rate_at_point<S: State >(
-        &self,
-        state: &S,
-        p: PointSafe2,
-    ) -> Rate {
+    pub fn monomer_detachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
         // If the point is a seed, then there is no detachment rate.
         // ODD HACK: we set a very low detachment rate for seeds and duple bottom/right, to allow
         // rate-based copying.  We ignore these below.
@@ -1086,7 +1082,7 @@ impl KTAM {
         v
     }
 
-    pub fn choose_detachment_at_point<S: State >(
+    pub fn choose_detachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1212,7 +1208,7 @@ impl KTAM {
         return (false, acc, Event::None);
     }
 
-    pub fn total_monomer_attachment_rate_at_point<S: State >(
+    pub fn total_monomer_attachment_rate_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1223,7 +1219,7 @@ impl KTAM {
         }
     }
 
-    pub fn choose_attachment_at_point<S: State >(
+    pub fn choose_attachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1232,7 +1228,7 @@ impl KTAM {
         self.choose_monomer_attachment_at_point(state, p, acc)
     }
 
-    pub fn choose_monomer_attachment_at_point<S: State >(
+    pub fn choose_monomer_attachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1241,14 +1237,14 @@ impl KTAM {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
-    pub fn setup_state<S: State >(&self, state: &mut S) -> Result<(), GrowError> {
+    pub fn setup_state<S: State>(&self, state: &mut S) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;
         }
         Ok(())
     }
 
-    fn _find_monomer_attachment_possibilities_at_point<S: State >(
+    fn _find_monomer_attachment_possibilities_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1353,7 +1349,7 @@ impl KTAM {
         (false, acc, Event::None)
     }
 
-    pub fn bond_energy_of_tile_type_at_point<S: State >(
+    pub fn bond_energy_of_tile_type_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1424,7 +1420,7 @@ impl KTAM {
         }
     }
 
-    fn update_monomer_points<S: State >(&self, state: &mut S, p: PointSafe2) {
+    fn update_monomer_points<S: State>(&self, state: &mut S, p: PointSafe2) {
         let points = [
             (
                 state.move_sa_n(p),
@@ -1482,11 +1478,7 @@ impl KTAM {
         state.update_multiple(&points);
     }
 
-    fn points_to_update_around<S: State >(
-        &self,
-        state: &S,
-        p: &PointSafe2,
-    ) -> Vec<PointSafeHere> {
+    fn points_to_update_around<S: State>(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
         match self.chunk_size {
             ChunkSize::Single => {
                 let mut points = Vec::with_capacity(13);
@@ -1539,7 +1531,7 @@ impl KTAM {
     }
 
     // Dimer detachment rates are written manually.
-    fn dimer_s_detach_rate<C: State >(
+    fn dimer_s_detach_rate<C: State>(
         &self,
         canvas: &C,
         p: PointSafeHere,
@@ -1563,7 +1555,7 @@ impl KTAM {
     }
 
     // Dimer detachment rates are written manually.
-    fn dimer_e_detach_rate<C: State >(
+    fn dimer_e_detach_rate<C: State>(
         &self,
         canvas: &C,
         p: PointSafeHere,
@@ -1586,7 +1578,7 @@ impl KTAM {
         }
     }
 
-    fn chunk_detach_rate<C: State >(&self, canvas: &C, p: PointSafe2, t: Tile) -> Rate {
+    fn chunk_detach_rate<C: State>(&self, canvas: &C, p: PointSafe2, t: Tile) -> Rate {
         match self.chunk_size {
             ChunkSize::Single => 0.0,
             ChunkSize::Dimer => {
@@ -1597,7 +1589,7 @@ impl KTAM {
         }
     }
 
-    fn choose_chunk_detachment<C: State >(
+    fn choose_chunk_detachment<C: State>(
         &self,
         canvas: &C,
         p: PointSafe2,

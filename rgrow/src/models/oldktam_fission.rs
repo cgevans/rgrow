@@ -1,10 +1,10 @@
+use super::fission_base::*;
 use crate::state::State;
 use crate::{canvas::PointSafe2, models::oldktam::OldKTAM};
 use std::collections::VecDeque;
-use super::fission_base::*;
 
 impl OldKTAM {
-    pub fn determine_fission<C: State >(
+    pub fn determine_fission<C: State>(
         &self,
         canvas: &C,
         possible_start_points: &[PointSafe2],

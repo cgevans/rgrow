@@ -24,7 +24,6 @@ pub trait ClonableState: State {
     }
 }
 
-
 impl ClonableState for QuadTreeState<CanvasSquare, OrderTracker> {
     fn clone_as_stateenum(&self) -> StateEnum {
         StateEnum::SquareOrderTracking(self.clone())
@@ -96,7 +95,6 @@ impl ClonableState for QuadTreeState<CanvasTube, PrintEventTracker> {
         StateEnum::TubePrintEventTracking(self.clone())
     }
 }
-
 
 #[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData, CloneAsStateEnum)]
 #[derive(Debug, Clone)]
@@ -643,9 +641,7 @@ impl StateTracker for LastAttachTimeTracker {
         self.arr.fill(f64::NAN);
     }
 
-    fn reset_assuming_empty_state(&mut self) {
-
-    }
+    fn reset_assuming_empty_state(&mut self) {}
 
     fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self {
         match event {

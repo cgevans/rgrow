@@ -7,7 +7,8 @@ use crate::ffs::{BoxedFFSResult, FFSRunConfig, FFSStateRef};
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TrackerData};
 use crate::system::{
-    DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, SystemWithDimers, TileBondInfo
+    DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, SystemWithDimers,
+    TileBondInfo,
 };
 use crate::tileset::CanvasType;
 use ndarray::Array2;
@@ -27,7 +28,11 @@ pub struct PyState(pub(crate) StateEnum);
 impl PyState {
     #[new]
     pub fn empty(shape: (usize, usize), kind: &str, tracking: &str) -> PyResult<Self> {
-        Ok(PyState(StateEnum::empty(shape, kind.try_into()?, tracking.try_into()?)?))
+        Ok(PyState(StateEnum::empty(
+            shape,
+            kind.try_into()?,
+            tracking.try_into()?,
+        )?))
     }
 
     #[getter]
@@ -57,9 +62,7 @@ impl PyState {
         self.0.rate_at_point(PointSafeHere(point)) // FIXME: check on bounds
     }
 
-    pub fn tracking_copy(
-        this: &Bound<Self>,
-    ) -> PyResult<RustAny> {
+    pub fn tracking_copy(this: &Bound<Self>) -> PyResult<RustAny> {
         let t = this.borrow();
         let ra = t.0.get_tracker_data();
 

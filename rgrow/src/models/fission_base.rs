@@ -1,9 +1,7 @@
 use crate::base::HashMapType;
-use crate::canvas::PointSafe2;
 use crate::base::Tile;
+use crate::canvas::PointSafe2;
 use rand::{distributions::weighted::WeightedIndex, distributions::Distribution};
-
-
 
 // lazy_static! {
 //     /// A vector specifying whether or not the 1 bits of the index are in a single
@@ -45,7 +43,6 @@ pub(super) static CONNECTED_RING: &[bool] = &[
     true, false, false, false, false, false, false, false, true, true, true, false, true, false,
     false, false, true, true, true, false, true, true, true, true, true,
 ];
-
 
 type GroupNum = usize;
 
