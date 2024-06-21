@@ -53,7 +53,7 @@ fn ratestore_qsta_update(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("single update", pn), &pv, |b, a| {
             b.iter(|| {
                 for (p, r) in a.iter() {
-                    rs_single.update_point(p.0, *r);
+                    rs_single.update_point(*p, *r);
                 }
             })
         });
@@ -90,7 +90,7 @@ fn ratestore_qsta_update(c: &mut Criterion) {
             |b, a| {
                 b.iter(|| {
                     for (p, r) in a.iter() {
-                        rs_single.update_point(p.0, *r);
+                        rs_single.update_point(*p, *r);
                     }
                 })
             },

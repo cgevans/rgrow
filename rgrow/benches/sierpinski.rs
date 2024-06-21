@@ -36,29 +36,29 @@ fn raw_sim_run(c: &mut Criterion) {
     });
 
     c.bench_function("evolve unistep", |b| {
-        b.iter(|| sys.state_step(&mut st, 1000000.))
+        b.iter(|| sys.take_single_step(&mut st, 1000000.))
     });
 }
-
-fn sim_run(c: &mut Criterion) {
-    let mut ts = TileSet::from_file("examples/sierpinski.yaml").unwrap();
-
-    ts.seed = Some(Seed::Single(2045, 2045, 1.into()));
-    ts.size = Some(rgrow::tileset::Size::Single(2048));
-    ts.model = Some(rgrow::tileset::Model::KTAM);
-
-    let mut sim = TileSet::into_simulation(&ts).unwrap();
-    sim.add_state().unwrap();
-
-    c.bench_function("evolve 10000 sim", |b| b.iter(|| sim.evolve(0, BOUNDS10K)));
-
-    ts.model = Some(rgrow::tileset::Model::OldKTAM);
-    let mut sim = TileSet::into_simulation(&ts).unwrap();
-
-    sim.add_state().unwrap();
-
-    c.bench_function("evolve 10000 old", |b| b.iter(|| sim.evolve(0, BOUNDS10K)));
-}
-
-criterion_group!(benches, raw_sim_run, sim_run);
+// 
+// fn sim_run(c: &mut Criterion) {
+    // let mut ts = TileSet::from_file("examples/sierpinski.yaml").unwrap();
+// 
+    // ts.seed = Some(Seed::Single(2045, 2045, 1.into()));
+    // ts.size = Some(rgrow::tileset::Size::Single(2048));
+    // ts.model = Some(rgrow::tileset::Model::KTAM);
+// 
+    // let mut sim = TileSet::into_simulation(&ts).unwrap();
+    // sim.add_state().unwrap();
+// 
+    // c.bench_function("evolve 10000 sim", |b| b.iter(|| sim.evolve(0, BOUNDS10K)));
+// 
+    // ts.model = Some(rgrow::tileset::Model::OldKTAM);
+    // let mut sim = TileSet::into_simulation(&ts).unwrap();
+// 
+    // sim.add_state().unwrap();
+// 
+    // c.bench_function("evolve 10000 old", |b| b.iter(|| sim.evolve(0, BOUNDS10K)));
+// }
+// 
+criterion_group!(benches, raw_sim_run);
 criterion_main!(benches);
