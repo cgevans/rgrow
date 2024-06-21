@@ -220,7 +220,7 @@ pub trait StateRates {
     fn choose_point(&self) -> (Point, Rate);
     fn rate_at_point(&self, point: PointSafeHere) -> Rate;
     fn update_point(&mut self, point: PointSafeHere, new_rate: Rate);
-    fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)], bounds: Option<((usize, usize), ((i64, i64), (i64, i64)))>);
+    fn update_multiple(&mut self, to_update: &[Option<(PointSafeHere, Rate)>], bounds: Option<((usize, usize), ((i64, i64), (i64, i64)))>);
     fn total_rate(&self) -> Rate;
 }
 
@@ -238,18 +238,19 @@ impl<C: Canvas, T: StateTracker> StateRates for QuadTreeState<C, T> {
     }
 
     #[inline]
-    fn update_multiple(&mut self, points: &[(PointSafeHere, Rate)], bounds: Option<((usize, usize), ((i64, i64), (i64, i64)))>) {
+    fn update_multiple(&mut self, points: &[Option<(PointSafeHere, Rate)>], bounds: Option<((usize, usize), ((i64, i64), (i64, i64)))>) {
         // FIXME: need to figure out checks here
-        if let Some((p, bounds)) = bounds {
-        if self.inbounds_bounds(p, bounds) {
-            return unsafe {self.rates.update_multiple(&points)};
-        }};
-        let v: Vec<_> = points
-            .into_iter()
-            .filter(|(p, _)| self.inbounds(p.0))
-            .map(|x| x.clone())
-            .collect();
-        unsafe {self.rates.update_multiple(&v)};
+        // if let Some((p, bounds)) = bounds {
+        // if self.inbounds_bounds(p, bounds) {
+        //     return unsafe {self.rates.update_multiple(&points)};
+        // }};
+        // let v: Vec<_> = points
+        //     .into_iter()
+        //     .filter(|(p, _)| self.inbounds(p.0))
+        //     .map(|x| x.clone())
+        //     .collect();
+        // unsafe {self.rates.update_multiple(&v)};
+        unsafe {self.rates.update_multiple(&points)};
     }
 
     fn total_rate(&self) -> Rate {
@@ -292,6 +293,10 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
 
     fn tile_at_offset(&self, p: Point, offset: (i64, i64)) -> Tile {
         return self.canvas.tile_at_offset(p, offset);
+    }
+
+    fn point_at_offset(&self,p:Point,offset:(i64,i64)) -> Option<PointSafeHere> {
+        return self.canvas.point_at_offset(p,offset);
     }
 
     fn inbounds_bounds(&self, p: Point, bounds: (((i64, i64), (i64, i64)))) -> bool {

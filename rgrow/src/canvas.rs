@@ -56,6 +56,19 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
 
     fn tile_at_offset(&self, p: Point, offset: (i64, i64)) -> Tile;
 
+    fn point_at_offset(&self, p: Point, offset: (i64, i64)) -> Option<PointSafeHere> {
+        let x = (p.0 as i64) + (offset.0);
+        if x < 0 {
+            return None;
+        }
+        let y = (p.1 as i64) + (offset.1);
+        if y < 0 {
+            return None;
+        }
+        if !self.inbounds((x as usize, y as usize)) { return None; }
+        Some(PointSafeHere((x as usize, y as usize)))
+    }
+
     fn move_sa_n(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_n(p.0))
     }

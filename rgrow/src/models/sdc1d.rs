@@ -178,7 +178,7 @@ impl SDC {
         self.update_system();
     }
 
-    fn polymer_update<S: State + ?Sized>(&self, points: &Vec<PointSafe2>, state: &mut S) {
+    fn polymer_update<S: State>(&self, points: &Vec<PointSafe2>, state: &mut S) {
         let mut points_to_update = points
             .iter()
             .flat_map(|&point| {
@@ -195,13 +195,13 @@ impl SDC {
         self.update_points(state, &points_to_update)
     }
 
-    fn update_monomer_point<S: State + ?Sized>(&self, state: &mut S, scaffold_point: &PointSafe2) {
+    fn update_monomer_point<S: State>(&self, state: &mut S, scaffold_point: &PointSafe2) {
         let points = [
             state.move_sa_w(*scaffold_point),
             state.move_sa_e(*scaffold_point),
             PointSafeHere(scaffold_point.0),
         ]
-        .map(|point| (point, self.event_rate_at_point(state, point)));
+        .map(|point| Some((point, self.event_rate_at_point(state, point))));
 
         state.update_multiple(&points, Some((scaffold_point.0, ((0,0),(-1,1)))));
     }
@@ -253,7 +253,7 @@ impl SDC {
         }
     }
 
-    pub fn monomer_detachment_rate_at_point<S: State + ?Sized>(
+    pub fn monomer_detachment_rate_at_point<S: State>(
         &self,
         state: &S,
         scaffold_point: PointSafe2,
@@ -275,7 +275,7 @@ impl SDC {
         self.kf * bond_energy.exp()
     }
 
-    pub fn choose_monomer_attachment_at_point<S: State + ?Sized>(
+    pub fn choose_monomer_attachment_at_point<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
@@ -284,7 +284,7 @@ impl SDC {
         self.find_monomer_attachment_possibilities_at_point(state, acc, point, false)
     }
 
-    pub fn choose_monomer_detachment_at_point<S: State + ?Sized>(
+    pub fn choose_monomer_detachment_at_point<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
@@ -303,7 +303,7 @@ impl SDC {
     /// |_ _ _ _ _ _ _ _ _ _  <- Scaffold
     /// |        ^ point
     ///
-    fn find_monomer_attachment_possibilities_at_point<S: State + ?Sized>(
+    fn find_monomer_attachment_possibilities_at_point<S: State>(
         &self,
         state: &S,
         mut acc: Rate,
@@ -333,7 +333,7 @@ impl SDC {
         (false, acc, Event::None)
     }
 
-    fn total_monomer_attachment_rate_at_poin<S: State + ?Sized>(
+    fn total_monomer_attachment_rate_at_poin<S: State>(
         &self,
         state: &S,
         scaffold_coord: PointSafe2,
@@ -348,7 +348,7 @@ impl SDC {
     }
 
     /// Get the sum of the energies of the bonded strands (if any)
-    fn bond_energy_of_strand<S: State + ?Sized>(
+    fn bond_energy_of_strand<S: State>(
         &self,
         state: &S,
         scaffold_point: PointSafe2,
@@ -366,7 +366,7 @@ impl SDC {
 }
 
 impl System for SDC {
-    fn update_after_event<St: State + ?Sized>(&self, state: &mut St, event: &crate::system::Event) {
+    fn update_after_event<St: State>(&self, state: &mut St, event: &crate::system::Event) {
         match event {
             Event::None => todo!(),
             Event::MonomerAttachment(scaffold_point, _)
@@ -383,7 +383,7 @@ impl System for SDC {
         }
     }
 
-    fn event_rate_at_point<St: State + ?Sized>(
+    fn event_rate_at_point<St: State>(
         &self,
         state: &St,
         p: crate::canvas::PointSafeHere,
@@ -401,7 +401,7 @@ impl System for SDC {
         }
     }
 
-    fn choose_event_at_point<St: State + ?Sized>(
+    fn choose_event_at_point<St: State>(
         &self,
         state: &St,
         point: crate::canvas::PointSafe2,
@@ -427,7 +427,7 @@ impl System for SDC {
     }
 
     // TODO: Array containing locations to "bad connections"
-    fn calc_mismatch_locations<St: State + ?Sized>(&self, state: &St) -> Array2<usize> {
+    fn calc_mismatch_locations<St: State>(&self, state: &St) -> Array2<usize> {
         todo!()
     }
 

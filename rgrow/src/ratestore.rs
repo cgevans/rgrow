@@ -1,10 +1,10 @@
 use std::borrow::BorrowMut;
 
-
 use fnv::FnvHashSet;
 use ndarray::Array2;
 use rand::thread_rng;
 use rand::Rng;
+use smallvec::SmallVec;
 
 use crate::base::{Point, Rate};
 use crate::canvas::PointSafeHere;
@@ -16,7 +16,7 @@ pub trait RateStore {
     fn choose_point(&self) -> (Point, Rate);
     fn rate_at_point(&self, point: PointSafeHere) -> Rate;
     fn update_point(&mut self, point: PointSafeHere, new_rate: Rate);
-    unsafe fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]);
+    unsafe fn update_multiple(&mut self, to_update: &[Option<(PointSafeHere, Rate)>]);
     fn total_rate(&self) -> Rate;
 }
 
@@ -119,7 +119,7 @@ impl RateStore for QuadTreeSquareArray<f64> {
     }
 
     #[inline(always)]
-    unsafe fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]) {
+    unsafe fn update_multiple(&mut self, to_update: &[Option<(PointSafeHere, Rate)>]) {
         // Two code paths here: one for small N, using a sorted Vec,
         // and one for large N, using an FnvHashSet.
 
@@ -138,14 +138,14 @@ impl RateStore for QuadTreeSquareArray<f64> {
 }
 
 impl<Rate: RateTrait> QuadTreeSquareArray<Rate> {
-    pub fn _update_multiple_small(&mut self, to_update: &[(PointSafeHere, Rate)]) {
-        let mut todo = Vec::<Point>::new();
+    pub fn _update_multiple_small(&mut self, to_update: &[Option<(PointSafeHere, Rate)>]) {
+        let mut todo = SmallVec::<[Point; 25]>::new();
 
         let mut rtiter = self.0.iter_mut();
         let mut r_prev = rtiter.next().unwrap();
 
-        for (p, r) in to_update {
-            r_prev[p.0] = *r;
+        for (p, r) in to_update.iter().filter(|x| x.is_some()).map(|x| x.unwrap()) {
+            r_prev[p.0] = r;
             let n = (p.0 .0 / 2, p.0 .1 / 2);
             if todo.iter().rev().all(|x| n != *x) {
                 todo.push(n);
@@ -165,7 +165,7 @@ impl<Rate: RateTrait> QuadTreeSquareArray<Rate> {
         self.1 = r_prev.sum();
     }
 
-    pub fn _update_multiple_large(&mut self, to_update: &[(PointSafeHere, Rate)]) {
+    pub fn _update_multiple_large(&mut self, to_update: &[Option<(PointSafeHere, Rate)>]) {
         let mut h1 = FnvHashSet::<Point>::default();
         let mut h2 = FnvHashSet::<Point>::default();
 
@@ -173,8 +173,8 @@ impl<Rate: RateTrait> QuadTreeSquareArray<Rate> {
         let mut r_prev = rtiter.next().unwrap();
 
         let mut todo = h1.borrow_mut();
-        for (p, r) in to_update {
-            r_prev[p.0] = *r;
+        for (p, r) in to_update.iter().filter(|x| x.is_some()).map(|x| x.unwrap()) {
+            r_prev[p.0] = r;
             let n = (p.0 .0 / 2, p.0 .1 / 2);
             todo.insert(n);
         }
@@ -192,12 +192,12 @@ impl<Rate: RateTrait> QuadTreeSquareArray<Rate> {
         self.1 = r_prev.sum();
     }
 
-    pub fn _update_multiple_all(&mut self, to_update: &[(PointSafeHere, Rate)]) {
+    pub fn _update_multiple_all(&mut self, to_update: &[Option<(PointSafeHere, Rate)>]) {
         let mut rtiter = self.0.iter_mut();
         let mut r_prev = rtiter.next().unwrap();
 
-        for (p, r) in to_update {
-            r_prev[p.0] = *r;
+        for (p, r) in to_update.iter().filter(|x| x.is_some()).map(|x| x.unwrap()) {
+            r_prev[p.0] = r;
         }
 
         for r_next in rtiter {
@@ -247,7 +247,7 @@ mod tests {
         let allchanges = (0..128usize)
             .flat_map(|x| (0..128usize).map(move |y| (x, y)))
             .zip(it)
-            .map(|((x, y), r)| (PointSafeHere((x, y)), r))
+            .map(|((x, y), r)| (Some((PointSafeHere((x, y)), r))))
             .collect::<Vec<_>>();
 
         rs._update_multiple_small(&allchanges);
@@ -255,8 +255,8 @@ mod tests {
 
         assert_eq!(rs, rs_large);
 
-        for (p, r) in allchanges.iter() {
-            rs_single.update_point(*p, *r);
+        for (p, r) in allchanges.iter().filter(|x| x.is_some()).map(|x| x.unwrap()) {
+            rs_single.update_point(p, r);
         }
 
         assert_eq!(rs, rs_single);
