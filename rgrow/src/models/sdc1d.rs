@@ -232,16 +232,16 @@ impl SDC {
                 // Case 1: First strands is to the west of second
                 // strand_f    strand_s
                 self.strand_energy_bonds[(strand_f, strand_s)] =
-                    -self.glue_links[(f_east_glue, s_west_glue)];
+                    self.glue_links[(f_east_glue, s_west_glue)];
 
                 // Case 2: First strands is to the east of second
                 // strand_s    strand_f
                 self.strand_energy_bonds[(strand_s, strand_f)] =
-                    -self.glue_links[(f_west_glue, s_east_glue)];
+                    self.glue_links[(f_west_glue, s_east_glue)];
             }
 
             // Calculate the binding strength of the starnd with the scaffold
-            self.scaffold_energy_bonds[strand_f] = -self.glue_links[(f_btm_glue, f_btm_glue)];
+            self.scaffold_energy_bonds[strand_f] = self.glue_links[(f_btm_glue, f_btm_glue)];
         }
     }
 
