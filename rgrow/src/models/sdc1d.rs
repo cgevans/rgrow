@@ -657,10 +657,7 @@ fn self_and_inverse(value: &String) -> (String, String, String) {
 impl SDC {
     pub fn from_params(params: SDCParams) -> Self {
         let mut glue_name_map = BiHashMap::<String, usize>::new();
-
         let mut gluenum = 1;
-        let mut max_gluenum = 1;
-
         let mut tile_glues_int = Array2::<usize>::zeros((params.tile_glues.len(), 3));
 
         for (tgl, mut r) in
@@ -687,13 +684,14 @@ impl SDC {
                                 }
 
                                 gluenum += 2;
-                                max_gluenum = max_gluenum.max(gluenum);
                             }
                         }
                     }
                 }
             }
         }
+
+        let max_gluenum = gluenum;
 
         // Delta G at 37 degrees C
         let mut glue_delta_g = Array2::<f64>::zeros((max_gluenum, max_gluenum));
