@@ -367,9 +367,10 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
     fn set_point<St: State>(
         &self,
         state: &mut St,
-        point: Point,
+        point: impl Into<Point>,
         tile: Tile,
     ) -> Result<&Self, GrowError> {
+        let point = point.into();
         if !state.inbounds(point) {
             Err(GrowError::OutOfBounds(point.0, point.1))
         } else {

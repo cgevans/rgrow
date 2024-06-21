@@ -368,7 +368,7 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
 }
 
 #[enum_dispatch]
-pub(crate) trait CanvasMoves: Canvas {
+pub trait CanvasMoves: Canvas {
     fn move_n(&self, p: impl Into<PointSafeHere> + Into<Point>) -> Point {
         self.u_move_point_n(p.into())
     }
@@ -809,6 +809,9 @@ impl Canvas for CanvasTube {
 pub trait MovablePoint<C: Canvas> {
     type NextPoint;
     fn move_n(&self, canvas: &C) -> Self::NextPoint;
+    fn move_e(&self, canvas: &C) -> Self::NextPoint;
+    fn move_s(&self, canvas: &C) -> Self::NextPoint;
+    fn move_w(&self, canvas: &C) -> Self::NextPoint;
     fn to_point(&self) -> Point;
 }
 
@@ -819,16 +822,65 @@ impl<C: Canvas> MovablePoint<C> for &PointSafe2 {
         PointSafeHere(canvas.u_move_point_n(self.0))
     }
 
+    fn move_e(&self, canvas: &C) -> Self::NextPoint {
+        PointSafeHere(canvas.u_move_point_e(self.0))
+    }
+
+    fn move_s(&self, canvas: &C) -> Self::NextPoint {
+        PointSafeHere(canvas.u_move_point_s(self.0))
+    }
+
+    fn move_w(&self, canvas: &C) -> Self::NextPoint {
+        PointSafeHere(canvas.u_move_point_w(self.0))
+    }
+
     fn to_point(&self) -> Point {
         self.0
     }
 }
+
+impl<C: Canvas> MovablePoint<C> for PointSafe2 {
+    type NextPoint = PointSafeHere;
+
+    fn move_n(&self, canvas: &C) -> Self::NextPoint {
+        PointSafeHere(canvas.u_move_point_n(self.0))
+    }
+
+    fn move_e(&self, canvas: &C) -> Self::NextPoint {
+        PointSafeHere(canvas.u_move_point_e(self.0))
+    }
+
+    fn move_s(&self, canvas: &C) -> Self::NextPoint {
+        PointSafeHere(canvas.u_move_point_s(self.0))
+    }
+
+    fn move_w(&self, canvas: &C) -> Self::NextPoint {
+        PointSafeHere(canvas.u_move_point_w(self.0))
+    }
+
+    fn to_point(&self) -> Point {
+        self.0
+    }
+}
+
 
 impl<C: Canvas> MovablePoint<C> for &PointSafeHere {
     type NextPoint = Point;
 
     fn move_n(&self, canvas: &C) -> Self::NextPoint {
         canvas.u_move_point_n(self.0)
+    }
+
+    fn move_e(&self, canvas: &C) -> Self::NextPoint {
+        canvas.u_move_point_e(self.0)
+    }
+
+    fn move_s(&self, canvas: &C) -> Self::NextPoint {
+        canvas.u_move_point_s(self.0)
+    }
+
+    fn move_w(&self, canvas: &C) -> Self::NextPoint {
+        canvas.u_move_point_w(self.0)
     }
 
     fn to_point(&self) -> Point {
@@ -851,5 +903,11 @@ impl Into<Point> for PointSafeHere {
 impl Into<PointSafeHere> for PointSafe2 {
     fn into(self) -> PointSafeHere {
         PointSafeHere(self.0)
+    }
+}
+
+impl PointSafeHere {
+    pub(crate) unsafe fn u_to_2(&self) -> PointSafe2 {
+        PointSafe2(self.0)
     }
 }

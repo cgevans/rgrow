@@ -11,7 +11,7 @@
 use super::fission_base::*;
 use crate::{
     base::{GrowError, RgrowError},
-    canvas::{PointSafe2, PointSafeHere},
+    canvas::{MovablePoint, PointSafe2, PointSafeHere},
     state::State,
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
@@ -563,7 +563,7 @@ impl System for KTAM {
         // TODO: this should use an iterator from the canvas, which we should implement.
         for i in 0..state.nrows() {
             for j in 0..state.ncols() {
-                if !state.inbounds((i, j)) {
+                if !state.inbounds2((i, j)) {
                     continue;
                 }
                 let p = PointSafe2((i, j));
@@ -1030,7 +1030,7 @@ impl KTAM {
         }
     }
 
-    pub fn is_seed(&self, p: PointSafe2) -> bool {
+    fn is_seed(&self, p: PointSafe2) -> bool {
         match &self.seed {
             Seed::None() => false,
             Seed::SingleTile {
@@ -1048,7 +1048,7 @@ impl KTAM {
         }
     }
 
-    pub fn monomer_detachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
+    fn monomer_detachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
         // If the point is a seed, then there is no detachment rate.
         // ODD HACK: we set a very low detachment rate for seeds and duple bottom/right, to allow
         // rate-based copying.  We ignore these below.
@@ -1084,7 +1084,7 @@ impl KTAM {
         v
     }
 
-    pub fn choose_detachment_at_point<S: State>(
+    fn choose_detachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1105,18 +1105,18 @@ impl KTAM {
                 let tw = { state.tile_to_w(p) };
                 let te = { state.tile_to_e(p) };
                 let ts = { state.tile_to_s(p) };
-                // FIXME
+                // FIXME: safety here is because energies ensure tile is there
                 if self.get_energy_ns(tn, tile) > 0. {
-                    possible_starts.push(PointSafe2(state.move_sa_n(p).0))
+                    possible_starts.push(unsafe {p.move_n(state).u_to_2()})
                 };
                 if self.get_energy_we(tw, tile) > 0. {
-                    possible_starts.push(PointSafe2(state.move_sa_w(p).0))
+                    possible_starts.push(unsafe {p.move_w(state).u_to_2()})
                 };
                 if self.get_energy_ns(tile, ts) > 0. {
-                    possible_starts.push(PointSafe2(state.move_sa_s(p).0))
+                    possible_starts.push(unsafe {p.move_s(state).u_to_2()})
                 };
                 if self.get_energy_we(tile, te) > 0. {
-                    possible_starts.push(PointSafe2(state.move_sa_e(p).0))
+                    possible_starts.push(unsafe {p.move_e(state).u_to_2()})
                 };
 
                 now_empty.push(p);
@@ -1241,7 +1241,7 @@ impl KTAM {
 
     pub fn setup_state<S: State>(&self, state: &mut S) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
-            self.set_point(state, p.0, t)?;
+            self.set_point(state, p, t)?;
         }
         Ok(())
     }
@@ -1486,11 +1486,11 @@ impl KTAM {
                 let mut points = Vec::with_capacity(13);
                 points.extend_from_slice(&[
                     // Single moves (no dimer chunks, no duples)
-                    state.move_sa_n(*p),
-                    state.move_sa_w(*p),
+                    p.move_n(state),
+                    p.move_w(state),
                     PointSafeHere(p.0),
-                    state.move_sa_e(*p),
-                    state.move_sa_s(*p),
+                    p.move_e(state),
+                    p.move_s(state),
                 ]);
                 if self.has_duples {
                     points.extend_from_slice(&[
@@ -1513,11 +1513,11 @@ impl KTAM {
                 }
                 points.extend_from_slice(&[
                     // Single moves (no dimer chunks, no duples)
-                    state.move_sa_n(*p),
-                    state.move_sa_w(*p),
+                    p.move_n(state),
+                    p.move_w(state),
                     PointSafeHere(p.0),
-                    state.move_sa_e(*p),
-                    state.move_sa_s(*p),
+                    p.move_e(state),
+                    p.move_s(state),
                     state.move_sa_nn(*p),
                     state.move_sa_ne(*p),
                     state.move_sa_ee(*p),
