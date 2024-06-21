@@ -1,7 +1,6 @@
 use std::borrow::BorrowMut;
 
-use crate::state::StateEnum;
-use enum_dispatch::enum_dispatch;
+
 use fnv::FnvHashSet;
 use ndarray::Array2;
 use rand::thread_rng;
@@ -13,12 +12,11 @@ use crate::canvas::PointSafeHere;
 // choice of a point based on those rates.  It makes no assumptions about relationships between the
 // points, beyond the points being defined by two integer coordinates; eg, they do not need to be a
 // rectilinear grid.
-#[enum_dispatch]
 pub trait RateStore {
     fn choose_point(&self) -> (Point, Rate);
     fn rate_at_point(&self, point: PointSafeHere) -> Rate;
     fn update_point(&mut self, point: PointSafeHere, new_rate: Rate);
-    fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]);
+    unsafe fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]);
     fn total_rate(&self) -> Rate;
 }
 
@@ -121,7 +119,7 @@ impl RateStore for QuadTreeSquareArray<f64> {
     }
 
     #[inline(always)]
-    fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]) {
+    unsafe fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]) {
         // Two code paths here: one for small N, using a sorted Vec,
         // and one for large N, using an FnvHashSet.
 

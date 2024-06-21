@@ -13,7 +13,7 @@ use enum_dispatch::enum_dispatch;
 use std::fmt::Debug;
 
 #[enum_dispatch]
-pub trait State: RateStore + Canvas + StateStatus + Sync + Send + TrackerData {
+pub trait State: StateRates + Canvas + StateStatus + Sync + Send + TrackerData {
     fn panicinfo(&self) -> String;
 }
 
@@ -23,7 +23,6 @@ pub trait ClonableState: State {
         panic!("Not implemented")
     }
 }
-
 
 impl ClonableState for QuadTreeState<CanvasSquare, OrderTracker> {
     fn clone_as_stateenum(&self) -> StateEnum {
@@ -97,8 +96,7 @@ impl ClonableState for QuadTreeState<CanvasTube, PrintEventTracker> {
     }
 }
 
-
-#[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData, CloneAsStateEnum)]
+#[enum_dispatch(State, StateStatus, Canvas, StateRates, TrackerData, CloneAsStateEnum)]
 #[derive(Debug, Clone)]
 pub enum StateEnum {
     SquareCanvasNullTracker(QuadTreeState<CanvasSquare, NullStateTracker>),
@@ -217,7 +215,16 @@ impl<C: Canvas + CanvasCreate, T: StateTracker> State for QuadTreeState<C, T> {
     }
 }
 
-impl<C: Canvas, T: StateTracker> RateStore for QuadTreeState<C, T> {
+#[enum_dispatch]
+pub trait StateRates {
+    fn choose_point(&self) -> (Point, Rate);
+    fn rate_at_point(&self, point: PointSafeHere) -> Rate;
+    fn update_point(&mut self, point: PointSafeHere, new_rate: Rate);
+    fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)], bounds: Option<((usize, usize), ((i64, i64), (i64, i64)))>);
+    fn total_rate(&self) -> Rate;
+}
+
+impl<C: Canvas, T: StateTracker> StateRates for QuadTreeState<C, T> {
     fn choose_point(&self) -> (Point, Rate) {
         self.rates.choose_point()
     }
@@ -231,8 +238,18 @@ impl<C: Canvas, T: StateTracker> RateStore for QuadTreeState<C, T> {
     }
 
     #[inline]
-    fn update_multiple(&mut self, points: &[(PointSafeHere, Rate)]) {
-        self.rates.update_multiple(points);
+    fn update_multiple(&mut self, points: &[(PointSafeHere, Rate)], bounds: Option<((usize, usize), ((i64, i64), (i64, i64)))>) {
+        // FIXME: need to figure out checks here
+        if let Some((p, bounds)) = bounds {
+        if self.inbounds_bounds(p, bounds) {
+            return unsafe {self.rates.update_multiple(&points)};
+        }};
+        let v: Vec<_> = points
+            .into_iter()
+            .filter(|(p, _)| self.inbounds(p.0))
+            .map(|x| x.clone())
+            .collect();
+        unsafe {self.rates.update_multiple(&v)};
     }
 
     fn total_rate(&self) -> Rate {
@@ -272,6 +289,15 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
     fn calc_n_tiles(&self) -> NumTiles {
         self.canvas.calc_n_tiles()
     }
+
+    fn tile_at_offset(&self, p: Point, offset: (i64, i64)) -> Tile {
+        return self.canvas.tile_at_offset(p, offset);
+    }
+
+    fn inbounds_bounds(&self, p: Point, bounds: (((i64, i64), (i64, i64)))) -> bool {
+        self.canvas.inbounds_bounds(p, bounds)
+    }
+    
 
     fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
         self.canvas.calc_n_tiles_with_tilearray(should_be_counted)
@@ -643,9 +669,7 @@ impl StateTracker for LastAttachTimeTracker {
         self.arr.fill(f64::NAN);
     }
 
-    fn reset_assuming_empty_state(&mut self) {
-
-    }
+    fn reset_assuming_empty_state(&mut self) {}
 
     fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self {
         match event {

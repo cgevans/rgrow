@@ -847,8 +847,8 @@ impl KTAM {
         k_f: Option<f64>,
         seed: Option<Seed>,
         fission_handling: Option<FissionHandling>,
-        chunk_handling: Option<ChunkHandling>, 
-        chunk_size: Option<ChunkSize>,         
+        chunk_handling: Option<ChunkHandling>,
+        chunk_size: Option<ChunkSize>,
         tile_names: Option<Vec<String>>,
         tile_colors: Option<Vec<[u8; 4]>>,
     ) -> Self {
@@ -1097,7 +1097,7 @@ impl KTAM {
             // FIXME: may slow things down
             if self.is_seed(p) || ((self.has_duples) && self.is_fake_duple(state.tile_at_point(p)))
             {
-                return (true, acc, Event::None)
+                return (true, acc, Event::None);
             } else {
                 let mut possible_starts = Vec::new();
                 let mut now_empty = Vec::new();
@@ -1183,7 +1183,9 @@ impl KTAM {
                     //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
                     match self.fission_handling {
                         FissionHandling::NoFission => (true, acc, Event::None),
-                        FissionHandling::JustDetach => (true, acc, Event::PolymerDetachment(now_empty)),
+                        FissionHandling::JustDetach => {
+                            (true, acc, Event::PolymerDetachment(now_empty))
+                        }
                         FissionHandling::KeepSeeded => {
                             let sl = self._seed_locs();
                             (
@@ -1204,7 +1206,7 @@ impl KTAM {
                         ),
                     }
                 }
-            }
+            };
         }
 
         return (false, acc, Event::None);
@@ -1477,7 +1479,7 @@ impl KTAM {
                 self.event_rate_at_point(state, state.move_sa_nw(*p)),
             ),
         ];
-        state.update_multiple(&points);
+        state.update_multiple(&points, Some((p.0, ((-3, 3), (-3, 3)))));
     }
 
     fn points_to_update_around<S: State + ?Sized>(

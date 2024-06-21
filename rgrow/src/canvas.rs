@@ -33,6 +33,12 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     fn u_move_point_s(&self, p: Point) -> Point;
     fn u_move_point_w(&self, p: Point) -> Point;
     fn inbounds(&self, p: Point) -> bool;
+    fn inbounds_bounds(&self, p: Point, bounds: ((i64, i64), (i64, i64))) -> bool {
+        (p.0 as i64 + bounds.0.0 >= 0 ) &
+        (p.1 as i64 + bounds.1.0 >= 0 ) &
+        (p.0 as i64 + bounds.0.1 < self.nrows() as i64 ) &
+        (p.1 as i64 + bounds.1.1 < self.ncols() as i64 )
+    }
     fn calc_n_tiles(&self) -> NumTiles;
     fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles;
     fn raw_array(&self) -> ArrayView2<Tile>;
@@ -47,6 +53,8 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     ) {
         self.set_sa(p, t);
     }
+
+    fn tile_at_offset(&self, p: Point, offset: (i64, i64)) -> Tile;
 
     fn move_sa_n(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_n(p.0))
@@ -147,59 +155,59 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     }
 
     fn tile_at_point(&self, p: PointSafe2) -> Tile {
-        unsafe { self.uv_p(p.0) }
+        self.tile_at_offset(p.0, (0, 0))
     }
 
     fn v_sh(&self, p: PointSafeHere) -> Tile {
-        unsafe { self.uv_p(p.0) }
+        self.tile_at_offset(p.0, (0, 0))
     }
 
     fn tile_to_n(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_n(p))
+        self.tile_at_offset(p.0, (-1, 0))
     }
 
     fn tile_to_e(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_e(p))
+        self.tile_at_offset(p.0, (0, 1))
     }
 
     fn tile_to_s(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_s(p))
+        self.tile_at_offset(p.0, (1, 0))
     }
 
     fn tile_to_w(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_w(p))
+        self.tile_at_offset(p.0, (0, -1))
     }
 
     fn tile_to_nn(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_nn(p))
+        self.tile_at_offset(p.0, (-2, 0))
     }
 
     fn tile_to_ne(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_ne(p))
+        self.tile_at_offset(p.0, (-1, 1))
     }
 
     fn tile_to_ee(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_ee(p))
+        self.tile_at_offset(p.0, (0, 2))
     }
 
     fn tile_to_se(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_se(p))
+        self.tile_at_offset(p.0, (1, 1))
     }
 
     fn tile_to_ss(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_ss(p))
+        self.tile_at_offset(p.0, (2, 0))
     }
 
     fn tile_to_sw(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_sw(p))
+        self.tile_at_offset(p.0, (1, -1))
     }
 
     fn tile_to_ww(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_ww(p))
+        self.tile_at_offset(p.0, (0, -2))
     }
 
     fn tile_to_nw(&self, p: PointSafe2) -> Tile {
-        self.v_sh(self.move_sa_nw(p))
+        self.tile_at_offset(p.0, (-1, -1))
     }
 
     /// # Safety
@@ -405,6 +413,19 @@ impl CanvasCreate for CanvasSquare {
 }
 
 impl Canvas for CanvasSquare {
+    fn tile_at_offset(&self, p: Point, offset: (i64, i64)) -> Tile {
+        let x = (p.0 as i64) + (offset.0);
+        if x < 0 {
+            return 0;
+        }
+        let y = (p.1 as i64) + (offset.1);
+        if y < 0 {
+            return 0;
+        }
+        if !self.inbounds((x as usize, y as usize)) { return 0; }
+        unsafe { self.uv_p((x as usize, y as usize)) }
+    }
+
     #[inline(always)]
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
         self.0.uget(p)
@@ -417,7 +438,7 @@ impl Canvas for CanvasSquare {
 
     #[inline(always)]
     fn inbounds(&self, p: Point) -> bool {
-        (p.0 >= 2) & (p.1 >= 2) & (p.0 < self.nrows() - 2) & (p.1 < self.ncols() - 2)
+        (p.0 < self.nrows() - 0) & (p.1 < self.ncols() - 0)
     }
 
     #[inline(always)]
@@ -515,6 +536,19 @@ impl Canvas for CanvasPeriodic {
         }
     }
 
+    fn tile_at_offset(&self, p: Point, offset: (i64, i64)) -> Tile {
+        let dims = self.0.dim();
+
+        let x = (p.0 as i64 + offset.0 as i64).rem_euclid(dims.0 as i64) as usize;
+        let y = (p.1 as i64 + offset.1 as i64).rem_euclid(dims.1 as i64) as usize;
+
+        unsafe { self.uv_p((x, y)) }
+    }
+
+    fn inbounds_bounds(&self, p: Point, _bounds: ((i64, i64), (i64, i64))) -> bool {
+        self.inbounds(p)
+    }
+
     fn u_move_point_e(&self, p: Point) -> Point {
         (p.0, (p.1 + 1) % self.0.ncols())
     }
@@ -582,6 +616,19 @@ impl CanvasCreate for CanvasTube {
 }
 
 impl Canvas for CanvasTube {
+    fn tile_at_offset(&self, p: Point, offset: (i64, i64)) -> Tile {
+        let x = (p.0 as i64) + (offset.0);
+        if x < 0 {
+            return 0;
+        }
+        let y = (p.1 as i64) + (offset.1);
+        if y < 0 {
+            return 0;
+        }
+        if !self.inbounds((x as usize, y as usize)) { return 0; }
+        unsafe { self.uv_p((x as usize, y as usize)) }
+    }
+
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
         self.0.uget(p)
     }

@@ -5,8 +5,7 @@ use crate::base::{NumEvents, NumTiles, RustAny, Tile};
 use crate::canvas::{Canvas, PointSafeHere};
 use crate::ffs::{BoxedFFSResult, FFSRunConfig, FFSStateRef};
 use crate::models::sdc1d::{SDC,SDCParams};
-use crate::ratestore::RateStore;
-use crate::state::{StateEnum, StateStatus, TrackerData};
+use crate::state::{StateEnum, StateStatus, TrackerData, StateRates};
 use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, SystemWithDimers, TileBondInfo
 };

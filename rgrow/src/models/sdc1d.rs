@@ -203,7 +203,7 @@ impl SDC {
         ]
         .map(|point| (point, self.event_rate_at_point(state, point)));
 
-        state.update_multiple(&points);
+        state.update_multiple(&points, Some((scaffold_point.0, ((0,0),(-1,1)))));
     }
 
     /// Fill the energy_bonds array

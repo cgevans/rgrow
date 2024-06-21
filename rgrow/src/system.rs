@@ -489,7 +489,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo {
             .map(|p| (*p, self.event_rate_at_point(state, *p)))
             .collect::<Vec<_>>();
 
-        state.update_multiple(&p);
+        state.update_multiple(&p, None);
     }
 
     fn update_all<St: State + ?Sized>(&self, state: &mut St, needed: &NeededUpdate) {
