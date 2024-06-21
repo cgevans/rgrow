@@ -148,8 +148,18 @@ impl SDC {
             .index_axis(ndarray::Axis(1), BOTTOM_GLUE_INDEX)
             .indexed_iter()
         {
+            // 0 <-> Nothing
+            // 1 <-> 2
+            // 3 <-> 4
+            // ...
+
+            if b == 0 {
+                continue;
+            }
+
+            let b_inverse = if b % 2 == 1 { b + 1 } else { b - 1 };
             friends_btm
-                .entry(b)
+                .entry(b_inverse)
                 .or_insert(HashSet::new())
                 .insert(t as u32);
         }
@@ -622,16 +632,26 @@ pub struct SDCParams {
     pub temperature: f64,
 }
 
-/// Return the orignial, and its inverse
-fn self_and_inverse(value: &String) -> (String, String) {
+/// Triple (x, y, z)
+///
+/// x: Original input but parsed so that there can be no errors in it (eg. No h**)
+/// y: From (eg. h)
+/// z: Inverse (eg. h*)
+fn self_and_inverse(value: &String) -> (String, String, String) {
     // Remove all the stars at the end
     let filtered = value.trim_end_matches("*");
     let star_count = value.len() - filtered.len();
-    if star_count % 2 == 0 {
-        (filtered.to_string(), format!("{}*", filtered.to_string()))
+    let simplified = if star_count % 2 == 0 {
+        filtered.to_string()
     } else {
-        (format!("{}*", filtered).to_string(), filtered.to_string())
-    }
+        format!("{}*", filtered.to_string())
+    };
+
+    (
+        simplified,
+        filtered.to_string(),
+        format!("{}*", filtered.to_string()),
+    )
 }
 
 impl SDC {
@@ -650,16 +670,22 @@ impl SDC {
                 match t {
                     None => r[i] = 0,
                     Some(s) => {
-                        let (s_equiv, s_equiv_inverse) = self_and_inverse(s);
-                        let j = glue_name_map.get_by_left(&s_equiv);
+                        let (s, s_base, s_to) = self_and_inverse(s);
+                        let j = glue_name_map.get_by_left(&s);
                         match j {
                             Some(j) => {
                                 r[i] = *j;
                             }
                             None => {
-                                glue_name_map.insert(s_equiv, gluenum);
-                                glue_name_map.insert(s_equiv_inverse, gluenum + 1);
+                                glue_name_map.insert(s_base, gluenum);
+                                glue_name_map.insert(s_to, gluenum + 1);
                                 r[i] = gluenum;
+
+                                // The right answer here would be gluenum+1, so add one
+                                if s.ends_with('*') {
+                                    r[i] += 1
+                                }
+
                                 gluenum += 2;
                                 max_gluenum = max_gluenum.max(gluenum);
                             }
@@ -675,10 +701,13 @@ impl SDC {
 
         for (k, &v) in params.glue_dg_s.iter() {
             let (i, j) = match k {
-                RefOrPair::Ref(r) => self_and_inverse(r),
+                RefOrPair::Ref(r) => {
+                    let (_, base, inverse) = self_and_inverse(r);
+                    (base, inverse)
+                }
                 RefOrPair::Pair(r1, r2) => {
-                    let (r1, _) = self_and_inverse(r1);
-                    let (r2, _) = self_and_inverse(r2);
+                    let (r1, _, _) = self_and_inverse(r1);
+                    let (r2, _, _) = self_and_inverse(r2);
                     (r1, r2)
                 }
             };
@@ -755,11 +784,11 @@ mod test_sdc_model {
             glues: array![
                 [0, 0, 0],
                 [1, 3, 12],
-                [6, 8, 12],
+                [6, 2, 12],
                 [31, 3, 45],
                 [8, 4, 2],
                 [1, 1, 78],
-                [4, 8, 1],
+                [4, 4, 1],
             ],
             colors: Vec::new(),
             kf: 0.0,
@@ -786,11 +815,10 @@ mod test_sdc_model {
 
         // Check that the friends hashmap is being generated as expected
         let expected_friends = HashMap::from([
-            (0, HashSet::from([0])),
-            (1, HashSet::from([5])),
-            (3, HashSet::from([1, 3])),
-            (4, HashSet::from([4])),
-            (8, HashSet::from([2, 6])),
+            (1, HashSet::from([2])),
+            (2, HashSet::from([5])),
+            (3, HashSet::from([4, 6])),
+            (4, HashSet::from([1, 3])),
         ]);
         assert_eq!(expected_friends, sdc.friends_btm);
     }
@@ -802,16 +830,16 @@ mod test_sdc_model {
         let acc = input
             .into_iter()
             .map(|str| self_and_inverse(&str.to_string()))
-            .collect::<Vec<(String, String)>>();
+            .collect::<Vec<(String, String, String)>>();
 
         let expected = vec![
-            ("some*str", "some*str*"),
-            ("some*str*", "some*str"),
-            ("some*str", "some*str*"),
+            ("some*str", "some*str", "some*str*"),
+            ("some*str*", "some*str", "some*str*"),
+            ("some*str", "some*str", "some*str*"),
         ]
         .iter()
-        .map(|(a, b)| (a.to_string(), b.to_string()))
-        .collect::<Vec<(String, String)>>();
+        .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()))
+        .collect::<Vec<(String, String, String)>>();
 
         assert_eq!(acc, expected);
     }
