@@ -456,6 +456,13 @@ impl System for SDC {
                 self.update_system();
                 Ok(NeededUpdate::NonZero)
             }
+            "temperature" => {
+                let temperature = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.change_temperature_to(*temperature);
+                Ok(NeededUpdate::NonZero)
+            }
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }
@@ -466,6 +473,7 @@ impl System for SDC {
             "strand_concentrations" => Ok(Box::new(self.strand_concentration.clone())),
             "glue_links" => Ok(Box::new(self.glue_links.clone())),
             "energy_bonds" => Ok(Box::new(self.strand_energy_bonds.clone())),
+            "temperature" => Ok(Box::new(self.temperature)),
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }
