@@ -93,7 +93,7 @@ unsafe impl Send for ATAM {}
 unsafe impl Sync for ATAM {}
 
 impl System for ATAM {
-    fn update_after_event<S: State + ?Sized>(&self, state: &mut S, event: &Event) {
+    fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => todo!(),
             Event::MonomerAttachment(p, _)
@@ -131,7 +131,7 @@ impl System for ATAM {
         }
     }
 
-    fn event_rate_at_point<S: State + ?Sized>(
+    fn event_rate_at_point<S: State>(
         &self,
         state: &S,
         p: crate::canvas::PointSafeHere,
@@ -148,7 +148,7 @@ impl System for ATAM {
         }
     }
 
-    fn choose_event_at_point<S: State + ?Sized>(
+    fn choose_event_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -171,7 +171,7 @@ impl System for ATAM {
         }
     }
 
-    fn set_safe_point<S: State + ?Sized>(
+    fn set_safe_point<S: State>(
         &self,
         state: &mut S,
         point: PointSafe2,
@@ -184,28 +184,28 @@ impl System for ATAM {
         self
     }
 
-    fn perform_event<S: State + ?Sized>(&self, state: &mut S, event: &Event) -> &Self {
+    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) => {
-                state.set_sa(point, tile);
+                state.set(*point, *tile);
                 match self.tile_shape(*tile) {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(state.tile_to_e(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &dt);
+                        state.set(state.move_sa_e(*point), dt);
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(state.tile_to_s(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &dt);
+                        state.set(state.move_sa_s(*point), dt);
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(state.tile_to_w(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &dt);
+                        state.set(state.move_sa_w(*point), dt);
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(state.tile_to_n(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &dt);
+                        state.set(state.move_sa_n(*point), dt);
                     }
                 }
             }
@@ -217,41 +217,41 @@ impl System for ATAM {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(dt, state.tile_to_e(*point));
-                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &0)
+                        state.set(state.move_sa_e(*point), 0)
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(dt, state.tile_to_s(*point));
-                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &0)
+                        state.set(state.move_sa_s(*point), 0)
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(dt, state.tile_to_w(*point));
-                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &0)
+                        state.set(state.move_sa_w(*point), 0)
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(dt, state.tile_to_n(*point));
-                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &0)
+                        state.set(state.move_sa_n(*point), 0)
                     }
                 }
 
-                state.set_sa(point, tile);
+                state.set(*point, *tile);
 
                 match self.tile_shape(*tile) {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(state.tile_to_e(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &dt);
+                        state.set(state.move_sa_e(*point), dt);
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(state.tile_to_s(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &dt);
+                        state.set(state.move_sa_s(*point), dt);
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(state.tile_to_w(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &dt);
+                        state.set(state.move_sa_w(*point), dt);
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(state.tile_to_n(*point), 0);
-                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &dt);
+                        state.set(state.move_sa_n(*point), dt);
                     }
                 }
             }
@@ -260,31 +260,31 @@ impl System for ATAM {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(state.tile_to_e(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_e(*point).0), &0);
+                        state.set(state.move_sa_e(*point), 0);
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(state.tile_to_s(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_s(*point).0), &0);
+                        state.set(state.move_sa_s(*point), 0);
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(state.tile_to_w(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_w(*point).0), &0);
+                        state.set(state.move_sa_w(*point), 0);
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(state.tile_to_n(*point), dt);
-                        state.set_sa(&PointSafe2(state.move_sa_n(*point).0), &0);
+                        state.set(state.move_sa_n(*point), 0);
                     }
                 }
-                state.set_sa(point, &0);
+                state.set(*point, 0);
             }
             Event::PolymerAttachment(changelist) | Event::PolymerChange(changelist) => {
                 for (point, tile) in changelist {
-                    state.set_sa(point, tile);
+                    state.set(*point, *tile);
                 }
             }
             Event::PolymerDetachment(changelist) => {
                 for point in changelist {
-                    state.set_sa(point, &0);
+                    state.set(*point, 0);
                 }
             }
         };
@@ -308,7 +308,7 @@ impl System for ATAM {
         v
     }
 
-    fn calc_mismatch_locations<S: State + ?Sized>(&self, state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations<S: State>(&self, state: &S) -> Array2<usize> {
         let threshold = self.threshold / 4.0; // FIXME: this is a hack
         let mut mismatch_locations = Array2::<usize>::zeros((state.nrows(), state.ncols()));
 
@@ -417,7 +417,7 @@ impl ATAM {
         TileShape::Single
     }
 
-    pub fn total_monomer_attachment_rate_at_point<S: State + ?Sized>(
+    pub fn total_monomer_attachment_rate_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -428,7 +428,7 @@ impl ATAM {
         }
     }
 
-    pub fn choose_attachment_at_point<S: State + ?Sized>(
+    pub fn choose_attachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -437,7 +437,7 @@ impl ATAM {
         self.choose_monomer_attachment_at_point(state, p, acc)
     }
 
-    pub fn choose_monomer_attachment_at_point<S: State + ?Sized>(
+    pub fn choose_monomer_attachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -446,7 +446,7 @@ impl ATAM {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
-    fn _find_monomer_attachment_possibilities_at_point<S: State + ?Sized>(
+    fn _find_monomer_attachment_possibilities_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -531,7 +531,7 @@ impl ATAM {
         (false, acc, Event::None)
     }
 
-    pub fn bond_energy_of_tile_type_at_point_hypothetical<S: State + ?Sized>(
+    pub fn bond_energy_of_tile_type_at_point_hypothetical<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -579,7 +579,7 @@ impl ATAM {
         energy
     }
 
-    fn points_to_update_around<S: State + ?Sized>(
+    fn points_to_update_around<S: State>(
         &self,
         state: &S,
         p: &PointSafe2,

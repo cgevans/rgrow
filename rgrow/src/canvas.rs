@@ -33,20 +33,15 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     fn u_move_point_s(&self, p: Point) -> Point;
     fn u_move_point_w(&self, p: Point) -> Point;
     fn inbounds(&self, p: Point) -> bool;
+
+    fn inbounds1(&self, p: Point) -> bool { self.inbounds(p) }
+    fn inbounds2(&self, p: Point) -> bool { self.inbounds(p) }
+    
     fn calc_n_tiles(&self) -> NumTiles;
     fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles;
     fn raw_array(&self) -> ArrayView2<Tile>;
     fn nrows(&self) -> usize;
     fn ncols(&self) -> usize;
-
-    fn set_sa_countabletilearray(
-        &mut self,
-        p: &PointSafe2,
-        t: &Tile,
-        _should_be_counted: &Array1<bool>,
-    ) {
-        self.set_sa(p, t);
-    }
 
     fn move_sa_n(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_n(p.0))
@@ -87,23 +82,6 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     }
     fn move_sa_nw(&self, p: PointSafe2) -> PointSafeHere {
         PointSafeHere(self.u_move_point_nw(p.0))
-    }
-
-    fn move_sh_n(&self, p: PointSafeHere) -> Point {
-        self.u_move_point_n(p.0)
-    }
-    fn move_sh_e(&self, p: PointSafeHere) -> Point {
-        self.u_move_point_e(p.0)
-    }
-    fn move_sh_s(&self, p: PointSafeHere) -> Point {
-        self.u_move_point_s(p.0)
-    }
-    fn move_sh_w(&self, p: PointSafeHere) -> Point {
-        self.u_move_point_w(p.0)
-    }
-
-    fn set_sa(&mut self, p: &PointSafe2, t: &Tile) {
-        unsafe { *self.uvm_p(p.0) = *t };
     }
 
     #[inline(always)]
@@ -389,6 +367,45 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     }
 }
 
+#[enum_dispatch]
+pub(crate) trait CanvasMoves: Canvas {
+    fn move_n(&self, p: impl Into<PointSafeHere> + Into<Point>) -> Point {
+        self.u_move_point_n(p.into())
+    }
+    fn move_e(&self, p: impl Into<PointSafeHere> + Into<Point>) -> Point {
+        self.u_move_point_e(p.into())
+    }
+    fn move_s(&self, p: impl Into<PointSafeHere> + Into<Point>) -> Point {
+        self.u_move_point_s(p.into())
+    }
+    fn move_w(&self, p: impl Into<PointSafeHere> + Into<Point>) -> Point {
+        self.u_move_point_w(p.into())
+    }
+
+    fn set(&mut self, p: impl Into<PointSafeHere> + Into<Point>, t: Tile) {
+        unsafe { *self.uvm_p(p.into()) = t };
+    }
+
+    fn set_sa_countabletilearray(
+        &mut self,
+        p: impl Into<PointSafeHere> + Into<Point>,
+        t: Tile,
+        _should_be_counted: &Array1<bool>,
+    ) {
+        self.set(p, t);
+    }
+
+    fn pointsafe2(&self, p: impl Into<Point>) -> Option<PointSafe2> {
+        let p = p.into();
+        if self.inbounds(p) {
+            Some(PointSafe2(p))
+        } else {
+            None
+        }
+    }
+
+}
+
 #[derive(Clone, Debug)]
 pub struct CanvasSquare(Array2<Tile>);
 
@@ -417,6 +434,16 @@ impl Canvas for CanvasSquare {
 
     #[inline(always)]
     fn inbounds(&self, p: Point) -> bool {
+        (p.0 >= 2) & (p.1 >= 2) & (p.0 < self.nrows() - 2) & (p.1 < self.ncols() - 2)
+    }
+
+    #[inline(always)]
+    fn inbounds1(&self, p: Point) -> bool {
+        (p.0 >= 1) & (p.1 >= 1) & (p.0 < self.nrows() - 1) & (p.1 < self.ncols() - 1)
+    }
+
+    #[inline(always)]
+    fn inbounds2(&self, p: Point) -> bool {
         (p.0 >= 2) & (p.1 >= 2) & (p.0 < self.nrows() - 2) & (p.1 < self.ncols() - 2)
     }
 
@@ -776,5 +803,53 @@ impl Canvas for CanvasTube {
 
     fn center(&self) -> PointSafe2 {
         PointSafe2((self.nrows() / 2, self.ncols() / 2))
+    }
+}
+
+pub trait MovablePoint<C: Canvas> {
+    type NextPoint;
+    fn move_n(&self, canvas: &C) -> Self::NextPoint;
+    fn to_point(&self) -> Point;
+}
+
+impl<C: Canvas> MovablePoint<C> for &PointSafe2 {
+    type NextPoint = PointSafeHere;
+
+    fn move_n(&self, canvas: &C) -> Self::NextPoint {
+        PointSafeHere(canvas.u_move_point_n(self.0))
+    }
+
+    fn to_point(&self) -> Point {
+        self.0
+    }
+}
+
+impl<C: Canvas> MovablePoint<C> for &PointSafeHere {
+    type NextPoint = Point;
+
+    fn move_n(&self, canvas: &C) -> Self::NextPoint {
+        canvas.u_move_point_n(self.0)
+    }
+
+    fn to_point(&self) -> Point {
+        self.0
+    }
+}
+
+impl Into<Point> for PointSafe2 {
+    fn into(self) -> Point {
+        self.0
+    }
+}
+
+impl Into<Point> for PointSafeHere {
+    fn into(self) -> Point {
+        self.0
+    }
+}
+
+impl Into<PointSafeHere> for PointSafe2 {
+    fn into(self) -> PointSafeHere {
+        PointSafeHere(self.0)
     }
 }

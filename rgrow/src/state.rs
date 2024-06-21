@@ -1,5 +1,5 @@
 use super::base::*;
-use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube};
+use crate::canvas::{Canvas, CanvasCreate, CanvasMoves, CanvasPeriodic, CanvasSquare, CanvasTube};
 use crate::tileset::{CanvasType, TrackingType};
 use crate::{
     canvas::PointSafe2,
@@ -13,12 +13,12 @@ use enum_dispatch::enum_dispatch;
 use std::fmt::Debug;
 
 #[enum_dispatch]
-pub trait State: RateStore + Canvas + StateStatus + Sync + Send + TrackerData {
+pub trait State: RateStore + Canvas + StateStatus + Sync + Send + TrackerData + CanvasMoves {
     fn panicinfo(&self) -> String;
 }
 
 #[enum_dispatch]
-pub trait ClonableState: State {
+pub trait ClonableState:  RateStore + Canvas + StateStatus + Sync + Send + TrackerData {
     fn clone_as_stateenum(&self) -> StateEnum {
         panic!("Not implemented")
     }
@@ -98,7 +98,7 @@ impl ClonableState for QuadTreeState<CanvasTube, PrintEventTracker> {
 }
 
 
-#[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData, CloneAsStateEnum)]
+#[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData, CloneAsStateEnum, CanvasMoves)]
 #[derive(Debug, Clone)]
 pub enum StateEnum {
     SquareCanvasNullTracker(QuadTreeState<CanvasSquare, NullStateTracker>),
@@ -289,41 +289,6 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
         self.canvas.ncols()
     }
 
-    fn set_sa(&mut self, p: &PointSafe2, t: &Tile) {
-        let r = unsafe { self.uvm_p(p.0) };
-
-        let old_tile = *r;
-
-        *r = *t;
-
-        if (old_tile == 0) & (*t > 0) {
-            self.ntiles += 1
-        }
-        if (old_tile > 0) & (*t == 0) {
-            self.ntiles -= 1
-        }
-    }
-
-    fn set_sa_countabletilearray(
-        &mut self,
-        p: &PointSafe2,
-        t: &Tile,
-        should_be_counted: &Array1<bool>,
-    ) {
-        let r = unsafe { self.uvm_p(p.0) };
-
-        let old_tile = *r;
-
-        *r = *t;
-
-        if should_be_counted[old_tile as usize] & !should_be_counted[*t as usize] {
-            self.ntiles -= 1
-        }
-        if !should_be_counted[old_tile as usize] & should_be_counted[*t as usize] {
-            self.ntiles += 1
-        }
-    }
-
     fn draw_size(&self) -> (u32, u32) {
         self.canvas.draw_size()
     }
@@ -353,6 +318,49 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
     ) {
         self.canvas.draw_scaled(frame, colors, tile_size, edge_size)
     }
+}
+
+impl<C, T> CanvasMoves for QuadTreeState<C, T>
+where
+    C: Canvas + CanvasCreate,
+    T: StateTracker,
+{
+
+    fn set(&mut self, p: impl Into<Point>, t: Tile) {
+        let r = unsafe { self.uvm_p(p.into()) };
+
+        let old_tile = *r;
+
+        *r = t;
+
+        if (old_tile == 0) & (t > 0) {
+            self.ntiles += 1
+        }
+        if (old_tile > 0) & (t == 0) {
+            self.ntiles -= 1
+        }
+    }
+
+    fn set_sa_countabletilearray(
+        &mut self,
+        p: impl Into<PointSafeHere> + Into<Point>,
+        t: Tile,
+        should_be_counted: &Array1<bool>,
+    ) {
+        let r = unsafe { self.uvm_p(p.into()) };
+
+        let old_tile = *r;
+
+        *r = t;
+
+        if should_be_counted[old_tile as usize] & !should_be_counted[t as usize] {
+            self.ntiles -= 1
+        }
+        if !should_be_counted[old_tile as usize] & should_be_counted[t as usize] {
+            self.ntiles += 1
+        }
+    }
+
 }
 
 impl<C, T> StateWithCreate for QuadTreeState<C, T>

@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use super::fission_base::*;
 
 impl OldKTAM {
-    pub fn determine_fission<C: State + ?Sized>(
+    pub fn determine_fission<C: State>(
         &self,
         canvas: &C,
         possible_start_points: &[PointSafe2],

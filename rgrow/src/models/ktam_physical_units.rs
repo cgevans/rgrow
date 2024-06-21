@@ -11,7 +11,7 @@
 use super::fission_base::*;
 use crate::{
     base::{GrowError, RgrowError},
-    canvas::{PointSafe2, PointSafeHere},
+    canvas::{PointSafe2, PointSafeHere, MovablePoint},
     state::State,
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
@@ -131,7 +131,7 @@ pub struct UKTAM {
 }
 
 impl System for UKTAM {
-    fn update_after_event<S: State + ?Sized>(&self, state: &mut S, event: &Event) {
+    fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => todo!(),
             Event::MonomerAttachment(p, _)
@@ -160,11 +160,11 @@ impl System for UKTAM {
         }
     }
 
-    fn calc_n_tiles<S: State + ?Sized>(&self, state: &S) -> crate::base::NumTiles {
+    fn calc_n_tiles<S: State>(&self, state: &S) -> crate::base::NumTiles {
         state.calc_n_tiles_with_tilearray(&self.should_be_counted)
     }
 
-    fn event_rate_at_point<S: State + ?Sized>(
+    fn event_rate_at_point<S: State>(
         &self,
         state: &S,
         p: crate::canvas::PointSafeHere,
@@ -204,7 +204,7 @@ impl System for UKTAM {
         }
     }
 
-    fn choose_event_at_point<S: State + ?Sized>(
+    fn choose_event_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -227,11 +227,11 @@ impl System for UKTAM {
         }
     }
 
-    fn perform_event<S: State + ?Sized>(&self, state: &mut S, event: &Event) -> &Self {
+    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) => {
-                state.set_sa(point, tile);
+                state.set(point, tile);
                 match self.tile_shape(*tile) {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
@@ -553,7 +553,7 @@ impl System for UKTAM {
         self._seed_locs()
     }
 
-    fn calc_mismatch_locations<S: State + ?Sized>(&self, state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations<S: State>(&self, state: &S) -> Array2<usize> {
         let threshold = 0.5; // Todo: fix this
         let mut mismatch_locations = Array2::<usize>::zeros((state.nrows(), state.ncols()));
 
@@ -1026,7 +1026,7 @@ impl UKTAM {
         }
     }
 
-    pub fn monomer_detachment_rate_at_point<S: State + ?Sized>(
+    pub fn monomer_detachment_rate_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1065,7 +1065,7 @@ impl UKTAM {
         v
     }
 
-    pub fn choose_detachment_at_point<S: State + ?Sized>(
+    pub fn choose_detachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1191,7 +1191,7 @@ impl UKTAM {
         return (false, acc, Event::None);
     }
 
-    pub fn total_monomer_attachment_rate_at_point<S: State + ?Sized>(
+    pub fn total_monomer_attachment_rate_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1202,7 +1202,7 @@ impl UKTAM {
         }
     }
 
-    pub fn choose_attachment_at_point<S: State + ?Sized>(
+    pub fn choose_attachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1211,7 +1211,7 @@ impl UKTAM {
         self.choose_monomer_attachment_at_point(state, p, acc)
     }
 
-    pub fn choose_monomer_attachment_at_point<S: State + ?Sized>(
+    pub fn choose_monomer_attachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1220,14 +1220,14 @@ impl UKTAM {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
-    pub fn setup_state<S: State + ?Sized>(&self, state: &mut S) -> Result<(), GrowError> {
+    pub fn setup_state<S: State>(&self, state: &mut S) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;
         }
         Ok(())
     }
 
-    fn _find_monomer_attachment_possibilities_at_point<S: State + ?Sized>(
+    fn _find_monomer_attachment_possibilities_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1332,7 +1332,7 @@ impl UKTAM {
         (false, acc, Event::None)
     }
 
-    pub fn gibbs_energy_of_tile_type_at_point<S: State + ?Sized>(
+    pub fn gibbs_energy_of_tile_type_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
@@ -1403,10 +1403,10 @@ impl UKTAM {
         }
     }
 
-    fn _update_monomer_points<S: State + ?Sized>(&self, state: &mut S, p: &PointSafe2) {
+    fn _update_monomer_points<S: State>(&self, state: &mut S, p: &PointSafe2) {
         let points = [
             (
-                state.move_sa_n(*p),
+                p.move_n(state),
                 self.event_rate_at_point(state, state.move_sa_n(*p)),
             ),
             (
@@ -1461,7 +1461,7 @@ impl UKTAM {
         state.update_multiple(&points);
     }
 
-    fn points_to_update_around<S: State + ?Sized>(
+    fn points_to_update_around<S: State>(
         &self,
         state: &S,
         p: &PointSafe2,
@@ -1519,14 +1519,14 @@ impl UKTAM {
 
     // Dimer detachment rates are written manually.
     #[allow(unreachable_code)]
-    fn dimer_s_detach_rate<C: State + ?Sized>(
+    fn dimer_s_detach_rate<C: State>(
         &self,
         canvas: &C,
         p: PointSafeHere,
         t: Tile,
         ts: Energy,
     ) -> Rate {
-        let p2 = canvas.move_sh_s(p);
+        let p2 = canvas.move_s(p);
         todo!("Needs to deal with # of bonds weirdness");
         if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 }) | self.is_seed(PointSafe2(p2))
         {
@@ -1545,14 +1545,14 @@ impl UKTAM {
 
     // Dimer detachment rates are written manually.
     #[allow(unreachable_code)]
-    fn dimer_e_detach_rate<C: State + ?Sized>(
+    fn dimer_e_detach_rate<C: State>(
         &self,
         canvas: &C,
         p: PointSafeHere,
         t: Tile,
         ts: Energy,
     ) -> Rate {
-        let p2 = canvas.move_sh_e(p);
+        let p2 = canvas.move_e(p);
         todo!("Needs to deal with # of bonds weirdness");
         if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 } | self.is_seed(PointSafe2(p2)))
         {
@@ -1569,7 +1569,7 @@ impl UKTAM {
         }
     }
 
-    fn chunk_detach_rate<C: State + ?Sized>(&self, canvas: &C, p: PointSafe2, t: Tile) -> Rate {
+    fn chunk_detach_rate<C: State>(&self, canvas: &C, p: PointSafe2, t: Tile) -> Rate {
         match self.chunk_size {
             ChunkSize::Single => 0.0,
             ChunkSize::Dimer => {
@@ -1580,7 +1580,7 @@ impl UKTAM {
         }
     }
 
-    fn choose_chunk_detachment<C: State + ?Sized>(
+    fn choose_chunk_detachment<C: State>(
         &self,
         canvas: &C,
         p: PointSafe2,
