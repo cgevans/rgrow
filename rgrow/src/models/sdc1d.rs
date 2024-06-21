@@ -13,9 +13,6 @@ macro_rules! type_alias {
 *
 * TODO:
 * - There are quite a few expects that need to be handled better
-* - find_monomer_attachment_possibilities_at_point is missing one parameter (because im unsure as
-* to what it does)
-* - Replace all use of index for glues to WEST_GLUE_INDEX ...
 * */
 
 use std::{
