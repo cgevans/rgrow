@@ -9,3 +9,6 @@ pub mod oldktam_fission;
 pub mod covers;
 
 pub mod fission_base;
+
+pub mod ktam_physical_units;
+pub mod ktam_p_fission;
