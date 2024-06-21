@@ -658,11 +658,13 @@ impl SDC {
     pub fn from_params(params: SDCParams) -> Self {
         let mut glue_name_map = BiHashMap::<String, usize>::new();
         let mut gluenum = 1;
-        let mut tile_glues_int = Array2::<usize>::zeros((params.tile_glues.len(), 3));
+        let mut tile_glues_int = Array2::<usize>::zeros((params.tile_glues.len() + 1, 3));
 
-        for (tgl, mut r) in
-            std::iter::zip(params.tile_glues.iter(), tile_glues_int.outer_iter_mut())
-        {
+        for (tgl, mut r) in std::iter::zip(
+            params.tile_glues.iter(),
+            // The firs one will just be 0
+            tile_glues_int.outer_iter_mut().skip(1),
+        ) {
             for (i, t) in tgl.iter().enumerate() {
                 match t {
                     None => r[i] = 0,
@@ -748,23 +750,35 @@ impl SDC {
             SingleOrMultiScaffold::Multi(_m) => todo!(),
         };
 
-        let colors = params
+        let mut more_colors: Vec<_> = params
             .tile_colors
             .iter()
             .map(|c| get_color_or_random(&c.as_ref().map(|x| x.as_str())).unwrap())
             .collect();
 
+        // Add color for empty tile
+        let mut colors = vec![[0, 0, 0, 0]];
+        colors.append(&mut more_colors);
+
+        let mut input_names: Vec<_> = params
+            .tile_names
+            .into_iter()
+            .enumerate()
+            .map(|(n, os)| os.unwrap_or(n.to_string()))
+            .collect();
+
+        let mut strand_names = vec!["empty".to_string()];
+        strand_names.append(&mut input_names);
+
+        let mut c = vec![0.0];
+        c.extend(params.tile_concentration);
+
         SDC::new(
             Vec::new(),
-            params
-                .tile_names
-                .into_iter()
-                .enumerate()
-                .map(|(n, os)| os.unwrap_or(n.to_string()))
-                .collect(),
+            strand_names,
             glue_names.into_iter().collect(), // FIXME: consider types here
             scaffold,
-            Array1::from(params.tile_concentration),
+            Array1::from(c),
             tile_glues_int,
             colors,
             params.k_f,
