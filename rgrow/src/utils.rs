@@ -1,3 +1,6 @@
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 /*
 * A G A A A
 * --------->
@@ -94,6 +97,11 @@ fn dna_dg_ds(dna: impl Iterator<Item = DnaNucleotideBase>) -> (f64, f64) {
         (dg + acc_dg, ds + acc_ds)
     })
     .expect("DNA must have length of at least 2")
+}
+
+#[cfg_attr(feature = "python", pyfunction)]
+pub fn string_dna_dg_ds(dna_sequence: &str) -> (f64, f64) {
+    dna_dg_ds(dna_sequence.chars().map(DnaNucleotideBase::from))
 }
 
 /// Get delta g for some string dna sequence and its "perfect match".  For example:

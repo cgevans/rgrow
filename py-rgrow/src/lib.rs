@@ -17,5 +17,7 @@ fn pyrgrow(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<rgrow::system::EvolveBounds>()?;
     m.add_class::<rgrow::system::EvolveOutcome>()?;
 
+    m.add_function(wrap_pyfunction!(rgrow::utils::string_dna_dg_ds, m)?)?;
+
     Ok(())
 }
