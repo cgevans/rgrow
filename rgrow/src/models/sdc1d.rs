@@ -710,8 +710,15 @@ impl SDC {
                 }
             };
 
-            let i = *glue_name_map.get_by_left(&i).unwrap(); // FIXME: fails if glue not found
-            let j = *glue_name_map.get_by_left(&j).unwrap(); // FIXME: fails if glue not found
+            let i = *glue_name_map
+                .get_by_left(&i)
+                // FIXME: fails if glue not found
+                .expect(format!("Glue {} not found", i).as_str());
+
+            let j = *glue_name_map
+                .get_by_left(&j)
+                // FIXME: fails if glue not found
+                .expect(format!("Glue {} not found", j).as_str());
 
             glue_delta_g[[i, j]] = v.0;
             glue_delta_g[[j, i]] = v.0;
