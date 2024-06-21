@@ -234,7 +234,7 @@ impl TryFrom<&str> for ChunkHandling {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "python", pyclass)]
 pub enum ChunkSize {
     #[serde(alias = "single")]

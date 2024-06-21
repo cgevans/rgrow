@@ -847,8 +847,8 @@ impl KTAM {
         k_f: Option<f64>,
         seed: Option<Seed>,
         fission_handling: Option<FissionHandling>,
-        chunk_handling: Option<ChunkHandling>, 
-        chunk_size: Option<ChunkSize>,         
+        chunk_handling: Option<ChunkHandling>,
+        chunk_size: Option<ChunkSize>,
         tile_names: Option<Vec<String>>,
         tile_colors: Option<Vec<[u8; 4]>>,
     ) -> Self {
@@ -1046,11 +1046,7 @@ impl KTAM {
         }
     }
 
-    pub fn monomer_detachment_rate_at_point<S: State>(
-        &self,
-        state: &S,
-        p: PointSafe2,
-    ) -> Rate {
+    pub fn monomer_detachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
         // If the point is a seed, then there is no detachment rate.
         // ODD HACK: we set a very low detachment rate for seeds and duple bottom/right, to allow
         // rate-based copying.  We ignore these below.
@@ -1097,7 +1093,7 @@ impl KTAM {
             // FIXME: may slow things down
             if self.is_seed(p) || ((self.has_duples) && self.is_fake_duple(state.tile_at_point(p)))
             {
-                return (true, acc, Event::None)
+                return (true, acc, Event::None);
             } else {
                 let mut possible_starts = Vec::new();
                 let mut now_empty = Vec::new();
@@ -1183,7 +1179,9 @@ impl KTAM {
                     //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
                     match self.fission_handling {
                         FissionHandling::NoFission => (true, acc, Event::None),
-                        FissionHandling::JustDetach => (true, acc, Event::PolymerDetachment(now_empty)),
+                        FissionHandling::JustDetach => {
+                            (true, acc, Event::PolymerDetachment(now_empty))
+                        }
                         FissionHandling::KeepSeeded => {
                             let sl = self._seed_locs();
                             (
@@ -1204,7 +1202,7 @@ impl KTAM {
                         ),
                     }
                 }
-            }
+            };
         }
 
         return (false, acc, Event::None);
@@ -1423,68 +1421,45 @@ impl KTAM {
     }
 
     fn _update_monomer_points<S: State>(&self, state: &mut S, p: &PointSafe2) {
-        let points = [
-            (
-                state.move_sa_n(*p),
-                self.event_rate_at_point(state, state.move_sa_n(*p)),
-            ),
-            (
-                state.move_sa_w(*p),
-                self.event_rate_at_point(state, state.move_sa_w(*p)),
-            ),
-            (
-                PointSafeHere(p.0),
-                self.event_rate_at_point(state, PointSafeHere(p.0)),
-            ),
-            (
-                state.move_sa_e(*p),
-                self.event_rate_at_point(state, state.move_sa_e(*p)),
-            ),
-            (
-                state.move_sa_s(*p),
-                self.event_rate_at_point(state, state.move_sa_s(*p)),
-            ),
-            (
-                state.move_sa_nn(*p),
-                self.event_rate_at_point(state, state.move_sa_nn(*p)),
-            ),
-            (
-                state.move_sa_ne(*p),
-                self.event_rate_at_point(state, state.move_sa_ne(*p)),
-            ),
-            (
-                state.move_sa_ee(*p),
-                self.event_rate_at_point(state, state.move_sa_ee(*p)),
-            ),
-            (
-                state.move_sa_se(*p),
-                self.event_rate_at_point(state, state.move_sa_se(*p)),
-            ),
-            (
-                state.move_sa_ss(*p),
-                self.event_rate_at_point(state, state.move_sa_ss(*p)),
-            ),
-            (
-                state.move_sa_sw(*p),
-                self.event_rate_at_point(state, state.move_sa_sw(*p)),
-            ),
-            (
-                state.move_sa_ww(*p),
-                self.event_rate_at_point(state, state.move_sa_ww(*p)),
-            ),
-            (
-                state.move_sa_nw(*p),
-                self.event_rate_at_point(state, state.move_sa_nw(*p)),
-            ),
-        ];
-        state.update_multiple(&points);
+        #[inline(always)]
+        fn point_and_rate<S: State>(
+            sys: &KTAM,
+            state: &S,
+            p: PointSafeHere,
+        ) -> (PointSafeHere, Rate) {
+            (p, sys.event_rate_at_point(state, p))
+        }
+
+        if (!self.has_duples) & (self.chunk_size == ChunkSize::Single) {
+            let points = [
+                point_and_rate(self, state, state.move_sa_n(*p)),
+                point_and_rate(self, state, state.move_sa_w(*p)),
+                point_and_rate(self, state, PointSafeHere(p.0)),
+                point_and_rate(self, state, state.move_sa_e(*p)),
+                point_and_rate(self, state, state.move_sa_s(*p)),
+            ];
+            state.update_multiple(&points);
+        } else {
+            let points = [
+                point_and_rate(self, state, state.move_sa_n(*p)),
+                point_and_rate(self, state, state.move_sa_w(*p)),
+                point_and_rate(self, state, PointSafeHere(p.0)),
+                point_and_rate(self, state, state.move_sa_e(*p)),
+                point_and_rate(self, state, state.move_sa_s(*p)),
+                point_and_rate(self, state, state.move_sa_nn(*p)),
+                point_and_rate(self, state, state.move_sa_ne(*p)),
+                point_and_rate(self, state, state.move_sa_ee(*p)),
+                point_and_rate(self, state, state.move_sa_se(*p)),
+                point_and_rate(self, state, state.move_sa_ss(*p)),
+                point_and_rate(self, state, state.move_sa_sw(*p)),
+                point_and_rate(self, state, state.move_sa_ww(*p)),
+                point_and_rate(self, state, state.move_sa_nw(*p)),
+            ];
+            state.update_multiple(&points);
+        }
     }
 
-    fn points_to_update_around<S: State>(
-        &self,
-        state: &S,
-        p: &PointSafe2,
-    ) -> Vec<PointSafeHere> {
+    fn points_to_update_around<S: State>(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
         match self.chunk_size {
             ChunkSize::Single => {
                 let mut points = Vec::with_capacity(13);

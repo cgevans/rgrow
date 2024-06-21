@@ -39,7 +39,7 @@ fn ratestore_qsta_update(c: &mut Criterion) {
         ("all_shuffle", &allchanges_shuffled[..]),
     ] {
         group.bench_with_input(BenchmarkId::new("small update", pn), &pv, |b, a| {
-            b.iter(|| rs._update_multiple_small(a))
+            b.iter(|| rs._update_multiple_small(a.clone()))
         });
 
         group.bench_with_input(BenchmarkId::new("large update", pn), &pv, |b, a| {
