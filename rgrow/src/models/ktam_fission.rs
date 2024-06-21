@@ -224,7 +224,7 @@ pub enum FissionResult {
 }
 
 impl KTAM {
-    pub fn determine_fission<S: State + ?Sized>(
+    pub fn determine_fission<S: State>(
         &self,
         canvas: &S,
         possible_start_points: &[PointSafe2],

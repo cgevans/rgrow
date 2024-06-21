@@ -206,7 +206,7 @@ impl OldKTAM {
         }
     }
 
-    pub(crate) fn points_to_update_around<C: State + ?Sized>(
+    pub(crate) fn points_to_update_around<C: State>(
         &self,
         state: &C,
         p: &PointSafe2,
@@ -322,7 +322,7 @@ impl OldKTAM {
 
     /// Unsafe because does not check bounds of p: assumes inbounds (with border if applicable).
     /// This requires the tile to be specified because it is likely you've already accessed it.
-    pub(crate) fn bond_strength_of_tile_at_point<C: State + ?Sized>(
+    pub(crate) fn bond_strength_of_tile_at_point<C: State>(
         &self,
         canvas: &C,
         p: PointSafe2,
@@ -348,7 +348,7 @@ impl OldKTAM {
     }
 
     // Dimer detachment rates are written manually.
-    fn dimer_s_detach_rate<C: State + ?Sized>(
+    fn dimer_s_detach_rate<C: State>(
         &self,
         canvas: &C,
         p: Point,
@@ -371,7 +371,7 @@ impl OldKTAM {
     }
 
     // Dimer detachment rates are written manually.
-    fn dimer_e_detach_rate<C: State + ?Sized>(
+    fn dimer_e_detach_rate<C: State>(
         &self,
         canvas: &C,
         p: Point,
@@ -393,7 +393,7 @@ impl OldKTAM {
         }
     }
 
-    fn chunk_detach_rate<C: State + ?Sized>(&self, canvas: &C, p: Point, t: Tile) -> Rate {
+    fn chunk_detach_rate<C: State>(&self, canvas: &C, p: Point, t: Tile) -> Rate {
         match self.chunk_size {
             ChunkSize::Single => 0.0,
             ChunkSize::Dimer => {
@@ -404,7 +404,7 @@ impl OldKTAM {
         }
     }
 
-    fn choose_chunk_detachment<C: State + ?Sized>(
+    fn choose_chunk_detachment<C: State>(
         &self,
         canvas: &C,
         p: PointSafe2,
@@ -480,7 +480,7 @@ impl OldKTAM {
 }
 
 impl System for OldKTAM {
-    fn event_rate_at_point<S: State + ?Sized>(&self, canvas: &S, point: PointSafeHere) -> Rate {
+    fn event_rate_at_point<S: State>(&self, canvas: &S, point: PointSafeHere) -> Rate {
         let p = if canvas.inbounds(point.0) {
             PointSafe2(point.0)
         } else {
@@ -574,7 +574,7 @@ impl System for OldKTAM {
         }
     }
 
-    fn choose_event_at_point<S: State + ?Sized>(
+    fn choose_event_at_point<S: State>(
         &self,
         canvas: &S,
         p: PointSafe2,
@@ -733,7 +733,7 @@ impl System for OldKTAM {
         v
     }
 
-    fn update_after_event<S: State + ?Sized>(&self, state: &mut S, event: &Event) {
+    fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {
             Event::None => {
                 panic!("Being asked to update after a dead event.")
@@ -798,7 +798,7 @@ impl System for OldKTAM {
         }
     }
 
-    fn calc_mismatch_locations<S: State + ?Sized>(&self, state: &S) -> Array2<usize> {
+    fn calc_mismatch_locations<S: State>(&self, state: &S) -> Array2<usize> {
         let threshold = 0.1;
         let mut arr = Array2::zeros(state.raw_array().raw_dim());
 
