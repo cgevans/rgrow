@@ -240,8 +240,11 @@ impl SDC {
                     self.glue_links[(f_west_glue, s_east_glue)];
             }
 
-            // Calculate the binding strength of the starnd with the scaffold
-            self.scaffold_energy_bonds[strand_f] = self.glue_links[(f_btm_glue, f_btm_glue)];
+            let b_inverse = if f_btm_glue % 2 == 1 { f_btm_glue + 1 } else { f_btm_glue - 1 };
+            
+
+            // Calculate the binding strength of the strand with the scaffold
+            self.scaffold_energy_bonds[strand_f] = self.glue_links[(f_btm_glue, b_inverse)];
         }
     }
 
