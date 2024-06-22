@@ -7,7 +7,6 @@ fn make_params(c: &mut Criterion) -> SDCParams {
     let mut scaffold = vec![None; 2];
     scaffold.extend((1..20).map(|x| Some(format!("s{}*", x))));
     scaffold.extend((0..2).map(|x| None));
-    println!("{:?}", scaffold);
 
     let mut glue_dg_s = HashMap::new();
     for s in 1..20 {
@@ -65,8 +64,6 @@ fn make_params(c: &mut Criterion) -> SDCParams {
         temperature: 70.0,
     };
 
-    println!("{:?}", params);
-
     params
 }
 
@@ -77,8 +74,6 @@ fn bench_hold(c: &mut Criterion) {
     let mut state = QuadTreeState::<CanvasSquare, NullStateTracker>::empty((64, 24)).unwrap();
     let bounds = EvolveBounds::default().for_events(100);
     
-    println!("{:?}", sdc);
-
     System::update_all(&mut sdc, &mut state, &NeededUpdate::All);
 
     // c.bench_function("evolve100_sdc_at_temp", |b| b.iter(|| {

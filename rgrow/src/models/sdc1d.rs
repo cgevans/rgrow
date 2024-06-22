@@ -196,21 +196,36 @@ impl SDC {
     }
 
     fn update_monomer_point<S: State>(&self, state: &mut S, scaffold_point: &PointSafe2) {
-        let points = [
-            state.move_sa_w(*scaffold_point),
-            state.move_sa_e(*scaffold_point),
-            PointSafeHere(scaffold_point.0),
-        ]
-        .map(|point| (point, self.event_rate_at_point(state, point)));
+        let here = PointSafeHere(scaffold_point.0);
+        let w = state.move_sa_w(*scaffold_point);
+        let e = state.move_sa_e(*scaffold_point);
 
-        state.update_multiple(&points);
+        match (state.v_sh(w), state.v_sh(e)) {
+            (0, 0) => state.update_point(here, self.event_rate_at_point(state, here)),
+            (0, _) => {
+                state.update_multiple(
+                    &[here, e].map(|point| (point, self.event_rate_at_point(state, point))),
+                );
+            }
+            (_, 0) => {
+                state.update_multiple(
+                    &[here, w].map(|point| (point, self.event_rate_at_point(state, point))),
+                );
+            }
+            (_, _) => {
+                state.update_multiple(
+                    &[here, w, e].map(|point| (point, self.event_rate_at_point(state, point))),
+                );
+            }
+        }
     }
 
     /// Fill the energy_bonds array
     fn fill_energy_array(&mut self) {
         let num_of_strands = self.strand_names.len();
         // For each *possible* pair of strands, calculate the energy bond
-        for strand_f in 1..(num_of_strands as usize) { // 1: no point in calculating for 0
+        for strand_f in 1..(num_of_strands as usize) {
+            // 1: no point in calculating for 0
             let (f_west_glue, f_btm_glue, f_east_glue) = {
                 let glues = self.glues.row(strand_f);
                 (
@@ -244,8 +259,11 @@ impl SDC {
                 continue;
             }
 
-            let b_inverse = if f_btm_glue % 2 == 1 { f_btm_glue + 1 } else { f_btm_glue - 1 };
-            
+            let b_inverse = if f_btm_glue % 2 == 1 {
+                f_btm_glue + 1
+            } else {
+                f_btm_glue - 1
+            };
 
             // Calculate the binding strength of the strand with the scaffold
             self.scaffold_energy_bonds[strand_f] = self.glue_links[(f_btm_glue, b_inverse)];
