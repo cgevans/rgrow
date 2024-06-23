@@ -9,3 +9,5 @@ pub mod oldktam_fission;
 pub mod sdc1d;
 
 pub mod covers;
+
+pub mod fission_base;

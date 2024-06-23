@@ -8,7 +8,7 @@
 /// - As with Xgrow, duples are treated as two tiles, where the right/bottom tile is "fake".
 /// - Unlike Xgrow, there is no *requirement* that there be a seed.
 /// - Dimer detachment is not currently implemented.
-use super::ktam_fission::*;
+use super::fission_base::*;
 use crate::{
     base::{GrowError, RgrowError},
     canvas::{PointSafe2, PointSafeHere},
@@ -138,7 +138,7 @@ impl System for KTAM {
             Event::MonomerAttachment(p, _)
             | Event::MonomerDetachment(p)
             | Event::MonomerChange(p, _) => {
-                self._update_monomer_points(state, p);
+                self.update_monomer_points(state, *p);
             }
             Event::PolymerDetachment(v) => {
                 let mut points = Vec::new();

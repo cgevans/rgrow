@@ -62,8 +62,13 @@ impl TileSet {
                     }
                     v => Python::with_gil(|py| {
                         let user_warning = py.get_type_bound::<pyo3::exceptions::PyUserWarning>();
-                        PyErr::warn_bound(py, &user_warning, &format!("Ignoring unknown key {v}."), 0)
-                            .unwrap();
+                        PyErr::warn_bound(
+                            py,
+                            &user_warning,
+                            &format!("Ignoring unknown key {v}."),
+                            0,
+                        )
+                        .unwrap();
                     }),
                 }
             }

@@ -218,7 +218,9 @@ pub trait FFSSurface: Send + Sync {
     fn get_config(&self, i: usize) -> ArrayView2<Tile>;
     fn get_state(&self, i: usize) -> &dyn ClonableState;
     fn states(&self) -> Vec<&dyn ClonableState> {
-        (0..self.num_stored_states()).map(|i| self.get_state(i)).collect()
+        (0..self.num_stored_states())
+            .map(|i| self.get_state(i))
+            .collect()
     }
     fn configs(&self) -> Vec<ArrayView2<Tile>> {
         (0..self.num_stored_states())
@@ -318,7 +320,7 @@ impl TileSet {
                     self, config,
                 )?,
             )),
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }
@@ -512,7 +514,7 @@ impl<St: ClonableState> FFSSurface for FFSLevel<St> {
     fn p_r(&self) -> f64 {
         self.p_r
     }
-    
+
     fn num_stored_states(&self) -> usize {
         self.state_list.len()
     }

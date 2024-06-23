@@ -281,6 +281,7 @@ impl StaticKTAMCover {
 
         PossibleChoice::Remainder(acc)
     }
+
     fn composite_to_cover_rate<S: State>(
         &self,
         state: &S,

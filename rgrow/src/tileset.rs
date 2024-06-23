@@ -18,11 +18,11 @@ use super::*;
 use anyhow::Context;
 use base::{NumEvents, NumTiles};
 use bimap::BiMap;
-use state::{LastAttachTimeTracker, PrintEventTracker};
 use core::fmt;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json;
+use state::{LastAttachTimeTracker, PrintEventTracker};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::io::{self, Read};
@@ -517,7 +517,7 @@ pub enum TrackingType {
     None,
     Order,
     LastAttachTime,
-    PrintEvent
+    PrintEvent,
 }
 
 impl TryFrom<&str> for CanvasType {
@@ -542,7 +542,10 @@ impl TryFrom<&str> for TrackingType {
             "order" => Ok(TrackingType::Order),
             "lastattach" => Ok(TrackingType::LastAttachTime),
             "printevent" => Ok(TrackingType::PrintEvent),
-            _ => Err(StringConvError(format!("Unknown tracking type {}.  Valid options are \"none\" and \"order\".", value))),
+            _ => Err(StringConvError(format!(
+                "Unknown tracking type {}.  Valid options are \"none\" and \"order\".",
+                value
+            ))),
         }
     }
 }

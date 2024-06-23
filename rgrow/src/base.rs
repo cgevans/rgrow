@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::any::Any;
 
 #[cfg(feature = "python")]
-use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyArrayMethods};
+use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
 use serde::{Deserialize, Serialize};
 use thiserror;
 
@@ -73,7 +73,7 @@ pub enum RgrowError {
     #[error(transparent)]
     IO(#[from] std::io::Error),
     #[error("No UI is available.")]
-    NoUI
+    NoUI,
 }
 
 #[cfg(feature = "python")]
@@ -141,7 +141,6 @@ impl core::fmt::Debug for Ident {
 
 pub type GlueIdent = Ident;
 pub type TileIdent = Ident;
-
 
 pub struct RustAny(pub Box<dyn Any>);
 
