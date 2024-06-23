@@ -138,7 +138,7 @@ impl System for KTAM {
             Event::MonomerAttachment(p, _)
             | Event::MonomerDetachment(p)
             | Event::MonomerChange(p, _) => {
-                self.update_monomer_points(state, *p);
+                self._update_monomer_points(state, p);
             }
             Event::PolymerDetachment(v) => {
                 let mut points = Vec::new();
