@@ -210,7 +210,8 @@ impl SDC {
     fn fill_energy_array(&mut self) {
         let num_of_strands = self.strand_names.len();
         // For each *possible* pair of strands, calculate the energy bond
-        for strand_f in 1..(num_of_strands as usize) { // 1: no point in calculating for 0
+        for strand_f in 1..(num_of_strands as usize) {
+            // 1: no point in calculating for 0
             let (f_west_glue, f_btm_glue, f_east_glue) = {
                 let glues = self.glues.row(strand_f);
                 (
@@ -244,8 +245,11 @@ impl SDC {
                 continue;
             }
 
-            let b_inverse = if f_btm_glue % 2 == 1 { f_btm_glue + 1 } else { f_btm_glue - 1 };
-            
+            let b_inverse = if f_btm_glue % 2 == 1 {
+                f_btm_glue + 1
+            } else {
+                f_btm_glue - 1
+            };
 
             // Calculate the binding strength of the strand with the scaffold
             self.scaffold_energy_bonds[strand_f] = self.glue_links[(f_btm_glue, b_inverse)];
@@ -633,11 +637,22 @@ impl From<Vec<Vec<Option<String>>>> for SingleOrMultiScaffold {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
+pub struct SDCStrand {
+    pub name: Option<String>,
+    pub color: Option<String>,
+    pub concentration: f64,
+
+    // this may be slightly better, since this way we know that the user wont
+    // enter too many glues, eg an array of 5 glues
+    pub btm_glue: Option<String>,
+    pub left_glue: Option<String>,
+    pub right_glue: Option<String>,
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub struct SDCParams {
-    pub tile_glues: Vec<Vec<Option<String>>>,
-    pub tile_concentration: Vec<f64>,
-    pub tile_names: Vec<Option<String>>,
-    pub tile_colors: Vec<Option<String>>,
+    pub strands: Vec<SDCStrand>,
     pub scaffold: SingleOrMultiScaffold,
     // Pair with delta G at 37 degrees C and delta S
     pub glue_dg_s: HashMap<RefOrPair, (f64, f64)>,
@@ -652,100 +667,95 @@ pub struct SDCParams {
 /// x: Original input but parsed so that there can be no errors in it (eg. No h**)
 /// y: From (eg. h)
 /// z: Inverse (eg. h*)
-fn self_and_inverse(value: &String) -> (String, String, String) {
+fn self_and_inverse(value: &String) -> (bool, String, String) {
     // Remove all the stars at the end
     let filtered = value.trim_end_matches("*");
     let star_count = value.len() - filtered.len();
-    let simplified = if star_count % 2 == 0 {
-        filtered.to_string()
-    } else {
-        format!("{}*", filtered.to_string())
-    };
+    let is_from = star_count % 2 == 0;
 
     (
-        simplified,
+        is_from,
         filtered.to_string(),
         format!("{}*", filtered.to_string()),
     )
 }
 
+fn get_or_generate(
+    map: &mut HashMap<String, usize>,
+    count: &mut usize,
+    val: Option<String>,
+) -> usize {
+    // If the user didnt prove a glue, we assume nothign will ever stick
+    let str = match val {
+        Some(x) => x,
+        None => return 0,
+    };
+
+    // If we have already generated an id for this glue, then we use it
+    let (is_from, fromval, toval) = self_and_inverse(&str);
+    let simpl = if is_from { &fromval } else { &toval };
+    let res = map.get(simpl);
+    if let Some(u) = res {
+        return *u;
+    }
+
+    map.insert(fromval, *count);
+    map.insert(toval, *count + 1);
+    *count += 2;
+
+    if is_from {
+        *count - 2
+    } else {
+        *count - 1
+    }
+}
+
 impl SDC {
     pub fn from_params(params: SDCParams) -> Self {
-        let mut glue_name_map = BiHashMap::<String, usize>::new();
+        let mut glue_name_map: HashMap<String, usize> = HashMap::new();
+
+        // Add one to account for the empty strand
+        let strand_count = params.strands.len() + 1;
+
+        let mut strand_names: Vec<String> = Vec::with_capacity(strand_count);
+        let mut strand_colors: Vec<[u8; 4]> = Vec::with_capacity(strand_count);
+        let mut strand_concentration = Array1::<f64>::zeros(strand_count);
+        strand_names.push("null".to_string());
+        strand_colors.push([0, 0, 0, 0]);
+        strand_concentration[0] = 0.0;
+
+        let mut glues = Array2::<usize>::zeros((strand_count + 1, 3));
         let mut gluenum = 1;
-        let mut tile_glues_int = Array2::<usize>::zeros((params.tile_glues.len() + 1, 3));
 
-        for (tgl, mut r) in std::iter::zip(
-            params.tile_glues.iter(),
-            // The firs one will just be 0
-            tile_glues_int.outer_iter_mut().skip(1),
-        ) {
-            for (i, t) in tgl.iter().enumerate() {
-                match t {
-                    None => r[i] = 0,
-                    Some(s) => {
-                        let (s, s_base, s_to) = self_and_inverse(s);
-                        let j = glue_name_map.get_by_left(&s);
-                        match j {
-                            Some(j) => {
-                                r[i] = *j;
-                            }
-                            None => {
-                                glue_name_map.insert(s_base, gluenum);
-                                glue_name_map.insert(s_to, gluenum + 1);
-                                r[i] = gluenum;
+        for (
+            id,
+            SDCStrand {
+                name,
+                color,
+                concentration,
+                left_glue,
+                btm_glue,
+                right_glue,
+            },
+        ) in params.strands.into_iter().enumerate()
+        {
+            // Add the name and the color
+            strand_names.push(name.unwrap_or(id.to_string()));
 
-                                // The right answer here would be gluenum+1, so add one
-                                if s.ends_with('*') {
-                                    r[i] += 1
-                                }
+            let color_as_str = color.as_ref().map(|x| x.as_str());
+            let color_or_rand = get_color_or_random(&color_as_str).unwrap();
+            strand_colors.push(color_or_rand);
 
-                                gluenum += 2;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+            // Add the glues, note that we want to leave idnex (0, _) empty (for the empty tile)
+            glues[(id + 1, WEST_GLUE_INDEX)] =
+                get_or_generate(&mut glue_name_map, &mut gluenum, left_glue);
+            glues[(id + 1, BOTTOM_GLUE_INDEX)] =
+                get_or_generate(&mut glue_name_map, &mut gluenum, btm_glue);
+            glues[(id + 1, EAST_GLUE_INDEX)] =
+                get_or_generate(&mut glue_name_map, &mut gluenum, right_glue);
 
-        let max_gluenum = gluenum;
-
-        // Delta G at 37 degrees C
-        let mut glue_delta_g = Array2::<f64>::zeros((max_gluenum, max_gluenum));
-        let mut glue_s = Array2::<f64>::zeros((max_gluenum, max_gluenum));
-
-        for (k, &v) in params.glue_dg_s.iter() {
-            let (i, j) = match k {
-                RefOrPair::Ref(r) => {
-                    let (_, base, inverse) = self_and_inverse(r);
-                    (base, inverse)
-                }
-                RefOrPair::Pair(r1, r2) => {
-                    let (r1, _, _) = self_and_inverse(r1);
-                    let (r2, _, _) = self_and_inverse(r2);
-                    (r1, r2)
-                }
-            };
-
-            let i = *glue_name_map
-                .get_by_left(&i)
-                // FIXME: fails if glue not found
-                .expect(format!("Glue {} not found", i).as_str());
-
-            let j = *glue_name_map
-                .get_by_left(&j)
-                // FIXME: fails if glue not found
-                .expect(format!("Glue {} not found", j).as_str());
-
-            glue_delta_g[[i, j]] = v.0;
-            glue_delta_g[[j, i]] = v.0;
-            glue_s[[i, j]] = v.1;
-            glue_s[[j, i]] = v.1;
-        }
-
-        let mut glue_names = Array1::<String>::from_elem(max_gluenum + 1, "".to_string());
-        for (s, i) in glue_name_map.iter() {
-            glue_names[*i] = s.clone();
+            // Add the concentrations
+            strand_concentration[id + 1] = concentration;
         }
 
         let scaffold = match params.scaffold {
@@ -755,7 +765,7 @@ impl SDC {
                     if let Some(g) = maybe_g {
                         scaffold
                             .index_axis_mut(ndarray::Axis(1), i)
-                            .fill(*glue_name_map.get_by_left(g).unwrap());
+                            .fill(*glue_name_map.get(g).unwrap());
                     } else {
                         scaffold.index_axis_mut(ndarray::Axis(1), i).fill(0);
                     }
@@ -765,37 +775,52 @@ impl SDC {
             SingleOrMultiScaffold::Multi(_m) => todo!(),
         };
 
-        let mut more_colors: Vec<_> = params
-            .tile_colors
-            .iter()
-            .map(|c| get_color_or_random(&c.as_ref().map(|x| x.as_str())).unwrap())
-            .collect();
+        let mut glue_names = vec![String::default(); gluenum];
+        for (s, i) in glue_name_map.iter() {
+            glue_names[*i] = s.clone();
+        }
 
-        // Add color for empty tile
-        let mut colors = vec![[0, 0, 0, 0]];
-        colors.append(&mut more_colors);
+        // Delta G at 37 degrees C
+        let mut glue_delta_g = Array2::<f64>::zeros((gluenum, gluenum));
+        let mut glue_s = Array2::<f64>::zeros((gluenum, gluenum));
 
-        let mut input_names: Vec<_> = params
-            .tile_names
-            .into_iter()
-            .enumerate()
-            .map(|(n, os)| os.unwrap_or(n.to_string()))
-            .collect();
+        for (k, &v) in params.glue_dg_s.iter() {
+            let (i, j) = match k {
+                RefOrPair::Ref(r) => {
+                    let (_, base, inverse) = self_and_inverse(r);
+                    (base, inverse)
+                }
+                RefOrPair::Pair(r1, r2) => {
+                    let (r1, r1f, r1t) = self_and_inverse(r1);
+                    let (r2, r2f, r2t) = self_and_inverse(r2);
+                    (if r1 { r1f } else { r1t }, if r2 { r2f } else { r2t })
+                }
+            };
 
-        let mut strand_names = vec!["empty".to_string()];
-        strand_names.append(&mut input_names);
+            // FIXME: fails if glue not found
+            let i = *glue_name_map
+                .get(&i)
+                .expect(format!("Glue {} not found", i).as_str());
 
-        let mut c = vec![0.0];
-        c.extend(params.tile_concentration);
+            let j = *glue_name_map
+                .get(&j)
+                .expect(format!("Glue {} not found", j).as_str());
+
+            glue_delta_g[[i, j]] = v.0;
+            glue_delta_g[[j, i]] = v.0;
+            glue_s[[i, j]] = v.1;
+            glue_s[[j, i]] = v.1;
+        }
 
         SDC::new(
-            Vec::new(),
+            // TODO: anchor tiles
+            vec![],
             strand_names,
-            glue_names.into_iter().collect(), // FIXME: consider types here
+            glue_names,
             scaffold,
-            Array1::from(c),
-            tile_glues_int,
-            colors,
+            strand_concentration,
+            glues,
+            strand_colors,
             params.k_f,
             glue_delta_g,
             glue_s,
@@ -868,16 +893,16 @@ mod test_sdc_model {
         let acc = input
             .into_iter()
             .map(|str| self_and_inverse(&str.to_string()))
-            .collect::<Vec<(String, String, String)>>();
+            .collect::<Vec<(bool, String, String)>>();
 
         let expected = vec![
-            ("some*str", "some*str", "some*str*"),
-            ("some*str*", "some*str", "some*str*"),
-            ("some*str", "some*str", "some*str*"),
+            (true, "some*str", "some*str*"),
+            (false, "some*str", "some*str*"),
+            (true, "some*str", "some*str*"),
         ]
         .iter()
-        .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()))
-        .collect::<Vec<(String, String, String)>>();
+        .map(|(a, b, c)| (*a, b.to_string(), c.to_string()))
+        .collect::<Vec<(bool, String, String)>>();
 
         assert_eq!(acc, expected);
     }
