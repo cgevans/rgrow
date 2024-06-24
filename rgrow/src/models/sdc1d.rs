@@ -521,8 +521,8 @@ impl System for SDC {
 
     fn system_info(&self) -> String {
         format!(
-            "1 dimensional SDC with scaffold of len {} and {} strands",
-            self.scaffold.len(),
+            "1 dimensional SDC with scaffold of length {} and {} strands",
+            self.scaffold.dim().1,
             self.strand_names.len(),
         )
     }
