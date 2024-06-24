@@ -27,6 +27,7 @@ use crate::{
     state::State,
     system::{Event, NeededUpdate, System, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, Size},
+    utils,
 };
 
 use ndarray::prelude::{Array1, Array2};
@@ -592,8 +593,6 @@ impl FromTileSet for SDC {
 
 use std::hash::Hash;
 
-use bimap::BiHashMap;
-
 #[cfg(python)]
 use pyo3::prelude::*;
 
@@ -651,11 +650,25 @@ pub struct SDCStrand {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
+pub enum GsOrSeq {
+    GS((f64, f64)),
+    Seq(String),
+}
+
+fn gsorseq_to_gs(gsorseq: &GsOrSeq) -> (f64, f64) {
+    match gsorseq {
+        GsOrSeq::GS(x) => *x,
+        GsOrSeq::Seq(s) => crate::utils::string_dna_dg_ds(s.as_str()),
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub struct SDCParams {
     pub strands: Vec<SDCStrand>,
     pub scaffold: SingleOrMultiScaffold,
     // Pair with delta G at 37 degrees C and delta S
-    pub glue_dg_s: HashMap<RefOrPair, (f64, f64)>,
+    pub glue_dg_s: HashMap<RefOrPair, GsOrSeq>,
     pub k_f: f64,
     pub k_n: f64,
     pub k_c: f64,
@@ -784,7 +797,10 @@ impl SDC {
         let mut glue_delta_g = Array2::<f64>::zeros((gluenum, gluenum));
         let mut glue_s = Array2::<f64>::zeros((gluenum, gluenum));
 
-        for (k, &v) in params.glue_dg_s.iter() {
+        for (k, gs_or_dna_sequence) in params.glue_dg_s.iter() {
+            // here we handle the fact that the user may have input (g, s) or TCGTA...
+            let gs = gsorseq_to_gs(gs_or_dna_sequence);
+
             let (i, j) = match k {
                 RefOrPair::Ref(r) => {
                     let (_, base, inverse) = self_and_inverse(r);
@@ -806,10 +822,10 @@ impl SDC {
                 .get(&j)
                 .expect(format!("Glue {} not found", j).as_str());
 
-            glue_delta_g[[i, j]] = v.0;
-            glue_delta_g[[j, i]] = v.0;
-            glue_s[[i, j]] = v.1;
-            glue_s[[j, i]] = v.1;
+            glue_delta_g[[i, j]] = gs.0;
+            glue_delta_g[[j, i]] = gs.0;
+            glue_s[[i, j]] = gs.1;
+            glue_s[[j, i]] = gs.1;
         }
 
         SDC::new(
