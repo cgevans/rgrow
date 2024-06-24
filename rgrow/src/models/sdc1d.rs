@@ -430,10 +430,42 @@ impl System for SDC {
         self.anchor_tiles.clone()
     }
 
-    // TODO: Array containing locations to "bad connections"
     fn calc_mismatch_locations<St: State>(&self, state: &St) -> Array2<usize> {
-        todo!()
+        let threshold = -0.1; // Todo: fix this
+        let mut mismatch_locations = Array2::<usize>::zeros((state.nrows(), state.ncols()));
+
+        // TODO: this should use an iterator from the canvas, which we should implement.
+        for i in 0..state.nrows() {
+            for j in 0..state.ncols() {
+                if !state.inbounds((i, j)) {
+                    continue;
+                }
+                let p = PointSafe2((i, j));
+
+                let t = state.tile_at_point(p) as usize;
+
+                if t == 0 {
+                    continue;
+                }
+
+                let te = state.tile_to_e(p) as usize;
+                let tw = state.tile_to_w(p) as usize;
+
+                let mm_e = ((te != 0) & (self.strand_energy_bonds[(t, te)] > threshold)) as usize;
+                let mm_w = ((tw != 0) & (self.strand_energy_bonds[(tw, t)] > threshold)) as usize;
+
+                // Should we repurpose one of these to represent strand-scaffold mismatches?
+                // These are currently impossible, but could be added in the future.
+                // let ts = state.tile_to_s(p);
+                // let mm_s = ((ts != 0) & (self.get_energy_ns(t, ts) < threshold)) as usize;
+
+                mismatch_locations[(i, j)] = 4 * mm_e + mm_w;
+            }
+        }
+
+        mismatch_locations
     }
+
 
     fn set_param(
         &mut self,
