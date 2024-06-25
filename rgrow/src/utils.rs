@@ -1,6 +1,9 @@
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
+const PENALTY_G: f64 = 1.96;
+const PENALTY_S: f64 = 0.0057;
+
 /*
 * A G A A A
 * --------->
@@ -88,7 +91,7 @@ fn dG_dS(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> (f64, f64) {
 /// the sum of all neighbours a, b -- dG_(37 degrees C) (a, b) - (temperature - 37) dS(a, b)
 fn dna_strength(dna: impl Iterator<Item = DnaNucleotideBase>, temperature: f64) -> f64 {
     let (total_dg, total_ds) = dna_dg_ds(dna);
-    total_dg - (temperature - 37.0) * total_ds
+    (total_dg + PENALTY_G) - (temperature - 37.0) * (total_ds + PENALTY_S)
 }
 
 fn dna_dg_ds(dna: impl Iterator<Item = DnaNucleotideBase>) -> (f64, f64) {
@@ -109,7 +112,7 @@ pub fn string_dna_dg_ds(dna_sequence: &str) -> (f64, f64) {
 /// ```rust
 /// use rgrow::utils::string_dna_delta_g;
 /// let seq = "cgatg";
-/// assert_eq!(string_dna_delta_g(seq, 37.0), -5.8);
+/// assert_eq!(string_dna_delta_g(seq, 37.0), -5.8+1.96);
 /// ```
 ///
 pub fn string_dna_delta_g(dna_sequence: &str, temperature: f64) -> f64 {
@@ -231,13 +234,14 @@ mod test_utils {
         for (&seq, &dG) in seqs.iter().zip(dG_at_37.iter()) {
             let result = string_dna_delta_g(seq, 37.0);
             println!("{}", seq);
-            assert_ulps_eq!(dG, result, max_ulps = 10);
+            // TODO: Undo dG properly
+            assert_ulps_eq!(dG + 1.96, result, max_ulps = 10);
         }
 
         for (&seq, &dG) in seqs.iter().zip(dG_at_50.iter()) {
             let result = string_dna_delta_g(seq, 50.0);
             println!("{}", seq);
-            assert_ulps_eq!(dG, result, max_ulps = 10);
+            assert_ulps_eq!(dG + 1.96 - (50.0 - 37.0) * 0.0057, result, max_ulps = 10);
         }
     }
 }
