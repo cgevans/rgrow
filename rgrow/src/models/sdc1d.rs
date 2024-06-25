@@ -38,6 +38,7 @@ type_alias!( f64 => Strength, RatePerConc, Conc );
 const WEST_GLUE_INDEX: usize = 0;
 const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
+const R: f64 = 8.314;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC {
@@ -233,12 +234,12 @@ impl SDC {
                 // Case 1: First strands is to the west of second
                 // strand_f    strand_s
                 self.strand_energy_bonds[(strand_f, strand_s)] =
-                    self.glue_links[(f_east_glue, s_west_glue)];
+                    self.glue_links[(f_east_glue, s_west_glue)] / (R * self.temperature);
 
                 // Case 2: First strands is to the east of second
                 // strand_s    strand_f
                 self.strand_energy_bonds[(strand_s, strand_f)] =
-                    self.glue_links[(f_west_glue, s_east_glue)];
+                    self.glue_links[(f_west_glue, s_east_glue)] / (R * self.temperature);
             }
 
             // I suppose maybe we'd have weird strands with no position domain?
@@ -253,7 +254,8 @@ impl SDC {
             };
 
             // Calculate the binding strength of the strand with the scaffold
-            self.scaffold_energy_bonds[strand_f] = self.glue_links[(f_btm_glue, b_inverse)];
+            self.scaffold_energy_bonds[strand_f] =
+                self.glue_links[(f_btm_glue, b_inverse)] / (R * self.temperature);
         }
     }
 
@@ -465,7 +467,6 @@ impl System for SDC {
 
         mismatch_locations
     }
-
 
     fn set_param(
         &mut self,
