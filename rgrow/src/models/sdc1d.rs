@@ -38,7 +38,7 @@ type_alias!( f64 => Strength, RatePerConc, Conc );
 const WEST_GLUE_INDEX: usize = 0;
 const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
-const R: f64 = 8.314;
+const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC {
@@ -175,9 +175,13 @@ impl SDC {
         self.glue_links = &self.delta_g_matrix - (self.temperature - 37.0) * &self.entropy_matrix;
     }
 
-    pub fn change_temperature_to(&mut self, kelvin: f64) {
-        self.temperature = kelvin;
+    pub fn change_temperature_to(&mut self, celsius: f64) {
+        self.temperature = celsius;
         self.update_system();
+    }
+
+    fn rtval(&self) -> f64 {
+        R * (self.temperature + 273.15)
     }
 
     fn polymer_update<S: State>(&self, points: &Vec<PointSafe2>, state: &mut S) {
@@ -234,12 +238,12 @@ impl SDC {
                 // Case 1: First strands is to the west of second
                 // strand_f    strand_s
                 self.strand_energy_bonds[(strand_f, strand_s)] =
-                    self.glue_links[(f_east_glue, s_west_glue)] / (R * self.temperature);
+                    self.glue_links[(f_east_glue, s_west_glue)] / self.rtval();
 
                 // Case 2: First strands is to the east of second
                 // strand_s    strand_f
                 self.strand_energy_bonds[(strand_s, strand_f)] =
-                    self.glue_links[(f_west_glue, s_east_glue)] / (R * self.temperature);
+                    self.glue_links[(f_west_glue, s_east_glue)] / self.rtval();
             }
 
             // I suppose maybe we'd have weird strands with no position domain?
@@ -255,7 +259,7 @@ impl SDC {
 
             // Calculate the binding strength of the strand with the scaffold
             self.scaffold_energy_bonds[strand_f] =
-                self.glue_links[(f_btm_glue, b_inverse)] / (R * self.temperature);
+                self.glue_links[(f_btm_glue, b_inverse)] / self.rtval();
         }
     }
 
@@ -324,7 +328,7 @@ impl SDC {
             return (false, acc, Event::None);
         }
 
-        let scaffold_glue = self.scaffold.get(point.0).expect("Invalid Index");
+        let scaffold_glue = self.scaffold.get((point.0.0.rem_euclid(self.scaffold.dim().0), point.0.1)).expect("Invalid Index");
 
         let empty_map = HashSet::default();
         let friends = self.friends_btm.get(scaffold_glue).unwrap_or(&empty_map);
