@@ -9,9 +9,9 @@ use crate::base::StringConvError;
 use crate::canvas::CanvasPeriodic;
 use crate::canvas::CanvasSquare;
 use crate::canvas::CanvasTube;
-use crate::ffs::BoxedFFSResult;
 use crate::ffs::FFSRun;
 use crate::ffs::FFSRunConfig;
+use crate::ffs::FFSRunResult;
 use crate::models::atam::ATAM;
 
 use crate::models::ktam::KTAM;
@@ -32,7 +32,6 @@ use crate::canvas::PointSafe2;
 use std::any::Any;
 use std::fmt::Debug;
 
-use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(feature = "ui")]
@@ -675,7 +674,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         &mut self,
         config: &FFSRunConfig,
         canvas_type: Option<CanvasType>,
-    ) -> Result<BoxedFFSResult, GrowError>;
+    ) -> Result<FFSRunResult, GrowError>;
 }
 
 impl<S: System + SystemWithDimers> DynSystem for S {
@@ -736,23 +735,23 @@ impl<S: System + SystemWithDimers> DynSystem for S {
         &mut self,
         config: &FFSRunConfig,
         canvas_type: Option<CanvasType>,
-    ) -> Result<BoxedFFSResult, GrowError> {
+    ) -> Result<FFSRunResult, GrowError> {
         match canvas_type.unwrap_or(CanvasType::Periodic) {
             CanvasType::Square => {
                 let run =
                     FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create(self, config)?;
-                Ok(BoxedFFSResult(Arc::new(Box::new(run))))
+                Ok(run.into())
             }
             CanvasType::Periodic => {
                 let run = FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(
                     self, config,
                 )?;
-                Ok(BoxedFFSResult(Arc::new(Box::new(run))))
+                Ok(run.into())
             }
             CanvasType::Tube => {
                 let run =
                     FFSRun::<QuadTreeState<CanvasTube, NullStateTracker>>::create(self, config)?;
-                Ok(BoxedFFSResult(Arc::new(Box::new(run))))
+                Ok(run.into())
             }
         }
     }

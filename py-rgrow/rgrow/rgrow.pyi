@@ -123,7 +123,7 @@ class FFSLevelRef(object):
         level that resulted in it."""
         ...
 
-class FFSResult(object):
+class FFSRunResult(object):
     @property
     def nucleation_rate(self) -> float:
         """
@@ -211,7 +211,7 @@ class TileSet(object):
         target_size: int,
         config: FFSRunConfig | None,
         **kwargs,
-    ) -> FFSResult: ...
+    ) -> FFSRunResult: ...
 
 class EvolveBounds(object):
     def __init__(

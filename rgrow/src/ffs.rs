@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use crate::base::{GrowError, RgrowError, Tile};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
@@ -10,10 +10,12 @@ use crate::state::{NullStateTracker, QuadTreeState};
 use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
+use canvas::Canvas;
 #[cfg(feature = "python")]
 use polars::prelude::*;
 #[cfg(feature = "python")]
 use python::PyState;
+use ratestore::RateStore;
 
 use super::*;
 //use ndarray::prelude::*;
@@ -42,7 +44,7 @@ use numpy::PyArray1;
 #[cfg(feature = "python")]
 use pyo3_polars::PyDataFrame;
 
-use state::{ClonableState, StateWithCreate};
+use state::{ClonableState, State, StateEnum, StateStatus, StateWithCreate};
 
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
@@ -207,94 +209,107 @@ impl FFSRunConfig {
 }
 
 impl TileSet {
-    pub fn run_ffs(&self, config: &FFSRunConfig) -> Result<Box<dyn FFSResult>, RgrowError> {
+    pub fn run_ffs(&self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {
         let canvas_type = self.canvas_type.unwrap_or(CanvasType::Periodic);
         let model = self.model.unwrap_or(Model::KTAM);
         let tracking = self.tracking.unwrap_or(TrackingType::None);
 
         match (model, canvas_type, tracking) {
-            (Model::KTAM, CanvasType::Square, TrackingType::None) => {
-                Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasSquare, NullStateTracker>,
-                >::create_from_tileset::<KTAM>(
-                    self, config
-                )?))
-            }
-            (Model::KTAM, CanvasType::Square, TrackingType::Order) => Ok(Box::new(
-                FFSRun::<QuadTreeState<CanvasSquare, OrderTracker>>::create_from_tileset::<KTAM>(
-                    self, config,
-                )?,
-            )),
-            (Model::KTAM, CanvasType::Periodic, TrackingType::None) => {
-                Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasPeriodic, NullStateTracker>,
-                >::create_from_tileset::<KTAM>(
-                    self, config
-                )?))
-            }
+            (Model::KTAM, CanvasType::Square, TrackingType::None) => Ok(FFSRun::<
+                QuadTreeState<CanvasSquare, NullStateTracker>,
+            >::create_from_tileset::<KTAM>(
+                self, config
+            )?
+            .into()),
+            (Model::KTAM, CanvasType::Square, TrackingType::Order) => Ok(FFSRun::<
+                QuadTreeState<CanvasSquare, OrderTracker>,
+            >::create_from_tileset::<
+                KTAM,
+            >(
+                self, config
+            )?
+            .into()),
+            (Model::KTAM, CanvasType::Periodic, TrackingType::None) => Ok(FFSRun::<
+                QuadTreeState<CanvasPeriodic, NullStateTracker>,
+            >::create_from_tileset::<
+                KTAM,
+            >(
+                self, config
+            )?
+            .into()),
             (Model::KTAM, CanvasType::Periodic, TrackingType::Order) => {
-                Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasPeriodic, OrderTracker>,
-                >::create_from_tileset::<KTAM>(
-                    self, config
-                )?))
+                Ok(
+                    FFSRun::<QuadTreeState<CanvasPeriodic, OrderTracker>>::create_from_tileset::<
+                        KTAM,
+                    >(self, config)?
+                    .into(),
+                )
             }
-            (Model::KTAM, CanvasType::Tube, TrackingType::None) => {
-                Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasTube, NullStateTracker>,
-                >::create_from_tileset::<KTAM>(
-                    self, config
-                )?))
-            }
-            (Model::KTAM, CanvasType::Tube, TrackingType::Order) => Ok(Box::new(
-                FFSRun::<QuadTreeState<CanvasTube, OrderTracker>>::create_from_tileset::<KTAM>(
-                    self, config,
-                )?,
-            )),
+            (Model::KTAM, CanvasType::Tube, TrackingType::None) => Ok(FFSRun::<
+                QuadTreeState<CanvasTube, NullStateTracker>,
+            >::create_from_tileset::<KTAM>(
+                self, config
+            )?
+            .into()),
+            (Model::KTAM, CanvasType::Tube, TrackingType::Order) => Ok(FFSRun::<
+                QuadTreeState<CanvasTube, OrderTracker>,
+            >::create_from_tileset::<KTAM>(
+                self, config
+            )?
+            .into()),
             (Model::ATAM, _, _) => Err(GrowError::FFSCannotRunATAM.into()),
             (Model::OldKTAM, CanvasType::Square, TrackingType::None) => {
-                Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasSquare, NullStateTracker>,
-                >::create_from_tileset::<OldKTAM>(
-                    self, config
-                )?))
+                Ok(
+                    FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create_from_tileset::<
+                        OldKTAM,
+                    >(self, config)?
+                    .into(),
+                )
             }
-            (Model::OldKTAM, CanvasType::Square, TrackingType::Order) => Ok(Box::new(
-                FFSRun::<QuadTreeState<CanvasSquare, OrderTracker>>::create_from_tileset::<OldKTAM>(
-                    self, config,
-                )?,
-            )),
-            (Model::OldKTAM, CanvasType::Periodic, TrackingType::None) => {
-                Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasPeriodic, NullStateTracker>,
-                >::create_from_tileset::<OldKTAM>(
-                    self, config
-                )?))
+            (Model::OldKTAM, CanvasType::Square, TrackingType::Order) => {
+                Ok(
+                    FFSRun::<QuadTreeState<CanvasSquare, OrderTracker>>::create_from_tileset::<
+                        OldKTAM,
+                    >(self, config)?
+                    .into(),
+                )
             }
+            (Model::OldKTAM, CanvasType::Periodic, TrackingType::None) => Ok(FFSRun::<
+                QuadTreeState<CanvasPeriodic, NullStateTracker>,
+            >::create_from_tileset::<
+                OldKTAM,
+            >(
+                self, config
+            )?
+            .into()),
             (Model::OldKTAM, CanvasType::Periodic, TrackingType::Order) => {
-                Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasPeriodic, OrderTracker>,
-                >::create_from_tileset::<OldKTAM>(
-                    self, config
-                )?))
+                Ok(
+                    FFSRun::<QuadTreeState<CanvasPeriodic, OrderTracker>>::create_from_tileset::<
+                        OldKTAM,
+                    >(self, config)?
+                    .into(),
+                )
             }
             (Model::OldKTAM, CanvasType::Tube, TrackingType::None) => {
-                Ok(Box::new(FFSRun::<
-                    QuadTreeState<CanvasTube, NullStateTracker>,
-                >::create_from_tileset::<OldKTAM>(
-                    self, config
-                )?))
+                Ok(
+                    FFSRun::<QuadTreeState<CanvasTube, NullStateTracker>>::create_from_tileset::<
+                        OldKTAM,
+                    >(self, config)?
+                    .into(),
+                )
             }
-            (Model::OldKTAM, CanvasType::Tube, TrackingType::Order) => Ok(Box::new(
-                FFSRun::<QuadTreeState<CanvasTube, OrderTracker>>::create_from_tileset::<OldKTAM>(
-                    self, config,
-                )?,
-            )),
+            (Model::OldKTAM, CanvasType::Tube, TrackingType::Order) => {
+                Ok(
+                    FFSRun::<QuadTreeState<CanvasTube, OrderTracker>>::create_from_tileset::<
+                        OldKTAM,
+                    >(self, config)?
+                    .into(),
+                )
+            }
             _ => todo!(),
         }
     }
 }
-
 
 fn _bounded_nonzero_region_of_array<'a>(
     arr: &'a ArrayView2<Tile>,
@@ -326,14 +341,12 @@ fn _bounded_nonzero_region_of_array<'a>(
     (subarr, mini, minj, maxi, maxj)
 }
 
-
 fn variance_over_mean2(num_success: usize, num_trials: usize) -> f64 {
     let ns = num_success as f64;
     let nt = num_trials as f64;
     let p = ns / nt;
     (1. - p) / (ns)
 }
-
 
 pub struct FFSRun<St: ClonableState> {
     pub level_list: Vec<FFSLevel<St>>,
@@ -652,18 +665,64 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
 // RESULTS CODE
 
-pub trait FFSResult: Send + Sync {
-    fn nucleation_rate(&self) -> f64;
-    fn forward_vec(&self) -> &Vec<f64>;
-    fn dimerization_rate(&self) -> f64;
-    fn surfaces(&self) -> Vec<&dyn FFSSurface>;
-    fn get_surface(&self, i: usize) -> &dyn FFSSurface;
+#[cfg_attr(feature = "python", pyclass)]
+pub struct FFSRunResult {
+    pub level_list: Vec<Arc<FFSLevelResult>>,
+    pub dimerization_rate: f64,
+    pub forward_prob: Vec<f64>,
+}
+
+impl<St: ClonableState> From<FFSRun<St>> for FFSRunResult
+where
+    FFSLevelResult: From<FFSLevel<St>>,
+{
+    fn from(value: FFSRun<St>) -> Self {
+        Self {
+            level_list: value
+                .level_list
+                .into_iter()
+                .map(|x| Arc::new(x.into()))
+                .collect(),
+            dimerization_rate: value.dimerization_rate,
+            forward_prob: value.forward_prob,
+        }
+    }
+}
+
+#[cfg_attr(feature = "python", pyclass)]
+pub struct FFSLevelResult {
+    pub state_list: Vec<Arc<StateEnum>>,
+    pub previous_list: Vec<usize>,
+    pub p_r: f64,
+    pub num_states: usize,
+    pub num_trials: usize,
+    pub target_size: NumTiles,
+}
+
+impl<St: ClonableState> From<FFSLevel<St>> for FFSLevelResult
+where
+    StateEnum: From<St>,
+{
+    fn from(value: FFSLevel<St>) -> Self {
+        Self {
+            state_list: value
+                .state_list
+                .into_iter()
+                .map(|x| Arc::new(x.into()))
+                .collect(),
+            previous_list: value.previous_list,
+            p_r: value.p_r,
+            num_states: value.num_states,
+            num_trials: value.num_trials,
+            target_size: value.target_size,
+        }
+    }
 }
 
 pub trait FFSSurface: Send + Sync {
     fn get_config(&self, i: usize) -> ArrayView2<Tile>;
-    fn get_state(&self, i: usize) -> &dyn ClonableState;
-    fn states(&self) -> Vec<&dyn ClonableState> {
+    fn get_state(&self, i: usize) -> Arc<StateEnum>;
+    fn states(&self) -> Vec<Arc<StateEnum>> {
         (0..self.num_stored_states())
             .map(|i| self.get_state(i))
             .collect()
@@ -681,112 +740,105 @@ pub trait FFSSurface: Send + Sync {
     fn p_r(&self) -> f64;
 }
 
-impl<St: ClonableState> FFSResult for FFSRun<St> {
+impl<St: ClonableState> FFSRun<St> {
     fn nucleation_rate(&self) -> Rate {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
+}
 
-    fn forward_vec(&self) -> &Vec<f64> {
+impl FFSRunResult {
+    pub fn nucleation_rate(&self) -> Rate {
+        self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
+    }
+
+    pub fn forward_vec(&self) -> &Vec<f64> {
         &self.forward_prob
     }
 
-    fn surfaces(&self) -> Vec<&dyn FFSSurface> {
-        self.level_list
-            .iter()
-            .map(|level| level as &dyn FFSSurface)
-            .collect()
+    pub fn surfaces(&self) -> Vec<Weak<FFSLevelResult>> {
+        self.level_list.iter().map(Arc::downgrade).collect()
     }
 
-    fn get_surface(&self, i: usize) -> &dyn FFSSurface {
-        self.level_list.get(i).unwrap()
+    pub fn get_surface(&self, i: usize) -> Option<Arc<FFSLevelResult>> {
+        self.level_list.get(i).map(|x| (*x).clone())
     }
 
-    fn dimerization_rate(&self) -> f64 {
+    pub fn dimerization_rate(&self) -> f64 {
         self.dimerization_rate
     }
 }
 
-impl<St: ClonableState> FFSSurface for FFSLevel<St> {
-    fn get_config(&self, i: usize) -> ArrayView2<Tile> {
+impl FFSLevelResult {
+    pub fn get_config(&self, i: usize) -> ArrayView2<Tile> {
         self.state_list[i].raw_array()
     }
 
-    fn get_state(&self, i: usize) -> &dyn ClonableState {
-        self.state_list.get(i).unwrap()
+    pub fn get_state(&self, i: usize) -> Option<Arc<StateEnum>> {
+        self.state_list.get(i).map(|x| (*x).clone())
     }
 
-    fn num_configs(&self) -> usize {
+    pub fn num_configs(&self) -> usize {
         self.num_states
     }
 
-    fn target_size(&self) -> NumTiles {
+    pub fn target_size(&self) -> NumTiles {
         self.target_size
     }
 
-    fn num_trials(&self) -> usize {
+    pub fn num_trials(&self) -> usize {
         self.num_trials
     }
 
-    fn previous_list(&self) -> Vec<usize> {
+    pub fn previous_list(&self) -> Vec<usize> {
         self.previous_list.clone()
     }
 
-    fn p_r(&self) -> f64 {
+    pub fn p_r(&self) -> f64 {
         self.p_r
     }
 
-    fn num_stored_states(&self) -> usize {
+    pub fn num_stored_states(&self) -> usize {
         self.state_list.len()
     }
 }
 
-
-#[cfg_attr(feature = "python", pyclass(name = "FFSResult"))]
-#[allow(dead_code)] // This is used in the python interface
-pub struct BoxedFFSResult(pub(crate) Arc<Box<dyn ffs::FFSResult>>);
-
 #[cfg(feature = "python")]
 #[pymethods]
-impl BoxedFFSResult {
+impl FFSRunResult {
     /// Nucleation rate, in M/s.  Calculated from the forward probability vector,
     /// and dimerization rate.
     #[getter]
     fn get_nucleation_rate(&self) -> f64 {
-        self.0.nucleation_rate()
+        self.nucleation_rate()
     }
 
     #[getter]
     fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.0.forward_vec().to_pyarray_bound(py)
+        self.forward_vec().to_pyarray_bound(py)
     }
 
     #[getter]
     fn get_dimerization_rate(&self) -> f64 {
-        self.0.dimerization_rate()
+        self.dimerization_rate()
     }
 
     #[getter]
     fn get_surfaces(&self) -> Vec<FFSLevelRef> {
-        self.0
-            .surfaces()
+        self.surfaces()
             .iter()
-            .enumerate()
-            .map(|(i, _)| FFSLevelRef {
-                res: self.0.clone(),
-                level: i,
-            })
+            .map(|f| FFSLevelRef(f.upgrade().unwrap().clone()))
             .collect()
     }
 
     fn surfaces_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
-        let surfaces = self.0.surfaces();
+        let surfaces = self.surfaces();
 
         let d = df!(
             "level" => 0..surfaces.len() as u64,
-            "n_configs" => surfaces.iter().map(|x| x.num_configs() as u64).collect::<Vec<u64>>(),
-            "n_trials" => surfaces.iter().map(|x| x.num_trials() as u64).collect::<Vec<u64>>(),
-            "target_size" => surfaces.iter().map(|x| x.target_size() as u64).collect::<Vec<u64>>(),
-            "p_r" => surfaces.iter().map(|x| x.p_r()).collect::<Vec<f64>>(),
+            "n_configs" => surfaces.iter().map(|x| (*x.upgrade().unwrap()).num_configs() as u64).collect::<Vec<u64>>(),
+            "n_trials" => surfaces.iter().map(|x| (*x.upgrade().unwrap()).num_trials() as u64).collect::<Vec<u64>>(),
+            "target_size" => surfaces.iter().map(|x| (*x.upgrade().unwrap()).target_size() as u64).collect::<Vec<u64>>(),
+            "p_r" => surfaces.iter().map(|x| (*x.upgrade().unwrap()).p_r()).collect::<Vec<f64>>(),
         )
         .unwrap();
 
@@ -805,8 +857,8 @@ impl BoxedFFSResult {
         let mut surfaceindex = Vec::new();
         let mut configindex = Vec::new();
 
-        for (i, surface) in self.0.surfaces().iter().enumerate() {
-            for (j, state) in surface.states().iter().enumerate() {
+        for (i, surface) in self.surfaces().iter().enumerate() {
+            for (j, state) in surface.upgrade().unwrap().state_list.iter().enumerate() {
                 sizes.push(state.n_tiles());
                 times.push(state.time());
                 let ss = &state.raw_array();
@@ -819,7 +871,14 @@ impl BoxedFFSResult {
                 arr_maxi.push(maxi as u64);
                 arr_maxj.push(maxj as u64);
             }
-            previndices.extend(surface.previous_list().iter().map(|x| *x as u64));
+            previndices.extend(
+                surface
+                    .upgrade()
+                    .unwrap()
+                    .previous_list()
+                    .iter()
+                    .map(|x| *x as u64),
+            );
         }
 
         let mut df = df!(
@@ -852,8 +911,8 @@ impl BoxedFFSResult {
     fn __str__(&self) -> String {
         format!(
             "FFSResult({:1.4e} M/s, {:?})",
-            self.0.nucleation_rate(),
-            self.0.forward_vec()
+            self.nucleation_rate(),
+            self.forward_vec()
         )
     }
 
@@ -872,68 +931,54 @@ impl BoxedFFSResult {
 
 #[cfg_attr(feature = "python", pyclass)]
 #[allow(dead_code)] // This is used in the python interface
-pub struct FFSLevelRef {
-    res: Arc<Box<dyn ffs::FFSResult>>,
-    level: usize,
-}
+pub struct FFSLevelRef(Arc<FFSLevelResult>);
 
 #[cfg(feature = "python")]
 #[pymethods]
 impl FFSLevelRef {
     #[getter]
     fn get_configs<'py>(&self, py: Python<'py>) -> Vec<Bound<'py, PyArray2<crate::base::Tile>>> {
-        self.res
-            .get_surface(self.level)
-            .configs()
+        self.0
+            .state_list
             .iter()
-            .map(|x| x.to_pyarray_bound(py))
+            .map(|x| x.raw_array().to_pyarray_bound(py))
             .collect()
     }
 
     #[getter]
     fn get_states<'py>(&self) -> Vec<FFSStateRef> {
-        self.res
-            .get_surface(self.level)
-            .states()
+        self.0
+            .state_list
             .iter()
-            .enumerate()
-            .map(|(i, _x)| FFSStateRef {
-                res: self.res.clone(),
-                level: self.level,
-                state: i,
-            })
+            .map(|x| FFSStateRef(x.clone()))
             .collect()
     }
 
     #[getter]
     fn get_previous_indices(&self) -> Vec<usize> {
-        self.res.get_surface(self.level).previous_list()
+        self.0.previous_list.clone()
     }
 
-    #[getter]
-    fn level(&self) -> usize {
-        self.level
-    }
+    // #[getter]
+    // fn level(&self) -> usize {
+    //     (*self.0).level
+    // }
 
     fn get_state(&self, i: usize) -> FFSStateRef {
-        FFSStateRef {
-            res: self.res.clone(),
-            level: self.level,
-            state: i,
-        }
+        FFSStateRef(self.0.state_list[i].clone())
     }
 
     fn has_stored_states(&self) -> bool {
-        self.res.get_surface(self.level).num_stored_states() > 0
+        !self.0.state_list.is_empty()
     }
 
     fn __repr__(&self) -> String {
         format!(
             "FFSLevelRef(n_configs={}, n_trials={}, target_size={}, p_r={}, has_stored_states={})",
-            self.res.get_surface(self.level).num_configs(),
-            self.res.get_surface(self.level).num_trials(),
-            self.res.get_surface(self.level).target_size(),
-            self.res.get_surface(self.level).p_r(),
+            self.0.num_configs(),
+            self.0.num_trials(),
+            self.0.target_size(),
+            self.0.p_r(),
             self.has_stored_states()
         )
     }
@@ -942,36 +987,25 @@ impl FFSLevelRef {
 #[cfg_attr(feature = "python", pyclass)]
 #[allow(dead_code)] // This is used in the python interface
 #[derive(Clone)]
-pub struct FFSStateRef {
-    res: Arc<Box<dyn ffs::FFSResult>>,
-    level: usize,
-    state: usize,
-}
-
-#[cfg(feature = "python")]
-impl FFSStateRef {
-    fn get_st(&self) -> &dyn ClonableState {
-        self.res.get_surface(self.level).get_state(self.state)
-    }
-}
+pub struct FFSStateRef(Arc<StateEnum>);
 
 #[cfg(feature = "python")]
 #[pymethods]
 impl FFSStateRef {
     pub fn time(&self) -> f64 {
-        self.get_st().time()
+        (*self.0).time()
     }
 
     pub fn total_events(&self) -> base::NumEvents {
-        self.get_st().total_events()
+        (*self.0).total_events()
     }
 
     pub fn n_tiles(&self) -> NumTiles {
-        self.get_st().n_tiles()
+        (*self.0).n_tiles()
     }
 
     pub fn clone_state(&self) -> PyState {
-        PyState(self.get_st().clone_as_stateenum())
+        PyState((*self.0).clone())
     }
 
     #[getter]
@@ -981,7 +1015,7 @@ impl FFSStateRef {
         _py: Python<'py>,
     ) -> PyResult<Bound<'py, PyArray2<crate::base::Tile>>> {
         let t = this.borrow();
-        let ra = t.get_st().raw_array();
+        let ra = (*t.0).raw_array();
 
         unsafe { Ok(PyArray2::borrow_from_array_bound(&ra, this.into_any())) }
     }
@@ -992,28 +1026,27 @@ impl FFSStateRef {
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyArray2<crate::base::Tile>>> {
         let t = this.borrow();
-        let ra = t.get_st().raw_array();
+        let ra = (*t.0).raw_array();
 
         Ok(PyArray2::from_array_bound(py, &ra))
     }
 
     pub fn tracking_copy(this: &Bound<Self>) -> PyResult<RustAny> {
         let t = this.borrow();
-        let ra = t.get_st().get_tracker_data();
+        let ra = (*t.0).get_tracker_data();
 
         Ok(ra)
     }
 
     pub fn __repr__(&self) -> String {
-        let s = self.get_st();
         format!(
             "FFSStateRef(n_tiles={}, time={} s, events={}, size=({}, {}), total_rate={})",
-            s.n_tiles(),
-            s.time(),
-            s.total_events(),
-            s.ncols(),
-            s.nrows(),
-            s.total_rate()
+            self.0.n_tiles(),
+            self.0.time(),
+            self.0.total_events(),
+            self.0.ncols(),
+            self.0.nrows(),
+            self.0.total_rate()
         )
     }
 }

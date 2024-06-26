@@ -7,7 +7,7 @@ use pyo3::{
 
 use crate::{
     base::GlueIdent,
-    ffs::{BoxedFFSResult, FFSRunConfig},
+    ffs::{FFSRunConfig, FFSRunResult},
     python::{PyState, PySystem},
     tileset::{self, Bond, CoverStrand, Tile, TileSet},
 };
@@ -172,7 +172,7 @@ impl TileSet {
         config: FFSRunConfig,
         kwargs: Option<&Bound<'py, PyDict>>,
         py: Python<'py>,
-    ) -> PyResult<BoxedFFSResult> {
+    ) -> PyResult<FFSRunResult> {
         let mut c = config;
 
         if let Some(dict) = kwargs {
@@ -183,7 +183,7 @@ impl TileSet {
 
         let res = py.allow_threads(|| self.run_ffs(&c));
         match res {
-            Ok(res) => Ok(BoxedFFSResult(res.into())),
+            Ok(res) => Ok(res.into()),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 err.to_string(),
             )),

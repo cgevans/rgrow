@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::base::{NumEvents, NumTiles, RustAny, Tile};
 use crate::canvas::{Canvas, PointSafeHere};
-use crate::ffs::{BoxedFFSResult, FFSRunConfig, FFSStateRef};
+use crate::ffs::{FFSRunConfig, FFSRunResult, FFSStateRef};
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TrackerData};
 use crate::system::{
@@ -324,7 +324,7 @@ impl PySystem {
         canvas_type: Option<CanvasType>,
         kwargs: Option<Bound<PyDict>>,
         py: Python<'_>,
-    ) -> PyResult<BoxedFFSResult> {
+    ) -> PyResult<FFSRunResult> {
         let mut c = config;
 
         if let Some(dict) = kwargs {

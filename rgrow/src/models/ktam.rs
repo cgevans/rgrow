@@ -1205,7 +1205,7 @@ impl KTAM {
             };
         }
 
-        return (false, acc, Event::None);
+        (false, acc, Event::None)
     }
 
     pub fn total_monomer_attachment_rate_at_point<S: State>(
