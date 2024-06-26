@@ -206,35 +206,6 @@ impl FFSRunConfig {
     }
 }
 
-pub trait FFSResult: Send + Sync {
-    fn nucleation_rate(&self) -> f64;
-    fn forward_vec(&self) -> &Vec<f64>;
-    fn dimerization_rate(&self) -> f64;
-    fn surfaces(&self) -> Vec<&dyn FFSSurface>;
-    fn get_surface(&self, i: usize) -> &dyn FFSSurface;
-}
-
-pub trait FFSSurface: Send + Sync {
-    fn get_config(&self, i: usize) -> ArrayView2<Tile>;
-    fn get_state(&self, i: usize) -> &dyn ClonableState;
-    fn states(&self) -> Vec<&dyn ClonableState> {
-        (0..self.num_stored_states())
-            .map(|i| self.get_state(i))
-            .collect()
-    }
-    fn configs(&self) -> Vec<ArrayView2<Tile>> {
-        (0..self.num_stored_states())
-            .map(|i| self.get_config(i))
-            .collect()
-    }
-    fn previous_list(&self) -> Vec<usize>;
-    fn num_stored_states(&self) -> usize;
-    fn num_configs(&self) -> usize;
-    fn num_trials(&self) -> usize;
-    fn target_size(&self) -> NumTiles;
-    fn p_r(&self) -> f64;
-}
-
 impl TileSet {
     pub fn run_ffs(&self, config: &FFSRunConfig) -> Result<Box<dyn FFSResult>, RgrowError> {
         let canvas_type = self.canvas_type.unwrap_or(CanvasType::Periodic);
@@ -324,35 +295,50 @@ impl TileSet {
     }
 }
 
+
+fn _bounded_nonzero_region_of_array<'a>(
+    arr: &'a ArrayView2<Tile>,
+) -> (ArrayView2<'a, Tile>, usize, usize, usize, usize) {
+    let mut mini = arr.nrows();
+    let mut minj = arr.ncols();
+    let mut maxi = 0;
+    let mut maxj = 0;
+
+    for ((i, j), v) in arr.indexed_iter() {
+        if *v != 0 {
+            if i < mini {
+                mini = i;
+            }
+            if i > maxi {
+                maxi = i;
+            }
+            if j < minj {
+                minj = j;
+            }
+            if j > maxj {
+                maxj = j;
+            }
+        }
+    }
+
+    let subarr = arr.slice(s![mini..maxi + 1, minj..maxj + 1]);
+
+    (subarr, mini, minj, maxi, maxj)
+}
+
+
+fn variance_over_mean2(num_success: usize, num_trials: usize) -> f64 {
+    let ns = num_success as f64;
+    let nt = num_trials as f64;
+    let p = ns / nt;
+    (1. - p) / (ns)
+}
+
+
 pub struct FFSRun<St: ClonableState> {
     pub level_list: Vec<FFSLevel<St>>,
     pub dimerization_rate: f64,
     pub forward_prob: Vec<f64>,
-}
-
-impl<St: ClonableState> FFSResult for FFSRun<St> {
-    fn nucleation_rate(&self) -> Rate {
-        self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
-    }
-
-    fn forward_vec(&self) -> &Vec<f64> {
-        &self.forward_prob
-    }
-
-    fn surfaces(&self) -> Vec<&dyn FFSSurface> {
-        self.level_list
-            .iter()
-            .map(|level| level as &dyn FFSSurface)
-            .collect()
-    }
-
-    fn get_surface(&self, i: usize) -> &dyn FFSSurface {
-        self.level_list.get(i).unwrap()
-    }
-
-    fn dimerization_rate(&self) -> f64 {
-        self.dimerization_rate
-    }
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
@@ -446,36 +432,6 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
     }
 }
 
-fn _bounded_nonzero_region_of_array<'a>(
-    arr: &'a ArrayView2<Tile>,
-) -> (ArrayView2<'a, Tile>, usize, usize, usize, usize) {
-    let mut mini = arr.nrows();
-    let mut minj = arr.ncols();
-    let mut maxi = 0;
-    let mut maxj = 0;
-
-    for ((i, j), v) in arr.indexed_iter() {
-        if *v != 0 {
-            if i < mini {
-                mini = i;
-            }
-            if i > maxi {
-                maxi = i;
-            }
-            if j < minj {
-                minj = j;
-            }
-            if j > maxj {
-                maxj = j;
-            }
-        }
-    }
-
-    let subarr = arr.slice(s![mini..maxi + 1, minj..maxj + 1]);
-
-    (subarr, mini, minj, maxi, maxj)
-}
-
 pub struct FFSLevel<St: ClonableState> {
     pub state_list: Vec<St>,
     pub previous_list: Vec<usize>,
@@ -483,40 +439,6 @@ pub struct FFSLevel<St: ClonableState> {
     pub num_states: usize,
     pub num_trials: usize,
     pub target_size: NumTiles,
-}
-
-impl<St: ClonableState> FFSSurface for FFSLevel<St> {
-    fn get_config(&self, i: usize) -> ArrayView2<Tile> {
-        self.state_list[i].raw_array()
-    }
-
-    fn get_state(&self, i: usize) -> &dyn ClonableState {
-        self.state_list.get(i).unwrap()
-    }
-
-    fn num_configs(&self) -> usize {
-        self.num_states
-    }
-
-    fn target_size(&self) -> NumTiles {
-        self.target_size
-    }
-
-    fn num_trials(&self) -> usize {
-        self.num_trials
-    }
-
-    fn previous_list(&self) -> Vec<usize> {
-        self.previous_list.clone()
-    }
-
-    fn p_r(&self) -> f64 {
-        self.p_r
-    }
-
-    fn num_stored_states(&self) -> usize {
-        self.state_list.len()
-    }
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> {
@@ -728,12 +650,96 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
     }
 }
 
-fn variance_over_mean2(num_success: usize, num_trials: usize) -> f64 {
-    let ns = num_success as f64;
-    let nt = num_trials as f64;
-    let p = ns / nt;
-    (1. - p) / (ns)
+// RESULTS CODE
+
+pub trait FFSResult: Send + Sync {
+    fn nucleation_rate(&self) -> f64;
+    fn forward_vec(&self) -> &Vec<f64>;
+    fn dimerization_rate(&self) -> f64;
+    fn surfaces(&self) -> Vec<&dyn FFSSurface>;
+    fn get_surface(&self, i: usize) -> &dyn FFSSurface;
 }
+
+pub trait FFSSurface: Send + Sync {
+    fn get_config(&self, i: usize) -> ArrayView2<Tile>;
+    fn get_state(&self, i: usize) -> &dyn ClonableState;
+    fn states(&self) -> Vec<&dyn ClonableState> {
+        (0..self.num_stored_states())
+            .map(|i| self.get_state(i))
+            .collect()
+    }
+    fn configs(&self) -> Vec<ArrayView2<Tile>> {
+        (0..self.num_stored_states())
+            .map(|i| self.get_config(i))
+            .collect()
+    }
+    fn previous_list(&self) -> Vec<usize>;
+    fn num_stored_states(&self) -> usize;
+    fn num_configs(&self) -> usize;
+    fn num_trials(&self) -> usize;
+    fn target_size(&self) -> NumTiles;
+    fn p_r(&self) -> f64;
+}
+
+impl<St: ClonableState> FFSResult for FFSRun<St> {
+    fn nucleation_rate(&self) -> Rate {
+        self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
+    }
+
+    fn forward_vec(&self) -> &Vec<f64> {
+        &self.forward_prob
+    }
+
+    fn surfaces(&self) -> Vec<&dyn FFSSurface> {
+        self.level_list
+            .iter()
+            .map(|level| level as &dyn FFSSurface)
+            .collect()
+    }
+
+    fn get_surface(&self, i: usize) -> &dyn FFSSurface {
+        self.level_list.get(i).unwrap()
+    }
+
+    fn dimerization_rate(&self) -> f64 {
+        self.dimerization_rate
+    }
+}
+
+impl<St: ClonableState> FFSSurface for FFSLevel<St> {
+    fn get_config(&self, i: usize) -> ArrayView2<Tile> {
+        self.state_list[i].raw_array()
+    }
+
+    fn get_state(&self, i: usize) -> &dyn ClonableState {
+        self.state_list.get(i).unwrap()
+    }
+
+    fn num_configs(&self) -> usize {
+        self.num_states
+    }
+
+    fn target_size(&self) -> NumTiles {
+        self.target_size
+    }
+
+    fn num_trials(&self) -> usize {
+        self.num_trials
+    }
+
+    fn previous_list(&self) -> Vec<usize> {
+        self.previous_list.clone()
+    }
+
+    fn p_r(&self) -> f64 {
+        self.p_r
+    }
+
+    fn num_stored_states(&self) -> usize {
+        self.state_list.len()
+    }
+}
+
 
 #[cfg_attr(feature = "python", pyclass(name = "FFSResult"))]
 #[allow(dead_code)] // This is used in the python interface
