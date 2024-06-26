@@ -10,6 +10,7 @@ use crate::{
 use ndarray::prelude::*;
 
 use enum_dispatch::enum_dispatch;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 #[enum_dispatch]
@@ -97,7 +98,7 @@ impl ClonableState for QuadTreeState<CanvasTube, PrintEventTracker> {
 }
 
 #[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData, CloneAsStateEnum)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StateEnum {
     SquareCanvasNullTracker(QuadTreeState<CanvasSquare, NullStateTracker>),
     PeriodicCanvasNoTracker(QuadTreeState<CanvasPeriodic, NullStateTracker>),
@@ -187,8 +188,9 @@ pub trait StateWithCreate: State + Sized {
     fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuadTreeState<C: Canvas, T: StateTracker> {
+    // #[serde(skip_serializing)] 
     pub rates: QuadTreeSquareArray<Rate>,
     pub canvas: C,
     ntiles: NumTiles,
@@ -538,7 +540,7 @@ pub trait StateTracker: Clone + Debug + Sync + Send {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct NullStateTracker;
 
 impl StateTracker for NullStateTracker {
@@ -557,7 +559,7 @@ impl StateTracker for NullStateTracker {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrderTracker {
     pub order: u64,
     pub arr: Array2<NumEvents>,
@@ -625,7 +627,7 @@ impl StateTracker for OrderTracker {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LastAttachTimeTracker {
     pub arr: Array2<f64>,
 }
@@ -684,7 +686,7 @@ impl StateTracker for LastAttachTimeTracker {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrintEventTracker();
 
 impl StateTracker for PrintEventTracker {

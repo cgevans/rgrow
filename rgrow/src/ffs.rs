@@ -16,6 +16,7 @@ use polars::prelude::*;
 #[cfg(feature = "python")]
 use python::PyState;
 use ratestore::RateStore;
+use serde::{Deserialize, Serialize};
 
 use super::*;
 //use ndarray::prelude::*;
@@ -44,7 +45,7 @@ use numpy::PyArray1;
 #[cfg(feature = "python")]
 use pyo3_polars::PyDataFrame;
 
-use state::{ClonableState, State, StateEnum, StateStatus, StateWithCreate};
+use state::{ClonableState, State, StateEnum, StateStatus, StateWithCreate, TrackerData};
 
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
@@ -666,6 +667,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 // RESULTS CODE
 
 #[cfg_attr(feature = "python", pyclass)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FFSRunResult {
     pub level_list: Vec<Arc<FFSLevelResult>>,
     pub dimerization_rate: f64,
@@ -690,6 +692,7 @@ where
 }
 
 #[cfg_attr(feature = "python", pyclass)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FFSLevelResult {
     pub state_list: Vec<Arc<StateEnum>>,
     pub previous_list: Vec<usize>,

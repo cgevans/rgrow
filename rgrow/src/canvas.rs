@@ -389,7 +389,7 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CanvasSquare(Array2<Tile>);
 
 impl CanvasCreate for CanvasSquare {
@@ -483,7 +483,7 @@ impl Canvas for CanvasSquare {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CanvasPeriodic(Array2<Tile>);
 
 impl CanvasCreate for CanvasPeriodic {
@@ -557,7 +557,7 @@ impl Canvas for CanvasPeriodic {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CanvasTube(Array2<Tile>);
 
 impl CanvasCreate for CanvasTube {

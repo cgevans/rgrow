@@ -1,7 +1,8 @@
+use std::fs::File;
 use std::ops::DerefMut;
 use std::time::Duration;
 
-use crate::base::{NumEvents, NumTiles, RustAny, Tile};
+use crate::base::{NumEvents, NumTiles, RgrowError, RustAny, Tile};
 use crate::canvas::{Canvas, PointSafeHere};
 use crate::ffs::{FFSRunConfig, FFSRunResult, FFSStateRef};
 use crate::ratestore::RateStore;
@@ -107,6 +108,15 @@ impl PyState {
 
     pub fn print_debug(&self) {
         println!("{:?}", self.0);
+    }
+
+    pub fn write(&self, filename: &str) -> Result<(), RgrowError> {
+        Ok(serde_json::to_writer(File::create(filename)?, &self.0).unwrap())
+    }
+
+    #[staticmethod]
+    pub fn read(filename: &str) -> Result<Self, RgrowError> {
+        Ok(PyState(serde_json::from_reader(File::open(filename)?).unwrap()))
     }
 }
 
