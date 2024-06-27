@@ -539,10 +539,10 @@ impl TryFrom<&str> for TrackingType {
         match value.to_lowercase().as_str() {
             "none" => Ok(TrackingType::None),
             "order" => Ok(TrackingType::Order),
-            "lastattach" => Ok(TrackingType::LastAttachTime),
+            "lastattachtime" => Ok(TrackingType::LastAttachTime),
             "printevent" => Ok(TrackingType::PrintEvent),
             _ => Err(StringConvError(format!(
-                "Unknown tracking type {}.  Valid options are \"none\" and \"order\".",
+                "Unknown tracking type {}.  Valid options are \"none\", \"order\", \"lastattachtime\", \"printevent\".",
                 value
             ))),
         }

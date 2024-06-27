@@ -46,7 +46,10 @@ use numpy::PyArray1;
 #[cfg(feature = "python")]
 use pyo3_polars::PyDataFrame;
 
-use state::{ClonableState, StateEnum, StateStatus, StateWithCreate, TrackerData};
+use state::{
+    ClonableState, LastAttachTimeTracker, PrintEventTracker, StateEnum, StateStatus,
+    StateWithCreate, TrackerData,
+};
 
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
@@ -212,103 +215,15 @@ impl FFSRunConfig {
 
 impl TileSet {
     pub fn run_ffs(&self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {
-        let canvas_type = self.canvas_type.unwrap_or(CanvasType::Periodic);
         let model = self.model.unwrap_or(Model::KTAM);
-        let tracking = self.tracking.unwrap_or(TrackingType::None);
-
-        match (model, canvas_type, tracking) {
-            (Model::KTAM, CanvasType::Square, TrackingType::None) => Ok(FFSRun::<
-                QuadTreeState<CanvasSquare, NullStateTracker>,
-            >::create_from_tileset::<KTAM>(
-                self, config
-            )?
-            .into()),
-            (Model::KTAM, CanvasType::Square, TrackingType::Order) => Ok(FFSRun::<
-                QuadTreeState<CanvasSquare, OrderTracker>,
-            >::create_from_tileset::<
-                KTAM,
-            >(
-                self, config
-            )?
-            .into()),
-            (Model::KTAM, CanvasType::Periodic, TrackingType::None) => Ok(FFSRun::<
-                QuadTreeState<CanvasPeriodic, NullStateTracker>,
-            >::create_from_tileset::<
-                KTAM,
-            >(
-                self, config
-            )?
-            .into()),
-            (Model::KTAM, CanvasType::Periodic, TrackingType::Order) => {
-                Ok(
-                    FFSRun::<QuadTreeState<CanvasPeriodic, OrderTracker>>::create_from_tileset::<
-                        KTAM,
-                    >(self, config)?
-                    .into(),
-                )
-            }
-            (Model::KTAM, CanvasType::Tube, TrackingType::None) => Ok(FFSRun::<
-                QuadTreeState<CanvasTube, NullStateTracker>,
-            >::create_from_tileset::<KTAM>(
-                self, config
-            )?
-            .into()),
-            (Model::KTAM, CanvasType::Tube, TrackingType::Order) => Ok(FFSRun::<
-                QuadTreeState<CanvasTube, OrderTracker>,
-            >::create_from_tileset::<KTAM>(
-                self, config
-            )?
-            .into()),
-            (Model::ATAM, _, _) => Err(GrowError::FFSCannotRunATAM.into()),
-            (Model::OldKTAM, CanvasType::Square, TrackingType::None) => {
-                Ok(
-                    FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create_from_tileset::<
-                        OldKTAM,
-                    >(self, config)?
-                    .into(),
-                )
-            }
-            (Model::OldKTAM, CanvasType::Square, TrackingType::Order) => {
-                Ok(
-                    FFSRun::<QuadTreeState<CanvasSquare, OrderTracker>>::create_from_tileset::<
-                        OldKTAM,
-                    >(self, config)?
-                    .into(),
-                )
-            }
-            (Model::OldKTAM, CanvasType::Periodic, TrackingType::None) => Ok(FFSRun::<
-                QuadTreeState<CanvasPeriodic, NullStateTracker>,
-            >::create_from_tileset::<
-                OldKTAM,
-            >(
-                self, config
-            )?
-            .into()),
-            (Model::OldKTAM, CanvasType::Periodic, TrackingType::Order) => {
-                Ok(
-                    FFSRun::<QuadTreeState<CanvasPeriodic, OrderTracker>>::create_from_tileset::<
-                        OldKTAM,
-                    >(self, config)?
-                    .into(),
-                )
-            }
-            (Model::OldKTAM, CanvasType::Tube, TrackingType::None) => {
-                Ok(
-                    FFSRun::<QuadTreeState<CanvasTube, NullStateTracker>>::create_from_tileset::<
-                        OldKTAM,
-                    >(self, config)?
-                    .into(),
-                )
-            }
-            (Model::OldKTAM, CanvasType::Tube, TrackingType::Order) => {
-                Ok(
-                    FFSRun::<QuadTreeState<CanvasTube, OrderTracker>>::create_from_tileset::<
-                        OldKTAM,
-                    >(self, config)?
-                    .into(),
-                )
-            }
-            _ => todo!(),
+        match model {
+            Model::KTAM => Ok(FFSRunResult::run_from_tileset_with_model::<KTAM>(
+                self, config,
+            )?),
+            Model::ATAM => Err(GrowError::FFSCannotRunATAM.into()),
+            Model::OldKTAM => Ok(FFSRunResult::run_from_tileset_with_model::<OldKTAM>(
+                self, config,
+            )?),
         }
     }
 }
@@ -774,6 +689,85 @@ impl FFSRunResult {
 
     pub fn dimerization_rate(&self) -> f64 {
         self.dimerization_rate
+    }
+
+    pub fn run_from_tileset_with_model<Sy: SystemWithDimers + System + FromTileSet>(
+        tileset: &TileSet,
+        config: &FFSRunConfig,
+    ) -> Result<FFSRunResult, RgrowError> {
+        let mut sys = Sy::from_tileset(tileset)?;
+        let c = {
+            let mut c = config.clone();
+            c.canvas_size = match tileset.size.unwrap_or(SIZE_DEFAULT) {
+                tileset::Size::Single(x) => (x, x),
+                tileset::Size::Pair(p) => p,
+            };
+            c
+        };
+
+        let canvas_type = tileset.canvas_type.unwrap_or(CanvasType::Periodic);
+        // let model = tileset.model.unwrap_or(Model::KTAM);
+        let tracking = tileset.tracking.unwrap_or(TrackingType::None);
+
+        match (canvas_type, tracking) {
+            (CanvasType::Square, TrackingType::None) => Ok(FFSRun::<
+                QuadTreeState<CanvasSquare, NullStateTracker>,
+            >::create(&mut sys, &c)?
+            .into()),
+            (CanvasType::Square, TrackingType::Order) => Ok(FFSRun::<
+                QuadTreeState<CanvasSquare, OrderTracker>,
+            >::create(&mut sys, &c)?
+            .into()),
+            (CanvasType::Square, TrackingType::LastAttachTime) => Ok(FFSRun::<
+                QuadTreeState<CanvasSquare, LastAttachTimeTracker>,
+            >::create(
+                &mut sys, &c
+            )?
+            .into()),
+            (CanvasType::Square, TrackingType::PrintEvent) => {
+                Ok(
+                    FFSRun::<QuadTreeState<CanvasSquare, PrintEventTracker>>::create(&mut sys, &c)?
+                        .into(),
+                )
+            }
+            (CanvasType::Periodic, TrackingType::None) => Ok(FFSRun::<
+                QuadTreeState<CanvasPeriodic, NullStateTracker>,
+            >::create(&mut sys, &c)?
+            .into()),
+            (CanvasType::Periodic, TrackingType::Order) => Ok(FFSRun::<
+                QuadTreeState<CanvasPeriodic, OrderTracker>,
+            >::create(&mut sys, &c)?
+            .into()),
+            (CanvasType::Periodic, TrackingType::LastAttachTime) => Ok(FFSRun::<
+                QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>,
+            >::create(
+                &mut sys, &c
+            )?
+            .into()),
+            (CanvasType::Periodic, TrackingType::PrintEvent) => Ok(FFSRun::<
+                QuadTreeState<CanvasPeriodic, PrintEventTracker>,
+            >::create(
+                &mut sys, &c
+            )?
+            .into()),
+            (CanvasType::Tube, TrackingType::None) => Ok(FFSRun::<
+                QuadTreeState<CanvasTube, NullStateTracker>,
+            >::create(&mut sys, &c)?
+            .into()),
+            (CanvasType::Tube, TrackingType::Order) => {
+                Ok(FFSRun::<QuadTreeState<CanvasTube, OrderTracker>>::create(&mut sys, &c)?.into())
+            }
+            (CanvasType::Tube, TrackingType::LastAttachTime) => Ok(FFSRun::<
+                QuadTreeState<CanvasTube, LastAttachTimeTracker>,
+            >::create(
+                &mut sys, &c
+            )?
+            .into()),
+            (CanvasType::Tube, TrackingType::PrintEvent) => Ok(FFSRun::<
+                QuadTreeState<CanvasTube, PrintEventTracker>,
+            >::create(&mut sys, &c)?
+            .into()),
+        }
     }
 }
 
