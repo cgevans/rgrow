@@ -183,7 +183,7 @@ impl TileSet {
 
         let res = py.allow_threads(|| self.run_ffs(&c));
         match res {
-            Ok(res) => Ok(res.into()),
+            Ok(res) => Ok(res),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 err.to_string(),
             )),

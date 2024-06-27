@@ -12,10 +12,12 @@ use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
 use canvas::Canvas;
 use num_traits::Num;
-#[cfg(feature = "python")]
 use polars::prelude::*;
 #[cfg(feature = "python")]
+use pyo3_polars::error::PyPolarsErr;
+#[cfg(feature = "python")]
 use python::PyState;
+#[cfg(feature = "python")]
 use ratestore::RateStore;
 use serde::{Deserialize, Serialize};
 
@@ -51,11 +53,11 @@ use state::{
     StateWithCreate, TrackerData,
 };
 
-use system::{Orientation, System};
+use system::{DynSystem, Orientation, System, SystemEnum};
 //use std::convert::{TryFrom, TryInto};
 
 /// Configuration options for FFS.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", pyclass(get_all, set_all))]
 pub struct FFSRunConfig {
     /// Use constant-variance, variable-configurations-per-surface method.
@@ -79,6 +81,8 @@ pub struct FFSRunConfig {
     pub keep_configs: bool,
     pub min_nuc_rate: Option<Rate>,
     pub canvas_size: (usize, usize),
+    pub canvas_type: CanvasType,
+    pub tracking: TrackingType,
     pub target_size: NumTiles,
 }
 
@@ -99,7 +103,9 @@ impl Default for FFSRunConfig {
             size_step: 1,
             keep_configs: false,
             min_nuc_rate: None,
-            canvas_size: (64, 64),
+            canvas_size: (32, 32),
+            canvas_type: CanvasType::Periodic,
+            tracking: TrackingType::None,
             target_size: 100,
         }
     }
@@ -216,14 +222,21 @@ impl FFSRunConfig {
 impl TileSet {
     pub fn run_ffs(&self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {
         let model = self.model.unwrap_or(Model::KTAM);
+        let config = {
+            let mut c = config.clone();
+            c.canvas_size = match self.size.unwrap_or(SIZE_DEFAULT) {
+                tileset::Size::Single(x) => (x, x),
+                tileset::Size::Pair(p) => p,
+            };
+            c.canvas_type = self.canvas_type.unwrap_or(CanvasType::Periodic);
+            c.tracking = self.tracking.unwrap_or(TrackingType::None);
+            c
+        };
+
         match model {
-            Model::KTAM => Ok(FFSRunResult::run_from_tileset_with_model::<KTAM>(
-                self, config,
-            )?),
+            Model::KTAM => KTAM::from_tileset(self)?.run_ffs(&config),
             Model::ATAM => Err(GrowError::FFSCannotRunATAM.into()),
-            Model::OldKTAM => Ok(FFSRunResult::run_from_tileset_with_model::<OldKTAM>(
-                self, config,
-            )?),
+            Model::OldKTAM => OldKTAM::from_tileset(self)?.run_ffs(&config),
         }
     }
 }
@@ -590,9 +603,13 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 #[cfg_attr(feature = "python", pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSRunResult {
+    #[serde(skip)]
     pub level_list: Vec<Arc<FFSLevelResult>>,
     pub dimerization_rate: f64,
     pub forward_prob: Vec<f64>,
+    pub ffs_config: Option<FFSRunConfig>,
+    #[serde(skip)]
+    pub system: Option<SystemEnum>,
 }
 
 impl<St: ClonableState> From<FFSRun<St>> for FFSRunResult
@@ -608,6 +625,8 @@ where
                 .collect(),
             dimerization_rate: value.dimerization_rate,
             forward_prob: value.forward_prob,
+            ffs_config: None,
+            system: None,
         }
     }
 }
@@ -691,149 +710,7 @@ impl FFSRunResult {
         self.dimerization_rate
     }
 
-    pub fn run_from_tileset_with_model<Sy: SystemWithDimers + System + FromTileSet>(
-        tileset: &TileSet,
-        config: &FFSRunConfig,
-    ) -> Result<FFSRunResult, RgrowError> {
-        let mut sys = Sy::from_tileset(tileset)?;
-        let c = {
-            let mut c = config.clone();
-            c.canvas_size = match tileset.size.unwrap_or(SIZE_DEFAULT) {
-                tileset::Size::Single(x) => (x, x),
-                tileset::Size::Pair(p) => p,
-            };
-            c
-        };
-
-        let canvas_type = tileset.canvas_type.unwrap_or(CanvasType::Periodic);
-        // let model = tileset.model.unwrap_or(Model::KTAM);
-        let tracking = tileset.tracking.unwrap_or(TrackingType::None);
-
-        match (canvas_type, tracking) {
-            (CanvasType::Square, TrackingType::None) => Ok(FFSRun::<
-                QuadTreeState<CanvasSquare, NullStateTracker>,
-            >::create(&mut sys, &c)?
-            .into()),
-            (CanvasType::Square, TrackingType::Order) => Ok(FFSRun::<
-                QuadTreeState<CanvasSquare, OrderTracker>,
-            >::create(&mut sys, &c)?
-            .into()),
-            (CanvasType::Square, TrackingType::LastAttachTime) => Ok(FFSRun::<
-                QuadTreeState<CanvasSquare, LastAttachTimeTracker>,
-            >::create(
-                &mut sys, &c
-            )?
-            .into()),
-            (CanvasType::Square, TrackingType::PrintEvent) => {
-                Ok(
-                    FFSRun::<QuadTreeState<CanvasSquare, PrintEventTracker>>::create(&mut sys, &c)?
-                        .into(),
-                )
-            }
-            (CanvasType::Periodic, TrackingType::None) => Ok(FFSRun::<
-                QuadTreeState<CanvasPeriodic, NullStateTracker>,
-            >::create(&mut sys, &c)?
-            .into()),
-            (CanvasType::Periodic, TrackingType::Order) => Ok(FFSRun::<
-                QuadTreeState<CanvasPeriodic, OrderTracker>,
-            >::create(&mut sys, &c)?
-            .into()),
-            (CanvasType::Periodic, TrackingType::LastAttachTime) => Ok(FFSRun::<
-                QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>,
-            >::create(
-                &mut sys, &c
-            )?
-            .into()),
-            (CanvasType::Periodic, TrackingType::PrintEvent) => Ok(FFSRun::<
-                QuadTreeState<CanvasPeriodic, PrintEventTracker>,
-            >::create(
-                &mut sys, &c
-            )?
-            .into()),
-            (CanvasType::Tube, TrackingType::None) => Ok(FFSRun::<
-                QuadTreeState<CanvasTube, NullStateTracker>,
-            >::create(&mut sys, &c)?
-            .into()),
-            (CanvasType::Tube, TrackingType::Order) => {
-                Ok(FFSRun::<QuadTreeState<CanvasTube, OrderTracker>>::create(&mut sys, &c)?.into())
-            }
-            (CanvasType::Tube, TrackingType::LastAttachTime) => Ok(FFSRun::<
-                QuadTreeState<CanvasTube, LastAttachTimeTracker>,
-            >::create(
-                &mut sys, &c
-            )?
-            .into()),
-            (CanvasType::Tube, TrackingType::PrintEvent) => Ok(FFSRun::<
-                QuadTreeState<CanvasTube, PrintEventTracker>,
-            >::create(&mut sys, &c)?
-            .into()),
-        }
-    }
-}
-
-impl FFSLevelResult {
-    pub fn get_config(&self, i: usize) -> ArrayView2<Tile> {
-        self.state_list[i].raw_array()
-    }
-
-    pub fn get_state(&self, i: usize) -> Option<Arc<StateEnum>> {
-        self.state_list.get(i).map(|x| (*x).clone())
-    }
-
-    pub fn num_configs(&self) -> usize {
-        self.num_states
-    }
-
-    pub fn target_size(&self) -> NumTiles {
-        self.target_size
-    }
-
-    pub fn num_trials(&self) -> usize {
-        self.num_trials
-    }
-
-    pub fn previous_list(&self) -> Vec<usize> {
-        self.previous_list.clone()
-    }
-
-    pub fn p_r(&self) -> f64 {
-        self.p_r
-    }
-
-    pub fn num_stored_states(&self) -> usize {
-        self.state_list.len()
-    }
-}
-
-#[cfg(feature = "python")]
-#[pymethods]
-impl FFSRunResult {
-    /// Nucleation rate, in M/s.  Calculated from the forward probability vector,
-    /// and dimerization rate.
-    #[getter]
-    fn get_nucleation_rate(&self) -> f64 {
-        self.nucleation_rate()
-    }
-
-    #[getter]
-    fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.forward_vec().to_pyarray_bound(py)
-    }
-
-    #[getter]
-    fn get_dimerization_rate(&self) -> f64 {
-        self.dimerization_rate()
-    }
-
-    #[getter]
-    fn get_surfaces(&self) -> Vec<FFSLevelRef> {
-        self.surfaces()
-            .iter()
-            .map(|f| FFSLevelRef(f.upgrade().unwrap().clone()))
-            .collect()
-    }
-
-    fn surfaces_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
+    fn surfaces_dataframe(&self) -> Result<DataFrame, PolarsError> {
         let surfaces = self.surfaces();
 
         let d = df!(
@@ -845,10 +722,10 @@ impl FFSRunResult {
         )
         .unwrap();
 
-        Ok(PyDataFrame(d))
+        Ok(d)
     }
 
-    fn configs_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
+    fn configs_dataframe(&self) -> Result<DataFrame, PolarsError> {
         let mut sizes = Vec::new();
         let mut times = Vec::new();
         let mut previndices = Vec::new();
@@ -914,15 +791,15 @@ impl FFSRunResult {
 
         let a = s.get_tracker_data();
 
-        if let Some(_) = a.0.downcast_ref::<Array2<u64>>() {
+        if a.0.downcast_ref::<Array2<u64>>().is_some() {
             let mut arrs = Vec::new();
             let mut minis = Vec::new();
             let mut minjs = Vec::new();
             let mut shapeis = Vec::new();
             let mut shapejs = Vec::new();
 
-            for (_, surface) in self.surfaces().iter().enumerate() {
-                for (_, state) in surface.upgrade().unwrap().state_list.iter().enumerate() {
+            for surface in self.surfaces().iter() {
+                for state in surface.upgrade().unwrap().state_list.iter() {
                     if let Some(val) = state.get_tracker_data().0.downcast_ref::<Array2<u64>>() {
                         let v = &val.view();
                         let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(v);
@@ -948,15 +825,15 @@ impl FFSRunResult {
                 ])
                 .collect()
                 .unwrap();
-        } else if let Some(_) = a.0.downcast_ref::<Array2<f64>>() {
+        } else if a.0.downcast_ref::<Array2<f64>>().is_some() {
             let mut arrs = Vec::new();
             let mut minis = Vec::new();
             let mut minjs = Vec::new();
             let mut shapeis = Vec::new();
             let mut shapejs = Vec::new();
 
-            for (_, surface) in self.surfaces().iter().enumerate() {
-                for (_, state) in surface.upgrade().unwrap().state_list.iter().enumerate() {
+            for surface in self.surfaces().iter() {
+                for state in surface.upgrade().unwrap().state_list.iter() {
                     if let Some(val) = state.get_tracker_data().0.downcast_ref::<Array2<f64>>() {
                         let v = &val.view();
                         let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(v);
@@ -982,12 +859,169 @@ impl FFSRunResult {
                 ])
                 .collect()
                 .unwrap();
-        } else if let Some(_) = a.0.downcast_ref::<()>() {
+        } else if a.0.downcast_ref::<()>().is_some() {
         } else {
             println!("Unknown tracker data type: skipping tracker data.")
         }
 
-        Ok(PyDataFrame(df))
+        Ok(df)
+    }
+
+    pub fn write_files(&self, prefix: &str) -> Result<(), PolarsError> {
+        let mut sdf = self.surfaces_dataframe()?;
+        let mut cdf = self.configs_dataframe()?;
+
+        let file = std::fs::File::create(format!("{}.surfaces.parquet", prefix))?;
+        ParquetWriter::new(file).finish(&mut sdf)?;
+
+        let file = std::fs::File::create(format!("{}.configurations.parquet", prefix))?;
+        ParquetWriter::new(file).finish(&mut cdf)?;
+
+        let file = std::fs::File::create(format!("{}.ffs_result.json", prefix))?;
+        serde_json::to_writer_pretty(file, self).unwrap();
+
+        Ok(())
+    }
+
+    pub fn run_from_system<Sy: SystemWithDimers + System>(
+        sys: &mut Sy,
+        config: &FFSRunConfig,
+    ) -> Result<FFSRunResult, RgrowError>
+    where
+        SystemEnum: From<Sy>,
+    {
+        let mut res: FFSRunResult = (match (config.canvas_type, config.tracking) {
+            (CanvasType::Square, TrackingType::None) => {
+                FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Square, TrackingType::Order) => {
+                FFSRun::<QuadTreeState<CanvasSquare, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Square, TrackingType::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasSquare, LastAttachTimeTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Square, TrackingType::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasSquare, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Periodic, TrackingType::None) => {
+                FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Periodic, TrackingType::Order) => {
+                FFSRun::<QuadTreeState<CanvasPeriodic, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Periodic, TrackingType::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Periodic, TrackingType::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasPeriodic, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Tube, TrackingType::None) => {
+                FFSRun::<QuadTreeState<CanvasTube, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Tube, TrackingType::Order) => {
+                FFSRun::<QuadTreeState<CanvasTube, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Tube, TrackingType::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasTube, LastAttachTimeTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Tube, TrackingType::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasTube, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+        })?;
+
+        res.ffs_config = Some(config.clone());
+        res.system = Some(sys.clone().into());
+
+        Ok(res)
+    }
+}
+
+impl FFSLevelResult {
+    pub fn get_config(&self, i: usize) -> ArrayView2<Tile> {
+        self.state_list[i].raw_array()
+    }
+
+    pub fn get_state(&self, i: usize) -> Option<Arc<StateEnum>> {
+        self.state_list.get(i).map(|x| (*x).clone())
+    }
+
+    pub fn num_configs(&self) -> usize {
+        self.num_states
+    }
+
+    pub fn target_size(&self) -> NumTiles {
+        self.target_size
+    }
+
+    pub fn num_trials(&self) -> usize {
+        self.num_trials
+    }
+
+    pub fn previous_list(&self) -> Vec<usize> {
+        self.previous_list.clone()
+    }
+
+    pub fn p_r(&self) -> f64 {
+        self.p_r
+    }
+
+    pub fn num_stored_states(&self) -> usize {
+        self.state_list.len()
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl FFSRunResult {
+    /// Nucleation rate, in M/s.  Calculated from the forward probability vector,
+    /// and dimerization rate.
+    #[getter]
+    fn get_nucleation_rate(&self) -> f64 {
+        self.nucleation_rate()
+    }
+
+    #[getter]
+    fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        self.forward_vec().to_pyarray_bound(py)
+    }
+
+    #[getter]
+    fn get_dimerization_rate(&self) -> f64 {
+        self.dimerization_rate()
+    }
+
+    #[getter]
+    fn get_surfaces(&self) -> Vec<FFSLevelRef> {
+        self.surfaces()
+            .iter()
+            .map(|f| FFSLevelRef(f.upgrade().unwrap().clone()))
+            .collect()
+    }
+
+    #[pyo3(name = "surfaces_dataframe")]
+    fn py_surfaces_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
+        self.surfaces_dataframe()
+            .map(PyDataFrame)
+            .map_err(|e| PyPolarsErr::from(e).into())
+    }
+
+    #[pyo3(name = "configs_dataframe")]
+    fn py_configs_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
+        self.configs_dataframe()
+            .map(PyDataFrame)
+            .map_err(|e| PyPolarsErr::from(e).into())
     }
 
     fn __str__(&self) -> String {
@@ -1010,18 +1044,18 @@ impl FFSRunResult {
             .collect()
     }
 
-    fn write_json(&self, filename: &str) -> PyResult<()> {
-        let f = std::fs::File::create(filename)?;
-        serde_json::to_writer(f, self).unwrap();
-        Ok(())
+    #[pyo3(name = "write_files")]
+    fn py_write_files(&self, prefix: &str) -> PyResult<()> {
+        self.write_files(prefix)
+            .map_err(|e| PyPolarsErr::from(e).into())
     }
 
-    #[staticmethod]
-    fn read_json(filename: &str) -> PyResult<Self> {
-        let f = std::fs::File::open(filename)?;
-        let r: Self = serde_json::from_reader(f).unwrap();
-        Ok(r)
-    }
+    // #[staticmethod]
+    // fn read_json(filename: &str) -> PyResult<Self> {
+    //     let f = std::fs::File::open(filename)?;
+    //     let r: Self = serde_json::from_reader(f).unwrap();
+    //     Ok(r)
+    // }
 }
 
 #[cfg_attr(feature = "python", pyclass)]
@@ -1041,7 +1075,7 @@ impl FFSLevelRef {
     }
 
     #[getter]
-    fn get_states<'py>(&self) -> Vec<FFSStateRef> {
+    fn get_states(&self) -> Vec<FFSStateRef> {
         self.0
             .state_list
             .iter()
