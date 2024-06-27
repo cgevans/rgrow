@@ -21,7 +21,7 @@ from .rgrow import (
     System,
     State,
     EvolveBounds,
-    FFSStateRef
+    FFSStateRef,
 )
 import attrs
 import attr
@@ -56,7 +56,9 @@ def _system_name_canvas(self: System, state: State | FFSStateRef) -> np.ndarray:
 System.name_canvas = _system_name_canvas  # type: ignore
 
 
-def _system_color_canvas(self: System, state: State | np.ndarray | FFSStateRef) -> np.ndarray:
+def _system_color_canvas(
+    self: System, state: State | np.ndarray | FFSStateRef
+) -> np.ndarray:
     """Returns the current canvas for state, as an array of tile colors."""
 
     if isinstance(state, (State, FFSStateRef)):
@@ -170,11 +172,9 @@ def _system_plot_canvas(
         mml = sys.calc_mismatch_locations(state)
         for i, j in zip(*mml.nonzero()):
             d = mml[i, j]
-            if d > 2:
-                # will have already been marked by the other side
-                # mismatches are designated by 8*N+4*E+2*S+1*W
-                continue
-            elif d == 1:  # W
+            # We check only 0b1 (west) and 0b10 (south), as 0b100 (east) and 0b1000 (north)
+            # will be covered by the tile on the other side of the mismatch.
+            if int(d) & 1:  # W
                 ax.add_patch(
                     plt.Rectangle(
                         (j - 0.75, i - 0.25),
@@ -186,7 +186,7 @@ def _system_plot_canvas(
                         linewidth=0,
                     )
                 )
-            elif d == 2:  # S
+            if int(d) & 2:  # S
                 ax.add_patch(
                     plt.Rectangle(
                         (j - 0.25, i + 0.25),

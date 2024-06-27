@@ -1,3 +1,7 @@
+# 0.15.1
+
+- Fix Python mismatch display code (some mismatches were not shown).
+
 # 0.15.0
 
 - Start order tracking at 1 (0 is a site that was never filled).
