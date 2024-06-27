@@ -818,7 +818,13 @@ impl SDC {
                     if let Some(g) = maybe_g {
                         scaffold
                             .index_axis_mut(ndarray::Axis(1), i)
-                            .fill(*glue_name_map.get(g).unwrap());
+                            .fill(
+                                *glue_name_map
+                                    .get(g)
+                                    .expect(
+                                        format!("ERROR: Glue {} ... Perhaps it is in the glues array, but not in any of the defined strands ?", g).as_str()
+                                    )
+                            );
                     } else {
                         scaffold.index_axis_mut(ndarray::Axis(1), i).fill(0);
                     }
