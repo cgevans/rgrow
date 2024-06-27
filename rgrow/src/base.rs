@@ -201,6 +201,8 @@ impl IntoPy<PyObject> for RustAny {
             (val.0, val.1).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<(usize, usize, Ident)>() {
             (val.0, val.1, val.2.clone()).into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<()>() {
+            val.into_py(py)
         } else {
             panic!("Cannot convert Any to PyAny");
         }

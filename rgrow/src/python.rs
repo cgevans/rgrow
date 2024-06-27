@@ -116,7 +116,9 @@ impl PyState {
 
     #[staticmethod]
     pub fn read(filename: &str) -> Result<Self, RgrowError> {
-        Ok(PyState(serde_json::from_reader(File::open(filename)?).unwrap()))
+        Ok(PyState(
+            serde_json::from_reader(File::open(filename)?).unwrap(),
+        ))
     }
 }
 

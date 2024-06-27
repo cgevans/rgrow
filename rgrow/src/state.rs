@@ -190,7 +190,7 @@ pub trait StateWithCreate: State + Sized {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuadTreeState<C: Canvas, T: StateTracker> {
-    // #[serde(skip_serializing)] 
+    // #[serde(skip_serializing)]
     pub rates: QuadTreeSquareArray<Rate>,
     pub canvas: C,
     ntiles: NumTiles,

@@ -11,6 +11,7 @@ use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
 use canvas::Canvas;
+use num_traits::Num;
 #[cfg(feature = "python")]
 use polars::prelude::*;
 #[cfg(feature = "python")]
@@ -23,7 +24,7 @@ use super::*;
 //use ndarray::Zip;
 use base::{NumTiles, Rate};
 
-use ndarray::{s, ArrayView2};
+use ndarray::{s, Array2, ArrayView2};
 #[cfg(feature = "python")]
 use numpy::{PyArray2, ToPyArray};
 use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
@@ -45,7 +46,7 @@ use numpy::PyArray1;
 #[cfg(feature = "python")]
 use pyo3_polars::PyDataFrame;
 
-use state::{ClonableState, State, StateEnum, StateStatus, StateWithCreate, TrackerData};
+use state::{ClonableState, StateEnum, StateStatus, StateWithCreate, TrackerData};
 
 use system::{Orientation, System};
 //use std::convert::{TryFrom, TryInto};
@@ -312,16 +313,16 @@ impl TileSet {
     }
 }
 
-fn _bounded_nonzero_region_of_array<'a>(
-    arr: &'a ArrayView2<Tile>,
-) -> (ArrayView2<'a, Tile>, usize, usize, usize, usize) {
+fn _bounded_nonzero_region_of_array<'a, T: Num>(
+    arr: &'a ArrayView2<T>,
+) -> (ArrayView2<'a, T>, usize, usize, usize, usize) {
     let mut mini = arr.nrows();
     let mut minj = arr.ncols();
     let mut maxi = 0;
     let mut maxj = 0;
 
     for ((i, j), v) in arr.indexed_iter() {
-        if *v != 0 {
+        if !(*v).is_zero() {
             if i < mini {
                 mini = i;
             }
@@ -667,7 +668,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 // RESULTS CODE
 
 #[cfg_attr(feature = "python", pyclass)]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSRunResult {
     pub level_list: Vec<Arc<FFSLevelResult>>,
     pub dimerization_rate: f64,
@@ -692,7 +693,7 @@ where
 }
 
 #[cfg_attr(feature = "python", pyclass)]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSLevelResult {
     pub state_list: Vec<Arc<StateEnum>>,
     pub previous_list: Vec<usize>,
@@ -874,14 +875,16 @@ impl FFSRunResult {
                 arr_maxi.push(maxi as u64);
                 arr_maxj.push(maxj as u64);
             }
-            previndices.extend(
-                surface
-                    .upgrade()
-                    .unwrap()
-                    .previous_list()
-                    .iter()
-                    .map(|x| *x as u64),
-            );
+            if !surface.upgrade().unwrap().state_list.is_empty() {
+                previndices.extend(
+                    surface
+                        .upgrade()
+                        .unwrap()
+                        .previous_list()
+                        .iter()
+                        .map(|x| *x as u64),
+                );
+            }
         }
 
         let mut df = df!(
@@ -908,6 +911,83 @@ impl FFSRunResult {
             .collect()
             .unwrap();
 
+        let s = self.get_surface(0).unwrap().get_state(0).unwrap();
+
+        let a = s.get_tracker_data();
+
+        if let Some(_) = a.0.downcast_ref::<Array2<u64>>() {
+            let mut arrs = Vec::new();
+            let mut minis = Vec::new();
+            let mut minjs = Vec::new();
+            let mut shapeis = Vec::new();
+            let mut shapejs = Vec::new();
+
+            for (_, surface) in self.surfaces().iter().enumerate() {
+                for (_, state) in surface.upgrade().unwrap().state_list.iter().enumerate() {
+                    if let Some(val) = state.get_tracker_data().0.downcast_ref::<Array2<u64>>() {
+                        let v = &val.view();
+                        let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(v);
+                        arrs.push(m.iter().collect::<Series>());
+                        minis.push(mini as u64);
+                        minjs.push(minj as u64);
+                        shapeis.push((maxi - mini + 1) as u64);
+                        shapejs.push((maxj - minj + 1) as u64);
+                    } else {
+                        panic!()
+                    }
+                }
+            }
+
+            df = df
+                .lazy()
+                .with_columns([
+                    Series::new("tracker", arrs).lit(),
+                    Series::new("tracker_min_i", minis).lit(),
+                    Series::new("tracker_min_j", minjs).lit(),
+                    Series::new("tracker_shape_i", shapeis).lit(),
+                    Series::new("tracker_shape_j", shapejs).lit(),
+                ])
+                .collect()
+                .unwrap();
+        } else if let Some(_) = a.0.downcast_ref::<Array2<f64>>() {
+            let mut arrs = Vec::new();
+            let mut minis = Vec::new();
+            let mut minjs = Vec::new();
+            let mut shapeis = Vec::new();
+            let mut shapejs = Vec::new();
+
+            for (_, surface) in self.surfaces().iter().enumerate() {
+                for (_, state) in surface.upgrade().unwrap().state_list.iter().enumerate() {
+                    if let Some(val) = state.get_tracker_data().0.downcast_ref::<Array2<f64>>() {
+                        let v = &val.view();
+                        let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(v);
+                        arrs.push(m.iter().collect::<Series>());
+                        minis.push(mini as u64);
+                        minjs.push(minj as u64);
+                        shapeis.push((maxi - mini + 1) as u64);
+                        shapejs.push((maxj - minj + 1) as u64);
+                    } else {
+                        panic!()
+                    }
+                }
+            }
+
+            df = df
+                .lazy()
+                .with_columns([
+                    Series::new("tracker", arrs).lit(),
+                    Series::new("tracker_min_i", minis).lit(),
+                    Series::new("tracker_min_j", minjs).lit(),
+                    Series::new("tracker_shape_i", shapeis).lit(),
+                    Series::new("tracker_shape_j", shapejs).lit(),
+                ])
+                .collect()
+                .unwrap();
+        } else if let Some(_) = a.0.downcast_ref::<()>() {
+        } else {
+            println!("Unknown tracker data type: skipping tracker data.")
+        }
+
         Ok(PyDataFrame(df))
     }
 
@@ -929,6 +1009,19 @@ impl FFSRunResult {
             .iter()
             .map(|x| x.get_previous_indices())
             .collect()
+    }
+
+    fn write_json(&self, filename: &str) -> PyResult<()> {
+        let f = std::fs::File::create(filename)?;
+        serde_json::to_writer(f, self).unwrap();
+        Ok(())
+    }
+
+    #[staticmethod]
+    fn read_json(filename: &str) -> PyResult<Self> {
+        let f = std::fs::File::open(filename)?;
+        let r: Self = serde_json::from_reader(f).unwrap();
+        Ok(r)
     }
 }
 
