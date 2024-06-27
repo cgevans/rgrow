@@ -5,6 +5,7 @@
 - Improved FFS polars dataframe output creation:
   - configs now include tracking information, if present.
   - configs no longer breaks if keep_configs is false (shows last configurations)
+- Fix Python mismatch display code (some mismatches were not shown).
 
 # 0.15.0
 
