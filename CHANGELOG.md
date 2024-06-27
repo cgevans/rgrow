@@ -1,3 +1,11 @@
+# 0.16.0
+
+- Improvements to FFS code organization.
+- Support for writing FFS results to files.
+- Improved FFS polars dataframe output creation:
+  - configs now include tracking information, if present.
+  - configs no longer breaks if keep_configs is false (shows last configurations)
+
 # 0.15.0
 
 - Start order tracking at 1 (0 is a site that was never filled).

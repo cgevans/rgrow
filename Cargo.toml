@@ -11,11 +11,11 @@ pyo3 = {version = "^0.21", features = ["extension-module", "multiple-pymethods"]
 rayon = { version = "1" }
 numpy = "^0.21"
 enum_dispatch = "0.3"
-pyo3-polars = "^0.14"
-polars = {version = "^0.40", features = ["lazy", "fmt", "parquet", "serde"]}
+pyo3-polars = "^0.15"
+polars = {version = "^0.41", features = ["lazy", "fmt", "parquet", "serde"]}
 
 [workspace.package]
-version = "0.14.1"
+version = "0.15.0"
 authors = ["Constantine Evans <const@costi.net>"]
 edition = "2021"
 repository = "https://github.com/cgevans/rgrow"
