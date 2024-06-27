@@ -6,6 +6,8 @@ use fnv::FnvHashSet;
 use ndarray::Array2;
 use rand::thread_rng;
 use rand::Rng;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::base::{Point, Rate};
 use crate::canvas::PointSafeHere;
@@ -37,7 +39,7 @@ pub trait CreateSizedRateStore {
 /// - A quadtree to store and choose rates.
 /// - Square arrays in the quadtree.
 /// - Linear rate storage.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct QuadTreeSquareArray<R: RateTrait>(pub Vec<Array2<R>>, pub R);
 
 impl<R: RateTrait> CreateSizedRateStore for QuadTreeSquareArray<R> {

@@ -6,21 +6,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::base::RgrowError;
 use crate::base::StringConvError;
-use crate::canvas::CanvasPeriodic;
-use crate::canvas::CanvasSquare;
-use crate::canvas::CanvasTube;
-use crate::ffs::BoxedFFSResult;
-use crate::ffs::FFSRun;
 use crate::ffs::FFSRunConfig;
+use crate::ffs::FFSRunResult;
 use crate::models::atam::ATAM;
 
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
-use crate::state::NullStateTracker;
-use crate::state::QuadTreeState;
 use crate::state::State;
 use crate::state::StateEnum;
-use crate::tileset::CanvasType;
 
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateWithCreate,
@@ -32,7 +25,6 @@ use crate::canvas::PointSafe2;
 use std::any::Any;
 use std::fmt::Debug;
 
-use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(feature = "ui")]
@@ -79,7 +71,7 @@ thread_local! {
     pub static APP: fltk::app::App = app::App::default()
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", pyclass)]
 pub struct EvolveBounds {
     /// Stop if this number of events has taken place during this evolve call.
@@ -257,7 +249,7 @@ impl TryFrom<&str> for ChunkSize {
     }
 }
 
-pub trait System: Debug + Sync + Send + TileBondInfo {
+pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn new_state<St: StateWithCreate + State>(&self, params: St::Params) -> Result<St, GrowError> {
         let mut new_state = St::empty(params)?;
         self.configure_empty_state(&mut new_state)?;
@@ -671,14 +663,13 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
 
     fn system_info(&self) -> String;
 
-    fn run_ffs(
-        &mut self,
-        config: &FFSRunConfig,
-        canvas_type: Option<CanvasType>,
-    ) -> Result<BoxedFFSResult, GrowError>;
+    fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError>;
 }
 
-impl<S: System + SystemWithDimers> DynSystem for S {
+impl<S: System + SystemWithDimers> DynSystem for S
+where
+    SystemEnum: From<S>,
+{
     fn evolve(
         &self,
         state: &mut StateEnum,
@@ -732,29 +723,8 @@ impl<S: System + SystemWithDimers> DynSystem for S {
         self.update_all(state, needed)
     }
 
-    fn run_ffs(
-        &mut self,
-        config: &FFSRunConfig,
-        canvas_type: Option<CanvasType>,
-    ) -> Result<BoxedFFSResult, GrowError> {
-        match canvas_type.unwrap_or(CanvasType::Periodic) {
-            CanvasType::Square => {
-                let run =
-                    FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create(self, config)?;
-                Ok(BoxedFFSResult(Arc::new(Box::new(run))))
-            }
-            CanvasType::Periodic => {
-                let run = FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(
-                    self, config,
-                )?;
-                Ok(BoxedFFSResult(Arc::new(Box::new(run))))
-            }
-            CanvasType::Tube => {
-                let run =
-                    FFSRun::<QuadTreeState<CanvasTube, NullStateTracker>>::create(self, config)?;
-                Ok(BoxedFFSResult(Arc::new(Box::new(run))))
-            }
-        }
+    fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {
+        FFSRunResult::run_from_system(self, config)
     }
 
     fn system_info(&self) -> String {
@@ -763,7 +733,7 @@ impl<S: System + SystemWithDimers> DynSystem for S {
 }
 
 #[enum_dispatch(DynSystem, TileBondInfo, SystemWithDimers)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SystemEnum {
     KTAM,
     OldKTAM,

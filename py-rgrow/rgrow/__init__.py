@@ -5,7 +5,7 @@ __all__ = [
     "EvolveOutcome",
     # "FFSLevel",
     "EvolveBounds",
-    "FFSResult",
+    "FFSRunResult",
     "FFSRunConfig",
 ]
 
@@ -16,7 +16,7 @@ from .rgrow import (
     TileSet as _TileSet,
     EvolveOutcome,
     # FFSLevel,
-    FFSResult,
+    FFSRunResult,
     FFSRunConfig,
     System,
     State,
@@ -374,7 +374,7 @@ class TileSet:
         target_size: int = 100,
         config: FFSRunConfig | None = None,  # FIXME
         **kwargs,
-    ) -> FFSResult:
+    ) -> FFSRunResult:
         return self._to_rg_tileset().run_ffs(
             constant_variance=constant_variance,
             var_per_mean2=var_per_mean2,

@@ -9,7 +9,7 @@ fn pyrgrow(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<rgrow::python::PySystem>()?;
     m.add_class::<rgrow::python::PyState>()?;
 
-    m.add_class::<rgrow::ffs::BoxedFFSResult>()?;
+    m.add_class::<rgrow::ffs::FFSRunResult>()?;
     m.add_class::<rgrow::ffs::FFSLevelRef>()?;
     m.add_class::<rgrow::ffs::FFSStateRef>()?;
 
