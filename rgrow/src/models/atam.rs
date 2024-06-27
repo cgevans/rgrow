@@ -171,12 +171,7 @@ impl System for ATAM {
         }
     }
 
-    fn set_safe_point<S: State>(
-        &self,
-        state: &mut S,
-        point: PointSafe2,
-        tile: Tile,
-    ) -> &Self {
+    fn set_safe_point<S: State>(&self, state: &mut S, point: PointSafe2, tile: Tile) -> &Self {
         let event = Event::MonomerAttachment(point, tile);
 
         self.perform_event(state, &event)
@@ -579,11 +574,7 @@ impl ATAM {
         energy
     }
 
-    fn points_to_update_around<S: State>(
-        &self,
-        state: &S,
-        p: &PointSafe2,
-    ) -> Vec<PointSafeHere> {
+    fn points_to_update_around<S: State>(&self, state: &S, p: &PointSafe2) -> Vec<PointSafeHere> {
         // match self.chunk_size {
         // ChunkSize::Single => {
         let mut points = Vec::with_capacity(13);

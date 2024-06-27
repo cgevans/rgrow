@@ -348,13 +348,7 @@ impl OldKTAM {
     }
 
     // Dimer detachment rates are written manually.
-    fn dimer_s_detach_rate<C: State>(
-        &self,
-        canvas: &C,
-        p: Point,
-        t: Tile,
-        ts: Energy,
-    ) -> Rate {
+    fn dimer_s_detach_rate<C: State>(&self, canvas: &C, p: Point, t: Tile, ts: Energy) -> Rate {
         let p2 = canvas.u_move_point_s(p);
         if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 }) | self.is_seed(p2) {
             0.0
@@ -371,13 +365,7 @@ impl OldKTAM {
     }
 
     // Dimer detachment rates are written manually.
-    fn dimer_e_detach_rate<C: State>(
-        &self,
-        canvas: &C,
-        p: Point,
-        t: Tile,
-        ts: Energy,
-    ) -> Rate {
+    fn dimer_e_detach_rate<C: State>(&self, canvas: &C, p: Point, t: Tile, ts: Energy) -> Rate {
         let p2 = canvas.u_move_point_e(p);
         if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 } | self.is_seed(p2)) {
             0.0
@@ -574,12 +562,7 @@ impl System for OldKTAM {
         }
     }
 
-    fn choose_event_at_point<S: State>(
-        &self,
-        canvas: &S,
-        p: PointSafe2,
-        mut acc: Rate,
-    ) -> Event {
+    fn choose_event_at_point<S: State>(&self, canvas: &S, p: PointSafe2, mut acc: Rate) -> Event {
         let tile = { canvas.tile_at_point(p) };
 
         let tn = { canvas.tile_to_n(p) };

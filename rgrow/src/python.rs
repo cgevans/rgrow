@@ -1,17 +1,17 @@
+use std::fs::File;
 use std::ops::DerefMut;
 use std::time::Duration;
 
-use crate::base::{NumEvents, NumTiles, RustAny, Tile};
+use crate::base::{NumEvents, NumTiles, RgrowError, RustAny, Tile};
 use crate::canvas::{Canvas, PointSafeHere};
-use crate::ffs::{BoxedFFSResult, FFSRunConfig, FFSStateRef};
-use crate::models::sdc1d::{SDC,SDCParams};
+use crate::ffs::{FFSRunConfig, FFSRunResult, FFSStateRef};
+use crate::models::sdc1d::{SDCParams, SDC};
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TrackerData};
 use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, SystemWithDimers,
     TileBondInfo,
 };
-use crate::tileset::CanvasType;
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray2};
 use pyo3::prelude::*;
@@ -108,6 +108,18 @@ impl PyState {
 
     pub fn print_debug(&self) {
         println!("{:?}", self.0);
+    }
+
+    pub fn write_json(&self, filename: &str) -> Result<(), RgrowError> {
+        serde_json::to_writer(File::create(filename)?, &self.0).unwrap();
+        Ok(())
+    }
+
+    #[staticmethod]
+    pub fn read_json(filename: &str) -> Result<Self, RgrowError> {
+        Ok(PyState(
+            serde_json::from_reader(File::open(filename)?).unwrap(),
+        ))
     }
 }
 
@@ -318,14 +330,13 @@ impl PySystem {
         self.0.update_all(&mut state.0, needed)
     }
 
-    #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), canvas_type = None, **kwargs))]
+    #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), **kwargs))]
     fn py_run_ffs(
         &mut self,
         config: FFSRunConfig,
-        canvas_type: Option<CanvasType>,
         kwargs: Option<Bound<PyDict>>,
         py: Python<'_>,
-    ) -> PyResult<BoxedFFSResult> {
+    ) -> PyResult<FFSRunResult> {
         let mut c = config;
 
         if let Some(dict) = kwargs {
@@ -334,7 +345,7 @@ impl PySystem {
             }
         }
 
-        let res = py.allow_threads(|| self.0.run_ffs(&c, canvas_type));
+        let res = py.allow_threads(|| self.0.run_ffs(&c));
         match res {
             Ok(res) => Ok(res),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -354,5 +365,17 @@ impl PySystem {
     #[staticmethod]
     fn new_sdc(params: SDCParams) -> PySystem {
         PySystem(SystemEnum::SDC(SDC::from_params(params)))
+    }
+
+    pub fn write_json(&self, filename: &str) -> Result<(), RgrowError> {
+        serde_json::to_writer(File::create(filename)?, &self.0).unwrap();
+        Ok(())
+    }
+
+    #[staticmethod]
+    pub fn read_json(filename: &str) -> Result<Self, RgrowError> {
+        Ok(PySystem(
+            serde_json::from_reader(File::open(filename)?).unwrap(),
+        ))
     }
 }

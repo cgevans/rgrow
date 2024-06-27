@@ -328,7 +328,10 @@ impl SDC {
             return (false, acc, Event::None);
         }
 
-        let scaffold_glue = self.scaffold.get((point.0.0.rem_euclid(self.scaffold.dim().0), point.0.1)).expect("Invalid Index");
+        let scaffold_glue = self
+            .scaffold
+            .get((point.0 .0.rem_euclid(self.scaffold.dim().0), point.0 .1))
+            .expect("Invalid Index");
 
         let empty_map = HashSet::default();
         let friends = self.friends_btm.get(scaffold_glue).unwrap_or(&empty_map);

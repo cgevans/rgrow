@@ -131,12 +131,7 @@ impl System for StaticKTAMCover {
         }
     }
 
-    fn choose_event_at_point<S: State>(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        acc: Rate,
-    ) -> Event {
+    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: Rate) -> Event {
         let t = state.tile_at_point(p);
 
         match self.tile_is_cover[t as usize] {
@@ -162,11 +157,7 @@ impl System for StaticKTAMCover {
         self.inner.calc_mismatch_locations(state)
     }
 
-    fn take_single_step<S: State>(
-        &self,
-        state: &mut S,
-        max_time_step: f64,
-    ) -> StepOutcome {
+    fn take_single_step<S: State>(&self, state: &mut S, max_time_step: f64) -> StepOutcome {
         let time_step = -f64::ln(thread_rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
@@ -185,12 +176,7 @@ impl System for StaticKTAMCover {
         StepOutcome::HadEventAt(time_step)
     }
 
-    fn set_safe_point<S: State>(
-        &self,
-        state: &mut S,
-        point: PointSafe2,
-        tile: Tile,
-    ) -> &Self {
+    fn set_safe_point<S: State>(&self, state: &mut S, point: PointSafe2, tile: Tile) -> &Self {
         state.set_sa(&point, &tile);
 
         let event = Event::MonomerAttachment(point, tile);
@@ -235,12 +221,7 @@ impl SystemWithDimers for StaticKTAMCover {
 }
 
 impl StaticKTAMCover {
-    fn cover_to_composite_rate<S: State>(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        t: Tile,
-    ) -> Rate {
+    fn cover_to_composite_rate<S: State>(&self, state: &S, p: PointSafe2, t: Tile) -> Rate {
         let cc = &self.cover_attach_info[t as usize];
 
         let mut total_rate = 0.;
@@ -282,12 +263,7 @@ impl StaticKTAMCover {
         PossibleChoice::Remainder(acc)
     }
 
-    fn composite_to_cover_rate<S: State>(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        t: Tile,
-    ) -> Rate {
+    fn composite_to_cover_rate<S: State>(&self, state: &S, p: PointSafe2, t: Tile) -> Rate {
         let cc = &self.composite_detach_info[t as usize];
 
         let mut total_rate = 0.;

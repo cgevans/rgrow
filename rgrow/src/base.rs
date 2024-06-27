@@ -36,8 +36,6 @@ use pyo3::{FromPyObject, IntoPy, PyAny, PyErr, PyObject, PyResult, Python};
 pub enum GrowError {
     #[error("can't create canvas from array of size ({0}, {1})")]
     WrongCanvasSize(usize, usize),
-    #[error("FFS is meaningless for the aTAM.")]
-    FFSCannotRunATAM,
     #[error("Point ({0}, {1}) is out of bounds.")]
     OutOfBounds(usize, usize),
     #[error("{0}")]
@@ -61,6 +59,8 @@ impl From<GrowError> for pyo3::PyErr {
 
 #[derive(Error, Debug)]
 pub enum RgrowError {
+    #[error("FFS is meaningless for the {0} model.")]
+    FFSCannotRunModel(String),
     #[error(transparent)]
     Parser(#[from] ParserError),
     #[error(transparent)]
@@ -201,6 +201,8 @@ impl IntoPy<PyObject> for RustAny {
             (val.0, val.1).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<(usize, usize, Ident)>() {
             (val.0, val.1, val.2.clone()).into_py(py)
+        } else if let Some(val) = self.0.downcast_ref::<()>() {
+            val.into_py(py)
         } else {
             panic!("Cannot convert Any to PyAny");
         }

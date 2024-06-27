@@ -540,10 +540,10 @@ impl TryFrom<&str> for TrackingType {
         match value.to_lowercase().as_str() {
             "none" => Ok(TrackingType::None),
             "order" => Ok(TrackingType::Order),
-            "lastattach" => Ok(TrackingType::LastAttachTime),
+            "lastattachtime" => Ok(TrackingType::LastAttachTime),
             "printevent" => Ok(TrackingType::PrintEvent),
             _ => Err(StringConvError(format!(
-                "Unknown tracking type {}.  Valid options are \"none\" and \"order\".",
+                "Unknown tracking type {}.  Valid options are \"none\", \"order\", \"lastattachtime\", \"printevent\".",
                 value
             ))),
         }
@@ -559,7 +559,7 @@ pub enum Model {
     #[serde(alias = "OldkTAM", alias = "oldktam")]
     OldKTAM,
     #[serde(alias = "SDC1D", alias = "sdc1d")]
-    SDC
+    SDC,
 }
 
 use std::convert::TryFrom;
@@ -991,7 +991,7 @@ impl ProcessedTileSet {
             tile_stoics: Array1::from_vec(tile_stoics),
             tile_names,
             tile_colors,
-            glue_names: Vec::new(),  // FIXME
+            glue_names: Vec::new(), // FIXME
             glue_strengths,
             has_duples,
             glue_map,
