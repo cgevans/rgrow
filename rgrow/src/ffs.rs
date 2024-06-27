@@ -374,11 +374,15 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
             forward_prob: Vec::new(),
         };
 
-        let (first_level, dimer_level) = FFSLevel::nmers_from_dimers(system, config)?;
+        let (first_level, mut dimer_level) = FFSLevel::nmers_from_dimers(system, config)?;
 
         ret.forward_prob.push(first_level.p_r);
 
         let mut current_size = first_level.target_size;
+
+        if !config.keep_configs {
+            dimer_level.drop_states();
+        }
 
         ret.level_list.push(dimer_level);
         ret.level_list.push(first_level);
@@ -458,7 +462,8 @@ pub struct FFSLevel<St: ClonableState> {
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> {
     pub fn drop_states(&mut self) -> &Self {
-        self.state_list.drain(..);
+        drop(self.state_list.drain(..));
+        drop(self.previous_list.drain(..));
         self
     }
 
