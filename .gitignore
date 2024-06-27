@@ -29,3 +29,4 @@ Cargo.lock
 coverage.xml
 coverage.lcov
 **/.hypothesis/*
+rgrow/profile.json

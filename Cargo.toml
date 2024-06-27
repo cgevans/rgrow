@@ -26,3 +26,7 @@ categories = ["science", "simulation"]
 [profile.release]
 # debug = true
 # lto = true
+
+[profile.profiling]
+inherits = "release"
+debug = true

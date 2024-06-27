@@ -202,14 +202,28 @@ impl SDC {
     }
 
     fn update_monomer_point<S: State>(&self, state: &mut S, scaffold_point: &PointSafe2) {
-        let points = [
-            state.move_sa_w(*scaffold_point),
-            state.move_sa_e(*scaffold_point),
-            PointSafeHere(scaffold_point.0),
-        ]
-        .map(|point| (point, self.event_rate_at_point(state, point)));
+        let here = PointSafeHere(scaffold_point.0);
+        let w = state.move_sa_w(*scaffold_point);
+        let e = state.move_sa_e(*scaffold_point);
 
-        state.update_multiple(&points);
+        match (state.v_sh(w), state.v_sh(e)) {
+            (0, 0) => state.update_point(here, self.event_rate_at_point(state, here)),
+            (0, _) => {
+                state.update_multiple(
+                    &[here, e].map(|point| (point, self.event_rate_at_point(state, point))),
+                );
+            }
+            (_, 0) => {
+                state.update_multiple(
+                    &[here, w].map(|point| (point, self.event_rate_at_point(state, point))),
+                );
+            }
+            (_, _) => {
+                state.update_multiple(
+                    &[here, w, e].map(|point| (point, self.event_rate_at_point(state, point))),
+                );
+            }
+        }
     }
 
     /// Fill the energy_bonds array
