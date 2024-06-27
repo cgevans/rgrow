@@ -11,7 +11,7 @@ use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
 
 use canvas::Canvas;
-use num_traits::Num;
+use num_traits::{Float, Num};
 use polars::prelude::*;
 #[cfg(feature = "python")]
 use pyo3_polars::error::PyPolarsErr;
@@ -251,6 +251,36 @@ fn _bounded_nonzero_region_of_array<'a, T: Num>(
 
     for ((i, j), v) in arr.indexed_iter() {
         if !(*v).is_zero() {
+            if i < mini {
+                mini = i;
+            }
+            if i > maxi {
+                maxi = i;
+            }
+            if j < minj {
+                minj = j;
+            }
+            if j > maxj {
+                maxj = j;
+            }
+        }
+    }
+
+    let subarr = arr.slice(s![mini..maxi + 1, minj..maxj + 1]);
+
+    (subarr, mini, minj, maxi, maxj)
+}
+
+fn _bounded_nonnan_region_of_array<'a, T: Float>(
+    arr: &'a ArrayView2<T>,
+) -> (ArrayView2<'a, T>, usize, usize, usize, usize) {
+    let mut mini = arr.nrows();
+    let mut minj = arr.ncols();
+    let mut maxi = 0;
+    let mut maxj = 0;
+
+    for ((i, j), v) in arr.indexed_iter() {
+        if !(*v).is_nan() {
             if i < mini {
                 mini = i;
             }
@@ -612,6 +642,89 @@ pub struct FFSRunResult {
     pub system: Option<SystemEnum>,
 }
 
+#[cfg_attr(feature = "python", pyclass)]
+#[derive(Debug, Clone, Serialize)]
+pub struct FFSRunResultDF {
+    #[serde(skip)]
+    pub surfaces_df: DataFrame,
+    #[serde(skip)]
+    pub configs_df: DataFrame,
+    pub ffs_config: Option<FFSRunConfig>,
+    pub system: Option<SystemEnum>,
+    pub dimerization_rate: f64,
+}
+
+impl From<FFSRunResult> for FFSRunResultDF {
+    fn from(value: FFSRunResult) -> Self {
+        let surfaces_df = value.surfaces_dataframe().unwrap();
+        let configs_df = value.configs_dataframe().unwrap();
+        Self {
+            surfaces_df,
+            configs_df,
+            ffs_config: value.ffs_config,
+            system: value.system,
+            dimerization_rate: value.dimerization_rate,
+        }
+    }
+}
+
+impl FFSRunResultDF {
+    pub fn read_files(prefix: &str) -> Result<Self, PolarsError> {
+        let file = std::fs::File::open(format!("{}.surfaces.parquet", prefix))?;
+        let surfaces_df = ParquetReader::new(file).finish()?;
+        let file = std::fs::File::open(format!("{}.configurations.parquet", prefix))?;
+        let configs_df = ParquetReader::new(file).finish()?;
+        let file = std::fs::File::open(format!("{}.ffs_result.json", prefix))?;
+        let ffs_result: FFSRunResult = serde_json::from_reader(file).unwrap();
+        Ok(Self {
+            surfaces_df,
+            configs_df,
+            ffs_config: ffs_result.ffs_config,
+            system: ffs_result.system,
+            dimerization_rate: ffs_result.dimerization_rate,
+        })
+    }
+
+    pub fn write_files(&mut self, prefix: &str) -> Result<(), PolarsError> {
+        let file = std::fs::File::create(format!("{}.surfaces.parquet", prefix))?;
+        ParquetWriter::new(file).finish(&mut self.surfaces_df)?;
+        let file = std::fs::File::create(format!("{}.configurations.parquet", prefix))?;
+        ParquetWriter::new(file).finish(&mut self.configs_df)?;
+        let file = std::fs::File::create(format!("{}.ffs_result.json", prefix))?;
+        serde_json::to_writer(file, &self).unwrap();
+        Ok(())
+    }
+
+    pub fn forward_vec(&self) -> Vec<f64> {
+        let mut it = self
+            .surfaces_df
+            .column("p_r")
+            .unwrap()
+            .f64()
+            .unwrap()
+            .into_iter();
+
+        // first value is just 1.0 (dimers)
+        it.next();
+
+        it.map(|x| x.unwrap()).collect()
+    }
+
+    pub fn nucleation_rate(&self) -> Rate {
+        let ptot: f64 = self
+            .surfaces_df
+            .column("p_r")
+            .unwrap()
+            .product()
+            .unwrap()
+            .as_any_value()
+            .try_extract()
+            .unwrap();
+
+        self.dimerization_rate * ptot
+    }
+}
+
 impl<St: ClonableState> From<FFSRun<St>> for FFSRunResult
 where
     FFSLevelResult: From<FFSLevel<St>>,
@@ -732,8 +845,8 @@ impl FFSRunResult {
         let mut canvases = Vec::new();
         let mut arr_mini = Vec::new();
         let mut arr_minj = Vec::new();
-        let mut arr_maxi = Vec::new();
-        let mut arr_maxj = Vec::new();
+        let mut shape_i = Vec::new();
+        let mut shape_j = Vec::new();
         let mut surfaceindex = Vec::new();
         let mut configindex = Vec::new();
 
@@ -748,8 +861,8 @@ impl FFSRunResult {
                 configindex.push(j as u64);
                 arr_mini.push(mini as u64);
                 arr_minj.push(minj as u64);
-                arr_maxi.push(maxi as u64);
-                arr_maxj.push(maxj as u64);
+                shape_i.push((maxi - mini + 1) as u64);
+                shape_j.push((maxj - minj + 1) as u64);
             }
             if !surface.upgrade().unwrap().state_list.is_empty() {
                 previndices.extend(
@@ -772,20 +885,10 @@ impl FFSRunResult {
             "canvas" => canvases,
             "min_i" => arr_mini,
             "min_j" => arr_minj,
-            "max_i" => arr_maxi,
-            "max_j" => arr_maxj,
+            "shape_i" => shape_i,
+            "shape_j" => shape_j,
         )
         .unwrap();
-
-        df = df
-            .lazy()
-            .select([
-                col("*"),
-                (col("max_i") - col("min_i") + lit(1)).alias("shape_i"),
-                (col("max_j") - col("min_j") + lit(1)).alias("shape_j"),
-            ])
-            .collect()
-            .unwrap();
 
         let s = self.get_surface(0).unwrap().get_state(0).unwrap();
 
@@ -836,7 +939,7 @@ impl FFSRunResult {
                 for state in surface.upgrade().unwrap().state_list.iter() {
                     if let Some(val) = state.get_tracker_data().0.downcast_ref::<Array2<f64>>() {
                         let v = &val.view();
-                        let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(v);
+                        let (m, mini, minj, maxi, maxj) = _bounded_nonnan_region_of_array(v);
                         arrs.push(m.iter().collect::<Series>());
                         minis.push(mini as u64);
                         minjs.push(minj as u64);
@@ -1048,6 +1151,84 @@ impl FFSRunResult {
     fn py_write_files(&self, prefix: &str) -> PyResult<()> {
         self.write_files(prefix)
             .map_err(|e| PyPolarsErr::from(e).into())
+    }
+
+    // #[staticmethod]
+    // fn read_json(filename: &str) -> PyResult<Self> {
+    //     let f = std::fs::File::open(filename)?;
+    //     let r: Self = serde_json::from_reader(f).unwrap();
+    //     Ok(r)
+    // }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl FFSRunResultDF {
+    /// Nucleation rate, in M/s.  Calculated from the forward probability vector,
+    /// and dimerization rate.
+    #[getter]
+    fn get_nucleation_rate(&self) -> f64 {
+        self.nucleation_rate()
+    }
+
+    #[getter]
+    fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        self.forward_vec().to_pyarray_bound(py)
+    }
+
+    #[getter]
+    fn get_dimerization_rate(&self) -> f64 {
+        self.dimerization_rate
+    }
+
+    // #[getter]
+    // fn get_surfaces(&self) -> Vec<FFSLevelRef> {
+    //     self.surfaces()
+    //         .iter()
+    //         .map(|f| FFSLevelRef(f.upgrade().unwrap().clone()))
+    //         .collect()
+    // }
+
+    #[pyo3(name = "surfaces_dataframe")]
+    fn py_surfaces_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
+        Ok(PyDataFrame(self.surfaces_df.clone()))
+    }
+
+    #[pyo3(name = "configs_dataframe")]
+    fn py_configs_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
+        Ok(PyDataFrame(self.configs_df.clone()))
+    }
+
+    fn __str__(&self) -> String {
+        format!(
+            "FFSResultDF({:1.4e} M/s, {:?})",
+            self.nucleation_rate(),
+            self.forward_vec()
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+
+    // #[getter]
+    // fn previous_indices(&self) -> Vec<Vec<usize>> {
+    //     self.get_surfaces()
+    //         .iter()
+    //         .map(|x| x.get_previous_indices())
+    //         .collect()
+    // }
+
+    #[pyo3(name = "write_files")]
+    fn py_write_files(&mut self, prefix: &str) -> PyResult<()> {
+        self.write_files(prefix)
+            .map_err(|e| PyPolarsErr::from(e).into())
+    }
+
+    #[pyo3(name = "read_files")]
+    #[staticmethod]
+    fn py_read_files(prefix: &str) -> PyResult<Self> {
+        FFSRunResultDF::read_files(prefix).map_err(|e| PyPolarsErr::from(e).into())
     }
 
     // #[staticmethod]
