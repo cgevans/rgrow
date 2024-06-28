@@ -904,7 +904,14 @@ impl FFSRunResult {
         )
         .unwrap();
 
-        let s = self.get_surface(0).unwrap().get_state(0).unwrap();
+        let s = self
+            .surfaces()
+            .last()
+            .unwrap()
+            .upgrade()
+            .unwrap()
+            .get_state(0)
+            .unwrap();
 
         let a = s.get_tracker_data();
 
