@@ -84,6 +84,8 @@ pub struct FFSRunConfig {
     pub canvas_type: CanvasType,
     pub tracking: TrackingType,
     pub target_size: NumTiles,
+    pub store_ffs_config: bool,
+    pub store_system: bool,
 }
 
 impl Default for FFSRunConfig {
@@ -107,6 +109,8 @@ impl Default for FFSRunConfig {
             canvas_type: CanvasType::Periodic,
             tracking: TrackingType::None,
             target_size: 100,
+            store_ffs_config: true,
+            store_system: false,
         }
     }
 }
@@ -131,6 +135,8 @@ impl FFSRunConfig {
             "min_nuc_rate" => self.min_nuc_rate = v.extract()?,
             "canvas_size" => self.canvas_size = v.extract()?,
             "target_size" => self.target_size = v.extract()?,
+            "store_ffs_config" => self.store_ffs_config = v.extract()?,
+            "store_system" => self.store_system = v.extract()?,
             _ => {
                 return Err(PyTypeError::new_err(format!(
                     "Unknown FFSRunConfig setting: {k}"
@@ -162,6 +168,8 @@ impl FFSRunConfig {
         min_nuc_rate: Option<Rate>,
         canvas_size: Option<(usize, usize)>,
         target_size: Option<NumTiles>,
+        store_ffs_config: Option<bool>,
+        store_system: Option<bool>,
     ) -> Self {
         let mut rc = Self::default();
 
@@ -214,6 +222,12 @@ impl FFSRunConfig {
         }
         if let Some(x) = target_size {
             rc.target_size = x;
+        }
+        if let Some(x) = store_ffs_config {
+            rc.store_ffs_config = x;
+        }
+        if let Some(x) = store_system {
+            rc.store_system = x;
         }
         rc
     }
@@ -643,7 +657,7 @@ pub struct FFSRunResult {
 }
 
 #[cfg_attr(feature = "python", pyclass)]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSRunResultDF {
     #[serde(skip)]
     pub surfaces_df: DataFrame,
@@ -675,7 +689,7 @@ impl FFSRunResultDF {
         let file = std::fs::File::open(format!("{}.configurations.parquet", prefix))?;
         let configs_df = ParquetReader::new(file).finish()?;
         let file = std::fs::File::open(format!("{}.ffs_result.json", prefix))?;
-        let ffs_result: FFSRunResult = serde_json::from_reader(file).unwrap();
+        let ffs_result: FFSRunResultDF = serde_json::from_reader(file).unwrap();
         Ok(Self {
             surfaces_df,
             configs_df,
@@ -1044,8 +1058,12 @@ impl FFSRunResult {
             }
         })?;
 
-        res.ffs_config = Some(config.clone());
-        res.system = Some(sys.clone().into());
+        if config.store_ffs_config {
+            res.ffs_config = Some(config.clone());
+        }
+        if config.store_system {
+            res.system = Some(sys.clone().into());
+        }
 
         Ok(res)
     }
@@ -1151,6 +1169,10 @@ impl FFSRunResult {
     fn py_write_files(&self, prefix: &str) -> PyResult<()> {
         self.write_files(prefix)
             .map_err(|e| PyPolarsErr::from(e).into())
+    }
+
+    fn into_resdf(this: Bound<FFSRunResult>) -> FFSRunResultDF {
+        this.borrow_mut().clone().into()
     }
 
     // #[staticmethod]
