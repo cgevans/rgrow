@@ -930,3 +930,14 @@ impl SystemWithDimers for ATAM {
         todo!()
     }
 }
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl ATAM {
+    #[staticmethod]
+    #[pyo3(name = "from_tileset")]
+    fn py_from_tileset(tileset: &Bound<PyAny>) -> PyResult<Self> {
+        let tileset: TileSet = tileset.extract()?;
+        Ok(Self::from_tileset(&tileset)?)
+    }
+}

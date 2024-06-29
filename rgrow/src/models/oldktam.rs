@@ -103,16 +103,57 @@ pub struct OldKTAM {
     friends_w: TileHashSetVec,
     #[serde(skip)]
     insertcache: ClonableCache,
-    seed: Seed,
+    pub seed: Seed,
     pub k_f: f64,
     pub alpha: f64,
     pub g_se: Option<f64>,
     pub g_mc: Option<f64>,
-    fission_handling: FissionHandling,
-    chunk_handling: ChunkHandling,
-    pub(crate) chunk_size: ChunkSize,
-    pub(crate) tile_names: Vec<String>,
-    pub(crate) tile_colors: Vec<[u8; 4]>,
+    pub fission_handling: FissionHandling,
+    pub chunk_handling: ChunkHandling,
+    pub chunk_size: ChunkSize,
+    pub tile_names: Vec<String>,
+    pub tile_colors: Vec<[u8; 4]>,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl OldKTAM {
+    #[getter(alpha)]
+    fn py_get_alpha(&self) -> f64 {
+        self.alpha
+    }
+
+    #[getter(g_se)]
+    fn py_get_g_se(&self) -> Option<f64> {
+        self.g_se
+    }
+
+    #[getter(kf)]
+    fn py_get_kf(&self) -> f64 {
+        self.k_f
+    }
+
+    #[getter(energy_we)]
+    fn py_get_energy_we<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
+        numpy::IntoPyArray::into_pyarray_bound(self.energy_we.clone(), py)
+    }
+
+    #[getter(energy_ns)]
+    fn py_get_energy_ns<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
+        numpy::IntoPyArray::into_pyarray_bound(self.energy_ns.clone(), py)
+    }
+
+    #[getter(tile_adj_concs)]
+    fn py_get_tile_concs<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
+        numpy::IntoPyArray::into_pyarray_bound(self.tile_adj_concs.clone(), py)
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "from_tileset")]
+    fn py_from_tileset(tileset: &Bound<PyAny>) -> PyResult<Self> {
+        let tileset: TileSet = tileset.extract()?;
+        Ok(Self::from_tileset(&tileset)?)
+    }
 }
 
 impl TileBondInfo for OldKTAM {
