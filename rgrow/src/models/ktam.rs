@@ -26,8 +26,8 @@ use ndarray::prelude::*;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray2};
 use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::{collections::HashMap, ops::Deref};
 
 use crate::base::{Glue, Tile};
 

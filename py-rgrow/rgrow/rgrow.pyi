@@ -1,5 +1,5 @@
 # flake8: noqa: PYI021
-from typing import Any, List, Sequence, Self
+from typing import Any, List, Sequence, Self, TypeAlias
 from numpy import dtype, ndarray
 import numpy as np
 import polars as pl
@@ -693,6 +693,8 @@ class OldKTAM:
             The name of the file to write to.
         """
 
+System: TypeAlias = ATAM | KTAM | OldKTAM
+
 class State:
     @property
     def canvas_view(self) -> ndarray[int, dtype[int]]:
@@ -709,20 +711,23 @@ class State:
     def write_json(self, filename: str) -> None: ...
 
 class TileSet:
-    def create_state(self, system=None): ...
-    def create_state_from_canvas(self, canvas): ...
-    def create_system(self): ...
-    def create_system_and_state(self): ...
-    def from_dict(cls, data) -> None:
+    def create_state(self, system: System | None = None) -> State: ...
+    def create_state_from_canvas(self, canvas: NDArray[np.uint]) -> State: ...
+    def create_system(self) -> System: ...
+    def create_system_and_state(self) -> tuple[System, State]: ...
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
         """
         Creates a TileSet from a dict by exporting to json, then parsing the json.
         FIXME: implement this without the json trip.
         """
 
-    def from_file(cls, path) -> None:
+    @classmethod
+    def from_file(cls, path) -> Self:
         """Parses a file (JSON, YAML, etc) into a TileSet"""
 
-    def from_json(cls, data) -> None:
+    @classmethod
+    def from_json(cls, data) -> Self:
         """Parses a JSON string into a TileSet."""
 
     def run_ffs(self, config=..., **kwargs) -> None:

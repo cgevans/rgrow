@@ -11,8 +11,7 @@ use crate::models::oldktam::OldKTAM;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TrackerData};
 use crate::system::{
-    DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, SystemWithDimers,
-    TileBondInfo,
+    DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo,
 };
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray2};
@@ -141,14 +140,6 @@ pub enum PyStateOrRef<'py> {
     State(Bound<'py, PyState>),
     Ref(Bound<'py, FFSStateRef>),
 }
-
-#[repr(transparent)]
-#[cfg_attr(
-    feature = "python",
-    pyclass(module = "rgrow", name = "System", subclass)
-)]
-/// A System
-pub struct PySystem(pub SystemEnum);
 
 impl From<FFSStateRef> for PyState {
     fn from(state: FFSStateRef) -> Self {

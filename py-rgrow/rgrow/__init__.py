@@ -11,7 +11,6 @@ __all__ = [
     "FFSRunConfig",
 ]
 
-import copy
 import numpy as np
 from . import rgrow as rgr
 from .rgrow import (
@@ -311,24 +310,7 @@ class TileSet:
             if getattr(self, k) is not None
         }
 
-        # FIXME: this is a quick hack
-        rtiles = []
-        for t in self.tiles:
-            t2 = copy.deepcopy(t)
-            match t2.shape:
-                case None:
-                    pass
-                case "S" | "s" | "single" | "Single":
-                    t2.shape = rgr.TileShape.Single
-                case "H" | "h" | "horizontal" | "Horizontal":
-                    t2.shape = rgr.TileShape.Horizontal
-                case "V" | "v" | "vertical" | "Vertical":
-                    t2.shape = rgr.TileShape.Vertical
-                case _:
-                    raise ValueError(f"unknown shape {t2.shape!r}")
-            rtiles.append(t2)
-
-        return _TileSet(tiles=rtiles, bonds=self.bonds, glues=self.glues, **kwargs)
+        return _TileSet(tiles=self.tiles, bonds=self.bonds, glues=self.glues, **kwargs)
 
     def create_system(self) -> "System":
         return self._to_rg_tileset().create_system()

@@ -6,9 +6,6 @@ mod rgrow {
     use rgrow::tileset::TileSet;
 
     #[pymodule_export]
-    use rgrow::tileset::TileShape;
-
-    #[pymodule_export]
     use rgrow::python::PyState;
 
     #[pymodule_export]

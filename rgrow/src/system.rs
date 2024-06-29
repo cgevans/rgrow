@@ -183,7 +183,7 @@ pub enum Orientation {
     WE,
 }
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
 
 pub struct DimerInfo {
     pub t1: Tile,
