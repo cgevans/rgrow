@@ -21,6 +21,9 @@ use crate::{
     tileset::{FromTileSet, ProcessedTileSet, TileSet},
 };
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 type Cache = SizedCache<(Tile, Tile, Tile, Tile), f64>;
 
 #[derive(Debug)]
@@ -85,6 +88,7 @@ fn create_friend_data(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub struct OldKTAM {
     pub tile_adj_concs: Array1<Rate>,
     pub energy_ns: Array2<Energy>,

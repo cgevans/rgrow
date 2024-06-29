@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use numpy::{PyArray2, PyArrayMethods};
 use pyo3::{
     exceptions::PyValueError,
@@ -8,7 +10,9 @@ use pyo3::{
 use crate::{
     base::GlueIdent,
     ffs::{FFSRunConfig, FFSRunResult},
-    python::{PyState, PySystem},
+    models::{atam::ATAM, ktam::KTAM, oldktam::OldKTAM},
+    python::PyState,
+    system::SystemEnum,
     tileset::{self, Bond, CoverStrand, Tile, TileSet},
 };
 
@@ -118,28 +122,41 @@ impl TileSet {
     }
 
     #[pyo3(name = "create_system")]
-    fn py_create_system(&self) -> PyResult<PySystem> {
+    fn py_create_system(&self) -> PyResult<SystemEnum> {
         let sys = self.create_dynsystem()?;
-        Ok(PySystem(sys))
+        Ok(sys)
     }
 
     #[pyo3(name = "create_state")]
-    fn py_create_state(&self, system: Option<&PySystem>) -> PyResult<PyState> {
-        let sys_ref;
-        let sys;
-        if system.is_none() {
-            sys = self.create_dynsystem()?;
-            sys_ref = &sys;
-        } else {
-            sys_ref = &system.unwrap().0;
+    fn py_create_state(&self, system: Option<&Bound<'_, PyAny>>) -> PyResult<PyState> {
+        match system {
+            None => Ok(PyState(
+                self.create_state_with_system(&self.create_dynsystem()?)?,
+            )),
+            Some(x) => {
+                if let Ok(sys) = x.downcast::<KTAM>() {
+                    Ok(PyState(
+                        self.create_state_with_system(sys.borrow().deref())?,
+                    ))
+                } else if let Ok(sys) = x.downcast::<ATAM>() {
+                    Ok(PyState(
+                        self.create_state_with_system(sys.borrow().deref())?,
+                    ))
+                } else if let Ok(sys) = x.downcast::<OldKTAM>() {
+                    Ok(PyState(
+                        self.create_state_with_system(sys.borrow().deref())?,
+                    ))
+                } else {
+                    Err(PyErr::new::<PyValueError, _>("Invalid system type."))
+                }
+            }
         }
-        Ok(PyState(self.create_state_with_system(sys_ref)?))
     }
 
     #[pyo3(name = "create_system_and_state")]
-    fn py_create_system_and_state(&self) -> PyResult<(PySystem, PyState)> {
+    fn py_create_system_and_state(&self) -> PyResult<(SystemEnum, PyState)> {
         let (sys, state) = self.create_system_and_state()?;
-        Ok((PySystem(sys), PyState(state)))
+        Ok((sys, PyState(state)))
     }
 
     #[pyo3(name = "create_state_from_canvas")]

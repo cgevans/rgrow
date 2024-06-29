@@ -6,7 +6,6 @@ fn pyrgrow(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<rgrow::tileset::TileSet>()?;
     m.add_class::<rgrow::tileset::TileShape>()?;
 
-    m.add_class::<rgrow::python::PySystem>()?;
     m.add_class::<rgrow::python::PyState>()?;
 
     m.add_class::<rgrow::ffs::FFSRunResult>()?;
@@ -17,6 +16,10 @@ fn pyrgrow(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<rgrow::ffs::FFSRunConfig>()?;
     m.add_class::<rgrow::system::EvolveBounds>()?;
     m.add_class::<rgrow::system::EvolveOutcome>()?;
+
+    m.add_class::<rgrow::models::ktam::KTAM>()?;
+    m.add_class::<rgrow::models::atam::ATAM>()?;
+    m.add_class::<rgrow::models::oldktam::OldKTAM>()?;
 
     Ok(())
 }

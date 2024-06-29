@@ -6,6 +6,9 @@ use crate::{
     tileset::{FromTileSet, ProcessedTileSet, TileSet},
 };
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 use crate::base::{HashMapType, HashSetType};
 use ndarray::prelude::*;
 use rand::prelude::Distribution;
@@ -45,6 +48,7 @@ enum TileShape {
     DupleToTop(Tile),
 }
 
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ATAM {
     /// Tile names, as strings.  Only used for reference.

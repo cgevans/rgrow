@@ -734,11 +734,23 @@ where
 
 #[enum_dispatch(DynSystem, TileBondInfo, SystemWithDimers)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(FromPyObject))]
 pub enum SystemEnum {
     KTAM,
     OldKTAM,
     ATAM,
     // StaticKTAMCover
+}
+
+#[cfg(feature = "python")]
+impl IntoPy<PyObject> for SystemEnum {
+    fn into_py(self, py: Python) -> PyObject {
+        match self {
+            SystemEnum::KTAM(ktam) => ktam.into_py(py),
+            SystemEnum::OldKTAM(oldktam) => oldktam.into_py(py),
+            SystemEnum::ATAM(atam) => atam.into_py(py),
+        }
+    }
 }
 
 #[enum_dispatch]

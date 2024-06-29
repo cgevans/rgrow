@@ -703,7 +703,7 @@ impl TileSet {
     }
 
     /// Create a state, and set it up with a provided DynSystem.
-    pub fn create_state_with_system(&self, sys: &SystemEnum) -> Result<StateEnum, RgrowError> {
+    pub fn create_state_with_system(&self, sys: &impl DynSystem) -> Result<StateEnum, RgrowError> {
         let mut state = self.create_state_empty()?;
         sys.setup_state(&mut state)?;
         Ok(state)

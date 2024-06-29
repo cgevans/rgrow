@@ -28,6 +28,9 @@ use std::collections::HashMap;
 
 use crate::base::{Glue, Tile};
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 /// Concentration (M)
 type Conc = f64;
 type Strength = f64;
@@ -78,6 +81,7 @@ impl Default for TileShape {
     }
 }
 
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KTAM {
     /// Tile names, as strings.  Only used for reference.
@@ -138,6 +142,50 @@ pub struct KTAM {
     has_duples: bool,
     duple_info: Array1<TileShape>,
     should_be_counted: Array1<bool>,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl KTAM {
+    #[getter]
+    fn get_alpha(&self) -> f64 {
+        self.alpha
+    }
+
+    #[setter]
+    fn set_alpha(&mut self, alpha: f64) {
+        self.alpha = alpha;
+        self.update_system();
+    }
+
+    #[getter]
+    fn get_g_se(&self) -> f64 {
+        self.g_se
+    }
+
+    #[setter]
+    fn set_g_se(&mut self, g_se: f64) {
+        self.g_se = g_se;
+        self.update_system();
+    }
+
+    #[getter]
+    fn get_kf(&self) -> f64 {
+        self.kf
+    }
+
+    #[setter]
+    fn set_kf(&mut self, kf: f64) {
+        self.kf = kf;
+        self.update_system();
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "from_tileset")]
+    fn py_from_tileset(tileset: &Bound<PyAny>) -> PyResult<Self> {
+        let tileset: TileSet = tileset.extract()?;
+        Ok(Self::from_tileset(&tileset)?)
+    }
 }
 
 impl System for KTAM {
