@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 __all__ = [
     "Tile",
     "TileSet",
@@ -13,12 +15,14 @@ import copy
 import numpy as np
 from . import rgrow as rgr
 from .rgrow import (
+    ATAM,
+    KTAM,
+    OldKTAM,
     TileSet as _TileSet,
     EvolveOutcome,
     # FFSLevel,
     FFSRunResult,
     FFSRunConfig,
-    System,
     State,
     EvolveBounds,
     FFSStateRef,
@@ -26,15 +30,26 @@ from .rgrow import (
 import attrs
 import attr
 
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeAlias,
+)
 
-from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
+System: TypeAlias = ATAM | KTAM | OldKTAM
+SYSTEMS = (ATAM, KTAM, OldKTAM)
 
 if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt
     import matplotlib.colors
+    from numpy.typing import NDArray
 
 
-def _system_name_canvas(self: System, state: State | FFSStateRef) -> np.ndarray:
+def _system_name_canvas(self: "System", state: State | FFSStateRef) -> np.ndarray:
     """Returns the current canvas for state, as an array of tile names.
     'empty' indicates empty locations; numbers are translated to strings.
 
@@ -53,9 +68,6 @@ def _system_name_canvas(self: System, state: State | FFSStateRef) -> np.ndarray:
     return a[state.canvas_view]
 
 
-System.name_canvas = _system_name_canvas  # type: ignore
-
-
 def _system_color_canvas(
     self: System, state: State | np.ndarray | FFSStateRef
 ) -> np.ndarray:
@@ -67,16 +79,13 @@ def _system_color_canvas(
         return self.tile_colors[state]
 
 
-System.color_canvas = _system_color_canvas  # type: ignore
-
-
 def _system_plot_canvas(
     sys: System,
     state: State | np.ndarray | FFSStateRef,
-    ax=None,
-    annotate_tiles=False,
-    annotate_mismatches=False,
-    crop=False,
+    ax: matplotlib.axes.Axes | None = None,
+    annotate_tiles: bool = False,
+    annotate_mismatches: bool = False,
+    crop: bool = False,
 ) -> "plt.Axes":
     import matplotlib.pyplot as plt
     import numpy as np
@@ -202,7 +211,10 @@ def _system_plot_canvas(
     return ax
 
 
-System.plot_canvas = _system_plot_canvas  # type: ignore
+for sys in SYSTEMS:
+    sys.plot_canvas = _system_plot_canvas  # type: ignore
+    sys.color_canvas = _system_color_canvas  # type: ignore
+    sys.name_canvas = _system_name_canvas  # type: ignore
 
 
 @attr.define(auto_attribs=True)
@@ -318,7 +330,7 @@ class TileSet:
 
         return _TileSet(tiles=rtiles, bonds=self.bonds, glues=self.glues, **kwargs)
 
-    def create_system(self) -> System:
+    def create_system(self) -> "System":
         return self._to_rg_tileset().create_system()
 
     def create_state_empty(self) -> State:
@@ -438,7 +450,7 @@ class Simulation:
         size_max: int | None = None,
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
-    ):
+    ) -> EvolveOutcome | List[EvolveOutcome]:
         """Evolve a particular state, with index `state_index`,
         subject to some bounds.  Runs state 0 by default.
 
@@ -503,7 +515,7 @@ class Simulation:
         size_max: int | None = None,
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
-    ):
+    ) -> List[EvolveOutcome]:
         """Evolve *all* states, stopping each as they reach the
         boundary conditions.  Runs multithreaded using available
         cores.
@@ -566,7 +578,7 @@ class Simulation:
         size_max: int | None = None,
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
-    ):
+    ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve *some* states, stopping each as they reach the
         boundary conditions.  Runs multithreaded using available
@@ -652,7 +664,7 @@ class Simulation:
             name="tile_cmap",
         )
 
-    def canvas_view(self, state_index: int = 0) -> "np.ndarray":
+    def canvas_view(self, state_index: int = 0) -> NDArray[np.uint]:
         """Returns the current canvas for state_index (default 0), as a
         *direct* view of the state array.  This array will update as
         the simulation evolves.  It should not be modified, as modifications
@@ -676,7 +688,7 @@ class Simulation:
         self.check_state(state_index)
         return self.states[state_index].canvas_view
 
-    def canvas_copy(self, state_index: int = 0) -> "np.ndarray":
+    def canvas_copy(self, state_index: int = 0) -> NDArray[np.uint]:
         """Returns a copy of the current canvas for state_index (default 0).
         This array will *not* update as the simulation evolves.
 
