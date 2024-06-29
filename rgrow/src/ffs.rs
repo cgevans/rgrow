@@ -58,7 +58,7 @@ use system::{DynSystem, Orientation, System, SystemEnum};
 
 /// Configuration options for FFS.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
 pub struct FFSRunConfig {
     /// Use constant-variance, variable-configurations-per-surface method.
     /// If false, use max_configs for each surface.
@@ -644,7 +644,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
 // RESULTS CODE
 
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSRunResult {
     #[serde(skip)]
@@ -656,7 +656,7 @@ pub struct FFSRunResult {
     pub system: Option<SystemEnum>,
 }
 
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSRunResultDF {
     #[serde(skip)]
@@ -758,7 +758,7 @@ where
     }
 }
 
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSLevelResult {
     pub state_list: Vec<Arc<StateEnum>>,
@@ -1218,6 +1218,11 @@ impl FFSRunResultDF {
     //         .collect()
     // }
 
+    /// Get the surfaces as a Polars DataFrame.
+    ///
+    /// Returns
+    /// -------
+    /// pl.DataFrame
     #[pyo3(name = "surfaces_dataframe")]
     fn py_surfaces_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
         Ok(PyDataFrame(self.surfaces_df.clone()))
@@ -1248,12 +1253,25 @@ impl FFSRunResultDF {
     //         .collect()
     // }
 
+    /// Write dataframes and result data to files.
+    ///
+    /// Parameters
+    /// ----------
+    /// prefix : str
+    ///    Prefix for the filenames.  The files will be named
+    ///    `{prefix}.surfaces.parquet`, `{prefix}.configurations.parquet`, and
+    ///    `{prefix}.ffs_result.json`.
     #[pyo3(name = "write_files")]
     fn py_write_files(&mut self, prefix: &str) -> PyResult<()> {
         self.write_files(prefix)
             .map_err(|e| PyPolarsErr::from(e).into())
     }
 
+    /// Read dataframes and result data from files.
+    ///
+    /// Returns
+    /// -------
+    /// Self
     #[pyo3(name = "read_files")]
     #[staticmethod]
     fn py_read_files(prefix: &str) -> PyResult<Self> {
@@ -1268,7 +1286,7 @@ impl FFSRunResultDF {
     // }
 }
 
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[allow(dead_code)] // This is used in the python interface
 pub struct FFSLevelRef(Arc<FFSLevelResult>);
 
@@ -1323,7 +1341,7 @@ impl FFSLevelRef {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[allow(dead_code)] // This is used in the python interface
 #[derive(Clone)]
 pub struct FFSStateRef(Arc<StateEnum>);

@@ -634,6 +634,11 @@ impl TileSet {
     }
 
     /// Creates an empty state, without any setup by a System.
+    ///
+    /// Returns
+    /// -------
+    /// State
+    ///     An empty state.
     pub fn create_state_empty(&self) -> Result<StateEnum, RgrowError> {
         let shape = match self.size.unwrap_or(SIZE_DEFAULT) {
             Size::Single(i) => (i, i),

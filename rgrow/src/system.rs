@@ -59,7 +59,7 @@ pub enum StepOutcome {
 }
 
 #[derive(Debug)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum NeededUpdate {
     None,
     NonZero,
@@ -72,7 +72,7 @@ thread_local! {
 }
 
 #[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub struct EvolveBounds {
     /// Stop if this number of events has taken place during this evolve call.
     pub for_events: Option<NumEvents>,
@@ -163,7 +163,7 @@ impl EvolveBounds {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub enum EvolveOutcome {
@@ -176,7 +176,7 @@ pub enum EvolveOutcome {
 }
 
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 
 pub enum Orientation {
     NS,
@@ -202,7 +202,7 @@ impl DimerInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum ChunkHandling {
     #[serde(alias = "none")]
     None,
@@ -226,7 +226,7 @@ impl TryFrom<&str> for ChunkHandling {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum ChunkSize {
     #[serde(alias = "single")]
     Single,
@@ -764,7 +764,7 @@ pub trait SystemInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum FissionHandling {
     #[serde(alias = "off", alias = "no-fission")]
     NoFission,

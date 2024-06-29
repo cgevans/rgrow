@@ -116,14 +116,23 @@ pub struct KTAM {
     /// at point P if tile T is in that direction.  Eg, friends_e[T]
     /// is a set of tiles that might attach at point P if T is east of
     /// point P.  The ones other than NESW are only for duples.
+    #[serde(skip)]
     friends_n: Vec<HashSetType<Tile>>,
+    #[serde(skip)]
     friends_e: Vec<HashSetType<Tile>>,
+    #[serde(skip)]
     friends_s: Vec<HashSetType<Tile>>,
+    #[serde(skip)]
     friends_w: Vec<HashSetType<Tile>>,
+    #[serde(skip)]
     friends_ne: Vec<HashSetType<Tile>>,
+    #[serde(skip)]
     friends_ee: Vec<HashSetType<Tile>>,
+    #[serde(skip)]
     friends_se: Vec<HashSetType<Tile>>,
+    #[serde(skip)]
     friends_ss: Vec<HashSetType<Tile>>,
+    #[serde(skip)]
     friends_sw: Vec<HashSetType<Tile>>,
 
     has_duples: bool,

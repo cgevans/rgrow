@@ -144,6 +144,7 @@ pub enum PyStateOrRef<'py> {
     feature = "python",
     pyclass(module = "rgrow", name = "System", subclass)
 )]
+/// A System
 pub struct PySystem(pub SystemEnum);
 
 impl From<FFSStateRef> for PyState {
@@ -155,6 +156,11 @@ impl From<FFSStateRef> for PyState {
 #[cfg(feature = "python")]
 #[pymethods]
 impl PySystem {
+    #[new]
+    pub fn new(model: &str, kwargs: Option<Bound<PyDict>>) -> PyResult<Self> {
+        todo!()
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[pyo3(
         name = "evolve",
@@ -173,6 +179,39 @@ impl PySystem {
     /// Evolve a state (or states), with some bounds on the simulation.
     ///
     /// If evolving multiple states, the bounds are applied per-state.
+    ///
+    /// Parameters
+    /// ----------
+    /// state : State or Sequence[State]
+    ///   The state or states to evolve.
+    /// for_events : int, optional
+    ///   Stop evolving each state after this many events.
+    /// total_events : int, optional
+    ///   Stop evelving each state when the state's total number of events (including
+    ///   previous events) reaches this.
+    /// for_time : float, optional
+    ///   Stop evolving each state after this many seconds of simulated time.
+    /// total_time : float, optional
+    ///   Stop evolving each state when the state's total time (including previous steps)
+    ///   reaches this.
+    /// size_min : int, optional
+    ///   Stop evolving each state when the state's number of tiles is less than or equal to this.
+    /// size_max : int, optional
+    ///   Stop evolving each state when the state's number of tiles is greater than or equal to this.
+    /// for_wall_time : float, optional
+    ///   Stop evolving each state after this many seconds of wall time.
+    /// require_strong_bound : bool
+    ///   Require that the stopping conditions are strong, i.e., they are guaranteed to be eventually
+    ///   satisfied under normal conditions.
+    /// show_window : bool
+    ///   Show a graphical UI window while evolving (requires ui feature, and a single state).
+    /// parallel : bool
+    ///   Use multiple threads.
+    ///
+    /// Returns
+    /// -------
+    /// EvolveOutcome or List[EvolveOutcome]
+    ///  The outcome (stopping condition) of the evolution.  If evolving a single state, returns a single outcome.
     pub fn py_evolve<'py>(
         &mut self,
         state: PyStateOrStates<'py>,
@@ -256,6 +295,22 @@ impl PySystem {
         }
     }
 
+    /// Calculate the number of mismatches in a state.
+    ///
+    /// Parameters
+    /// ----------
+    /// state : State or FFSStateRef
+    ///   The state to calculate mismatches for.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///  The number of mismatches.
+    ///
+    /// See also
+    /// --------
+    /// calc_mismatch_locations
+    ///   Calculate the location and direction of mismatches, not jus the number.
     fn calc_mismatches(&self, state: PyStateOrRef) -> usize {
         match state {
             PyStateOrRef::State(s) => self.0.calc_mismatches(&s.borrow().0),
@@ -263,10 +318,31 @@ impl PySystem {
         }
     }
 
+    /// Calculate information about the dimers the system is able to form.
+    ///
+    /// Returns
+    /// -------
+    /// List[DimerInfo]
     fn calc_dimers(&self) -> Vec<DimerInfo> {
         self.0.calc_dimers()
     }
 
+    /// Calculate the locations of mismatches in the state.  
+    ///
+    /// This returns a copy of the canvas, with the values set to 0 if there is no mismatch
+    /// in the location, and > 0, in a model defined way, if there is at least one mismatch.
+    /// Most models use v = 8*N + 4*E + 2*S + W, where N, E, S, W are the four directions.
+    /// Thus, a tile with mismatches to the E and W would have v = 4+2 = 6.
+    ///
+    /// Parameters
+    /// ----------
+    /// state : State or FFSStateRef
+    ///    The state to calculate mismatches for.
+    ///
+    /// Returns
+    /// -------
+    /// ndarray
+    ///   An array of the same shape as the state's canvas, with the values set as described above.
     fn calc_mismatch_locations<'py>(
         this: &Bound<'py, Self>,
         state: PyStateOrRef,
@@ -280,22 +356,42 @@ impl PySystem {
         Ok(PyArray2::from_array_bound(py, &ra))
     }
 
+    /// Set a system parameter.
+    ///
+    /// Parameters
+    /// ----------
+    /// param_name : str
+    ///     The name of the parameter to set.
+    /// value : Any
+    ///     The value to set the parameter to.
+    ///
+    /// Returns
+    /// -------
+    /// NeededUpdate
+    ///     The type of state update needed.  This can be passed to
+    ///    `update_state` to update the state.
     fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
         Ok(self.0.set_param(param_name, value.0)?)
     }
 
-    /// Names of tiles, per number.
-    // #[getter]
-    // fn tile_names(&self, py: Python<'_>) -> PyArray1<PyFixedUnicode<MAX_NAME_LENGTH>> {
-    //     PyArray1::from_vec(py, self.0.tile_names()).into()
-    // }
-
+    /// Names of tiles, by tile number.
     #[getter]
     fn tile_names(&self) -> Vec<String> {
         self.0.tile_names().iter().map(|x| x.to_string()).collect()
     }
 
-    fn tile_number(&self, tile_name: &str) -> Option<Tile> {
+    /// Given a tile name, return the tile number.
+    ///
+    /// Parameters
+    /// ----------
+    /// tile_name : str
+    ///   The name of the tile.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///  The tile number.
+    fn tile_number_from_name(&self, tile_name: &str) -> Option<Tile> {
         self.0
             .tile_names()
             .iter()
@@ -303,6 +399,17 @@ impl PySystem {
             .map(|x| x as Tile)
     }
 
+    /// Given a tile number, return the color of the tile.
+    ///
+    /// Parameters
+    /// ----------
+    /// tile_number : int
+    ///  The tile number.
+    ///
+    /// Returns
+    /// -------
+    /// list[int]
+    ///   The color of the tile, as a list of 4 integers (RGBA).
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
         self.0.tile_color(tile_number)
     }
@@ -329,6 +436,36 @@ impl PySystem {
         self.0.update_all(&mut state.0, needed)
     }
 
+    /// Recalculate a state's rates.
+    ///
+    /// This is usually needed when a parameter of the system has
+    /// been changed.
+    ///
+    /// Parameters
+    /// ----------
+    /// state : State
+    ///   The state to update.
+    /// needed : NeededUpdate, optional
+    ///   The type of update needed.  If not provided, all locations
+    ///   will be recalculated.
+    #[pyo3(signature = (state, needed = &NeededUpdate::All))]
+    fn update_state(&self, state: &mut PyState, needed: &NeededUpdate) {
+        self.0.update_all(&mut state.0, needed)
+    }
+
+    /// Run FFS.
+    ///
+    /// Parameters
+    /// ----------
+    /// config : FFSRunConfig
+    ///  The configuration for the FFS run.
+    /// **kwargs
+    ///   FFSRunConfig parameters as keyword arguments.
+    ///
+    /// Returns
+    /// -------
+    /// FFSRunResult
+    ///  The result of the FFS run.
     #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), **kwargs))]
     fn py_run_ffs(
         &mut self,
@@ -361,11 +498,23 @@ impl PySystem {
         println!("{:?}", self.0);
     }
 
+    /// Write the system to a JSON file.
+    ///
+    /// Parameters
+    /// ----------
+    /// filename : str
+    ///     The name of the file to write to.
     pub fn write_json(&self, filename: &str) -> Result<(), RgrowError> {
         serde_json::to_writer(File::create(filename)?, &self.0).unwrap();
         Ok(())
     }
 
+    /// Read a system from a JSON file.
+    ///
+    /// Parameters
+    /// ----------
+    /// filename : str
+    ///     The name of the file to read from.
     #[staticmethod]
     pub fn read_json(filename: &str) -> Result<Self, RgrowError> {
         Ok(PySystem(
