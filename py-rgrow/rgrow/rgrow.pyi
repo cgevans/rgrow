@@ -120,7 +120,7 @@ class ATAM:
             The name of the file to read from.
         """
 
-    def run_ffs(self, config: FFSRunConfig = ..., **kwargs) -> FFSRunResult:
+    def run_ffs(self, config: FFSRunConfig = ..., **kwargs: Any) -> FFSRunResult:
         """
         Run FFS.
 
@@ -213,8 +213,9 @@ class ATAM:
         """
 
 class EvolveBounds:
-    def is_strongly_bounded(self): ...
-    def is_weakly_bounded(self) -> None:
+    def __init__(self, for_time: float | None = None): ...
+    def is_strongly_bounded(self) -> bool: ...
+    def is_weakly_bounded(self) -> bool:
         """
         Will the EvolveBounds actually bound anything, or is it just null, such that the simulation will continue
         until a ZeroRate or an error?  Note that this includes weak bounds (size minimum and maximum) that may
@@ -711,6 +712,7 @@ class State:
     def write_json(self, filename: str) -> None: ...
 
 class TileSet:
+    def __init__(self, **kwargs: Any): ...
     def create_state(self, system: System | None = None) -> State: ...
     def create_state_from_canvas(self, canvas: NDArray[np.uint]) -> State: ...
     def create_system(self) -> System: ...
@@ -730,10 +732,10 @@ class TileSet:
     def from_json(cls, data) -> Self:
         """Parses a JSON string into a TileSet."""
 
-    def run_ffs(self, config=..., **kwargs) -> None:
+    def run_ffs(self, config: FFSRunConfig = ..., **kwargs: Any) -> FFSRunResult:
         """Runs FFS."""
 
-    def run_window(self) -> None:
+    def run_window(self) -> EvolveOutcome:
         """
         Creates a simulation, and runs it in a UI.  Returns the :any:`Simulation` when
         finished.

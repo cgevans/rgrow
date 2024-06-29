@@ -239,7 +239,7 @@ class Bond:
     strength: float
 
     @staticmethod
-    def _conv(a: "Bond | Any", *args, **kwargs) -> "Bond":
+    def _conv(a: "Bond | Any", *args: Any, **kwargs: Any) -> "Bond":
         if isinstance(a, Bond):
             return a
         elif isinstance(a, dict):
@@ -326,7 +326,7 @@ class TileSet:
             system = self.create_system()
         return self._to_rg_tileset().create_state(system=system)
 
-    def run_window(self) -> tuple[System, State]:
+    def run_window(self) -> EvolveOutcome:
         return self._to_rg_tileset().run_window()
 
     @classmethod
@@ -367,7 +367,7 @@ class TileSet:
         canvas_size: tuple[int, int] = (64, 64),
         target_size: int = 100,
         config: FFSRunConfig | None = None,  # FIXME
-        **kwargs,
+        **kwargs: Any,
     ) -> FFSRunResult:
         return self._to_rg_tileset().run_ffs(
             constant_variance=constant_variance,
