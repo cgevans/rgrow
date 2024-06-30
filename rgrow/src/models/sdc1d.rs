@@ -811,34 +811,6 @@ impl SDC {
             strand_concentration[id + 1] = concentration;
         }
 
-        let scaffold = match params.scaffold {
-            SingleOrMultiScaffold::Single(s) => {
-                let mut scaffold = Array2::<Glue>::zeros((64, s.len()));
-                for (i, maybe_g) in s.iter().enumerate() {
-                    if let Some(g) = maybe_g {
-                        scaffold
-                            .index_axis_mut(ndarray::Axis(1), i)
-                            .fill(
-                                *glue_name_map
-                                    .get(g)
-                                    .expect(
-                                        format!("ERROR: Glue {} ... Perhaps it is in the glues array, but not in any of the defined strands ?", g).as_str()
-                                    )
-                            );
-                    } else {
-                        scaffold.index_axis_mut(ndarray::Axis(1), i).fill(0);
-                    }
-                }
-                scaffold
-            }
-            SingleOrMultiScaffold::Multi(_m) => todo!(),
-        };
-
-        let mut glue_names = vec![String::default(); gluenum];
-        for (s, i) in glue_name_map.iter() {
-            glue_names[*i] = s.clone();
-        }
-
         // Delta G at 37 degrees C
         let mut glue_delta_g = Array2::<f64>::zeros((gluenum, gluenum));
         let mut glue_s = Array2::<f64>::zeros((gluenum, gluenum));
@@ -859,19 +831,51 @@ impl SDC {
                 }
             };
 
-            // FIXME: fails if glue not found
-            let i = *glue_name_map
-                .get(&i)
-                .expect(format!("Glue {} not found", i).as_str());
-
-            let j = *glue_name_map
-                .get(&j)
-                .expect(format!("Glue {} not found", j).as_str());
+            // If the user defines the DNA sequence of a glue, but it is never used in any of the
+            // strands, then we can ignore it. Also, if the user does use the glue A, but not the
+            // glue B, then we can safely ignore the binding strength of A and B, thus
+            //
+            // (None, None) and (Some, None) are both fine to skip
+            //
+            // MAYBE it could be better to iterate tglue_dg_s twice, the first time, we just make
+            // sure that all strings are inside the glue_name_map, and if they arent, we can add
+            // them. The second time around we know that the glues will always be found in the map
+            //
+            // However, since you cant mutate the strands glues, it shuold be fine to just ignore
+            // the glues that do not exist
+            let (i, j) = match (glue_name_map.get(&i), glue_name_map.get(&j)) {
+                (Some(&x), Some(&y)) => (x, y),
+                _ => continue,
+            };
 
             glue_delta_g[[i, j]] = gs.0;
             glue_delta_g[[j, i]] = gs.0;
             glue_s[[i, j]] = gs.1;
             glue_s[[j, i]] = gs.1;
+        }
+
+        let scaffold = match params.scaffold {
+            SingleOrMultiScaffold::Single(s) => {
+                let mut scaffold = Array2::<Glue>::zeros((64, s.len()));
+                for (i, maybe_g) in s.iter().enumerate() {
+                    if let Some(g) = maybe_g {
+                        let x = *glue_name_map
+                            .get(g)
+                            .expect(format!("ERROR: Glue {} in scaffold not found!", g).as_str());
+
+                        scaffold.index_axis_mut(ndarray::Axis(1), i).fill(x);
+                    } else {
+                        scaffold.index_axis_mut(ndarray::Axis(1), i).fill(0);
+                    }
+                }
+                scaffold
+            }
+            SingleOrMultiScaffold::Multi(_m) => todo!(),
+        };
+
+        let mut glue_names = vec![String::default(); gluenum];
+        for (s, i) in glue_name_map.iter() {
+            glue_names[*i] = s.clone();
         }
 
         SDC::new(
