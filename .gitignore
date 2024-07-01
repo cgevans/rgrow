@@ -29,3 +29,5 @@ Cargo.lock
 coverage.xml
 coverage.lcov
 **/.hypothesis/*
+**/.cargo/config.toml
+
