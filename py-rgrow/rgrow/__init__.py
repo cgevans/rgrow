@@ -177,6 +177,8 @@ def _system_plot_canvas(
                     ax.text(j, i, n, ha="center", va="center", color="white")
 
     if annotate_mismatches:
+        if isinstance(state, np.ndarray):
+            raise ValueError("Cannot currently annotate mismatches on a numpy array.")
         mml = sys.calc_mismatch_locations(state)
         for i, j in zip(*mml.nonzero()):
             d = mml[i, j]
