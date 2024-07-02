@@ -14,7 +14,7 @@ use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo,
 };
 use ndarray::Array2;
-use numpy::{IntoPyArray, PyArray2};
+use numpy::{IntoPyArray, PyArray2, ToPyArray};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -35,6 +35,15 @@ impl PyState {
             kind.try_into()?,
             tracking.try_into()?,
         )?))
+    }
+
+    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<crate::base::Rate>> {
+        self.0.rate_array().to_pyarray_bound(py)
+    }
+
+    #[getter]
+    pub fn total_rate(&self) -> crate::base::Rate {
+        RateStore::total_rate(&self.0)
     }
 
     #[getter]

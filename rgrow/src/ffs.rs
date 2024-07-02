@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
+use std::ops::Deref;
 use std::sync::{Arc, Weak};
 
 use crate::base::{GrowError, RgrowError, Tile};
@@ -1405,5 +1406,15 @@ impl FFSStateRef {
             self.0.nrows(),
             self.0.total_rate()
         )
+    }
+
+
+    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<crate::base::Rate>> {
+        self.0.rate_array().to_pyarray_bound(py)
+    }
+
+    #[getter]
+    pub fn total_rate(&self) -> crate::base::Rate {
+        RateStore::total_rate(self.0.deref())
     }
 }

@@ -4,6 +4,7 @@ use crate::state::StateEnum;
 use enum_dispatch::enum_dispatch;
 use fnv::FnvHashSet;
 use ndarray::Array2;
+use ndarray::ArrayView2;
 use rand::thread_rng;
 use rand::Rng;
 use serde::Deserialize;
@@ -22,6 +23,7 @@ pub trait RateStore {
     fn update_point(&mut self, point: PointSafeHere, new_rate: Rate);
     fn update_multiple(&mut self, to_update: &[(PointSafeHere, Rate)]);
     fn total_rate(&self) -> Rate;
+    fn rate_array(&self) -> ArrayView2<Rate>;
 }
 
 pub trait RateTrait:
@@ -60,6 +62,8 @@ impl RateStore for QuadTreeSquareArray<f64> {
     fn rate_at_point(&self, point: PointSafeHere) -> Rate {
         unsafe { *self.0[0].uget(point.0) }
     }
+
+    
 
     fn choose_point(&self) -> (Point, Rate) {
         let mut threshold = self.1 * thread_rng().gen::<f64>();
@@ -138,6 +142,10 @@ impl RateStore for QuadTreeSquareArray<f64> {
 
     fn total_rate(&self) -> Rate {
         self.1
+    }
+    
+    fn rate_array(&self) -> ArrayView2<Rate> {
+        self.0.first().unwrap().view()
     }
 }
 
