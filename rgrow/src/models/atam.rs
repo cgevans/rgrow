@@ -6,6 +6,9 @@ use crate::{
     tileset::{FromTileSet, ProcessedTileSet, TileSet},
 };
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 use crate::base::{HashMapType, HashSetType};
 use ndarray::prelude::*;
 use rand::prelude::Distribution;
@@ -45,6 +48,7 @@ enum TileShape {
     DupleToTop(Tile),
 }
 
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ATAM {
     /// Tile names, as strings.  Only used for reference.
@@ -924,5 +928,16 @@ impl SystemInfo for ATAM {
 impl SystemWithDimers for ATAM {
     fn calc_dimers(&self) -> Vec<crate::system::DimerInfo> {
         todo!()
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl ATAM {
+    #[staticmethod]
+    #[pyo3(name = "from_tileset")]
+    fn py_from_tileset(tileset: &Bound<PyAny>) -> PyResult<Self> {
+        let tileset: TileSet = tileset.extract()?;
+        Ok(Self::from_tileset(&tileset)?)
     }
 }

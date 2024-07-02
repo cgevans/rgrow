@@ -59,7 +59,7 @@ pub enum StepOutcome {
 }
 
 #[derive(Debug)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum NeededUpdate {
     None,
     NonZero,
@@ -72,7 +72,7 @@ thread_local! {
 }
 
 #[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub struct EvolveBounds {
     /// Stop if this number of events has taken place during this evolve call.
     pub for_events: Option<NumEvents>,
@@ -163,7 +163,7 @@ impl EvolveBounds {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub enum EvolveOutcome {
@@ -176,14 +176,14 @@ pub enum EvolveOutcome {
 }
 
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 
 pub enum Orientation {
     NS,
     WE,
 }
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
 
 pub struct DimerInfo {
     pub t1: Tile,
@@ -202,7 +202,7 @@ impl DimerInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum ChunkHandling {
     #[serde(alias = "none")]
     None,
@@ -226,7 +226,7 @@ impl TryFrom<&str> for ChunkHandling {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum ChunkSize {
     #[serde(alias = "single")]
     Single,
@@ -734,11 +734,24 @@ where
 
 #[enum_dispatch(DynSystem, TileBondInfo, SystemWithDimers)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(FromPyObject))]
 pub enum SystemEnum {
     KTAM,
     OldKTAM,
     ATAM,
     SDC, // StaticKTAMCover
+}
+
+#[cfg(feature = "python")]
+impl IntoPy<PyObject> for SystemEnum {
+    fn into_py(self, py: Python) -> PyObject {
+        match self {
+            SystemEnum::KTAM(ktam) => ktam.into_py(py),
+            SystemEnum::OldKTAM(oldktam) => oldktam.into_py(py),
+            SystemEnum::ATAM(atam) => atam.into_py(py),
+            SystemEnum::SDC(sdc) => sdc.into_py(py),
+        }
+    }
 }
 
 #[enum_dispatch]
@@ -770,7 +783,7 @@ pub trait SystemInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum FissionHandling {
     #[serde(alias = "off", alias = "no-fission")]
     NoFission,

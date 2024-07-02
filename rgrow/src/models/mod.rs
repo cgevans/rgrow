@@ -1,13 +1,8 @@
 pub mod atam;
-
+pub mod covers;
 pub mod ktam;
-pub mod ktam_fission;
-
 pub mod oldktam;
-pub mod oldktam_fission;
 
 pub mod sdc1d;
-
-pub mod covers;
-
-pub mod fission_base;
+ 
+pub(self) mod fission_base;

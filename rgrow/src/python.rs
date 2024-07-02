@@ -6,11 +6,13 @@ use crate::base::{NumEvents, NumTiles, RgrowError, RustAny, Tile};
 use crate::canvas::{Canvas, PointSafeHere};
 use crate::ffs::{FFSRunConfig, FFSRunResult, FFSStateRef};
 use crate::models::sdc1d::{SDCParams, SDC};
+use crate::models::atam::ATAM;
+use crate::models::ktam::KTAM;
+use crate::models::oldktam::OldKTAM;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TrackerData};
 use crate::system::{
-    DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemEnum, SystemWithDimers,
-    TileBondInfo,
+    DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo,
 };
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray2};
@@ -140,242 +142,395 @@ pub enum PyStateOrRef<'py> {
     Ref(Bound<'py, FFSStateRef>),
 }
 
-#[repr(transparent)]
-#[cfg_attr(
-    feature = "python",
-    pyclass(module = "rgrow", name = "System", subclass)
-)]
-pub struct PySystem(pub SystemEnum);
-
 impl From<FFSStateRef> for PyState {
     fn from(state: FFSStateRef) -> Self {
         state.clone_state()
     }
 }
 
-#[cfg(feature = "python")]
-#[pymethods]
-impl PySystem {
-    #[allow(clippy::too_many_arguments)]
-    #[pyo3(
-        name = "evolve",
-        signature = (state,
-                    for_events=None,
-                    total_events=None,
-                    for_time=None,
-                    total_time=None,
-                    size_min=None,
-                    size_max=None,
-                    for_wall_time=None,
-                    require_strong_bound=true,
-                    show_window=false,
-                    parallel=true)
-    )]
-    /// Evolve a state (or states), with some bounds on the simulation.
-    ///
-    /// If evolving multiple states, the bounds are applied per-state.
-    pub fn py_evolve<'py>(
-        &mut self,
-        state: PyStateOrStates<'py>,
-        for_events: Option<u64>,
-        total_events: Option<u64>,
-        for_time: Option<f64>,
-        total_time: Option<f64>,
-        size_min: Option<u32>,
-        size_max: Option<u32>,
-        for_wall_time: Option<f64>,
-        require_strong_bound: bool,
-        show_window: bool,
-        parallel: bool,
-        py: Python<'py>,
-    ) -> PyResult<PyObject> {
-        let bounds = EvolveBounds {
-            for_events,
-            for_time,
-            total_events,
-            total_time,
-            size_min,
-            size_max,
-            for_wall_time: for_wall_time.map(Duration::from_secs_f64),
-        };
+macro_rules! create_py_system {
+    ($name: ident) => {
+        #[cfg(feature = "python")]
+        #[pymethods]
+        impl $name {
 
-        if require_strong_bound & !bounds.is_strongly_bounded() {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "No strong bounds specified.",
-            ));
-        }
 
-        if !bounds.is_weakly_bounded() {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "No weak bounds specified.",
-            ));
-        }
+            #[allow(clippy::too_many_arguments)]
+            #[pyo3(
+                                                        name = "evolve",
+                                                        signature = (state,
+                                                                    for_events=None,
+                                                                    total_events=None,
+                                                                    for_time=None,
+                                                                    total_time=None,
+                                                                    size_min=None,
+                                                                    size_max=None,
+                                                                    for_wall_time=None,
+                                                                    require_strong_bound=true,
+                                                                    show_window=false,
+                                                                    parallel=true)
+                                                    )]
+            /// Evolve a state (or states), with some bounds on the simulation.
+            ///
+            /// If evolving multiple states, the bounds are applied per-state.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State or Sequence[State]
+            ///   The state or states to evolve.
+            /// for_events : int, optional
+            ///   Stop evolving each state after this many events.
+            /// total_events : int, optional
+            ///   Stop evelving each state when the state's total number of events (including
+            ///   previous events) reaches this.
+            /// for_time : float, optional
+            ///   Stop evolving each state after this many seconds of simulated time.
+            /// total_time : float, optional
+            ///   Stop evolving each state when the state's total time (including previous steps)
+            ///   reaches this.
+            /// size_min : int, optional
+            ///   Stop evolving each state when the state's number of tiles is less than or equal to this.
+            /// size_max : int, optional
+            ///   Stop evolving each state when the state's number of tiles is greater than or equal to this.
+            /// for_wall_time : float, optional
+            ///   Stop evolving each state after this many seconds of wall time.
+            /// require_strong_bound : bool
+            ///   Require that the stopping conditions are strong, i.e., they are guaranteed to be eventually
+            ///   satisfied under normal conditions.
+            /// show_window : bool
+            ///   Show a graphical UI window while evolving (requires ui feature, and a single state).
+            /// parallel : bool
+            ///   Use multiple threads.
+            ///
+            /// Returns
+            /// -------
+            /// EvolveOutcome or List[EvolveOutcome]
+            ///  The outcome (stopping condition) of the evolution.  If evolving a single state, returns a single outcome.
+            pub fn py_evolve<'py>(
+                &mut self,
+                state: PyStateOrStates<'py>,
+                for_events: Option<u64>,
+                total_events: Option<u64>,
+                for_time: Option<f64>,
+                total_time: Option<f64>,
+                size_min: Option<u32>,
+                size_max: Option<u32>,
+                for_wall_time: Option<f64>,
+                require_strong_bound: bool,
+                show_window: bool,
+                parallel: bool,
+                py: Python<'py>,
+            ) -> PyResult<PyObject> {
+                let bounds = EvolveBounds {
+                    for_events,
+                    for_time,
+                    total_events,
+                    total_time,
+                    size_min,
+                    size_max,
+                    for_wall_time: for_wall_time.map(Duration::from_secs_f64),
+                };
 
-        match state {
-            PyStateOrStates::State(pystate) => {
-                let state = &mut pystate.borrow_mut().0;
-                if show_window {
-                    Ok(py
-                        .allow_threads(|| self.0.evolve_in_window(state, None, bounds))?
-                        .into_py(py))
-                } else {
-                    Ok(py
-                        .allow_threads(|| self.0.evolve(state, bounds))?
-                        .into_py(py))
-                }
-            }
-            PyStateOrStates::States(pystates) => {
-                if show_window {
+                if require_strong_bound & !bounds.is_strongly_bounded() {
                     return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                        "Cannot show window with multiple states.",
+                        "No strong bounds specified.",
                     ));
                 }
-                let mut refs = pystates
-                    .into_iter()
-                    .map(|x| x.borrow_mut())
-                    .collect::<Vec<_>>();
-                let mut states = refs.iter_mut().map(|x| x.deref_mut()).collect::<Vec<_>>();
-                let out = if parallel {
-                    py.allow_threads(|| {
-                        states
-                            .par_iter_mut()
-                            .map(|state| self.0.evolve(&mut state.0, bounds))
-                            .collect::<Vec<_>>()
-                    })
-                } else {
-                    states
-                        .iter_mut()
-                        .map(|state| self.0.evolve(&mut state.0, bounds))
-                        .collect::<Vec<_>>()
+
+                if !bounds.is_weakly_bounded() {
+                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        "No weak bounds specified.",
+                    ));
+                }
+
+                match state {
+                    PyStateOrStates::State(pystate) => {
+                        let state = &mut pystate.borrow_mut().0;
+                        if show_window {
+                            Ok(py
+                                .allow_threads(|| {
+                                    DynSystem::evolve_in_window(self, state, None, bounds)
+                                })?
+                                .into_py(py))
+                        } else {
+                            Ok(py
+                                .allow_threads(|| DynSystem::evolve(self, state, bounds))?
+                                .into_py(py))
+                        }
+                    }
+                    PyStateOrStates::States(pystates) => {
+                        if show_window {
+                            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                                "Cannot show window with multiple states.",
+                            ));
+                        }
+                        let mut refs = pystates
+                            .into_iter()
+                            .map(|x| x.borrow_mut())
+                            .collect::<Vec<_>>();
+                        let mut states = refs.iter_mut().map(|x| x.deref_mut()).collect::<Vec<_>>();
+                        let out = if parallel {
+                            py.allow_threads(|| {
+                                states
+                                    .par_iter_mut()
+                                    .map(|state| DynSystem::evolve(self, &mut state.0, bounds))
+                                    .collect::<Vec<_>>()
+                            })
+                        } else {
+                            states
+                                .iter_mut()
+                                .map(|state| DynSystem::evolve(self, &mut state.0, bounds))
+                                .collect::<Vec<_>>()
+                        };
+                        let o: Result<Vec<EvolveOutcome>, PyErr> = out
+                            .into_iter()
+                            .map(|x| {
+                                x.map_err(|y| {
+                                    pyo3::exceptions::PyValueError::new_err(y.to_string())
+                                })
+                            })
+                            .collect();
+                        o.map(|x| x.into_py(py))
+                    }
+                }
+            }
+
+            /// Calculate the number of mismatches in a state.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State or FFSStateRef
+            ///   The state to calculate mismatches for.
+            ///
+            /// Returns
+            /// -------
+            /// int
+            ///  The number of mismatches.
+            ///
+            /// See also
+            /// --------
+            /// calc_mismatch_locations
+            ///   Calculate the location and direction of mismatches, not jus the number.
+            fn calc_mismatches(&self, state: PyStateOrRef) -> usize {
+                match state {
+                    PyStateOrRef::State(s) => DynSystem::calc_mismatches(self, &s.borrow().0),
+                    PyStateOrRef::Ref(s) => {
+                        DynSystem::calc_mismatches(self, &s.borrow().clone_state().0)
+                    }
+                }
+            }
+
+            /// Calculate information about the dimers the system is able to form.
+            ///
+            /// Returns
+            /// -------
+            /// List[DimerInfo]
+            fn calc_dimers(&self) -> Vec<DimerInfo> {
+                SystemWithDimers::calc_dimers(self)
+            }
+
+            /// Calculate the locations of mismatches in the state.
+            ///
+            /// This returns a copy of the canvas, with the values set to 0 if there is no mismatch
+            /// in the location, and > 0, in a model defined way, if there is at least one mismatch.
+            /// Most models use v = 8*N + 4*E + 2*S + W, where N, E, S, W are the four directions.
+            /// Thus, a tile with mismatches to the E and W would have v = 4+2 = 6.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State or FFSStateRef
+            ///    The state to calculate mismatches for.
+            ///
+            /// Returns
+            /// -------
+            /// ndarray
+            ///   An array of the same shape as the state's canvas, with the values set as described above.
+            fn calc_mismatch_locations<'py>(
+                &mut self,
+                state: PyStateOrRef,
+                py: Python<'py>,
+            ) -> PyResult<Bound<'py, PyArray2<usize>>> {
+                let ra = match state {
+                    PyStateOrRef::State(s) => {
+                        DynSystem::calc_mismatch_locations(self, &s.borrow().0)
+                    }
+                    PyStateOrRef::Ref(s) => {
+                        DynSystem::calc_mismatch_locations(self, &s.borrow().clone_state().0)
+                    }
                 };
-                let o: Result<Vec<EvolveOutcome>, PyErr> = out
-                    .into_iter()
-                    .map(|x| x.map_err(|y| pyo3::exceptions::PyValueError::new_err(y.to_string())))
-                    .collect();
-                o.map(|x| x.into_py(py))
+                Ok(PyArray2::from_array_bound(py, &ra))
+            }
+
+            /// Set a system parameter.
+            ///
+            /// Parameters
+            /// ----------
+            /// param_name : str
+            ///     The name of the parameter to set.
+            /// value : Any
+            ///     The value to set the parameter to.
+            ///
+            /// Returns
+            /// -------
+            /// NeededUpdate
+            ///     The type of state update needed.  This can be passed to
+            ///    `update_state` to update the state.
+            fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
+                Ok(DynSystem::set_param(self, param_name, value.0)?)
+            }
+
+            /// Names of tiles, by tile number.
+            #[getter]
+            fn tile_names(&self) -> Vec<String> {
+                TileBondInfo::tile_names(self)
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect()
+            }
+
+            /// Given a tile name, return the tile number.
+            ///
+            /// Parameters
+            /// ----------
+            /// tile_name : str
+            ///   The name of the tile.
+            ///
+            /// Returns
+            /// -------
+            /// int
+            ///  The tile number.
+            fn tile_number_from_name(&self, tile_name: &str) -> Option<Tile> {
+                TileBondInfo::tile_names(self)
+                    .iter()
+                    .position(|x| *x == tile_name)
+                    .map(|x| x as Tile)
+            }
+
+            /// Given a tile number, return the color of the tile.
+            ///
+            /// Parameters
+            /// ----------
+            /// tile_number : int
+            ///  The tile number.
+            ///
+            /// Returns
+            /// -------
+            /// list[int]
+            ///   The color of the tile, as a list of 4 integers (RGBA).
+            fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
+                TileBondInfo::tile_color(self, tile_number)
+            }
+
+            #[getter]
+            fn tile_colors<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<u8>> {
+                let colors = TileBondInfo::tile_colors(self);
+                let mut arr = Array2::zeros((colors.len(), 4));
+                for (i, c) in colors.iter().enumerate() {
+                    arr[[i, 0]] = c[0];
+                    arr[[i, 1]] = c[1];
+                    arr[[i, 2]] = c[2];
+                    arr[[i, 3]] = c[3];
+                }
+                arr.into_pyarray_bound(py)
+            }
+
+            fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
+                Ok(RustAny(DynSystem::get_param(self, param_name)?))
+            }
+
+            #[pyo3(signature = (state, needed = &NeededUpdate::All))]
+            fn update_all(&self, state: &mut PyState, needed: &NeededUpdate) {
+                DynSystem::update_all(self, &mut state.0, needed)
+            }
+
+            /// Recalculate a state's rates.
+            ///
+            /// This is usually needed when a parameter of the system has
+            /// been changed.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State
+            ///   The state to update.
+            /// needed : NeededUpdate, optional
+            ///   The type of update needed.  If not provided, all locations
+            ///   will be recalculated.
+            #[pyo3(signature = (state, needed = &NeededUpdate::All))]
+            fn update_state(&self, state: &mut PyState, needed: &NeededUpdate) {
+                DynSystem::update_all(self, &mut state.0, needed)
+            }
+
+            /// Run FFS.
+            ///
+            /// Parameters
+            /// ----------
+            /// config : FFSRunConfig
+            ///  The configuration for the FFS run.
+            /// **kwargs
+            ///   FFSRunConfig parameters as keyword arguments.
+            ///
+            /// Returns
+            /// -------
+            /// FFSRunResult
+            ///  The result of the FFS run.
+            #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), **kwargs))]
+            fn py_run_ffs(
+                &mut self,
+                config: FFSRunConfig,
+                kwargs: Option<Bound<PyDict>>,
+                py: Python<'_>,
+            ) -> PyResult<FFSRunResult> {
+                let mut c = config;
+
+                if let Some(dict) = kwargs {
+                    for (k, v) in dict.iter() {
+                        c._py_set(&k.extract::<String>()?, v)?;
+                    }
+                }
+
+                let res = py.allow_threads(|| DynSystem::run_ffs(self, &c));
+                match res {
+                    Ok(res) => Ok(res),
+                    Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        err.to_string(),
+                    )),
+                }
+            }
+
+            fn __repr__(&self) -> String {
+                format!("System({})", DynSystem::system_info(self))
+            }
+
+            pub fn print_debug(&self) {
+                println!("{:?}", self);
+            }
+
+            /// Write the system to a JSON file.
+            ///
+            /// Parameters
+            /// ----------
+            /// filename : str
+            ///     The name of the file to write to.
+            pub fn write_json(&self, filename: &str) -> Result<(), RgrowError> {
+                serde_json::to_writer(File::create(filename)?, self).unwrap();
+                Ok(())
+            }
+
+            /// Read a system from a JSON file.
+            ///
+            /// Parameters
+            /// ----------
+            /// filename : str
+            ///     The name of the file to read from.
+            #[staticmethod]
+            pub fn read_json(filename: &str) -> Result<Self, RgrowError> {
+                Ok(serde_json::from_reader(File::open(filename)?).unwrap())
             }
         }
-    }
-
-    fn calc_mismatches(&self, state: PyStateOrRef) -> usize {
-        match state {
-            PyStateOrRef::State(s) => self.0.calc_mismatches(&s.borrow().0),
-            PyStateOrRef::Ref(s) => self.0.calc_mismatches(&s.borrow().clone_state().0),
-        }
-    }
-
-    fn calc_dimers(&self) -> Vec<DimerInfo> {
-        self.0.calc_dimers()
-    }
-
-    fn calc_mismatch_locations<'py>(
-        this: &Bound<'py, Self>,
-        state: PyStateOrRef,
-        py: Python<'py>,
-    ) -> PyResult<Bound<'py, PyArray2<usize>>> {
-        let t = this.borrow();
-        let ra = match state {
-            PyStateOrRef::State(s) => t.0.calc_mismatch_locations(&s.borrow().0),
-            PyStateOrRef::Ref(s) => t.0.calc_mismatch_locations(&s.borrow().clone_state().0),
-        };
-        Ok(PyArray2::from_array_bound(py, &ra))
-    }
-
-    fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
-        Ok(self.0.set_param(param_name, value.0)?)
-    }
-
-    /// Names of tiles, per number.
-    // #[getter]
-    // fn tile_names(&self, py: Python<'_>) -> PyArray1<PyFixedUnicode<MAX_NAME_LENGTH>> {
-    //     PyArray1::from_vec(py, self.0.tile_names()).into()
-    // }
-
-    #[getter]
-    fn tile_names(&self) -> Vec<String> {
-        self.0.tile_names().iter().map(|x| x.to_string()).collect()
-    }
-
-    fn tile_number(&self, tile_name: &str) -> Option<Tile> {
-        self.0
-            .tile_names()
-            .iter()
-            .position(|x| *x == tile_name)
-            .map(|x| x as Tile)
-    }
-
-    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.0.tile_color(tile_number)
-    }
-
-    #[getter]
-    fn tile_colors<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<u8>> {
-        let colors = self.0.tile_colors();
-        let mut arr = Array2::zeros((colors.len(), 4));
-        for (i, c) in colors.iter().enumerate() {
-            arr[[i, 0]] = c[0];
-            arr[[i, 1]] = c[1];
-            arr[[i, 2]] = c[2];
-            arr[[i, 3]] = c[3];
-        }
-        arr.into_pyarray_bound(py)
-    }
-
-    fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
-        Ok(RustAny(self.0.get_param(param_name)?))
-    }
-
-    #[pyo3(signature = (state, needed = &NeededUpdate::All))]
-    fn update_all(&self, state: &mut PyState, needed: &NeededUpdate) {
-        self.0.update_all(&mut state.0, needed)
-    }
-
-    #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), **kwargs))]
-    fn py_run_ffs(
-        &mut self,
-        config: FFSRunConfig,
-        kwargs: Option<Bound<PyDict>>,
-        py: Python<'_>,
-    ) -> PyResult<FFSRunResult> {
-        let mut c = config;
-
-        if let Some(dict) = kwargs {
-            for (k, v) in dict.iter() {
-                c._py_set(&k.extract::<String>()?, v)?;
-            }
-        }
-
-        let res = py.allow_threads(|| self.0.run_ffs(&c));
-        match res {
-            Ok(res) => Ok(res),
-            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                err.to_string(),
-            )),
-        }
-    }
-
-    fn __repr__(&self) -> String {
-        format!("System({})", self.0.system_info())
-    }
-
-    pub fn print_debug(&self) {
-        println!("{:?}", self.0);
-    }
-
-    #[staticmethod]
-    fn new_sdc(params: SDCParams) -> PySystem {
-        PySystem(SystemEnum::SDC(SDC::from_params(params)))
-    }
-
-    pub fn write_json(&self, filename: &str) -> Result<(), RgrowError> {
-        serde_json::to_writer(File::create(filename)?, &self.0).unwrap();
-        Ok(())
-    }
-
-    #[staticmethod]
-    pub fn read_json(filename: &str) -> Result<Self, RgrowError> {
-        Ok(PySystem(
-            serde_json::from_reader(File::open(filename)?).unwrap(),
-        ))
-    }
+    };
 }
+
+create_py_system!(KTAM);
+create_py_system!(ATAM);
+create_py_system!(OldKTAM);
+create_py_system!(SDC);

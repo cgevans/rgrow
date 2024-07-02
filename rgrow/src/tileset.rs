@@ -107,7 +107,6 @@ impl IntoPy<PyObject> for Seed {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python", pyclass)]
 pub enum TileShape {
     #[serde(alias = "single", alias = "s", alias = "S")]
     Single,
@@ -115,6 +114,22 @@ pub enum TileShape {
     Horizontal,
     #[serde(alias = "vertical", alias = "v", alias = "V")]
     Vertical,
+}
+
+#[cfg(feature = "python")]
+impl FromPyObject<'_> for TileShape {
+    fn extract(ob: &PyAny) -> PyResult<Self> {
+        let s = ob.extract::<String>()?;
+        match s.to_lowercase().as_str() {
+            "single" | "s" => Ok(Self::Single),
+            "horizontal" | "h" => Ok(Self::Horizontal),
+            "vertical" | "v" => Ok(Self::Vertical),
+            _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "Unknown tile shape {}",
+                s
+            ))),
+        }
+    }
 }
 
 impl Display for TileShape {
@@ -173,7 +188,7 @@ impl Display for Tile {
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum Direction {
     N,
     E,
@@ -306,7 +321,7 @@ struct SerdeTileSet {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[serde(from = "SerdeTileSet")]
 pub struct TileSet {
     #[serde(default = "Vec::new")]
@@ -500,7 +515,7 @@ impl IntoPy<PyObject> for Size {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 
 pub enum CanvasType {
     #[serde(alias = "square")]
@@ -512,7 +527,7 @@ pub enum CanvasType {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum TrackingType {
     None,
     Order,
@@ -639,6 +654,11 @@ impl TileSet {
     }
 
     /// Creates an empty state, without any setup by a System.
+    ///
+    /// Returns
+    /// -------
+    /// State
+    ///     An empty state.
     pub fn create_state_empty(&self) -> Result<StateEnum, RgrowError> {
         let shape = match self.size.unwrap_or(SIZE_DEFAULT) {
             Size::Single(i) => (i, i),
@@ -703,7 +723,7 @@ impl TileSet {
     }
 
     /// Create a state, and set it up with a provided DynSystem.
-    pub fn create_state_with_system(&self, sys: &SystemEnum) -> Result<StateEnum, RgrowError> {
+    pub fn create_state_with_system(&self, sys: &impl DynSystem) -> Result<StateEnum, RgrowError> {
         let mut state = self.create_state_empty()?;
         sys.setup_state(&mut state)?;
         Ok(state)

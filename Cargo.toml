@@ -13,7 +13,7 @@ numpy = "^0.21"
 enum_dispatch = "0.3"
 approx = "^0.5"
 pyo3-polars = "^0.15"
-polars = {version = "^0.41", features = ["lazy", "fmt", "parquet", "serde"]}
+polars = {version = "^0.41", features = ["lazy", "parquet", "product"]}
 
 [workspace.package]
 version = "0.15.0"

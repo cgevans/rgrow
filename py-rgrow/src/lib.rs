@@ -1,23 +1,42 @@
-use pyo3::prelude::*;
+use pyo3::pymodule;
 
 #[pymodule]
-#[pyo3(name = "rgrow")]
-fn pyrgrow(m: &Bound<PyModule>) -> PyResult<()> {
-    m.add_class::<rgrow::tileset::TileSet>()?;
-    m.add_class::<rgrow::tileset::TileShape>()?;
+mod rgrow {
+    #[pymodule_export]
+    use rgrow::tileset::TileSet;
 
-    m.add_class::<rgrow::python::PySystem>()?;
-    m.add_class::<rgrow::python::PyState>()?;
+    #[pymodule_export]
+    use rgrow::python::PyState;
 
-    m.add_class::<rgrow::ffs::FFSRunResult>()?;
-    m.add_class::<rgrow::ffs::FFSLevelRef>()?;
-    m.add_class::<rgrow::ffs::FFSStateRef>()?;
+    #[pymodule_export]
+    use rgrow::ffs::FFSLevelRef;
+    #[pymodule_export]
+    use rgrow::ffs::FFSRunResult;
+    #[pymodule_export]
+    use rgrow::ffs::FFSRunResultDF;
+    #[pymodule_export]
+    use rgrow::ffs::FFSStateRef;
 
-    m.add_class::<rgrow::ffs::FFSRunConfig>()?;
-    m.add_class::<rgrow::system::EvolveBounds>()?;
-    m.add_class::<rgrow::system::EvolveOutcome>()?;
+    #[pymodule_export]
+    use rgrow::ffs::FFSRunConfig;
+    #[pymodule_export]
+    use rgrow::system::EvolveBounds;
+    #[pymodule_export]
+    use rgrow::system::EvolveOutcome;
 
-    m.add_function(wrap_pyfunction!(rgrow::utils::string_dna_dg_ds, m)?)?;
+    #[pymodule_export]
+    use rgrow::utils::string_dna_dg_ds;
 
-    Ok(())
+    #[pymodule_export]
+    use rgrow::models::atam::ATAM;
+    #[pymodule_export]
+    use rgrow::models::ktam::KTAM;
+    #[pymodule_export]
+    use rgrow::models::oldktam::OldKTAM;
+    #[pymodule_export]
+    use rgrow::models::sdc1d::SDC;
+    #[pymodule_export]
+    use rgrow::system::DimerInfo;
+    #[pymodule_export]
+    use rgrow::system::NeededUpdate;
 }

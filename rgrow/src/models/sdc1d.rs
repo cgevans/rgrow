@@ -33,6 +33,9 @@ use crate::{
 use ndarray::prelude::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 type_alias!( f64 => Strength, RatePerConc, Conc );
 
 const WEST_GLUE_INDEX: usize = 0;
@@ -40,6 +43,7 @@ const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 
+#[cfg_attr(feature = "python", pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC {
     /// The anchor tiles for each of the scaffolds
@@ -892,6 +896,15 @@ impl SDC {
             glue_s,
             params.temperature,
         )
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl SDC {
+    #[new]
+    fn py_new(params: SDCParams) -> Self {
+        SDC::from_params(params)
     }
 }
 
