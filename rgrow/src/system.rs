@@ -9,9 +9,9 @@ use crate::base::StringConvError;
 use crate::ffs::FFSRunConfig;
 use crate::ffs::FFSRunResult;
 use crate::models::atam::ATAM;
-
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
+use crate::models::sdc1d::SDC;
 use crate::state::State;
 use crate::state::StateEnum;
 
@@ -225,7 +225,7 @@ impl TryFrom<&str> for ChunkHandling {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum ChunkSize {
     #[serde(alias = "single")]
@@ -739,7 +739,7 @@ pub enum SystemEnum {
     KTAM,
     OldKTAM,
     ATAM,
-    // StaticKTAMCover
+    SDC, // StaticKTAMCover
 }
 
 #[cfg(feature = "python")]
@@ -749,6 +749,7 @@ impl IntoPy<PyObject> for SystemEnum {
             SystemEnum::KTAM(ktam) => ktam.into_py(py),
             SystemEnum::OldKTAM(oldktam) => oldktam.into_py(py),
             SystemEnum::ATAM(atam) => atam.into_py(py),
+            SystemEnum::SDC(sdc) => sdc.into_py(py),
         }
     }
 }
@@ -757,6 +758,12 @@ impl IntoPy<PyObject> for SystemEnum {
 pub trait SystemWithDimers {
     /// Returns information on dimers that the system can form, similarly useful for starting out a state.
     fn calc_dimers(&self) -> Vec<DimerInfo>;
+}
+
+impl SystemWithDimers for SDC {
+    fn calc_dimers(&self) -> Vec<DimerInfo> {
+        panic!("Not implemented")
+    }
 }
 
 #[enum_dispatch]

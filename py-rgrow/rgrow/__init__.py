@@ -17,6 +17,7 @@ from .rgrow import (
     ATAM,
     KTAM,
     OldKTAM,
+    SDC,
     TileSet as _TileSet,
     EvolveOutcome,
     # FFSLevel,
@@ -40,7 +41,7 @@ from typing import (
 )
 
 System: TypeAlias = ATAM | KTAM | OldKTAM
-SYSTEMS = (ATAM, KTAM, OldKTAM)
+SYSTEMS = (ATAM, KTAM, OldKTAM, SDC)
 
 if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt

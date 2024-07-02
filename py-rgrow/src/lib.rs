@@ -25,11 +25,16 @@ mod rgrow {
     use rgrow::system::EvolveOutcome;
 
     #[pymodule_export]
+    use rgrow::utils::string_dna_dg_ds;
+
+    #[pymodule_export]
     use rgrow::models::atam::ATAM;
     #[pymodule_export]
     use rgrow::models::ktam::KTAM;
     #[pymodule_export]
     use rgrow::models::oldktam::OldKTAM;
+    #[pymodule_export]
+    use rgrow::models::sdc1d::SDC;
     #[pymodule_export]
     use rgrow::system::DimerInfo;
     #[pymodule_export]

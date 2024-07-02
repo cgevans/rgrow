@@ -11,6 +11,7 @@ pyo3 = {version = "^0.21", features = ["extension-module", "multiple-pymethods"]
 rayon = { version = "1" }
 numpy = "^0.21"
 enum_dispatch = "0.3"
+approx = "^0.5"
 pyo3-polars = "^0.15"
 polars = {version = "^0.41", features = ["lazy", "parquet", "product"]}
 

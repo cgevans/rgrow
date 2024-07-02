@@ -5,6 +5,7 @@ use std::time::Duration;
 use crate::base::{NumEvents, NumTiles, RgrowError, RustAny, Tile};
 use crate::canvas::{Canvas, PointSafeHere};
 use crate::ffs::{FFSRunConfig, FFSRunResult, FFSStateRef};
+use crate::models::sdc1d::{SDCParams, SDC};
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
@@ -152,10 +153,7 @@ macro_rules! create_py_system {
         #[cfg(feature = "python")]
         #[pymethods]
         impl $name {
-            #[new]
-            pub fn new(_model: &str, _kwargs: Option<Bound<PyDict>>) -> PyResult<Self> {
-                todo!()
-            }
+
 
             #[allow(clippy::too_many_arguments)]
             #[pyo3(
@@ -535,3 +533,4 @@ macro_rules! create_py_system {
 create_py_system!(KTAM);
 create_py_system!(ATAM);
 create_py_system!(OldKTAM);
+create_py_system!(SDC);
