@@ -1,6 +1,7 @@
 # flake8: noqa: PYI021
-from typing import Any, List, Sequence, Self, TypeAlias, overload
-from numpy import dtype, ndarray
+from typing import Any, List, Sequence
+from typing_extensions import Self, TypeAlias, overload
+from numpy import ndarray
 import numpy as np
 import polars as pl
 from numpy.typing import NDArray

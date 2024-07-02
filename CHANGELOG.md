@@ -1,3 +1,9 @@
+# 0.17.0
+
+- Significant change in Python organization: there are now model-specific System class, rather than one System class.  Tileset definitions will return a specific class, and classes should eventually be able to be created directly.  This should make it much easier to add ways to view and manipulate system objects in model-dependent ways.
+- Improvements to Python docstrings and type stubs.
+- Numerous code rearrangements for Python.
+
 # 0.16.0
 
 - Improvements to FFS code organization.
