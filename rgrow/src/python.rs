@@ -15,11 +15,13 @@ use crate::system::{
 };
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray2, ToPyArray};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
-#[cfg_attr(feature = "python", pyclass(name = "State"))]
+/// A State object.
+#[cfg_attr(feature = "python", pyclass(name = "State", module="rgrow"))]
 #[repr(transparent)]
 pub struct PyState(pub(crate) StateEnum);
 
@@ -37,17 +39,24 @@ impl PyState {
         )?))
     }
 
+    /// Return a cloned copy of an array with the total possible next event rate for each point in the canvas.
+    /// This is the deepest level of the quadtree for tree-based states.
+    /// 
+    /// Returns
+    /// -------
+    /// NDArray[np.uint]
     pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<crate::base::Rate>> {
         self.0.rate_array().to_pyarray_bound(py)
     }
 
     #[getter]
+    /// float: the total rate of possible next events for the state.
     pub fn total_rate(&self) -> crate::base::Rate {
         RateStore::total_rate(&self.0)
     }
 
     #[getter]
-    /// A direct, mutable view of the state's canvas.  This is potentially unsafe.
+    /// NDArray[np.uint]: a direct, mutable view of the state's canvas.  This is potentially unsafe.
     pub fn canvas_view<'py>(
         this: Bound<'py, Self>,
         _py: Python<'py>,
@@ -58,7 +67,12 @@ impl PyState {
         unsafe { Ok(PyArray2::borrow_from_array_bound(&ra, this.into_any())) }
     }
 
-    /// A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
+    /// Return a copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
+    /// 
+    /// Returns
+    /// -------
+    /// NDArray[np.uint]
+    ///     A cloned copy of the state's canvas, in raw form.
     pub fn canvas_copy<'py>(
         this: &Bound<'py, Self>,
         py: Python<'py>,
@@ -69,10 +83,34 @@ impl PyState {
         Ok(PyArray2::from_array_bound(py, &ra))
     }
 
-    pub fn rate_at_point(&self, point: (usize, usize)) -> f64 {
-        self.0.rate_at_point(PointSafeHere(point)) // FIXME: check on bounds
+    /// Return the total possible next event rate at a specific canvas point.
+    /// 
+    /// Parameters
+    /// ----------
+    /// point: tuple[int, int]
+    ///     The canvas point.
+    /// 
+    /// Returns
+    /// -------
+    /// f64
+    /// 
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     if `point` is out of bounds for the canvas.
+    pub fn rate_at_point(&self, point: (usize, usize)) -> PyResult<f64> {
+        if self.0.inbounds(point) {
+            Ok(self.0.rate_at_point(PointSafeHere(point)) )
+        } else {
+            Err(PyValueError::new_err(format!("Point {:?} is out of bounds.", point)))
+        }
     }
 
+    /// Return a copy of the tracker's tracking data.
+    /// 
+    /// Returns
+    /// -------
+    /// Any
     pub fn tracking_copy(this: &Bound<Self>) -> PyResult<RustAny> {
         let t = this.borrow();
         let ra = t.0.get_tracker_data();
@@ -80,25 +118,25 @@ impl PyState {
         Ok(ra)
     }
 
-    /// The number of tiles in the state.
+    /// int: the number of tiles in the state.
     #[getter]
     pub fn n_tiles(&self) -> NumTiles {
         self.0.n_tiles()
     }
 
-    /// The number of tiles in the state (deprecated, use `n_tiles` instead).
+    /// int: the number of tiles in the state (deprecated, use `n_tiles` instead).
     #[getter]
     pub fn ntiles(&self) -> NumTiles {
         self.0.n_tiles()
     }
 
-    /// The total number of events that have occurred in the state.
+    /// int: the total number of events that have occurred in the state.
     #[getter]
     pub fn total_events(&self) -> NumEvents {
         self.0.total_events()
     }
 
-    /// The total time the state has simulated, in seconds.
+    /// float: the total time the state has simulated, in seconds.
     #[getter]
     pub fn time(&self) -> f64 {
         self.0.time()
@@ -120,6 +158,8 @@ impl PyState {
         println!("{:?}", self.0);
     }
 
+    /// Write the state to a JSON file.  This is inefficient, and is likely
+    /// useful primarily for debugging.
     pub fn write_json(&self, filename: &str) -> Result<(), RgrowError> {
         serde_json::to_writer(File::create(filename)?, &self.0).unwrap();
         Ok(())
@@ -451,7 +491,7 @@ macro_rules! create_py_system {
 
             #[pyo3(signature = (state, needed = &NeededUpdate::All))]
             fn update_all(&self, state: &mut PyState, needed: &NeededUpdate) {
-                DynSystem::update_all(self, &mut state.0, needed)
+                DynSystem::update_state(self, &mut state.0, needed)
             }
 
             /// Recalculate a state's rates.
@@ -468,7 +508,7 @@ macro_rules! create_py_system {
             ///   will be recalculated.
             #[pyo3(signature = (state, needed = &NeededUpdate::All))]
             fn update_state(&self, state: &mut PyState, needed: &NeededUpdate) {
-                DynSystem::update_all(self, &mut state.0, needed)
+                DynSystem::update_state(self, &mut state.0, needed)
             }
 
             /// Run FFS.
@@ -533,6 +573,10 @@ macro_rules! create_py_system {
             /// ----------
             /// filename : str
             ///     The name of the file to read from.
+            /// 
+            /// Returns
+            /// -------
+            /// Self
             #[staticmethod]
             pub fn read_json(filename: &str) -> Result<Self, RgrowError> {
                 Ok(serde_json::from_reader(File::open(filename)?).unwrap())

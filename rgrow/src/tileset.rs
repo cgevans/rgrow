@@ -712,7 +712,7 @@ impl TileSet {
 
         let sys = self.create_dynsystem()?;
 
-        sys.update_all(&mut st, &NeededUpdate::All);
+        sys.update_state(&mut st, &NeededUpdate::All);
 
         Ok(st)
     }

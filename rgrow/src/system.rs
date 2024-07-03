@@ -465,7 +465,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         state.update_multiple(&p);
     }
 
-    fn update_all<St: State>(&self, state: &mut St, needed: &NeededUpdate) {
+    fn update_state<St: State>(&self, state: &mut St, needed: &NeededUpdate) {
         let ncols = state.ncols();
         let nrows = state.nrows();
 
@@ -631,12 +631,14 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
 #[enum_dispatch]
 pub trait DynSystem: Sync + Send + TileBondInfo {
+    /// Simulate a single state, until reaching specified stopping conditions.
     fn evolve(
         &self,
         state: &mut StateEnum,
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, GrowError>;
 
+    /// Evolve a list of states, in parallel.
     #[cfg(feature = "use_rayon")]
     fn evolve_states(
         &mut self,
@@ -659,7 +661,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     fn set_param(&mut self, name: &str, value: Box<dyn Any>) -> Result<NeededUpdate, GrowError>;
     fn get_param(&self, name: &str) -> Result<Box<dyn Any>, GrowError>;
 
-    fn update_all(&self, state: &mut StateEnum, needed: &NeededUpdate);
+    fn update_state(&self, state: &mut StateEnum, needed: &NeededUpdate);
 
     fn system_info(&self) -> String;
 
@@ -719,7 +721,7 @@ where
         self.get_param(name)
     }
 
-    fn update_all(&self, state: &mut StateEnum, needed: &NeededUpdate) {
+    fn update_state(&self, state: &mut StateEnum, needed: &NeededUpdate) {
         self.update_all(state, needed)
     }
 

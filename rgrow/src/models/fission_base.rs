@@ -3,25 +3,30 @@ use crate::base::Tile;
 use crate::canvas::PointSafe2;
 use rand::{distributions::weighted::WeightedIndex, distributions::Distribution};
 
-// lazy_static! {
-//     /// A vector specifying whether or not the 1 bits of the index are in a single
-//     /// group, with no 0s between them, when the number is seed as a u8 that is a ring,
-//     /// eg, such that 0b11100111 is true.  This is useful because it tells us whether
-//     /// tiles arranged in a ring (eg, around a single point) are a single connected
-//     /// group.
-//     pub static ref CONNECTED_RING: Vec<bool> = {
-//         let mut v = Vec::<bool>::with_capacity(2usize.pow(8));
-//         v.push(false); // All zeros
-//         for i in 0b1u8..0b11111111 {
-//             let i = i.rotate_right(i.trailing_ones());
-//             let i = i.rotate_right(i.trailing_zeros());
-//             v.push((i+1).is_power_of_two())
-//         }
-//         v.push(true); // All ones
-//         v
-//     };
-// }
-
+/// An array specifying whether or not the 1 bits of the index are in a single
+/// group, with no 0s between them, when the number is seed as a u8 that is a ring,
+/// eg, such that 0b11100111 is true.  This is useful because it tells us whether
+/// tiles arranged in a ring (eg, around a single point) are a single connected
+/// group.
+/// 
+/// Using `lazy_static!`, the array can be calculated with the code below, but it is
+/// simpler to have the pre-computed array in the code directly, as it will not change.
+///
+/// ```ignore
+/// lazy_static! {
+///     pub static ref CONNECTED_RING: Vec<bool> = {
+///         let mut v = Vec::<bool>::with_capacity(2usize.pow(8));
+///         v.push(false); // All zeros
+///         for i in 0b1u8..0b11111111 {
+///             let i = i.rotate_right(i.trailing_ones());
+///             let i = i.rotate_right(i.trailing_zeros());
+///             v.push((i+1).is_power_of_two())
+///         }
+///         v.push(true); // All ones
+///         v
+///     };
+/// }
+/// ```
 pub(super) static CONNECTED_RING: &[bool] = &[
     false, true, true, true, true, false, true, true, true, false, false, false, true, false, true,
     true, true, false, false, false, false, false, false, false, true, false, false, false, true,
