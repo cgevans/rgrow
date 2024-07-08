@@ -1,8 +1,14 @@
+use std::f64;
+
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
 const PENALTY_G: f64 = 1.96;
 const PENALTY_S: f64 = 0.0057;
+// Gas constant in kcal / mol
+//
+// (same unit as delta G needed)
+const R_KCAL_PER_MOL: f64 = 1.986 * 10e-6;
 
 /*
 * A G A A A
@@ -121,6 +127,59 @@ pub fn string_dna_delta_g(dna_sequence: &str, temperature: f64) -> f64 {
         dna_sequence.chars().map(DnaNucleotideBase::from),
         temperature,
     )
+}
+
+pub enum LoopKind {
+    Bulge,
+    Internal,
+    HairPin,
+}
+
+/// # Panics
+///
+/// If length is not greater or equal to 30
+fn internal_loop_penality(length: usize) -> f64 {
+    if length < 30 {
+        panic!("No loops of length under 30 are allowed yet")
+    }
+
+    let g_diff_30 = 6.6;
+    g_diff_30 + R_KCAL_PER_MOL * (length as f64 / 30.0) * 2.44 * 310.15
+}
+
+/// # Panics
+///
+/// If length is not greater or equal to 30
+fn hairpin_loop_penality(length: usize) -> f64 {
+    if length < 30 {
+        panic!("No loops of length under 30 are allowed yet")
+    }
+
+    let g_diff_30 = 6.3;
+    g_diff_30 + R_KCAL_PER_MOL * (length as f64 / 30.0) * 2.44 * 310.15
+}
+
+/// # Panics
+///
+/// If length is not greater or equal to 30
+fn bulge_loop_penality(length: usize) -> f64 {
+    if length < 30 {
+        panic!("No loops of length under 30 are allowed yet")
+    }
+
+    let g_diff_30 = 5.9;
+    g_diff_30 + R_KCAL_PER_MOL * (length as f64 / 30.0) * 2.44 * 310.15
+}
+
+/// # Panics
+///
+/// If length is not greater or equal to 30
+pub fn loop_penalty(length: usize, kind: LoopKind) -> f64 {
+    match kind {
+        LoopKind::Bulge => bulge_loop_penality(length),
+        LoopKind::HairPin => hairpin_loop_penality(length),
+        LoopKind::Internal => internal_loop_penality(length),
+    }
 }
 
 #[cfg(test)]
