@@ -5,10 +5,11 @@ use pyo3::prelude::*;
 
 const PENALTY_G: f64 = 1.96;
 const PENALTY_S: f64 = 0.0057;
-// Gas constant in kcal / mol
+
+// Gas constant in kcal / mol / K
 //
 // (same unit as delta G needed)
-const R_KCAL_PER_MOL: f64 = 1.986 * 10e-6;
+const R: f64 = 1.98720425864083 / 1000.0;
 
 /*
 * A G A A A
@@ -144,7 +145,7 @@ fn internal_loop_penality(length: usize) -> f64 {
     }
 
     let g_diff_30 = 6.6;
-    g_diff_30 + R_KCAL_PER_MOL * (length as f64 / 30.0) * 2.44 * 310.15
+    g_diff_30 + R * (length as f64 / 30.0) * 2.44 * 310.15
 }
 
 /// # Panics
@@ -156,7 +157,7 @@ fn hairpin_loop_penality(length: usize) -> f64 {
     }
 
     let g_diff_30 = 6.3;
-    g_diff_30 + R_KCAL_PER_MOL * (length as f64 / 30.0) * 2.44 * 310.15
+    g_diff_30 + R * (length as f64 / 30.0) * 2.44 * 310.15
 }
 
 /// # Panics
@@ -168,7 +169,7 @@ fn bulge_loop_penality(length: usize) -> f64 {
     }
 
     let g_diff_30 = 5.9;
-    g_diff_30 + R_KCAL_PER_MOL * (length as f64 / 30.0) * 2.44 * 310.15
+    g_diff_30 + R * (length as f64 / 30.0) * 2.44 * 310.15
 }
 
 /// # Panics
