@@ -11,6 +11,29 @@ const PENALTY_S: f64 = 0.0057;
 // (same unit as delta G needed)
 const R: f64 = 1.98720425864083 / 1000.0;
 
+pub enum LoopKind {
+    Internal = 0,
+    Bulge = 1,
+    HairPin = 2,
+}
+
+const LOOP_TABLE: [[f64; 15]; 3] = [
+    // Internal Loops
+    [
+        3.2, 3.6, 4.0, 4.4, 4.6, 4.8, 4.9, 4.9, 5.2, 5.4, 5.6, 5.8, 5.9, 6.3, 6.6,
+    ],
+    // Bulge Loops
+    [
+        3.1, 3.2, 3.3, 3.5, 3.7, 3.9, 4.1, 4.3, 4.5, 4.8, 5.0, 5.2, 5.3, 5.6, 5.9,
+    ],
+    // Hairpin Loops
+    [
+        3.5, 3.5, 3.3, 4.0, 4.2, 4.3, 4.5, 4.6, 5.0, 5.1, 5.3, 5.5, 5.7, 6.1, 6.3,
+    ],
+];
+
+const LENGTHS: [usize; 15] = [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 25, 30];
+
 /*
 * A G A A A
 * --------->
@@ -130,64 +153,35 @@ pub fn string_dna_delta_g(dna_sequence: &str, temperature: f64) -> f64 {
     )
 }
 
-pub enum LoopKind {
-    Bulge,
-    Internal,
-    HairPin,
+fn _loop_penalty(length: usize, kind: LoopKind) -> f64 {
+    let (g_diff, len) = LOOP_TABLE[kind as usize]
+        .iter()
+        .zip(LENGTHS)
+        .rev()
+        .find(|(_, len)| len < &length)
+        .expect("Please enter a valid length");
+
+    g_diff + R * (length as f64 / (len as f64)).ln() * 2.44 * 310.15
 }
 
-/// # Panics
-///
-/// If length is not greater or equal to 30
-fn internal_loop_penality(length: usize) -> f64 {
-    if length < 30 {
-        panic!("No loops of length under 30 are allowed yet")
-    }
-
-    let g_diff_30 = 6.6;
-    g_diff_30 + R * (length as f64 / 30.0) * 2.44 * 310.15
-}
-
-/// # Panics
-///
-/// If length is not greater or equal to 30
-fn hairpin_loop_penality(length: usize) -> f64 {
-    if length < 30 {
-        panic!("No loops of length under 30 are allowed yet")
-    }
-
-    let g_diff_30 = 6.3;
-    g_diff_30 + R * (length as f64 / 30.0) * 2.44 * 310.15
-}
-
-/// # Panics
-///
-/// If length is not greater or equal to 30
-fn bulge_loop_penality(length: usize) -> f64 {
-    if length < 30 {
-        panic!("No loops of length under 30 are allowed yet")
-    }
-
-    let g_diff_30 = 5.9;
-    g_diff_30 + R * (length as f64 / 30.0) * 2.44 * 310.15
-}
-
-/// # Panics
-///
-/// If length is not greater or equal to 30
-pub fn loop_penalty(length: usize, kind: LoopKind) -> f64 {
+#[cfg_attr(feature = "python", pyfunction)]
+pub fn loop_penalty(length: usize, kind: &str) -> f64 {
     match kind {
-        LoopKind::Bulge => bulge_loop_penality(length),
-        LoopKind::HairPin => hairpin_loop_penality(length),
-        LoopKind::Internal => internal_loop_penality(length),
+        "bulge" => _loop_penalty(length, LoopKind::Bulge),
+        "internal" => _loop_penalty(length, LoopKind::Internal),
+        "hairpin" => _loop_penalty(length, LoopKind::HairPin),
+        _ => panic!(),
     }
 }
-
 #[cfg(test)]
 mod test_utils {
 
+    use crate::utils::LOOP_TABLE;
+
+    use super::_loop_penalty;
     use super::string_dna_delta_g;
     use super::two_window_fold;
+    use approx::assert_relative_eq;
     use approx::assert_ulps_eq;
 
     #[test]
@@ -303,5 +297,12 @@ mod test_utils {
             println!("{}", seq);
             assert_ulps_eq!(dG + 1.96 - (50.0 - 37.0) * 0.0057, result, max_ulps = 10);
         }
+    }
+
+    #[test]
+    fn test_loops() {
+        let val29 = _loop_penalty(29, super::LoopKind::Internal);
+        assert!(val29 > LOOP_TABLE[0][13]);
+        assert!(val29 < LOOP_TABLE[0][14]);
     }
 }
