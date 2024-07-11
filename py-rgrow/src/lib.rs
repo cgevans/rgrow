@@ -25,9 +25,6 @@ mod rgrow {
     use rgrow::system::EvolveOutcome;
 
     #[pymodule_export]
-    use rgrow::utils::string_dna_dg_ds;
-
-    #[pymodule_export]
     use rgrow::models::atam::ATAM;
     #[pymodule_export]
     use rgrow::models::ktam::KTAM;
@@ -39,4 +36,8 @@ mod rgrow {
     use rgrow::system::DimerInfo;
     #[pymodule_export]
     use rgrow::system::NeededUpdate;
+    #[pymodule_export]
+    use rgrow::utils::loop_penalty;
+    #[pymodule_export]
+    use rgrow::utils::string_dna_dg_ds;
 }
