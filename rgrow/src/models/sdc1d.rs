@@ -405,6 +405,7 @@ impl SDC {
 
             // Take into account the penalty
             let penalty = self.rtval() * (self.strand_concentration[*strand as usize] / U0).ln();
+
             sumg -= penalty;
         }
         sumg
@@ -456,7 +457,7 @@ impl SDC {
 
     #[inline(always)]
     fn beta(&self) -> f64 {
-        1.0 / (self.temperature * BOLTZMAN_CONSTANT)
+        1.0 / ((self.temperature + 273.15) * BOLTZMAN_CONSTANT)
     }
 
     pub fn boltzman_function(&self, attachments: Vec<u32>) -> f64 {
