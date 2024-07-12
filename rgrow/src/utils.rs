@@ -3,6 +3,14 @@ use std::f64;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
+// For testing
+#[macro_export]
+macro_rules! assert_all {
+    ($($e:expr),*) => {
+        $(assert!($e);)*
+    };
+}
+
 const PENALTY_G: f64 = 1.96;
 const PENALTY_S: f64 = 0.0057;
 

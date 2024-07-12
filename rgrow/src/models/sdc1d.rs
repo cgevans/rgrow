@@ -38,10 +38,13 @@ use pyo3::prelude::*;
 
 type_alias!( f64 => Strength, RatePerConc, Conc );
 
+// This surely needs unit adjustment, it seems wayyyy too small
+const BOLTZMAN_CONSTANT: f64 = 1.0; // 1.3806503e-23;
 const WEST_GLUE_INDEX: usize = 0;
 const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
+const U0: f64 = 1e-9;
 
 #[cfg_attr(feature = "python", pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -184,6 +187,7 @@ impl SDC {
         self.update_system();
     }
 
+    #[inline(always)]
     fn rtval(&self) -> f64 {
         R * (self.temperature + 273.15)
     }
@@ -379,6 +383,98 @@ impl SDC {
         self.scaffold_energy_bonds[strand as usize]
             + self.strand_energy_bonds[(strand as usize, e)]
             + self.strand_energy_bonds[(w, strand as usize)]
+    }
+
+    /// Given an SDC system, and some scaffold attachments
+    ///
+    /// 0 := nothing attached to the saccffold
+    fn g_system(&self, attachments: Vec<u32>) -> f64 {
+        let mut sumg = 0.0;
+
+        for (id, strand) in attachments.iter().enumerate() {
+            if strand == &0 {
+                continue;
+            }
+
+            // Add the energy of the strand and the scaffold
+            sumg += self.scaffold_energy_bonds[*strand as usize];
+            if let Some(s) = attachments.get(id + 1) {
+                // Also add the energy between the strand and the one to its right
+                sumg += self.strand_energy_bonds[(*strand as usize, *s as usize)]
+            };
+
+            // Take into account the penalty
+            let penalty = self.rtval() * (self.strand_concentration[*strand as usize] / U0).ln();
+            sumg -= penalty;
+        }
+        sumg
+    }
+
+    // This is quite inefficient -- and clones a lot. If the scaffold were to be
+    // longer than 10, this would not work
+    pub fn system_states(&self, scaffold: Vec<usize>) -> Vec<Vec<u32>> {
+        // Calculate the number of combinations ( this will i think make it a little more optimized
+        // since we wont need realloc )
+        let mut acc = 1;
+        for b in &scaffold {
+            if let Some(x) = self.friends_btm.get(&b) {
+                // number of possible times + none
+                acc *= x.len() + 1;
+            }
+        }
+
+        let mut possible_scaffolds: Vec<Vec<u32>> = Vec::with_capacity(acc);
+        possible_scaffolds.push(Vec::default());
+
+        for b in &scaffold {
+            let def = HashSet::default();
+            let friends = self.friends_btm.get(b).unwrap_or(&def);
+
+            possible_scaffolds = possible_scaffolds
+                .iter()
+                .flat_map(|scaffold_attachments| {
+                    let mut new_combinations: Vec<Vec<u32>> = Vec::new();
+
+                    // Each one of the friends will make one possible state
+                    for f in friends {
+                        let mut comb = scaffold_attachments.clone();
+                        comb.push(*f);
+                        new_combinations.push(comb);
+                    }
+
+                    // Also if nothing attached
+                    let mut comb = scaffold_attachments.clone();
+                    comb.push(0);
+                    new_combinations.push(comb);
+                    new_combinations
+                })
+                .collect();
+        }
+
+        possible_scaffolds
+    }
+
+    #[inline(always)]
+    fn beta(&self) -> f64 {
+        1.0 / (self.temperature * BOLTZMAN_CONSTANT)
+    }
+
+    pub fn boltzman_function(&self, attachments: Vec<u32>) -> f64 {
+        let g_a = self.g_system(attachments);
+        (-self.beta() * g_a).exp()
+    }
+
+    pub fn sum_systems(&self, scaffold: Vec<usize>) -> f64 {
+        self.system_states(scaffold)
+            .into_iter()
+            .map(|attachments| self.boltzman_function(attachments))
+            .sum()
+    }
+
+    pub fn probabilty(&self, scaffold: Vec<usize>, system: Vec<u32>) -> f64 {
+        let sum_z = self.sum_systems(scaffold);
+        let this_system = self.boltzman_function(system);
+        this_system / sum_z
     }
 }
 
@@ -910,7 +1006,9 @@ impl SDC {
 
 #[cfg(test)]
 mod test_sdc_model {
+    use crate::assert_all;
     use ndarray::array;
+    use num_traits::PrimInt;
 
     use super::*;
     #[test]
@@ -984,5 +1082,195 @@ mod test_sdc_model {
         .collect::<Vec<(bool, String, String)>>();
 
         assert_eq!(acc, expected);
+    }
+
+    #[test]
+    fn combinations() {
+        let mut sdc = SDC {
+            anchor_tiles: Vec::new(),
+            strand_names: Vec::new(),
+            glue_names: Vec::new(),
+            scaffold: Array2::<usize>::zeros((5, 5)),
+            strand_concentration: Array1::<f64>::zeros(5),
+            glues: array![
+                [0, 0, 0],
+                [1, 3, 12],
+                [11, 2, 12],
+                [29, 3, 45],
+                [8, 4, 2],
+                [11, 1, 30],
+                [4, 4, 1],
+            ],
+            colors: Vec::new(),
+            kf: 0.0,
+            friends_btm: HashMap::new(),
+            entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]],
+            delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]],
+            temperature: 50.0,
+            strand_energy_bonds: Array2::<f64>::zeros((5, 5)),
+            scaffold_energy_bonds: Array1::<f64>::zeros(5),
+            glue_links: Array2::<f64>::zeros((5, 5)),
+        };
+        // We need to fill the friends map
+        sdc.update_system();
+
+        // 0 <---> Nothing
+        //
+        // 1 <---> 2
+        // 3 <---> 4
+        // 5 <---> 6
+        let x = sdc.system_states(vec![0, 0, 1, 1, 2, 4, 0, 0]);
+
+        assert_all!(
+            x.contains(&vec![0, 0, 2, 2, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 2, 2, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 0, 2, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 2, 0, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 2, 2, 0, 1, 0, 0]),
+            x.contains(&vec![0, 0, 2, 2, 5, 0, 0, 0]),
+            x.contains(&vec![0, 0, 0, 0, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 0, 0, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 0, 2, 0, 1, 0, 0]),
+            x.contains(&vec![0, 0, 0, 2, 5, 0, 0, 0])
+        );
+
+        // Note: One is added to each since the 0 state is not in friends
+        //
+        //                   vvvvvv friends of 1 (squared since 1 shows up twice)
+        //                   vvvvvv          vvvvvv friends of 2
+        //                   vvvvvv          vvvvvv     vvvvvv friends of 4
+        assert_eq!(x.len(), (1 + 1).pow(2) * (1 + 1) * (2 + 1));
+    }
+
+    #[test]
+    fn probablities() {
+        let mut strands = Vec::<SDCStrand>::new();
+
+        // Anchor tile
+        strands.push(SDCStrand {
+            name: Some("0A0".to_string()),
+            color: None,
+            concentration: 1e-6,
+            btm_glue: Some(String::from("A")),
+            left_glue: None,
+            right_glue: Some("0e".to_string()),
+        });
+        strands.push(SDCStrand {
+            name: Some("-E-".to_string()),
+            color: None,
+            concentration: 1e-6,
+            btm_glue: Some(String::from("E")),
+            left_glue: None,
+            right_glue: None,
+        });
+
+        for base in "BCD".chars() {
+            let (leo, reo): (String, String) = if base == 'C' {
+                ("o".to_string(), "e".to_string())
+            } else {
+                ("e".to_string(), "o".to_string())
+            };
+
+            let name = format!("0{}0", base);
+            let lg = format!("0{}*", leo);
+            let rg = format!("0{}", reo);
+            strands.push(SDCStrand {
+                name: Some(name),
+                color: None,
+                concentration: 1e-6,
+                btm_glue: Some(String::from(base)),
+                left_glue: Some(lg),
+                right_glue: Some(rg),
+            });
+
+            let name = format!("1{}1", base);
+            let lg = format!("1{}*", leo);
+            let rg = format!("1{}*", reo);
+            strands.push(SDCStrand {
+                name: Some(name),
+                color: None,
+                concentration: 1e-6,
+                btm_glue: Some(String::from(base)),
+                left_glue: Some(lg),
+                right_glue: Some(rg),
+            })
+        }
+
+        let scaffold = SingleOrMultiScaffold::Single(vec![
+            None,
+            None,
+            Some("A*".to_string()),
+            Some("B*".to_string()),
+            Some("C*".to_string()),
+            Some("D*".to_string()),
+            Some("E*".to_string()),
+            None,
+            None,
+        ]);
+
+        let glue_dg_s: HashMap<RefOrPair, GsOrSeq> = HashMap::from(
+            [
+                ("0e", "GCTGAGAAGAGG"),
+                ("1e", "GGATCGGAGATG"),
+                ("2e", "GGCTTGGAAAGA"),
+                ("3e", "GGCAAGGATTGA"),
+                ("4e", "AACAGGGATGTG"),
+                ("5e", "AATGGGACATGG"),
+                ("6e", "GAACGTTGGTTG"),
+                ("7e", "GACGAAGTGTGA"),
+                ("0o", "GGTCAGGATGAG"),
+                ("1o", "GAACGGAGTTGA"),
+                ("2o", "AATGGTGGCATT"),
+                ("3o", "GACAAGGGTTGT"),
+                ("4o", "TGTTGGGAACAG"),
+                ("5o", "GGACTGGTAGTG"),
+                ("6o", "GACAGTGTGTGT"),
+                ("7o", "GGACGAAAGTGA"),
+                ("A", "TCTTTCCAGAGCCTAATTTGCCAG"),
+                ("B", "AGCGTCCAATACTGCGGAATCGTC"),
+                ("C", "ATAAATATTCATTGAATCCCCCTC"),
+                ("D", "AAATGCTTTAAACAGTTCAGAAAA"),
+                ("E", "CGAGAATGACCATAAATCAAAAAT"),
+            ]
+            .map(|(r, g)| (RefOrPair::Ref(r.to_string()), GsOrSeq::Seq(g.to_string()))),
+        );
+
+        let sdc_params = SDCParams {
+            strands,
+            scaffold,
+            temperature: 20.0,
+            glue_dg_s,
+            k_f: 1e6,
+            k_n: 1e5,
+            k_c: 1e4,
+        };
+
+        let mut sdc = SDC::from_params(sdc_params);
+        sdc.update_system();
+
+        let scaffold = vec![0, 0, 2, 8, 16, 18, 6, 0, 0];
+        let systems = sdc.system_states(scaffold.clone());
+
+        // A and E have only one strand possible (or empty), and BCD have 2 or empty
+        assert_eq!(systems.len(), 2.pow(2) * 3.pow(3));
+
+        let mut probs = systems
+            .iter()
+            // TODO: It wuold be better if this vvvvvvvvvvvvvvv were a pointer
+            .map(|s| (s.clone(), sdc.probabilty(scaffold.clone(), s.clone())))
+            .collect::<Vec<_>>();
+
+        probs.sort_by(|(_, p1), (_, p2)| {
+            p2.partial_cmp(p1)
+                .expect(format!("{} -- {}", p1, p2).as_str())
+        });
+
+        // The perfect combination would be all 0's
+        // Lets check if that is the case
+        // probs.iter().for_each(|(s, p)| {
+        //     println!("Probability of {} for {:?}", p, s);
+        // });
+
+        assert_eq!(probs[0].0, vec![0, 0, 1, 3, 5, 7, 2, 0, 0]);
     }
 }
