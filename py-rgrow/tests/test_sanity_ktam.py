@@ -55,13 +55,9 @@ def test_basic_rates_ktam(gse, concs_nM, alpha, kf, stoic, bond_strength):
         else:
             raise ValueError("Unexpected Dimer: ", d)
 
-    assert state.rate_at_point((5, 5)) == approx(
-        kf * np.exp(-bond_strength * gse + alpha)
-    )
+    assert state.rate_at_point((5, 5)) == approx(kf * np.exp(-bond_strength * gse + alpha))
 
-    assert state.rate_at_point((5, 6)) == approx(
-        kf * np.exp(-(1 + bond_strength) * gse + alpha)
-    )
+    assert state.rate_at_point((5, 6)) == approx(kf * np.exp(-(1 + bond_strength) * gse + alpha))
 
     assert state.rate_at_point((6, 6)) == approx(kf * np.exp(-gse + alpha))
 
@@ -117,13 +113,9 @@ def test_basic_rates_oldktam(gse, concs_nM, alpha, kf, stoic, bond_strength):
         else:
             raise ValueError("Unexpected Dimer: ", d)
 
-    assert state.rate_at_point((5, 5)) == approx(
-        kf * np.exp(-bond_strength * gse + alpha)
-    )
+    assert state.rate_at_point((5, 5)) == approx(kf * np.exp(-bond_strength * gse + alpha))
 
-    assert state.rate_at_point((5, 6)) == approx(
-        kf * np.exp(-(1 + bond_strength) * gse + alpha)
-    )
+    assert state.rate_at_point((5, 6)) == approx(kf * np.exp(-(1 + bond_strength) * gse + alpha))
 
     assert state.rate_at_point((6, 6)) == approx(kf * np.exp(-gse + alpha))
 

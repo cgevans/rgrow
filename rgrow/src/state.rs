@@ -238,9 +238,13 @@ impl<C: Canvas, T: StateTracker> RateStore for QuadTreeState<C, T> {
     fn total_rate(&self) -> Rate {
         self.rates.total_rate()
     }
-    
+
     fn rate_array(&self) -> ArrayView2<Rate> {
-        self.rates.0.first().unwrap().slice(s![..self.canvas.nrows(), ..self.canvas.ncols()])
+        self.rates
+            .0
+            .first()
+            .unwrap()
+            .slice(s![..self.canvas.nrows(), ..self.canvas.ncols()])
     }
 }
 

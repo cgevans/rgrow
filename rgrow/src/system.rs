@@ -722,7 +722,7 @@ where
     }
 
     fn update_state(&self, state: &mut StateEnum, needed: &NeededUpdate) {
-        self.update_all(state, needed)
+        self.update_state(state, needed)
     }
 
     fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {

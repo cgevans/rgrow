@@ -3,4 +3,4 @@ pub mod covers;
 pub mod ktam;
 pub mod oldktam;
 
-pub(self) mod fission_base;
+mod fission_base;

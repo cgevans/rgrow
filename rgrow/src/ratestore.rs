@@ -63,8 +63,6 @@ impl RateStore for QuadTreeSquareArray<f64> {
         unsafe { *self.0[0].uget(point.0) }
     }
 
-    
-
     fn choose_point(&self) -> (Point, Rate) {
         let mut threshold = self.1 * thread_rng().gen::<f64>();
 
@@ -143,7 +141,7 @@ impl RateStore for QuadTreeSquareArray<f64> {
     fn total_rate(&self) -> Rate {
         self.1
     }
-    
+
     fn rate_array(&self) -> ArrayView2<Rate> {
         self.0.first().unwrap().view()
     }

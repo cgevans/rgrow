@@ -67,9 +67,7 @@ def _system_name_canvas(self: "System", state: State | FFSStateRef) -> np.ndarra
     return a[state.canvas_view]
 
 
-def _system_color_canvas(
-    self: System, state: State | np.ndarray | FFSStateRef
-) -> np.ndarray:
+def _system_color_canvas(self: System, state: State | np.ndarray | FFSStateRef) -> np.ndarray:
     """Returns the current canvas for state, as an array of tile colors."""
 
     if isinstance(state, (State, FFSStateRef)):
@@ -159,11 +157,7 @@ def _system_plot_canvas(
             tile_colors / 12.92,
             ((tile_colors + 0.055) / 1.055) ** 2.4,
         )
-        lum = (
-            0.2126 * lumcolors[:, 0]
-            + 0.7152 * lumcolors[:, 1]
-            + 0.0722 * lumcolors[:, 2]
-        )
+        lum = 0.2126 * lumcolors[:, 0] + 0.7152 * lumcolors[:, 1] + 0.0722 * lumcolors[:, 2]
         for i in range(i_min, i_max + 1):
             for j in range(j_min, j_max + 1):
                 if cv[i, j] == 0:
@@ -417,9 +411,7 @@ class Simulation:
     def check_state(self, n: int = 0) -> int:
         """Check that the simulation has at least n states."""
         if len(self.states) < n:
-            raise ValueError(
-                f"Simulation has {len(self.states)} states, but {n} were required."
-            )
+            raise ValueError(f"Simulation has {len(self.states)} states, but {n} were required.")
 
         return n
 
@@ -617,9 +609,7 @@ class Simulation:
             require_strong_bound=require_strong_bound,
         )
 
-    def plot_state(
-        self, state_index: int = 0, ax: "plt.Axes | None" = None
-    ) -> "plt.QuadMesh":
+    def plot_state(self, state_index: int = 0, ax: "plt.Axes | None" = None) -> "plt.QuadMesh":
         """Plot a state as a pcolormesh.  Returns the pcolormesh object."""
         import matplotlib.pyplot as plt
 

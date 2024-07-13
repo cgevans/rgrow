@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
+#[cfg(feature="python")]
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
 
@@ -1261,7 +1262,7 @@ impl FFSRunResultDF {
     }
 
     /// Get the configurations as a Polars DataFrame.
-    /// 
+    ///
     /// Returns
     /// -------
     /// pl.DataFrame
@@ -1405,7 +1406,7 @@ impl FFSStateRef {
     }
 
     /// Return a copy of the state behind the reference as a mutable `State` object.
-    /// 
+    ///
     /// Returns
     /// -------
     /// State
@@ -1425,9 +1426,9 @@ impl FFSStateRef {
         unsafe { Ok(PyArray2::borrow_from_array_bound(&ra, this.into_any())) }
     }
 
-    /// Create a copy of the state's canvas.  This is safe, but can't be modified and is slower than 
+    /// Create a copy of the state's canvas.  This is safe, but can't be modified and is slower than
     /// `canvas_view`.
-    /// 
+    ///
     /// Returns
     /// -------
     /// NDArray[np.uint]
@@ -1443,7 +1444,7 @@ impl FFSStateRef {
     }
 
     /// Return a copy of the tracker's tracking data.
-    /// 
+    ///
     /// Returns
     /// -------
     /// Any
@@ -1468,7 +1469,7 @@ impl FFSStateRef {
 
     /// Return a cloned copy of an array with the total possible next event rate for each point in the canvas.
     /// This is the deepest level of the quadtree for tree-based states.
-    /// 
+    ///
     /// Returns
     /// -------
     /// NDArray[np.uint]

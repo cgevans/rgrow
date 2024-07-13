@@ -8,7 +8,7 @@ use rand::{distributions::weighted::WeightedIndex, distributions::Distribution};
 /// eg, such that 0b11100111 is true.  This is useful because it tells us whether
 /// tiles arranged in a ring (eg, around a single point) are a single connected
 /// group.
-/// 
+///
 /// Using `lazy_static!`, the array can be calculated with the code below, but it is
 /// simpler to have the pre-computed array in the code directly, as it will not change.
 ///

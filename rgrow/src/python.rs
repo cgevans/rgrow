@@ -21,7 +21,7 @@ use pyo3::types::PyDict;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 /// A State object.
-#[cfg_attr(feature = "python", pyclass(name = "State", module="rgrow"))]
+#[cfg_attr(feature = "python", pyclass(name = "State", module = "rgrow"))]
 #[repr(transparent)]
 pub struct PyState(pub(crate) StateEnum);
 
@@ -41,7 +41,7 @@ impl PyState {
 
     /// Return a cloned copy of an array with the total possible next event rate for each point in the canvas.
     /// This is the deepest level of the quadtree for tree-based states.
-    /// 
+    ///
     /// Returns
     /// -------
     /// NDArray[np.uint]
@@ -68,7 +68,7 @@ impl PyState {
     }
 
     /// Return a copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
-    /// 
+    ///
     /// Returns
     /// -------
     /// NDArray[np.uint]
@@ -84,30 +84,33 @@ impl PyState {
     }
 
     /// Return the total possible next event rate at a specific canvas point.
-    /// 
+    ///
     /// Parameters
     /// ----------
     /// point: tuple[int, int]
     ///     The canvas point.
-    /// 
+    ///
     /// Returns
     /// -------
     /// f64
-    /// 
+    ///
     /// Raises
     /// ------
     /// ValueError
     ///     if `point` is out of bounds for the canvas.
     pub fn rate_at_point(&self, point: (usize, usize)) -> PyResult<f64> {
         if self.0.inbounds(point) {
-            Ok(self.0.rate_at_point(PointSafeHere(point)) )
+            Ok(self.0.rate_at_point(PointSafeHere(point)))
         } else {
-            Err(PyValueError::new_err(format!("Point {:?} is out of bounds.", point)))
+            Err(PyValueError::new_err(format!(
+                "Point {:?} is out of bounds.",
+                point
+            )))
         }
     }
 
     /// Return a copy of the tracker's tracking data.
-    /// 
+    ///
     /// Returns
     /// -------
     /// Any
@@ -573,7 +576,7 @@ macro_rules! create_py_system {
             /// ----------
             /// filename : str
             ///     The name of the file to read from.
-            /// 
+            ///
             /// Returns
             /// -------
             /// Self

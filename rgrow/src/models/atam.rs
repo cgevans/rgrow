@@ -49,7 +49,7 @@ enum TileShape {
 }
 
 /// The aTAM model.
-/// 
+///
 /// Supports duples, and concentration-based attachment rates, which may
 /// be important for non-deterministic systems.
 #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
