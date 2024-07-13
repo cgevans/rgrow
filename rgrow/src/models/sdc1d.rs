@@ -385,6 +385,10 @@ impl SDC {
             + self.strand_energy_bonds[(w, strand as usize)]
     }
 
+    fn scaffold(&self) -> Vec<usize> {
+        self.scaffold.row(0).to_vec()
+    }
+
     /// Given an SDC system, and some scaffold attachments
     ///
     /// 0 := nothing attached to the saccffold
@@ -413,7 +417,9 @@ impl SDC {
 
     // This is quite inefficient -- and clones a lot. If the scaffold were to be
     // longer than 10, this would not work
-    pub fn system_states(&self, scaffold: Vec<usize>) -> Vec<Vec<u32>> {
+    pub fn system_states(&self) -> Vec<Vec<u32>> {
+        let scaffold = self.scaffold();
+
         // Calculate the number of combinations ( this will i think make it a little more optimized
         // since we wont need realloc )
         let mut acc = 1;
@@ -465,15 +471,15 @@ impl SDC {
         (-self.beta() * g_a).exp()
     }
 
-    pub fn sum_systems(&self, scaffold: Vec<usize>) -> f64 {
-        self.system_states(scaffold)
+    pub fn sum_systems(&self) -> f64 {
+        self.system_states()
             .into_iter()
             .map(|attachments| self.boltzman_function(attachments))
             .sum()
     }
 
-    pub fn probabilty(&self, scaffold: Vec<usize>, system: Vec<u32>) -> f64 {
-        let sum_z = self.sum_systems(scaffold);
+    pub fn probabilty(&self, system: Vec<u32>) -> f64 {
+        let sum_z = self.sum_systems();
         let this_system = self.boltzman_function(system);
         this_system / sum_z
     }
@@ -1087,11 +1093,17 @@ mod test_sdc_model {
 
     #[test]
     fn combinations() {
+        let mut scaffold = Array2::<usize>::zeros((1, 8));
+        scaffold[(0, 2)] = 1;
+        scaffold[(0, 3)] = 1;
+        scaffold[(0, 4)] = 2;
+        scaffold[(0, 5)] = 4;
+
         let mut sdc = SDC {
             anchor_tiles: Vec::new(),
             strand_names: Vec::new(),
             glue_names: Vec::new(),
-            scaffold: Array2::<usize>::zeros((5, 5)),
+            scaffold,
             strand_concentration: Array1::<f64>::zeros(5),
             glues: array![
                 [0, 0, 0],
@@ -1120,7 +1132,9 @@ mod test_sdc_model {
         // 1 <---> 2
         // 3 <---> 4
         // 5 <---> 6
-        let x = sdc.system_states(vec![0, 0, 1, 1, 2, 4, 0, 0]);
+
+        assert_eq!(sdc.scaffold(), vec![0, 0, 1, 1, 2, 4, 0, 0]);
+        let x = sdc.system_states();
 
         assert_all!(
             x.contains(&vec![0, 0, 2, 2, 5, 1, 0, 0]),
@@ -1250,15 +1264,15 @@ mod test_sdc_model {
         sdc.update_system();
 
         let scaffold = vec![0, 0, 2, 8, 16, 18, 6, 0, 0];
-        let systems = sdc.system_states(scaffold.clone());
+        assert_eq!(sdc.scaffold(), scaffold);
+        let systems = sdc.system_states();
 
         // A and E have only one strand possible (or empty), and BCD have 2 or empty
         assert_eq!(systems.len(), 2.pow(2) * 3.pow(3));
 
         let mut probs = systems
             .iter()
-            // TODO: It wuold be better if this vvvvvvvvvvvvvvv were a pointer
-            .map(|s| (s.clone(), sdc.probabilty(scaffold.clone(), s.clone())))
+            .map(|s| (s.clone(), sdc.probabilty(s.clone())))
             .collect::<Vec<_>>();
 
         probs.sort_by(|(_, p1), (_, p2)| {
