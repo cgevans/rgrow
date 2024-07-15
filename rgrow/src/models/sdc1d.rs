@@ -17,7 +17,7 @@ macro_rules! type_alias {
 
 use std::{
     collections::{HashMap, HashSet},
-    usize,
+    f64, usize,
 };
 
 use crate::{
@@ -38,13 +38,11 @@ use pyo3::prelude::*;
 
 type_alias!( f64 => Strength, RatePerConc, Conc );
 
-// This surely needs unit adjustment, it seems wayyyy too small
-const BOLTZMAN_CONSTANT: f64 = 1.0; // 1.3806503e-23;
 const WEST_GLUE_INDEX: usize = 0;
 const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
-const U0: f64 = 1e-9;
+const U0: f64 = 1.0;
 
 #[cfg_attr(feature = "python", pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -392,7 +390,7 @@ impl SDC {
     /// Given an SDC system, and some scaffold attachments
     ///
     /// 0 := nothing attached to the saccffold
-    fn g_system(&self, attachments: Vec<u32>) -> f64 {
+    fn g_system(&self, attachments: &Vec<u32>) -> f64 {
         let mut sumg = 0.0;
 
         for (id, strand) in attachments.iter().enumerate() {
@@ -461,24 +459,19 @@ impl SDC {
         possible_scaffolds
     }
 
-    #[inline(always)]
-    fn beta(&self) -> f64 {
-        1.0 / ((self.temperature + 273.15) * BOLTZMAN_CONSTANT)
-    }
-
-    pub fn boltzman_function(&self, attachments: Vec<u32>) -> f64 {
+    pub fn boltzman_function(&self, attachments: &Vec<u32>) -> f64 {
         let g_a = self.g_system(attachments);
-        (-self.beta() * g_a).exp()
+        (-self.rtval() * g_a).exp()
     }
 
     pub fn sum_systems(&self) -> f64 {
         self.system_states()
-            .into_iter()
+            .iter()
             .map(|attachments| self.boltzman_function(attachments))
             .sum()
     }
 
-    pub fn probabilty(&self, system: Vec<u32>) -> f64 {
+    pub fn probabilty(&self, system: &Vec<u32>) -> f64 {
         let sum_z = self.sum_systems();
         let this_system = self.boltzman_function(system);
         this_system / sum_z
@@ -1009,6 +1002,24 @@ impl SDC {
     fn py_new(params: SDCParams) -> Self {
         SDC::from_params(params)
     }
+
+    fn distribution(&self) -> Vec<f64> {
+        // Inneficient to run the same function twice, fix this
+        let mut probability = self
+            .system_states()
+            .iter()
+            .map(|sys| self.probabilty(sys))
+            .collect::<Vec<_>>();
+
+        probability.sort_unstable_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal));
+        probability
+    }
+
+    /// Change temperature of the system (degrees C) and update system with that new temperature
+    fn set_tmp_c(&mut self, tmp: f64) {
+        self.temperature = tmp;
+        self.update_system();
+    }
 }
 
 #[cfg(test)]
@@ -1272,7 +1283,7 @@ mod test_sdc_model {
 
         let mut probs = systems
             .iter()
-            .map(|s| (s.clone(), sdc.probabilty(s.clone())))
+            .map(|s| (s.clone(), sdc.probabilty(s)))
             .collect::<Vec<_>>();
 
         probs.sort_by(|(_, p1), (_, p2)| {
