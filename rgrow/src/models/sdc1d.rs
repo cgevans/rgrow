@@ -1003,6 +1003,10 @@ impl SDC {
         SDC::from_params(params)
     }
 
+    fn partition(&self) -> f64 {
+        self.sum_systems()
+    }
+
     fn distribution(&self) -> Vec<f64> {
         // Inneficient to run the same function twice, fix this
         let mut probability = self
