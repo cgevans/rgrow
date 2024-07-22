@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 #[enum_dispatch]
-pub trait State: RateStore + Canvas + StateStatus + Sync + Send + TrackerData {
+pub trait State: RateStore + Canvas + StateStatus + Sync + Send + TrackerData + TileCounts {
     fn panicinfo(&self) -> String;
 }
 
@@ -97,7 +97,15 @@ impl ClonableState for QuadTreeState<CanvasTube, PrintEventTracker> {
     }
 }
 
-#[enum_dispatch(State, StateStatus, Canvas, RateStore, TrackerData, CloneAsStateEnum)]
+#[enum_dispatch(
+    State,
+    StateStatus,
+    Canvas,
+    RateStore,
+    TrackerData,
+    CloneAsStateEnum,
+    TileCounts
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StateEnum {
     SquareCanvasNullTracker(QuadTreeState<CanvasSquare, NullStateTracker>),
@@ -119,48 +127,95 @@ impl StateEnum {
         shape: (usize, usize),
         kind: CanvasType,
         tracking: TrackingType,
+        n_tile_types: usize,
     ) -> Result<StateEnum, GrowError> {
         Ok(match kind {
             CanvasType::Square => match tracking {
                 TrackingType::None => {
-                    QuadTreeState::<CanvasSquare, NullStateTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasSquare, NullStateTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
                 TrackingType::Order => {
-                    QuadTreeState::<CanvasSquare, OrderTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasSquare, OrderTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
                 TrackingType::LastAttachTime => {
-                    QuadTreeState::<CanvasSquare, LastAttachTimeTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasSquare, LastAttachTimeTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
                 TrackingType::PrintEvent => {
-                    QuadTreeState::<CanvasSquare, PrintEventTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasSquare, PrintEventTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
             },
             CanvasType::Periodic => match tracking {
                 TrackingType::None => {
-                    QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
                 TrackingType::Order => {
-                    QuadTreeState::<CanvasPeriodic, OrderTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasPeriodic, OrderTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
                 TrackingType::LastAttachTime => {
-                    QuadTreeState::<CanvasPeriodic, LastAttachTimeTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasPeriodic, LastAttachTimeTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
                 TrackingType::PrintEvent => {
-                    QuadTreeState::<CanvasPeriodic, PrintEventTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasPeriodic, PrintEventTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
             },
             CanvasType::Tube => match tracking {
                 TrackingType::None => {
-                    QuadTreeState::<CanvasTube, NullStateTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasTube, NullStateTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
-                TrackingType::Order => {
-                    QuadTreeState::<CanvasTube, OrderTracker>::empty(shape)?.into()
-                }
+                TrackingType::Order => QuadTreeState::<CanvasTube, OrderTracker>::empty_with_types(
+                    shape,
+                    n_tile_types,
+                )?
+                .into(),
                 TrackingType::LastAttachTime => {
-                    QuadTreeState::<CanvasTube, LastAttachTimeTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasTube, LastAttachTimeTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
                 TrackingType::PrintEvent => {
-                    QuadTreeState::<CanvasTube, PrintEventTracker>::empty(shape)?.into()
+                    QuadTreeState::<CanvasTube, PrintEventTracker>::empty_with_types(
+                        shape,
+                        n_tile_types,
+                    )?
+                    .into()
                 }
             },
         })
@@ -179,10 +234,17 @@ pub trait StateStatus {
     fn reset_tracking_assuming_empty_state(&mut self);
 }
 
+#[enum_dispatch]
+pub trait TileCounts {
+    fn tile_counts(&self) -> ArrayView1<NumTiles>;
+    fn count_of_tile(&self, tile: Tile) -> NumTiles;
+}
+
 pub trait StateWithCreate: State + Sized {
     type Params;
     // fn new_raw(canvas: Self::RawCanvas) -> Result<Self, GrowError>;
     fn empty(params: Self::Params) -> Result<Self, GrowError>;
+    fn empty_with_types(params: Self::Params, n_tile_types: usize) -> Result<Self, GrowError>;
     fn from_array(arr: Array2<Tile>) -> Result<Self, GrowError>;
     fn get_params(&self) -> Self::Params;
     fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self;
@@ -197,11 +259,22 @@ pub struct QuadTreeState<C: Canvas, T: StateTracker> {
     total_events: NumEvents,
     time: f64,
     pub tracker: T,
+    tile_counts: Array1<NumTiles>,
 }
 
 impl<C: Canvas, T: StateTracker> QuadTreeState<C, T> {
     pub fn recalc_ntiles(&mut self) {
         self.ntiles = self.calc_n_tiles();
+    }
+}
+
+impl<C: Canvas, T: StateTracker> TileCounts for QuadTreeState<C, T> {
+    fn tile_counts(&self) -> ArrayView1<NumTiles> {
+        self.tile_counts.view()
+    }
+
+    fn count_of_tile(&self, tile: Tile) -> NumTiles {
+        self.tile_counts[tile as usize]
     }
 }
 
@@ -374,6 +447,23 @@ where
             total_events: 0,
             time: 0.,
             tracker,
+            tile_counts: Array1::<NumTiles>::zeros(1),
+        })
+    }
+
+    fn empty_with_types(params: Self::Params, n_tile_types: usize) -> Result<Self, GrowError> {
+        let rates: QuadTreeSquareArray<f64> =
+            QuadTreeSquareArray::new_with_size(params.0, params.1);
+        let canvas = C::new_sized(params)?;
+        let tracker = T::default(&canvas);
+        Ok(QuadTreeState::<C, T> {
+            rates,
+            canvas,
+            ntiles: 0,
+            total_events: 0,
+            time: 0.,
+            tracker,
+            tile_counts: Array1::<NumTiles>::zeros(n_tile_types),
         })
     }
 
@@ -390,6 +480,7 @@ where
             total_events: 0,
             time: 0.,
             tracker,
+            tile_counts: Array1::<NumTiles>::zeros(1),
         })
     }
 

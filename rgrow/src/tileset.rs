@@ -668,7 +668,7 @@ impl TileSet {
         let kind = self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT);
         let tracking = self.tracking.unwrap_or(TrackingType::None);
 
-        Ok(StateEnum::empty(shape, kind, tracking)?)
+        Ok(StateEnum::empty(shape, kind, tracking, 1)?) // FIXME
     }
 
     /// Creates an empty state, without any setup by a System.
