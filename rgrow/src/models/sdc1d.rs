@@ -506,20 +506,20 @@ impl SDC {
 }
 
 impl System for SDC {
-    fn update_after_event<St: State>(&self, state: &mut St, event: &crate::system::Event) {
+    fn update_after_event<St: State>(&self, state: &mut St, event: &Event) {
         match event {
             Event::None => todo!(),
-            Event::MonomerAttachment(scaffold_point, _)
-            | Event::MonomerDetachment(scaffold_point)
-            | Event::MonomerChange(scaffold_point, _) => {
-                // TODO: Make sure that this is all that needs be done for update
+            Event::MonomerAttachment(scaffold_point, strand) => {
+                // Increment the strands attachment by one
+                state.update_attachment(*strand);
                 self.update_monomer_point(state, scaffold_point)
             }
-            Event::PolymerDetachment(v) => self.polymer_update(v, state),
-            Event::PolymerAttachment(t) | Event::PolymerChange(t) => self.polymer_update(
-                &t.iter().map(|(p, _)| *p).collect::<Vec<PointSafe2>>(),
-                state,
-            ),
+            Event::MonomerDetachment(scaffold_point) => {
+                let strand = state.tile_at_point(*scaffold_point);
+                state.update_detachment(strand);
+                self.update_monomer_point(state, scaffold_point)
+            }
+            _ => panic!("This event is not supported in SDC"),
         }
     }
 
