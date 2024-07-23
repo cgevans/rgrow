@@ -198,7 +198,7 @@ impl SDC {
     // count_monomer = (c_monomer / c_scaffold) * count_scaffold
     pub fn total_tile_count(&self, tile: Tile) -> usize {
         let per = self.strand_concentration[tile as usize] / self.scaffold_concentration;
-        let net = per * self.scaffold().len() as f64;
+        let net = per * self.scaffold.nrows() as f64;
         net as usize
     }
 
