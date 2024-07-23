@@ -238,6 +238,11 @@ pub trait StateStatus {
 pub trait TileCounts {
     fn tile_counts(&self) -> ArrayView1<NumTiles>;
     fn count_of_tile(&self, tile: Tile) -> NumTiles;
+
+    /// Change the tile count based on the tile attaching
+    fn update_attachment(&mut self, tile: Tile);
+    /// Change the tile count based on the tile detaching
+    fn update_detachment(&mut self, tile: Tile);
 }
 
 pub trait StateWithCreate: State + Sized {
@@ -275,6 +280,14 @@ impl<C: Canvas, T: StateTracker> TileCounts for QuadTreeState<C, T> {
 
     fn count_of_tile(&self, tile: Tile) -> NumTiles {
         self.tile_counts[tile as usize]
+    }
+
+    fn update_attachment(&mut self, tile: Tile) {
+        self.tile_counts[tile as usize] += 1;
+    }
+
+    fn update_detachment(&mut self, tile: Tile) {
+        self.tile_counts[tile as usize] += 1;
     }
 }
 
