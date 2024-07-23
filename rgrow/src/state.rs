@@ -279,15 +279,28 @@ impl<C: Canvas, T: StateTracker> TileCounts for QuadTreeState<C, T> {
     }
 
     fn count_of_tile(&self, tile: Tile) -> NumTiles {
-        self.tile_counts[tile as usize]
+        *self.tile_counts.get(tile as usize).expect(
+            format!(
+                "Count Of Tile out of bounds ({} not in arr of len {})",
+                tile as usize,
+                self.tile_counts.len()
+            )
+            .as_str(),
+        )
     }
 
     fn update_attachment(&mut self, tile: Tile) {
-        self.tile_counts[tile as usize] += 1;
+        *self
+            .tile_counts
+            .get_mut(tile as usize)
+            .expect("Out of bounds on attachment update") += 1;
     }
 
     fn update_detachment(&mut self, tile: Tile) {
-        self.tile_counts[tile as usize] += 1;
+        *self
+            .tile_counts
+            .get_mut(tile as usize)
+            .expect("Out of bounds on detachment update") -= 1;
     }
 }
 
