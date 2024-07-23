@@ -271,6 +271,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         let (point, remainder) = state.choose_point(); // todo: resultify
         let event = self.choose_event_at_point(state, PointSafe2(point), remainder); // FIXME
         if let Event::None = event {
+            state.add_time(time_step);
             return StepOutcome::DeadEventAt(time_step);
         }
 
