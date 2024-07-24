@@ -510,18 +510,32 @@ impl System for SDC {
     fn update_after_event<St: State>(&self, state: &mut St, event: &Event) {
         match event {
             Event::None => todo!(),
-            Event::MonomerAttachment(scaffold_point, strand) => {
+            Event::MonomerAttachment(scaffold_point, _) => {
                 // Increment the strands attachment by one
-                state.update_attachment(*strand);
                 self.update_monomer_point(state, scaffold_point)
             }
             Event::MonomerDetachment(scaffold_point) => {
-                let strand = state.tile_at_point(*scaffold_point);
-                state.update_detachment(strand);
                 self.update_monomer_point(state, scaffold_point)
             }
             _ => panic!("This event is not supported in SDC"),
         }
+    }
+
+    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
+        match event {
+            Event::None => panic!("Being asked to perform null event."),
+            Event::MonomerAttachment(point, strand) => {
+                state.update_attachment(*strand);
+                state.set_sa(point, strand);
+            }
+            Event::MonomerDetachment(point) => {
+                let strand = state.tile_at_point(*point);
+                state.update_detachment(strand);
+                state.set_sa(point, &0);
+            }
+            _ => panic!("This event is not supported in SDC"),
+        };
+        self
     }
 
     fn event_rate_at_point<St: State>(
