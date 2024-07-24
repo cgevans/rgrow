@@ -189,6 +189,10 @@ impl SDC {
         self.update_system();
     }
 
+    pub fn n_scaffolds<S: State>(&self, state: &S) -> usize {
+        state.nrows_usable()
+    }
+
     // FIXME:
     // MAKE SURE THAT THIS FUNCTION IS CORRECT
     //
@@ -196,14 +200,10 @@ impl SDC {
     // ie monomer count
     //
     // count_monomer = (c_monomer / c_scaffold) * count_scaffold
-    pub fn total_tile_count(&self, tile: Tile) -> usize {
+    pub fn total_tile_count<S: State>(&self, state: &S, tile: Tile) -> usize {
         let per = self.strand_concentration[tile as usize] / self.scaffold_concentration;
-        let net = per * self.scaffold.nrows() as f64;
+        let net = per * self.n_scaffolds(state) as f64;
         net as usize
-    }
-
-    pub fn attachment_probability(&self, tile: Tile) {
-        self.total_tile_count(tile);
     }
 
     #[inline(always)]
@@ -367,7 +367,7 @@ impl SDC {
             acc -= self.kf * self.strand_concentration[strand as usize];
             if acc <= 0.0 && (!just_calc) {
                 let rand: f64 = rand::random();
-                let total = self.total_tile_count(strand) as f64;
+                let total = self.total_tile_count(state, strand) as f64;
                 let attached = state.count_of_tile(strand) as f64;
                 if rand <= attached / total {
                     return (true, acc, Event::None);

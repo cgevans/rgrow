@@ -388,6 +388,14 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
         self.canvas.ncols()
     }
 
+    fn nrows_usable(&self) -> usize {
+        self.canvas.nrows_usable()
+    }
+
+    fn ncols_usable(&self) -> usize {
+        self.canvas.ncols_usable()
+    }
+
     fn set_sa(&mut self, p: &PointSafe2, t: &Tile) {
         let r = unsafe { self.uvm_p(p.0) };
 
