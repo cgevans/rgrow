@@ -18,6 +18,7 @@ macro_rules! type_alias {
 use core::f64;
 use std::collections::{HashMap, HashSet};
 
+use num_traits::Float;
 use rand::Rng;
 
 use crate::{
@@ -1051,6 +1052,73 @@ impl Default for AnnealProtocol {
             anneal_time: 3.0 * 60.0 * 60.0,
             seconds_per_step: 2.0,
         }
+    }
+}
+
+impl AnnealProtocol {
+    #[inline(always)]
+    fn initial_steps(&self) -> usize {
+        (self.holds.0 / self.seconds_per_step).ceil() as usize
+    }
+
+    #[inline(always)]
+    fn final_steps(&self) -> usize {
+        (self.holds.1 / self.seconds_per_step).ceil() as usize
+    }
+
+    #[inline(always)]
+    fn delta_steps(&self) -> usize {
+        (self.anneal_time / self.seconds_per_step).ceil() as usize
+    }
+
+    /// Generates two arrays:
+    /// (Vec<temperatures>, Vec<times>)
+    fn generate_arrays(&self) -> (Vec<f64>, Vec<f64>) {
+        // See how many steps we wil take during each of the stages
+        let steps_init = self.initial_steps();
+        let steps_final = self.final_steps();
+        let steps_delta = self.delta_steps();
+
+        let mut temps = Vec::<f64>::with_capacity(steps_init + steps_delta + steps_final);
+        let mut times = Vec::<f64>::with_capacity(steps_init + steps_delta + steps_final);
+
+        // This assumes that the final temperature is lower
+        let temperature_diff = self.temperatures.0 - self.temperatures.1;
+        let temperature_delta = temperature_diff / (steps_delta as f64);
+
+        // Initial time in seconds
+        let mut current_time = 0.0;
+        let mut current_temp = self.temperatures.0;
+
+        (0..steps_init).for_each(|_step_num| {
+            // The temperature doesnt change
+            temps.push(current_temp);
+            // The time increments by the same delta
+            times.push(current_time);
+
+            current_time += self.seconds_per_step;
+        });
+
+        (0..steps_delta).for_each(|_step_num| {
+            // The temperature doesnt change
+            temps.push(current_temp);
+            // The time increments by the same delta
+            times.push(current_time);
+
+            current_time += self.seconds_per_step;
+            current_temp -= temperature_delta;
+        });
+
+        (0..steps_final).for_each(|_step_num| {
+            // The temperature doesnt change
+            temps.push(current_temp);
+            // The time increments by the same delta
+            times.push(current_time);
+
+            current_time += self.seconds_per_step;
+        });
+
+        (temps, times)
     }
 }
 
