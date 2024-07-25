@@ -1021,6 +1021,39 @@ impl SDC {
     }
 }
 
+/*
+*
+* EXPERIMENTAL HELPER FUNCIONS
+*
+* I think that this part maybe could be moved to a different file
+* as to not mix implementation of the system with its use
+*/
+
+pub struct AnnealProtocol {
+    /// A tuple with initial and final temperatures (in C)
+    pub temperatures: (f64, f64),
+    /// A tuple with:
+    /// 1. How long to hold the initial temperature for before starting the temperature decremenet
+    /// 2. How long to hold the final temperature for before finishing the anneal
+    pub holds: (f64, f64),
+    /// How long to spend in the phase where the temperature is decrementing from the initial to
+    /// the final temp
+    pub anneal_time: f64,
+    /// TODO: Document this properly
+    steps_per_sec: f64,
+}
+
+impl Default for AnnealProtocol {
+    fn default() -> Self {
+        AnnealProtocol {
+            temperatures: (80., 20.),
+            holds: (10. * 60., 45. * 60.),
+            anneal_time: 3.0 * 60.0 * 60.0,
+            steps_per_sec: 0.5,
+        }
+    }
+}
+
 #[cfg(feature = "python")]
 #[pymethods]
 impl SDC {
