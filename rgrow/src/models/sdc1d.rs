@@ -18,9 +18,7 @@ macro_rules! type_alias {
 use core::f64;
 use std::collections::{HashMap, HashSet};
 
-use num_traits::Float;
 use rand::Rng;
-use rayon::iter::Either;
 
 use crate::{
     base::{Energy, Glue, GrowError, Rate, Tile},
