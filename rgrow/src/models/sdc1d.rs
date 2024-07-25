@@ -362,11 +362,12 @@ impl SDC {
 
         let empty_map = HashSet::default();
         let friends = self.friends_btm.get(scaffold_glue).unwrap_or(&empty_map);
+        let mut rand_thread = rand::thread_rng();
 
         for &strand in friends {
             acc -= self.kf * self.strand_concentration[strand as usize];
             if acc <= 0.0 && (!just_calc) {
-                let rand: f64 = rand::random();
+                let rand: f64 = rand_thread.gen();
                 let total = self.total_tile_count(state, strand) as f64;
                 let attached = state.count_of_tile(strand) as f64;
                 if rand <= attached / total {
