@@ -210,23 +210,6 @@ impl SDC {
         R * (self.temperature + 273.15)
     }
 
-    fn polymer_update<S: State>(&self, points: &Vec<PointSafe2>, state: &mut S) {
-        let mut points_to_update = points
-            .iter()
-            .flat_map(|&point| {
-                [
-                    PointSafeHere(point.0),
-                    state.move_sa_w(point),
-                    state.move_sa_e(point),
-                ]
-            })
-            .collect::<Vec<PointSafeHere>>();
-
-        points_to_update.sort_unstable();
-        points_to_update.dedup();
-        self.update_points(state, &points_to_update)
-    }
-
     fn update_monomer_point<S: State>(&self, state: &mut S, scaffold_point: &PointSafe2) {
         let points = [
             state.move_sa_w(*scaffold_point),
