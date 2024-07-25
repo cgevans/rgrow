@@ -1218,6 +1218,114 @@ mod test_anneal {
         scaffold_count: 100,
     };
 
+    fn gen_sdc() -> SDC {
+        let mut strands = Vec::<SDCStrand>::new();
+
+        // Anchor tile
+        strands.push(SDCStrand {
+            name: Some("0A0".to_string()),
+            color: None,
+            concentration: 1e-6,
+            btm_glue: Some(String::from("A")),
+            left_glue: None,
+            right_glue: Some("0e".to_string()),
+        });
+        strands.push(SDCStrand {
+            name: Some("-E-".to_string()),
+            color: None,
+            concentration: 1e-6,
+            btm_glue: Some(String::from("E")),
+            left_glue: None,
+            right_glue: None,
+        });
+
+        for base in "BCD".chars() {
+            let (leo, reo): (String, String) = if base == 'C' {
+                ("o".to_string(), "e".to_string())
+            } else {
+                ("e".to_string(), "o".to_string())
+            };
+
+            let name = format!("0{}0", base);
+            let lg = format!("0{}*", leo);
+            let rg = format!("0{}", reo);
+            strands.push(SDCStrand {
+                name: Some(name),
+                color: None,
+                concentration: 1e-6,
+                btm_glue: Some(String::from(base)),
+                left_glue: Some(lg),
+                right_glue: Some(rg),
+            });
+
+            let name = format!("1{}1", base);
+            let lg = format!("1{}*", leo);
+            let rg = format!("1{}*", reo);
+            strands.push(SDCStrand {
+                name: Some(name),
+                color: None,
+                concentration: 1e-6,
+                btm_glue: Some(String::from(base)),
+                left_glue: Some(lg),
+                right_glue: Some(rg),
+            })
+        }
+
+        let scaffold = SingleOrMultiScaffold::Single(vec![
+            None,
+            None,
+            Some("A*".to_string()),
+            Some("B*".to_string()),
+            Some("C*".to_string()),
+            Some("D*".to_string()),
+            Some("E*".to_string()),
+            None,
+            None,
+        ]);
+
+        let glue_dg_s: HashMap<RefOrPair, GsOrSeq> = HashMap::from(
+            [
+                ("0e", "GCTGAGAAGAGG"),
+                ("1e", "GGATCGGAGATG"),
+                ("2e", "GGCTTGGAAAGA"),
+                ("3e", "GGCAAGGATTGA"),
+                ("4e", "AACAGGGATGTG"),
+                ("5e", "AATGGGACATGG"),
+                ("6e", "GAACGTTGGTTG"),
+                ("7e", "GACGAAGTGTGA"),
+                ("0o", "GGTCAGGATGAG"),
+                ("1o", "GAACGGAGTTGA"),
+                ("2o", "AATGGTGGCATT"),
+                ("3o", "GACAAGGGTTGT"),
+                ("4o", "TGTTGGGAACAG"),
+                ("5o", "GGACTGGTAGTG"),
+                ("6o", "GACAGTGTGTGT"),
+                ("7o", "GGACGAAAGTGA"),
+                ("A", "TCTTTCCAGAGCCTAATTTGCCAG"),
+                ("B", "AGCGTCCAATACTGCGGAATCGTC"),
+                ("C", "ATAAATATTCATTGAATCCCCCTC"),
+                ("D", "AAATGCTTTAAACAGTTCAGAAAA"),
+                ("E", "CGAGAATGACCATAAATCAAAAAT"),
+            ]
+            .map(|(r, g)| (RefOrPair::Ref(r.to_string()), GsOrSeq::Seq(g.to_string()))),
+        );
+
+        let sdc_params = SDCParams {
+            strands,
+            scaffold,
+            temperature: 20.0,
+            scaffold_concentration: 1e-100,
+            glue_dg_s,
+            k_f: 1e6,
+            k_n: 1e5,
+            k_c: 1e4,
+        };
+
+        let mut sdc = SDC::from_params(sdc_params);
+        sdc.update_system();
+        sdc
+    }
+
     #[test]
     fn test_time_and_temp_array() {
         let (tmp, time) = ANNEAL.generate_arrays();
@@ -1249,6 +1357,12 @@ mod test_anneal {
             let top = tmp[300 + i];
             assert!((tmps[i] - top).abs() < 0.1);
         })
+    }
+
+    #[test]
+    fn test_run_anneal() {
+        let sdc = gen_sdc();
+        ANNEAL.run_anneal_default_system(sdc).unwrap();
     }
 }
 
