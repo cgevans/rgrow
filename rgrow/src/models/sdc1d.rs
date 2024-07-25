@@ -20,13 +20,14 @@ use std::collections::{HashMap, HashSet};
 
 use num_traits::Float;
 use rand::Rng;
+use rayon::iter::Either;
 
 use crate::{
     base::{Energy, Glue, GrowError, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     colors::get_color_or_random,
     state::State,
-    system::{Event, NeededUpdate, System, TileBondInfo},
+    system::{DynSystem, Event, EvolveBounds, NeededUpdate, System, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, Size},
 };
 
@@ -1044,6 +1045,9 @@ pub struct AnnealProtocol {
     pub seconds_per_step: f64,
 }
 
+/// Canvas Arrays, Times, Temperatues
+type AnnealOutput = (Vec<Vec<u32>>, Vec<f64>, Vec<f64>);
+
 impl Default for AnnealProtocol {
     fn default() -> Self {
         AnnealProtocol {
@@ -1119,6 +1123,34 @@ impl AnnealProtocol {
         });
 
         (temps, times)
+    }
+
+    // The reason I made this function part of the anneal struct, rather than having this function
+    // be part of the SDC is that it will be easier to implement "run_many_systems" and have it be
+    // concurrent
+    pub fn run_system<St: State>(
+        &self,
+        mut sdc: SDC,
+        mut state: St,
+    ) -> Result<AnnealOutput, GrowError> {
+        let (tmps, times) = self.generate_arrays();
+
+        let bounds = EvolveBounds::default().for_time(self.seconds_per_step);
+        let needed = NeededUpdate::All;
+        let mut canvases = Vec::new();
+
+        for tmp in &tmps {
+            // Change the temperature
+            sdc.temperature = *tmp;
+            sdc.update_system();
+
+            crate::system::System::update_all(&sdc, &mut state, &needed);
+            crate::system::System::evolve(&sdc, &mut state, bounds)?;
+            let canvas = state.raw_array().to_slice().unwrap();
+            canvases.push(canvas.to_vec())
+        }
+
+        Ok((canvases, times, tmps))
     }
 }
 
