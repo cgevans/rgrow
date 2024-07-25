@@ -31,6 +31,8 @@ mod rgrow {
     #[pymodule_export]
     use rgrow::models::oldktam::OldKTAM;
     #[pymodule_export]
+    use rgrow::models::sdc1d::AnnealProtocol;
+    #[pymodule_export]
     use rgrow::models::sdc1d::SDC;
     #[pymodule_export]
     use rgrow::system::DimerInfo;
