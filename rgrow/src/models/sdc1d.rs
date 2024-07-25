@@ -1039,8 +1039,8 @@ pub struct AnnealProtocol {
     /// How long to spend in the phase where the temperature is decrementing from the initial to
     /// the final temp
     pub anneal_time: f64,
-    /// TODO: Document this properly
-    steps_per_sec: f64,
+    /// How long to spend at each temperature
+    seconds_per_step: f64,
 }
 
 impl Default for AnnealProtocol {
@@ -1049,7 +1049,7 @@ impl Default for AnnealProtocol {
             temperatures: (80., 20.),
             holds: (10. * 60., 45. * 60.),
             anneal_time: 3.0 * 60.0 * 60.0,
-            steps_per_sec: 0.5,
+            seconds_per_step: 2.0,
         }
     }
 }
