@@ -26,7 +26,7 @@ use crate::{
     base::{Energy, Glue, GrowError, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     colors::get_color_or_random,
-    state::State,
+    state::{State, StateEnum},
     system::{DynSystem, Event, EvolveBounds, NeededUpdate, System, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, Size},
 };
@@ -1043,6 +1043,7 @@ pub struct AnnealProtocol {
     pub anneal_time: f64,
     /// How long to spend at each temperature
     pub seconds_per_step: f64,
+    pub scaffold_count: usize,
 }
 
 /// Canvas Arrays, Times, Temperatues
@@ -1055,6 +1056,7 @@ impl Default for AnnealProtocol {
             holds: (10. * 60., 45. * 60.),
             anneal_time: 3.0 * 60.0 * 60.0,
             seconds_per_step: 2.0,
+            scaffold_count: 100,
         }
     }
 }
@@ -1152,6 +1154,25 @@ impl AnnealProtocol {
 
         Ok((canvases, times, tmps))
     }
+
+    fn default_state(&self, sdc: &SDC) -> Result<StateEnum, GrowError> {
+        // There is a better way to do this
+        let scaffold_size = sdc.scaffold().len();
+        let shape = (self.scaffold_count, scaffold_size);
+        let n_tile_types = sdc.strand_names.len();
+
+        StateEnum::empty(
+            shape,
+            crate::tileset::CanvasType::Square,
+            crate::tileset::TrackingType::None,
+            n_tile_types,
+        )
+    }
+
+    fn run_anneal_default_system(&self, sdc: SDC) -> Result<AnnealOutput, GrowError> {
+        let state = self.default_state(&sdc)?;
+        self.run_system(sdc, state)
+    }
 }
 
 #[cfg(feature = "python")]
@@ -1194,6 +1215,7 @@ mod test_anneal {
         holds: (10. * 60., 45. * 60.),
         anneal_time: 3.0 * 60.0 * 60.0,
         seconds_per_step: 2.0,
+        scaffold_count: 100,
     };
 
     #[test]
