@@ -493,11 +493,8 @@ impl System for SDC {
     fn update_after_event<St: State>(&self, state: &mut St, event: &Event) {
         match event {
             Event::None => todo!(),
-            Event::MonomerAttachment(scaffold_point, _) => {
-                // Increment the strands attachment by one
-                self.update_monomer_point(state, scaffold_point)
-            }
-            Event::MonomerDetachment(scaffold_point) => {
+            Event::MonomerAttachment(scaffold_point, _)
+            | Event::MonomerDetachment(scaffold_point) => {
                 self.update_monomer_point(state, scaffold_point)
             }
             _ => panic!("This event is not supported in SDC"),
