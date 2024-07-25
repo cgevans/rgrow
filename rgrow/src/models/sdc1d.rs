@@ -1029,6 +1029,7 @@ impl SDC {
 * as to not mix implementation of the system with its use
 */
 
+#[cfg_attr(feature = "python", pyclass)]
 pub struct AnnealProtocol {
     /// A tuple with initial and final temperatures (in C)
     pub temperatures: (f64, f64),
@@ -1170,6 +1171,33 @@ impl AnnealProtocol {
     fn run_anneal_default_system(&self, sdc: SDC) -> Result<AnnealOutput, GrowError> {
         let state = self.default_state(&sdc)?;
         self.run_system(sdc, state)
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl AnnealProtocol {
+    #[new]
+    fn new(
+        from_tmp: f64,
+        to_tmp: f64,
+        initial_hold: f64,
+        final_hold: f64,
+        delta_time: f64,
+        scaffold_count: usize,
+        seconds_per_step: f64,
+    ) -> Self {
+        AnnealProtocol {
+            temperatures: (from_tmp, to_tmp),
+            seconds_per_step,
+            anneal_time: delta_time,
+            holds: (initial_hold, final_hold),
+            scaffold_count,
+        }
+    }
+
+    fn run_one_system(&self, sdc: SDC) -> Option<AnnealOutput> {
+        self.run_anneal_default_system(sdc).ok()
     }
 }
 
