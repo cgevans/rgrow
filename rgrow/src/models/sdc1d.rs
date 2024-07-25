@@ -1041,7 +1041,7 @@ pub struct AnnealProtocol {
     /// the final temp
     pub anneal_time: f64,
     /// How long to spend at each temperature
-    seconds_per_step: f64,
+    pub seconds_per_step: f64,
 }
 
 impl Default for AnnealProtocol {
@@ -1073,7 +1073,7 @@ impl AnnealProtocol {
 
     /// Generates two arrays:
     /// (Vec<temperatures>, Vec<times>)
-    fn generate_arrays(&self) -> (Vec<f64>, Vec<f64>) {
+    pub fn generate_arrays(&self) -> (Vec<f64>, Vec<f64>) {
         // See how many steps we wil take during each of the stages
         let steps_init = self.initial_steps();
         let steps_final = self.final_steps();
@@ -1091,31 +1091,31 @@ impl AnnealProtocol {
         let mut current_temp = self.temperatures.0;
 
         (0..steps_init).for_each(|_step_num| {
+            current_time += self.seconds_per_step;
+
             // The temperature doesnt change
             temps.push(current_temp);
             // The time increments by the same delta
             times.push(current_time);
-
-            current_time += self.seconds_per_step;
         });
 
         (0..steps_delta).for_each(|_step_num| {
+            current_time += self.seconds_per_step;
+            current_temp -= temperature_delta;
+
             // The temperature doesnt change
             temps.push(current_temp);
             // The time increments by the same delta
             times.push(current_time);
-
-            current_time += self.seconds_per_step;
-            current_temp -= temperature_delta;
         });
 
         (0..steps_final).for_each(|_step_num| {
+            current_time += self.seconds_per_step;
+
             // The temperature doesnt change
             temps.push(current_temp);
             // The time increments by the same delta
             times.push(current_time);
-
-            current_time += self.seconds_per_step;
         });
 
         (temps, times)
@@ -1150,6 +1150,51 @@ impl SDC {
     fn set_tmp_c(&mut self, tmp: f64) {
         self.temperature = tmp;
         self.update_system();
+    }
+}
+
+#[cfg(test)]
+mod test_anneal {
+    use super::*;
+
+    const ANNEAL: AnnealProtocol = AnnealProtocol {
+        temperatures: (88., 28.),
+        holds: (10. * 60., 45. * 60.),
+        anneal_time: 3.0 * 60.0 * 60.0,
+        seconds_per_step: 2.0,
+    };
+
+    #[test]
+    fn test_time_and_temp_array() {
+        let (tmp, time) = ANNEAL.generate_arrays();
+
+        let mut expected_time = vec![];
+        let mut ctime = 2.0;
+        loop {
+            expected_time.push(ctime);
+            ctime += 2.0;
+            if ctime > 14100.0 {
+                break;
+            }
+        }
+        assert_eq!(time, expected_time);
+
+        (0..300).for_each(|i| {
+            let top = tmp[i];
+            assert_eq!(top, 88.0);
+        });
+        let tmps = [
+            87.98888683089461,
+            87.97777366178921,
+            87.96666049268383,
+            87.95554732357844,
+            87.94443415447304,
+            87.93332098536766,
+        ];
+        (0..6).for_each(|i| {
+            let top = tmp[300 + i];
+            assert!((tmps[i] - top).abs() < 0.1);
+        })
     }
 }
 
