@@ -1147,6 +1147,8 @@ impl AnnealProtocol {
 
             crate::system::System::update_all(&sdc, &mut state, &needed);
             crate::system::System::evolve(&sdc, &mut state, bounds)?;
+            // FIXME: This is flattening the canvas, so it doesnt work nicely
+            // it should be Vec<Vec<_>>, not Vec<_>
             let canvas = state.raw_array().to_slice().unwrap();
             canvases.push(canvas.to_vec())
         }
@@ -1358,7 +1360,7 @@ mod test_anneal {
 
         let mut expected_time = vec![];
         let mut ctime = 2.0;
-        loop {
+        loop {1d
             expected_time.push(ctime);
             ctime += 2.0;
             if ctime > 14100.0 {
