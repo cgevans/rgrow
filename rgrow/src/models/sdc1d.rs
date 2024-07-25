@@ -27,7 +27,6 @@ use crate::{
     state::State,
     system::{Event, NeededUpdate, System, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, Size},
-    utils,
 };
 
 use ndarray::prelude::{Array1, Array2};
