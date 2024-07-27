@@ -472,7 +472,7 @@ impl SDC {
 
     pub fn boltzman_function(&self, attachments: &Vec<u32>) -> f64 {
         let g_a = self.g_system(attachments);
-        (-self.rtval() * g_a).exp()
+        (-g_a / self.rtval()).exp()
     }
 
     pub fn sum_systems(&self) -> f64 {
@@ -1360,7 +1360,7 @@ mod test_anneal {
 
         let mut expected_time = vec![];
         let mut ctime = 2.0;
-        loop {1d
+        loop {
             expected_time.push(ctime);
             ctime += 2.0;
             if ctime > 14100.0 {
