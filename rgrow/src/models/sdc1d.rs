@@ -1137,7 +1137,7 @@ impl AnnealProtocol {
         let (tmps, times) = self.generate_arrays();
 
         let bounds = EvolveBounds::default().for_time(self.seconds_per_step);
-        let needed = NeededUpdate::All;
+        let needed = NeededUpdate::NonZero;
         let mut canvases = Vec::new();
 
         for tmp in &tmps {
