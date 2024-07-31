@@ -19,13 +19,14 @@ use core::f64;
 use std::collections::{HashMap, HashSet};
 
 use rand::Rng;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
     base::{Energy, Glue, GrowError, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     colors::get_color_or_random,
     state::{State, StateEnum},
-    system::{DynSystem, Event, EvolveBounds, NeededUpdate, System, TileBondInfo},
+    system::{self, DynSystem, Event, EvolveBounds, NeededUpdate, System, TileBondInfo},
     tileset::{FromTileSet, ProcessedTileSet, Size},
 };
 
@@ -1174,6 +1175,15 @@ impl AnnealProtocol {
         let state = self.default_state(&sdc)?;
         self.run_system(sdc, state)
     }
+
+    fn run_many_anneals_default_system(
+        &self,
+        sdcs: Vec<SDC>,
+    ) -> Vec<Result<AnnealOutput, GrowError>> {
+        sdcs.par_iter()
+            .map(|sdc| self.run_anneal_default_system(sdc.clone()))
+            .collect()
+    }
 }
 
 #[cfg(feature = "python")]
@@ -1200,6 +1210,13 @@ impl AnnealProtocol {
 
     fn run_one_system(&self, sdc: SDC) -> Option<AnnealOutput> {
         self.run_anneal_default_system(sdc).ok()
+    }
+
+    fn run_many_systems(&self, sdcs: Vec<SDC>) -> Vec<Option<AnnealOutput>> {
+        self.run_many_anneals_default_system(sdcs)
+            .into_iter()
+            .map(|z| z.ok())
+            .collect()
     }
 }
 
@@ -1231,6 +1248,21 @@ impl SDC {
     fn set_tmp_c(&mut self, tmp: f64) {
         self.temperature = tmp;
         self.update_system();
+    }
+
+    fn get_all_probs(&self) -> Vec<(Vec<u32>, f64, f64)> {
+        let systems = self.system_states();
+        let mut triples = Vec::new();
+        for s in systems {
+            let prob = self.probabilty(&s);
+            let energy = self.boltzman_function(&s);
+            triples.push((s, prob, energy));
+        }
+
+        triples.sort_unstable_by(|(_, x, _), (_, y, _)| {
+            x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        triples
     }
 }
 
@@ -1360,7 +1392,7 @@ mod test_anneal {
 
         let mut expected_time = vec![];
         let mut ctime = 2.0;
-        loop {1d
+        loop {
             expected_time.push(ctime);
             ctime += 2.0;
             if ctime > 14100.0 {
