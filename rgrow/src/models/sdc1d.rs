@@ -34,6 +34,8 @@ use ndarray::prelude::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "python")]
+use numpy::ToPyArray;
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 
 type_alias!( f64 => Strength, RatePerConc, Conc );
@@ -418,11 +420,11 @@ impl SDC {
             };
 
             // Take into account the penalty
-            let penalty = self.rtval() * (self.strand_concentration[*strand as usize] / U0).ln();
+            let penalty = (self.strand_concentration[*strand as usize] / U0).ln();
 
             sumg -= penalty;
         }
-        sumg
+        sumg * self.rtval()
     }
 
     // This is quite inefficient -- and clones a lot. If the scaffold were to be
@@ -473,7 +475,7 @@ impl SDC {
 
     pub fn boltzman_function(&self, attachments: &Vec<u32>) -> f64 {
         let g_a = self.g_system(attachments);
-        (-self.rtval() * g_a).exp()
+        (-g_a / self.rtval()).exp()
     }
 
     pub fn sum_systems(&self) -> f64 {
@@ -1138,7 +1140,7 @@ impl AnnealProtocol {
         let (tmps, times) = self.generate_arrays();
 
         let bounds = EvolveBounds::default().for_time(self.seconds_per_step);
-        let needed = NeededUpdate::All;
+        let needed = NeededUpdate::NonZero;
         let mut canvases = Vec::new();
 
         for tmp in &tmps {
@@ -1248,6 +1250,21 @@ impl SDC {
     fn set_tmp_c(&mut self, tmp: f64) {
         self.temperature = tmp;
         self.update_system();
+    }
+
+    #[getter]
+    fn get_scaffold_energy_bonds<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
+        self.scaffold_energy_bonds.to_pyarray_bound(py)
+    }
+
+    #[getter]
+    fn get_strand_energy_bonds<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
+        self.strand_energy_bonds.to_pyarray_bound(py)
+    }
+
+    #[getter]
+    fn get_tile_concs<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
+        self.strand_concentration.to_pyarray_bound(py)
     }
 
     fn get_all_probs(&self) -> Vec<(Vec<u32>, f64, f64)> {
