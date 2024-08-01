@@ -223,16 +223,18 @@ fn calc_penalty(prior: &DnaNucleotideBase, x: &DnaNucleotideBase, y: &DnaNucleot
     PENALTY_TABLE[*prior as usize][*x as usize][*y as usize]
 }
 
-/// IMPORTANT: This function assumes that there is a mismatch
-fn calculate_mismatch_penalty(
+fn calculate_single_mismatch_penalty(
     (a1, a2): (&DnaNucleotideBase, &DnaNucleotideBase),
     (b1, b2): (&DnaNucleotideBase, &DnaNucleotideBase),
 ) -> f64 {
-    match good_match(a1, b1) {
+    if good_match(a1, b1) {
         // Case 1: PX/(P*)Y
-        true => calc_penalty(a1, a2, b2),
+        calc_penalty(a1, a2, b2)
+    } else if good_match(a2, b2) {
         // Case 2: XP/Y(P*)
-        false => calc_penalty(b2, b1, a1),
+        calc_penalty(b2, b1, a1)
+    } else {
+        0.0
     }
 }
 
@@ -241,8 +243,8 @@ fn sequence_pair_dg_ds(dna_a: Vec<DnaNucleotideBase>, dna_b: Vec<DnaNucleotideBa
         panic!("Dnas must be same length to compare");
     }
 
+    let mut current_loop_length = 0;
     let (mut dg, mut ds) = (0.0, 0.0);
-
     let a_windows = dna_a.windows(2);
     let b_windows = dna_b.windows(2);
 
@@ -253,11 +255,17 @@ fn sequence_pair_dg_ds(dna_a: Vec<DnaNucleotideBase>, dna_b: Vec<DnaNucleotideBa
             let (ndg, nds) = dG_dS(&a1, &a2);
             dg += ndg;
             ds += nds;
+
+            // When we find a good match we know that the loop is over
+            if current_loop_length > 2 {
+                dg += loop_penalty(current_loop_length - 1, "internal");
+            }
+            current_loop_length = 0;
         } else {
-            dg += calculate_mismatch_penalty((&a1, &a2), (&b1, &b2));
+            dg += calculate_single_mismatch_penalty((&a1, &a2), (&b1, &b2));
+            current_loop_length += 1;
         }
     }
-
     (dg, ds)
 }
 
@@ -288,7 +296,7 @@ fn _loop_penalty(length: usize, kind: LoopKind) -> f64 {
         .iter()
         .zip(LENGTHS)
         .rev()
-        .find(|(_, len)| len < &length)
+        .find(|(_, len)| len <= &length)
         .expect("Please enter a valid length");
 
     g_diff + R * (length as f64 / (len as f64)).ln() * 2.44 * 310.15
@@ -455,5 +463,31 @@ mod test_utils {
         let (pg, ps) = string_dna_dg_ds("GGACTGAC");
         assert_eq!(g, pg);
         assert_eq!(s, ps);
+    }
+
+    #[test]
+    fn internal_loop_mismatch() {
+        /*
+         * Make sure that the way I calculated -0.17 by hand is right
+         *
+         *       A G C T G
+         * A T T | | | | | G T C
+         * | | |           | | |
+         * T A A | | | | | C A G
+         *       G A T G A
+         *
+         * Delta G =
+         *   G(A, T) + G(T, T)
+         *    + SingleMismatch(T A / A G)
+         *    + InternalLoop(5)
+         *    + SingleMismatch(G G / A C)
+         *    + G(G, T)  + G(T, C)
+         *    = -0.17
+         * */
+        let (g, _) = sequence_pair_dg_ds(
+            "attagctggtc".chars().map(DnaNucleotideBase::from).collect(),
+            "taagatgacag".chars().map(DnaNucleotideBase::from).collect(),
+        );
+        approx::assert_relative_eq!(g, -0.17);
     }
 }
