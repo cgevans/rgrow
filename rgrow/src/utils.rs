@@ -181,9 +181,9 @@ fn dG_dS(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> (f64, f64) {
 ///
 /// Right now this function can handle:
 /// - Single Mismatches
+/// - Many mismatches back to back
 ///
 /// It can not yet handle:
-/// - Many mismatches back to back
 /// - Mismatches at end
 ///
 ///
