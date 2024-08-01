@@ -55,7 +55,7 @@ const LENGTHS: [usize; 15] = [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 25, 3
 *   + g(A, T) + (temp - 37) s(A, T)
 * */
 
-/// 2-sliding window generic implementatin for any iterator with a fold function
+/// 2-sliding window generic implementation for any iterator with a fold function
 ///
 /// None will be returned if the iterator is too short
 fn two_window_fold<T, K, F>(mut iter: impl Iterator<Item = T>, fold: F) -> Option<K>
