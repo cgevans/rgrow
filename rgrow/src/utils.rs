@@ -19,6 +19,46 @@ const PENALTY_S: f64 = 0.0057;
 // (same unit as delta G needed)
 const R: f64 = 1.98720425864083 / 1000.0;
 
+/// Index this as follows:
+///
+/// Given the following MISMATCH
+/// PX/(P*)Y then the penalty is given
+/// by index [P][X][Y]
+const PENALTY_TABLE: [[[f64; 4]; 4]; 4] = [
+    // AX/TY
+    [
+        // X = A
+        [0.61, 0.0, 0.14, 0.88],
+        // X = T
+        [0.0, 0.69, 0.07, 0.73],
+        // X = G
+        [0.02, 0.71, -0.13, 0.0],
+        // X = C
+        [0.77, 0.64, 0.0, 1.33],
+    ],
+    // TX/AY
+    [
+        [0.69, 0.0, 0.42, 0.92],
+        [0.0, 0.68, 0.34, 0.75],
+        [0.74, 0.43, 0.44, 0.0],
+        [1.33, 0.97, 0.0, 1.05],
+    ],
+    // GX/CY
+    [
+        [0.17, 0.0, -0.25, 0.81],
+        [0.0, 0.45, -0.59, 0.98],
+        [-0.52, 0.08, -1.11, 0.0],
+        [0.47, 0.62, 0.0, 0.79],
+    ],
+    // CX/GY
+    [
+        [0.43, 0.0, 0.03, 0.75],
+        [0.0, -0.12, -0.32, 0.40],
+        [0.11, -0.47, -0.11, 0.0],
+        [0.79, 0.62, 0.0, 0.70],
+    ],
+];
+
 pub enum LoopKind {
     Internal = 0,
     Bulge = 1,
@@ -159,50 +199,23 @@ fn good_match(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> bool {
     a.connects_to() == *b
 }
 
-/// Index this as follows:
-///
-/// Given the following MISMATCH
-/// PX/(P*)Y then the penalty is given
-/// by index [P][X][Y]
-const PENALTY_TABLE: [[[f64; 4]; 4]; 4] = [
-    // AX/TY
-    [
-        // X = A
-        [0.61, 0.0, 0.14, 0.88],
-        // X = T
-        [0.0, 0.69, 0.07, 0.73],
-        // X = G
-        [0.02, 0.71, -0.13, 0.0],
-        // X = C
-        [0.77, 0.64, 0.0, 1.33],
-    ],
-    // TX/AY
-    [
-        [0.69, 0.0, 0.42, 0.92],
-        [0.0, 0.68, 0.34, 0.75],
-        [0.74, 0.43, 0.44, 0.0],
-        [1.33, 0.97, 0.0, 1.05],
-    ],
-    // GX/CY
-    [
-        [0.17, 0.0, -0.25, 0.81],
-        [0.0, 0.45, -0.59, 0.98],
-        [-0.52, 0.08, -1.11, 0.0],
-        [0.47, 0.62, 0.0, 0.79],
-    ],
-    // CX/GY
-    [
-        [0.43, 0.0, 0.03, 0.75],
-        [0.0, -0.12, -0.32, 0.40],
-        [0.11, -0.47, -0.11, 0.0],
-        [0.79, 0.62, 0.0, 0.70],
-    ],
-];
-
 /// Calculate the penalty introduced by a single mismatch
 #[inline(always)]
 fn calc_penalty(prior: &DnaNucleotideBase, x: &DnaNucleotideBase, y: &DnaNucleotideBase) -> f64 {
     PENALTY_TABLE[*prior as usize][*x as usize][*y as usize]
+}
+
+/// IMPORTANT: This function assumes that there is a mismatch
+fn calculate_mismatch_penalty(
+    (a1, a2): (&DnaNucleotideBase, &DnaNucleotideBase),
+    (b1, b2): (&DnaNucleotideBase, &DnaNucleotideBase),
+) -> f64 {
+    match good_match(a1, b1) {
+        // Case 1: PX/(P*)Y
+        true => calc_penalty(a1, a2, b2),
+        // Case 2: XP/Y(P*)
+        false => calc_penalty(b2, b1, a1),
+    }
 }
 
 fn dealta_g_with_penalty(
@@ -221,22 +234,12 @@ fn dealta_g_with_penalty(
     for (a, b) in std::iter::zip(a_windows, b_windows) {
         let (a1, a2) = (a[0], a[1]);
         let (b1, b2) = (b[0], b[1]);
-
         if good_match(&a2, &b2) && good_match(&a1, &b1) {
             let (ndg, nds) = dG_dS(&a1, &a2);
-            println!("{:?}{:?}/{:?}{:?} = {ndg}", a1, a2, b1, b2);
             dg += ndg;
             ds += nds;
-        } else if good_match(&a2, &b2) {
-            // [0.11, 0.0, -0.11, -0.47],
-
-            let p = PENALTY_TABLE[b2 as usize][b1 as usize][a1 as usize];
-            println!("{:?}{:?}/{:?}{:?} = {p}", b2, b1, a2, a1);
-            dg += p;
-        } else if good_match(&a1, &b1) {
-            let p = PENALTY_TABLE[a1 as usize][a2 as usize][b2 as usize];
-            println!("{:?}{:?}/{:?}{:?} = {p}", a1, a2, b1, b2);
-            dg += PENALTY_TABLE[a1 as usize][a2 as usize][b2 as usize];
+        } else {
+            dg += calculate_mismatch_penalty((&a1, &a2), (&b1, &b2));
         }
     }
 
