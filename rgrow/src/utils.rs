@@ -177,17 +177,35 @@ fn dG_dS(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> (f64, f64) {
     }
 }
 
-/// Given some dna sequence eg TAGGCGTA, find dG
+/// Get the binding strength of two sequences
+///
+/// Right now this function can handle:
+/// - Single Mismatches
+///
+/// It can not yet handle:
+/// - Many mismatches back to back
+/// - Mismatches at end
+///
+///
+/// If only one dna is provided, then this function will
+/// use the given dna sequence eg TAGGCGTA to find dG
 /// of said sequence with its "perfect fit"
 /// (in this case ATCCGCAT)
 ///
 /// the sum of all neighbours a, b -- dG_(37 degrees C) (a, b) - (temperature - 37) dS(a, b)
-fn dna_strength(dna: impl Iterator<Item = DnaNucleotideBase>, temperature: f64) -> f64 {
-    let (total_dg, total_ds) = dna_dg_ds(dna);
+fn sequences_strength(
+    dna: Vec<DnaNucleotideBase>,
+    other_dna: Option<Vec<DnaNucleotideBase>>,
+    temperature: f64,
+) -> f64 {
+    let (total_dg, total_ds) = match other_dna {
+        None => single_sequence_dg_ds(dna.into_iter()),
+        Some(other) => sequence_pair_dg_ds(dna, other),
+    };
     (total_dg + PENALTY_G) - (temperature - 37.0) * (total_ds + PENALTY_S)
 }
 
-fn dna_dg_ds(dna: impl Iterator<Item = DnaNucleotideBase>) -> (f64, f64) {
+fn single_sequence_dg_ds(dna: impl Iterator<Item = DnaNucleotideBase>) -> (f64, f64) {
     two_window_fold(dna, |(acc_dg, acc_ds), (a, b)| {
         let (dg, ds) = dG_dS(a, b);
         (dg + acc_dg, ds + acc_ds)
@@ -218,10 +236,7 @@ fn calculate_mismatch_penalty(
     }
 }
 
-fn dealta_g_with_penalty(
-    dna_a: Vec<DnaNucleotideBase>,
-    dna_b: Vec<DnaNucleotideBase>,
-) -> (f64, f64) {
+fn sequence_pair_dg_ds(dna_a: Vec<DnaNucleotideBase>, dna_b: Vec<DnaNucleotideBase>) -> (f64, f64) {
     if dna_a.len() != dna_b.len() {
         panic!("Dnas must be same length to compare");
     }
@@ -248,7 +263,7 @@ fn dealta_g_with_penalty(
 
 #[cfg_attr(feature = "python", pyfunction)]
 pub fn string_dna_dg_ds(dna_sequence: &str) -> (f64, f64) {
-    dna_dg_ds(dna_sequence.chars().map(DnaNucleotideBase::from))
+    single_sequence_dg_ds(dna_sequence.chars().map(DnaNucleotideBase::from))
 }
 
 /// Get delta g for some string dna sequence and its "perfect match".  For example:
@@ -260,9 +275,10 @@ pub fn string_dna_dg_ds(dna_sequence: &str) -> (f64, f64) {
 /// ```
 ///
 pub fn string_dna_delta_g(dna_sequence: &str, temperature: f64) -> f64 {
-    dna_strength(
+    sequences_strength(
         // Convert dna_sequence string into an iterator of nucleotide bases
-        dna_sequence.chars().map(DnaNucleotideBase::from),
+        dna_sequence.chars().map(DnaNucleotideBase::from).collect(),
+        None,
         temperature,
     )
 }
@@ -290,7 +306,7 @@ pub fn loop_penalty(length: usize, kind: &str) -> f64 {
 #[cfg(test)]
 mod test_utils {
 
-    use crate::utils::dealta_g_with_penalty;
+    use crate::utils::sequence_pair_dg_ds;
     use crate::utils::LOOP_TABLE;
 
     use super::string_dna_dg_ds;
@@ -427,7 +443,7 @@ mod test_utils {
     fn test_mismatch_penalty() {
         let dna_a = "GGACTGACG".chars().map(DnaNucleotideBase::from).collect();
         let dna_b = "CCTGGCTGC".chars().map(DnaNucleotideBase::from).collect();
-        let (total, _) = dealta_g_with_penalty(dna_a, dna_b);
+        let (total, _) = sequence_pair_dg_ds(dna_a, dna_b);
         assert_eq!(total + 1.96, -8.32);
     }
 
@@ -435,7 +451,7 @@ mod test_utils {
     fn test_no_mismatches() {
         let dna_a = "GGACTGAC".chars().map(DnaNucleotideBase::from).collect();
         let dna_b = DnaNucleotideBase::ideal_sequence(&dna_a);
-        let (g, s) = dealta_g_with_penalty(dna_a, dna_b);
+        let (g, s) = sequence_pair_dg_ds(dna_a, dna_b);
         let (pg, ps) = string_dna_dg_ds("GGACTGAC");
         assert_eq!(g, pg);
         assert_eq!(s, ps);
