@@ -478,15 +478,92 @@ impl SDC {
         (-g_a / self.rtval()).exp()
     }
 
-    pub fn sum_systems(&self) -> f64 {
+    pub fn partition_function_full(&self) -> f64 {
         self.system_states()
             .iter()
             .map(|attachments| self.boltzman_function(attachments))
             .sum()
     }
 
-    pub fn probabilty(&self, system: &Vec<u32>) -> f64 {
-        let sum_z = self.sum_systems();
+    ///
+    /// Notes:
+    /// - This only works for a single scaffold type.
+    pub fn partition_function_fast(&self) -> f64 {
+        let scaffold = self.scaffold();
+
+        let max_competition = scaffold
+            .iter()
+            .map(|x| self.friends_btm.get(x).map(|y| y.len()).unwrap_or(0))
+            .max()
+            .unwrap();
+
+        let mut z_curr = Array1::zeros(max_competition);
+        let mut z_prev = Array1::zeros(max_competition);
+        let mut z_sum = 1.0;
+        let mut sum_a = 0.0;
+
+        for (i, b) in scaffold.iter().enumerate() {
+            // This is the partial partition function assuming that the previous site is empty:
+            // it sums previous, previous partition functions (location i-2).
+            sum_a += z_prev.sum();
+
+            // We now move the previous (location i-1) location partial partition functions to the previous
+            // array, and reset the current arry.
+            z_prev.assign(&z_curr);
+            z_curr.fill(0.);
+
+            let friends = match self.friends_btm.get(b) {
+                Some(f) => f,
+                None => continue,
+            };
+
+            // Iterating through each possible attachment at the current location.
+            for (j, &f) in friends.iter().enumerate() {
+                let attachment_beta_dg = self.scaffold_energy_bonds[f as usize]
+                    - (self.strand_concentration[f as usize] / U0).ln();
+
+                let t1 = (-attachment_beta_dg).exp();
+
+                if i == 0 {
+                    // First scaffold site.
+                    // The partition function, given f attached at j, is all we need to calculate.
+                    // z_sum has 1 in it right now, which covers the case where nothing is attached.
+                    // sum_a has 0, because it is not being used yet.
+                    z_curr[j] = t1;
+                } else {
+                    // Every other scaffold site
+                    // t2 will hold the different cases where side i-1 has tile g in it.
+                    let mut t2 = 0.;
+
+                    match self.friends_btm.get(&scaffold[i - 1]) {
+                        Some(ff) => {
+                            for (k, &g) in ff.iter().enumerate() {
+                                let left_beta_dg =
+                                    self.strand_energy_bonds[(g as usize, f as usize)];
+                                t2 += z_prev[k] * (-left_beta_dg).exp();
+                            }
+                        }
+                        None => {}
+                    }
+
+                    // 1.0 -> *only* tile f is attached at position i.
+                    // sum_a -> tile f is at position i, no tile is at position i-1.
+                    // t2 -> tile f is at position i, another tile is at position i-1.
+                    z_curr[j] = t1 * (1.0 + t2 + sum_a);
+                }
+                z_sum += z_curr[j];
+            }
+        }
+
+        z_sum
+    }
+
+    pub fn partition_function(&self) -> f64 {
+        self.partition_function_fast()
+    }
+
+    pub fn probability_of_state(&self, system: &Vec<u32>) -> f64 {
+        let sum_z = self.partition_function_fast();
         let this_system = self.boltzman_function(system);
         this_system / sum_z
     }
@@ -1231,7 +1308,7 @@ impl SDC {
     }
 
     fn partition(&self) -> f64 {
-        self.sum_systems()
+        self.partition_function_full()
     }
 
     fn distribution(&self) -> Vec<f64> {
@@ -1239,7 +1316,7 @@ impl SDC {
         let mut probability = self
             .system_states()
             .iter()
-            .map(|sys| self.probabilty(sys))
+            .map(|sys| self.probability_of_state(sys))
             .collect::<Vec<_>>();
 
         probability.sort_unstable_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal));
@@ -1271,7 +1348,7 @@ impl SDC {
         let systems = self.system_states();
         let mut triples = Vec::new();
         for s in systems {
-            let prob = self.probabilty(&s);
+            let prob = self.probability_of_state(&s);
             let energy = self.boltzman_function(&s);
             triples.push((s, prob, energy));
         }
@@ -1280,6 +1357,16 @@ impl SDC {
             x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
         });
         triples
+    }
+
+    #[pyo3(name = "partition_function")]
+    fn py_partition_function(&self) -> f64 {
+        self.partition_function_fast()
+    }
+
+    #[pyo3(name = "partition_function_full")]
+    fn py_partition_function_full(&self) -> f64 {
+        self.partition_function_full()
     }
 }
 
@@ -1707,7 +1794,7 @@ mod test_sdc_model {
 
         let mut probs = systems
             .iter()
-            .map(|s| (s.clone(), sdc.probabilty(s)))
+            .map(|s| (s.clone(), sdc.probability_of_state(s)))
             .collect::<Vec<_>>();
 
         probs.sort_by(|(_, p1), (_, p2)| {
