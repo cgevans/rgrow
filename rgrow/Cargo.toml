@@ -70,6 +70,8 @@ polars = { workspace = true }
 pyo3-polars = {workspace = true}
 approx = { workspace = true }
 bincode = "1"
+rug = {version = "^1.25", features = ["num-traits"]}
+az = "1.2.1"
 
 [dependencies.clap]
 version = "4"
