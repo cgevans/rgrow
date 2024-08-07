@@ -1843,8 +1843,7 @@ mod test_sdc_model {
         assert_eq!(x.len(), (1 + 1).pow(2) * (1 + 1) * (2 + 1));
     }
 
-    #[test]
-    fn probablities() {
+    fn scaffold_for_tests() -> SDC {
         let mut strands = Vec::<SDCStrand>::new();
 
         // Anchor tile
@@ -1949,7 +1948,12 @@ mod test_sdc_model {
 
         let mut sdc = SDC::from_params(sdc_params);
         sdc.update_system();
+        sdc
+    }
 
+    #[test]
+    fn probablities() {
+        let sdc = scaffold_for_tests();
         let scaffold = vec![0, 0, 2, 8, 16, 18, 6, 0, 0];
         assert_eq!(sdc.scaffold(), scaffold);
         let systems = sdc.system_states();
