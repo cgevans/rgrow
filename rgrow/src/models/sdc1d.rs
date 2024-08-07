@@ -16,7 +16,10 @@ macro_rules! type_alias {
 * */
 
 use core::f64;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+};
 
 use rand::Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -647,6 +650,67 @@ impl SDC {
         let sum_z = self.partition_function_fast();
         let this_system = self.boltzman_function(system);
         this_system / sum_z
+    }
+}
+
+// MFE of system
+// FIXME: Hashset needs some sort of ordering (by tile id? Will that be consistent between runs?)
+impl SDC {
+    /// Given some set of strands xi (see the graph below), and some tile for the
+    /// y position, find the best match
+    ///
+    ///    x2
+    ///    x1
+    /// __ x0 y __
+    ///
+    /// Ideal bond = x1 y
+    ///
+    /// Return energy in the ideal case
+    fn best_energy_for_right_strand(&self, left_possible: &Vec<(f64, Tile)>, right: &Tile) -> f64 {
+        let right = *right as usize;
+        if left_possible.is_empty() {
+            return self.scaffold_energy_bonds[right];
+        }
+
+        left_possible
+            .iter()
+            .fold(f64::MAX, |acc, &(lenergy, left)| {
+                let nenergy = lenergy + self.strand_energy_bonds[(left as usize, right as usize)];
+                acc.min(nenergy)
+            })
+            + self.scaffold_energy_bonds[right]
+    }
+
+    /// This is for the standard case where the acc is not empty and the friends here hashset is
+    /// not empty
+    fn mfe_next_vector(
+        &self,
+        acc: Vec<(f64, Tile)>,
+        friends_here: &HashSet<Tile>,
+    ) -> Vec<(f64, Tile)> {
+        friends_here
+            .iter()
+            .map(|tile| (self.best_energy_for_right_strand(&acc, tile), *tile))
+            .collect()
+    }
+
+    /// Next vector in the case that the accumulator is empty (meaning this is the first set of
+    /// strand in the system, in a system with strands everywhere, this will be the 3rd index)
+    fn mfe_next_vector_empty_case(&self, friends_here: &HashSet<Tile>) -> Vec<(f64, Tile)> {
+        friends_here
+            .iter()
+            .map(|&tile| (self.scaffold_energy_bonds[tile as usize], tile))
+            .collect()
+    }
+
+    fn mfe(&self) {
+        self.scaffold()
+            .iter()
+            .fold(vec![], |acc, glue| match self.friends_btm.get(glue) {
+                Some(friends_here) if !acc.is_empty() => self.mfe_next_vector(acc, friends_here),
+                Some(friends_here) => self.mfe_next_vector_empty_case(friends_here),
+                None => acc.into_iter().map(|(lenergy, _)| (lenergy, 0)).collect(),
+            });
     }
 }
 
