@@ -1380,7 +1380,7 @@ impl AnnealProtocol {
             sdc.temperature = *tmp;
             sdc.update_system();
 
-            crate::system::System::update_all(&sdc, &mut state, &needed);
+            // crate::system::System::update_all(&sdc, &mut state, &needed);
             crate::system::System::evolve(&sdc, &mut state, bounds)?;
             // FIXME: This is flattening the canvas, so it doesnt work nicely
             // it should be Vec<Vec<_>>, not Vec<_>
