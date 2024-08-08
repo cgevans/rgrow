@@ -1,10 +1,12 @@
 # Introduction
 
-rgrow (which may change name in the future) is a fast, extensible simulator for Tile Assembly Models, primarily focused on kinetic models that require fast simulations of attachment and detachment events.  It is inspired by Xgrow, but seeks to be more extensible and easier and faster to use programmably.  It has Rust and Python interfaces, and a command line and UI interface similar to Xgrow.
+rgrow (which may change name in the future) is a fast, extensible simulator for Tile Assembly Models, primarily focused on kinetic models that require fast simulations of attachment and detachment events.  It is inspired by Xgrow, but seeks to be more extensible and easier and faster to use programmably.  It has Rust and Python interfaces, and a command line and UI interface similar to Xgrow.  It includes an implementation of forward flux sampling for nucleation rate calculations.
 
 Python documentation is available at [https://rgrow.readthedocs.io/en/latest/](https://rgrow.readthedocs.io/en/latest/).
 
 Rust documentation is available at [https://docs.rs/rgrow/](https://docs.rs/rgrow/).
+
+For FFS examples, see the [examples/ffs](https://github.com/cgevans/rgrow/tree/main/examples/ffs) folder.
 
 # Installation
 

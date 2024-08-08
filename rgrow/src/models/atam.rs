@@ -48,6 +48,10 @@ enum TileShape {
     DupleToTop(Tile),
 }
 
+/// The aTAM model.
+///
+/// Supports duples, and concentration-based attachment rates, which may
+/// be important for non-deterministic systems.
 #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ATAM {

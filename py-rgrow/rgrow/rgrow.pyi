@@ -1,18 +1,16 @@
 # flake8: noqa: PYI021
-from typing import Any, List, Sequence, Self, TypeAlias, overload
-from numpy import dtype, ndarray
+from typing import Any, List, Sequence
+from typing_extensions import Self, TypeAlias, overload
+from numpy import ndarray
 import numpy as np
 import polars as pl
 from numpy.typing import NDArray
 
 class ATAM:
-
     @property
     def tile_names(self) -> list[str]: ...
-
     @property
     def tile_colors(self) -> NDArray[np.uint]: ...
-    
     def calc_dimers(self) -> List[DimerInfo]:
         """
         Calculate information about the dimers the system is able to form.
@@ -62,8 +60,6 @@ class ATAM:
           Calculate the location and direction of mismatches, not jus the number.
         """
 
-      
-
     @overload
     def evolve(
         self,
@@ -79,7 +75,6 @@ class ATAM:
         show_window: bool = False,
         parallel: bool = True,
     ) -> EvolveOutcome: ...
-
     @overload
     def evolve(
         self,
@@ -95,7 +90,6 @@ class ATAM:
         show_window: bool = False,
         parallel: bool = True,
     ) -> List[EvolveOutcome]: ...
-
     @overload
     def evolve(
         self,
@@ -152,7 +146,6 @@ class ATAM:
 
     def get_param(self, param_name): ...
     def print_debug(self): ...
-
     @staticmethod
     def read_json(filename: str) -> None:
         """
@@ -255,13 +248,9 @@ class ATAM:
         filename : str
             The name of the file to write to.
         """
-                
-    def color_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.uint8]:
-      ...
 
-    def name_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.str_]:
-      ...
-
+    def color_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.uint8]: ...
+    def name_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.str_]: ...
 
 class SDC:
 
@@ -583,12 +572,8 @@ class FFSStateRef:
         """A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`."""
 
     def clone_state(self): ...
-    
-    
     @property
-    def canvas_view(self) -> NDArray[np.uint]:
-      ...
-    
+    def canvas_view(self) -> NDArray[np.uint]: ...
     def n_tiles(self) -> int: ...
     def time(self) -> float: ...
     def total_events(self) -> int: ...
@@ -597,11 +582,8 @@ class FFSStateRef:
 class KTAM:
     @property
     def tile_names(self) -> list[str]: ...
-
     @property
     def tile_colors(self) -> NDArray[np.uint]: ...
-
-    
     def calc_dimers(self) -> List[DimerInfo]:
         """
         Calculate information about the dimers the system is able to form.
@@ -651,7 +633,6 @@ class KTAM:
           Calculate the location and direction of mismatches, not jus the number.
         """
 
-
     @overload
     def evolve(
         self,
@@ -667,7 +648,6 @@ class KTAM:
         show_window: bool = False,
         parallel: bool = True,
     ) -> EvolveOutcome: ...
-
     @overload
     def evolve(
         self,
@@ -683,7 +663,6 @@ class KTAM:
         show_window: bool = False,
         parallel: bool = True,
     ) -> List[EvolveOutcome]: ...
-
     @overload
     def evolve(
         self,
@@ -741,7 +720,6 @@ class KTAM:
     def from_tileset(tileset): ...
     def get_param(self, param_name): ...
     def print_debug(self): ...
-    
     @staticmethod
     def read_json(filename: str) -> None:
         """
@@ -844,28 +822,16 @@ class KTAM:
         filename : str
             The name of the file to write to.
         """
-    def color_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.uint8]:
-      ...
-
-    def name_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.str_]:
-      ...
-
+    def color_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.uint8]: ...
+    def name_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.str_]: ...
 
 class OldKTAM:
-
     @property
     def tile_names(self) -> list[str]: ...
-
     @property
     def tile_colors(self) -> NDArray[np.uint]: ...
-
-    def color_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.uint8]:
-      ...
-
-    def name_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.str_]:
-      ...
-
-
+    def color_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.uint8]: ...
+    def name_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.str_]: ...
     def calc_dimers(self) -> List[DimerInfo]:
         """
         Calculate information about the dimers the system is able to form.
@@ -930,7 +896,6 @@ class OldKTAM:
         show_window: bool = False,
         parallel: bool = True,
     ) -> EvolveOutcome: ...
-
     @overload
     def evolve(
         self,
@@ -946,7 +911,6 @@ class OldKTAM:
         show_window: bool = False,
         parallel: bool = True,
     ) -> List[EvolveOutcome]: ...
-
     @overload
     def evolve(
         self,
@@ -1003,7 +967,6 @@ class OldKTAM:
 
     def get_param(self, param_name): ...
     def print_debug(self): ...
-
     @staticmethod
     def read_json(filename: str) -> None:
         """
@@ -1106,7 +1069,6 @@ class OldKTAM:
         filename : str
             The name of the file to write to.
         """
-        
 
 System: TypeAlias = ATAM | KTAM | OldKTAM
 
@@ -1124,16 +1086,12 @@ class State:
     def read_json(filename: str) -> State: ...
     def tracking_copy(self) -> ndarray: ...
     def write_json(self, filename: str) -> None: ...
-    
     @property
     def ntiles(self) -> int: ...
-    
     @property
     def total_events(self) -> int: ...
-    
     @property
     def time(self) -> float: ...
-    
 
 class TileSet:
     def __init__(self, **kwargs: Any): ...

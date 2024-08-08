@@ -1,5 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
+#[cfg(feature="python")]
+use std::ops::Deref;
 use std::sync::{Arc, Weak};
 
 use crate::base::{GrowError, RgrowError, Tile};
@@ -1114,23 +1116,26 @@ impl FFSLevelResult {
 #[cfg(feature = "python")]
 #[pymethods]
 impl FFSRunResult {
-    /// Nucleation rate, in M/s.  Calculated from the forward probability vector,
+    /// float: Nucleation rate, in M/s.  Calculated from the forward probability vector,
     /// and dimerization rate.
     #[getter]
     fn get_nucleation_rate(&self) -> f64 {
         self.nucleation_rate()
     }
 
+    /// list[float]: Forward probability vector.
     #[getter]
     fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
         self.forward_vec().to_pyarray_bound(py)
     }
 
+    /// float: Dimerization rate, in M/s.
     #[getter]
     fn get_dimerization_rate(&self) -> f64 {
         self.dimerization_rate()
     }
 
+    /// list[FFSLevelRef]: list of surfaces.
     #[getter]
     fn get_surfaces(&self) -> Vec<FFSLevelRef> {
         self.surfaces()
@@ -1139,6 +1144,9 @@ impl FFSRunResult {
             .collect()
     }
 
+    /// Returns
+    /// -------
+    /// pl.DataFrame
     #[pyo3(name = "surfaces_dataframe")]
     fn py_surfaces_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
         self.surfaces_dataframe()
@@ -1146,8 +1154,31 @@ impl FFSRunResult {
             .map_err(|e| PyPolarsErr::from(e).into())
     }
 
+    /// Returns
+    /// -------
+    /// pl.DataFrame
     #[pyo3(name = "configs_dataframe")]
     fn py_configs_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
+        self.configs_dataframe()
+            .map(PyDataFrame)
+            .map_err(|e| PyPolarsErr::from(e).into())
+    }
+
+    /// Returns
+    /// -------
+    /// pl.DataFrame
+    #[pyo3(name = "surfaces_to_polars")]
+    fn py_surfaces_to_polars(&self) -> PyResult<pyo3_polars::PyDataFrame> {
+        self.surfaces_dataframe()
+            .map(PyDataFrame)
+            .map_err(|e| PyPolarsErr::from(e).into())
+    }
+
+    /// Returns
+    /// -------
+    /// pl.DataFrame
+    #[pyo3(name = "states_to_polars")]
+    fn py_states_to_polars(&self) -> PyResult<pyo3_polars::PyDataFrame> {
         self.configs_dataframe()
             .map(PyDataFrame)
             .map_err(|e| PyPolarsErr::from(e).into())
@@ -1194,18 +1225,20 @@ impl FFSRunResult {
 #[cfg(feature = "python")]
 #[pymethods]
 impl FFSRunResultDF {
-    /// Nucleation rate, in M/s.  Calculated from the forward probability vector,
+    /// float: Nucleation rate, in M/s.  Calculated from the forward probability vector,
     /// and dimerization rate.
     #[getter]
     fn get_nucleation_rate(&self) -> f64 {
         self.nucleation_rate()
     }
 
+    /// list[float]: Forward probability vector.
     #[getter]
     fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
         self.forward_vec().to_pyarray_bound(py)
     }
 
+    /// float: Dimerization rate, in M/s.
     #[getter]
     fn get_dimerization_rate(&self) -> f64 {
         self.dimerization_rate
@@ -1229,6 +1262,11 @@ impl FFSRunResultDF {
         Ok(PyDataFrame(self.surfaces_df.clone()))
     }
 
+    /// Get the configurations as a Polars DataFrame.
+    ///
+    /// Returns
+    /// -------
+    /// pl.DataFrame
     #[pyo3(name = "configs_dataframe")]
     fn py_configs_dataframe(&self) -> PyResult<pyo3_polars::PyDataFrame> {
         Ok(PyDataFrame(self.configs_df.clone()))
@@ -1350,24 +1388,35 @@ pub struct FFSStateRef(Arc<StateEnum>);
 #[cfg(feature = "python")]
 #[pymethods]
 impl FFSStateRef {
+    /// float: the total time the state has simulated, in seconds.
+    #[getter]
     pub fn time(&self) -> f64 {
         (*self.0).time()
     }
 
+    /// int: the total number of events that have occurred in the state.
+    #[getter]
     pub fn total_events(&self) -> base::NumEvents {
         (*self.0).total_events()
     }
 
+    /// int: the number of tiles in the state.
+    #[getter]
     pub fn n_tiles(&self) -> NumTiles {
         (*self.0).n_tiles()
     }
 
+    /// Return a copy of the state behind the reference as a mutable `State` object.
+    ///
+    /// Returns
+    /// -------
+    /// State
     pub fn clone_state(&self) -> PyState {
         PyState((*self.0).clone())
     }
 
     #[getter]
-    /// A direct, mutable view of the state's canvas.  This is potentially unsafe.
+    /// NDArray[np.uint]: a direct, mutable view of the state's canvas.  This is potentially unsafe.
     pub fn canvas_view<'py>(
         this: Bound<'py, Self>,
         _py: Python<'py>,
@@ -1378,7 +1427,13 @@ impl FFSStateRef {
         unsafe { Ok(PyArray2::borrow_from_array_bound(&ra, this.into_any())) }
     }
 
-    /// A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
+    /// Create a copy of the state's canvas.  This is safe, but can't be modified and is slower than
+    /// `canvas_view`.
+    ///
+    /// Returns
+    /// -------
+    /// NDArray[np.uint]
+    ///     a copy of the state's canvas.
     pub fn canvas_copy<'py>(
         this: &Bound<Self>,
         py: Python<'py>,
@@ -1389,6 +1444,11 @@ impl FFSStateRef {
         Ok(PyArray2::from_array_bound(py, &ra))
     }
 
+    /// Return a copy of the tracker's tracking data.
+    ///
+    /// Returns
+    /// -------
+    /// Any
     pub fn tracking_copy(this: &Bound<Self>) -> PyResult<RustAny> {
         let t = this.borrow();
         let ra = (*t.0).get_tracker_data();
@@ -1406,5 +1466,21 @@ impl FFSStateRef {
             self.0.nrows(),
             self.0.total_rate()
         )
+    }
+
+    /// Return a cloned copy of an array with the total possible next event rate for each point in the canvas.
+    /// This is the deepest level of the quadtree for tree-based states.
+    ///
+    /// Returns
+    /// -------
+    /// NDArray[np.uint]
+    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<crate::base::Rate>> {
+        self.0.rate_array().to_pyarray_bound(py)
+    }
+
+    /// float: the total rate of possible next events for the state.
+    #[getter]
+    pub fn total_rate(&self) -> crate::base::Rate {
+        RateStore::total_rate(self.0.deref())
     }
 }
