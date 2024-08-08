@@ -119,11 +119,29 @@ pub struct SDC {
 
 impl SDC {
     fn bond_between_strands(&self, x: Tile, y: Tile) -> f64 {
-        *self.strand_energy_bonds[(x as usize, y as usize)].get_or_init(|| 0.0)
+        *self.strand_energy_bonds[(x as usize, y as usize)].get_or_init(|| {
+            let x_east_glue = self.glues[(x as usize, EAST_GLUE_INDEX)];
+            let y_west_glue = self.glues[(y as usize, WEST_GLUE_INDEX)];
+            self.glue_links[(x_east_glue, y_west_glue)] / self.rtval()
+        })
     }
 
     fn bond_with_scaffold(&self, x: Tile) -> f64 {
-        *self.scaffold_energy_bonds[x as usize].get_or_init(|| 0.0)
+        *self.scaffold_energy_bonds[x as usize].get_or_init(|| {
+            // TODO
+            let x_bottom_glue = self.glues[(x as usize, BOTTOM_GLUE_INDEX)];
+            if x_bottom_glue == 0 {
+                return 0.0;
+            }
+
+            let x_inverse = if x_bottom_glue % 2 == 1 {
+                x_bottom_glue + 1
+            } else {
+                x_bottom_glue - 1
+            };
+
+            self.glue_links[(x_bottom_glue, x_inverse)] / self.rtval()
+        })
     }
 
     fn new(
@@ -169,8 +187,14 @@ impl SDC {
         // Note that order is important, we need to generate the glue matrix first, then using
         // the data generated there, the energy array is filled, etc...
         self.generate_glue_matrix();
-        self.fill_energy_array();
+        self.empty_cache();
         self.generate_friends();
+    }
+
+    fn empty_cache(&mut self) {
+        let strand_count = self.strand_names.len();
+        self.strand_energy_bonds = Array2::default((strand_count, strand_count));
+        self.scaffold_energy_bonds = Array1::default(strand_count);
     }
 
     fn generate_friends(&mut self) {
@@ -268,12 +292,12 @@ impl SDC {
 
                 // Case 1: First strands is to the west of second
                 // strand_f    strand_s
-                self.strand_energy_bonds[(strand_f, strand_s)]
+                let _ = self.strand_energy_bonds[(strand_f, strand_s)]
                     .set(self.glue_links[(f_east_glue, s_west_glue)] / self.rtval());
 
                 // Case 2: First strands is to the east of second
                 // strand_s    strand_f
-                self.strand_energy_bonds[(strand_s, strand_f)]
+                let _ = self.strand_energy_bonds[(strand_s, strand_f)]
                     .set(self.glue_links[(f_west_glue, s_east_glue)] / self.rtval());
             }
 
@@ -289,7 +313,7 @@ impl SDC {
             };
 
             // Calculate the binding strength of the strand with the scaffold
-            self.scaffold_energy_bonds[strand_f]
+            let _ = self.scaffold_energy_bonds[strand_f]
                 .set(self.glue_links[(f_btm_glue, b_inverse)] / self.rtval());
         }
     }
@@ -1484,20 +1508,25 @@ impl SDC {
         self.update_system();
     }
 
-    // FIXME: Make sure to fill the cache array completely before running either of the following
-    // two functions
-
     #[getter]
-    fn get_scaffold_energy_bonds<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
+    fn get_scaffold_energy_bonds<'py>(
+        &mut self,
+        py: Python<'py>,
+    ) -> Bound<'py, numpy::PyArray1<f64>> {
+        self.fill_energy_array();
         self.scaffold_energy_bonds
-            .map(|x| x.0.unwrap())
+            .map(|x| *x.get().unwrap())
             .to_pyarray_bound(py)
     }
 
     #[getter]
-    fn get_strand_energy_bonds<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
+    fn get_strand_energy_bonds<'py>(
+        &mut self,
+        py: Python<'py>,
+    ) -> Bound<'py, numpy::PyArray2<f64>> {
+        self.fill_energy_array();
         self.strand_energy_bonds
-            .map(|x| x.0.unwrap())
+            .map(|x| *x.get().unwrap())
             .to_pyarray_bound(py)
     }
 
