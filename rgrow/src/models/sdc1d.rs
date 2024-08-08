@@ -18,6 +18,7 @@ macro_rules! type_alias {
 use core::f64;
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Debug,
     ops::Deref,
 };
 
@@ -51,6 +52,29 @@ const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 const U0: f64 = 1.0;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CachedEnergy(Option<f64>);
+
+impl CachedEnergy {
+    pub fn new(cache: Option<f64>) -> Self {
+        Self(cache)
+    }
+
+    pub fn with(cache: f64) -> Self {
+        CachedEnergy(Some(cache))
+    }
+
+    pub fn empty() -> Self {
+        CachedEnergy(None)
+    }
+}
+
+impl Default for CachedEnergy {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
 
 #[cfg_attr(feature = "python", pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,9 +129,9 @@ pub struct SDC {
     /// This array is indexed as follows. Given strands x and y, where x is to the west of y
     /// (meaning that the east of x forms a bond with the west of y), the energy of said bond
     /// is given by energy_bonds[(x, y)]
-    strand_energy_bonds: Array2<Energy>,
+    strand_energy_bonds: Array2<CachedEnergy>,
     /// The energy with which a strand attached to scaffold
-    scaffold_energy_bonds: Array1<Energy>,
+    scaffold_energy_bonds: Array1<CachedEnergy>,
     /// Binding strength between two glues
     glue_links: Array2<Strength>,
 }
@@ -115,10 +139,12 @@ pub struct SDC {
 impl SDC {
     fn bond_between_strands(&self, x: Tile, y: Tile) -> f64 {
         self.strand_energy_bonds[(x as usize, y as usize)]
+            .0
+            .unwrap_or(0.0)
     }
 
     fn bond_with_scaffold(&self, x: Tile) -> f64 {
-        self.scaffold_energy_bonds[x as usize]
+        self.scaffold_energy_bonds[x as usize].0.unwrap_or(0.0)
     }
 
     fn new(
@@ -153,8 +179,8 @@ impl SDC {
             // empty for now
             friends_btm: HashMap::new(),
             glue_links: Array2::<f64>::zeros((strand_count, strand_count)),
-            strand_energy_bonds: Array2::<f64>::zeros((strand_count, strand_count)),
-            scaffold_energy_bonds: Array1::<f64>::zeros(strand_count),
+            strand_energy_bonds: Array2::<CachedEnergy>::default((strand_count, strand_count)),
+            scaffold_energy_bonds: Array1::<CachedEnergy>::default(strand_count),
         };
         s.update_system();
         s
@@ -264,12 +290,12 @@ impl SDC {
                 // Case 1: First strands is to the west of second
                 // strand_f    strand_s
                 self.strand_energy_bonds[(strand_f, strand_s)] =
-                    self.glue_links[(f_east_glue, s_west_glue)] / self.rtval();
+                    CachedEnergy::with(self.glue_links[(f_east_glue, s_west_glue)] / self.rtval());
 
                 // Case 2: First strands is to the east of second
                 // strand_s    strand_f
                 self.strand_energy_bonds[(strand_s, strand_f)] =
-                    self.glue_links[(f_west_glue, s_east_glue)] / self.rtval();
+                    CachedEnergy::with(self.glue_links[(f_west_glue, s_east_glue)] / self.rtval());
             }
 
             // I suppose maybe we'd have weird strands with no position domain?
@@ -285,7 +311,7 @@ impl SDC {
 
             // Calculate the binding strength of the strand with the scaffold
             self.scaffold_energy_bonds[strand_f] =
-                self.glue_links[(f_btm_glue, b_inverse)] / self.rtval();
+                CachedEnergy::with(self.glue_links[(f_btm_glue, b_inverse)] / self.rtval());
         }
     }
 
@@ -931,7 +957,7 @@ impl FromTileSet for SDC {
         }
 
         // Just generate the stuff that will be filled by the model.
-        let energy_bonds = Array2::<f64>::zeros((pc.tile_names.len(), pc.tile_names.len()));
+        let energy_bonds = Array2::default((pc.tile_names.len(), pc.tile_names.len()));
 
         // We'll default to 64 scaffolds.
         let (n_scaffolds, scaffold_length) = match tileset.size {
@@ -1479,14 +1505,21 @@ impl SDC {
         self.update_system();
     }
 
+    // FIXME: Make sure to fill the cache array completely before running either of the following
+    // two functions
+
     #[getter]
     fn get_scaffold_energy_bonds<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
-        self.scaffold_energy_bonds.to_pyarray_bound(py)
+        self.scaffold_energy_bonds
+            .map(|x| x.0.unwrap())
+            .to_pyarray_bound(py)
     }
 
     #[getter]
     fn get_strand_energy_bonds<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
-        self.strand_energy_bonds.to_pyarray_bound(py)
+        self.strand_energy_bonds
+            .map(|x| x.0.unwrap())
+            .to_pyarray_bound(py)
     }
 
     #[getter]
@@ -1733,8 +1766,8 @@ mod test_sdc_model {
             entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]],
             delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]],
             temperature: 5.,
-            strand_energy_bonds: Array2::<f64>::zeros((5, 5)),
-            scaffold_energy_bonds: Array1::<f64>::zeros(5),
+            strand_energy_bonds: Array2::default((5, 5)),
+            scaffold_energy_bonds: Array1::default(5),
             glue_links: Array2::<f64>::zeros((5, 5)),
         };
 
@@ -1811,8 +1844,8 @@ mod test_sdc_model {
             entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]],
             delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]],
             temperature: 50.0,
-            strand_energy_bonds: Array2::<f64>::zeros((5, 5)),
-            scaffold_energy_bonds: Array1::<f64>::zeros(5),
+            strand_energy_bonds: Array2::default((5, 5)),
+            scaffold_energy_bonds: Array1::default(5),
             glue_links: Array2::<f64>::zeros((5, 5)),
         };
         // We need to fill the friends map
