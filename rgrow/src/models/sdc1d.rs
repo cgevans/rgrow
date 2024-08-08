@@ -113,6 +113,14 @@ pub struct SDC {
 }
 
 impl SDC {
+    fn bond_between_strands(&self, x: Tile, y: Tile) -> f64 {
+        self.strand_energy_bonds[(x as usize, y as usize)]
+    }
+
+    fn bond_with_scaffold(&self, x: Tile) -> f64 {
+        self.scaffold_energy_bonds[x as usize]
+    }
+
     fn new(
         anchor_tiles: Vec<(PointSafe2, Tile)>,
         strand_names: Vec<String>,
@@ -398,9 +406,9 @@ impl SDC {
             state.tile_to_e(scaffold_point) as usize,
         );
 
-        self.scaffold_energy_bonds[strand as usize]
-            + self.strand_energy_bonds[(strand as usize, e)]
-            + self.strand_energy_bonds[(w, strand as usize)]
+        self.bond_with_scaffold(strand)
+            + self.bond_between_strands(strand, e as Tile)
+            + self.bond_between_strands(w as Tile, strand)
     }
 
     fn scaffold(&self) -> Vec<usize> {
@@ -419,10 +427,10 @@ impl SDC {
             }
 
             // Add the energy of the strand and the scaffold
-            sumg += self.scaffold_energy_bonds[*strand as usize];
+            sumg += self.bond_with_scaffold(*strand);
             if let Some(s) = attachments.get(id + 1) {
                 // Also add the energy between the strand and the one to its right
-                sumg += self.strand_energy_bonds[(*strand as usize, *s as usize)]
+                sumg += self.bond_between_strands(*strand, *s)
             };
 
             // Take into account the penalty
@@ -525,8 +533,8 @@ impl SDC {
 
             // Iterating through each possible attachment at the current location.
             for (j, &f) in friends.iter().enumerate() {
-                let attachment_beta_dg = self.scaffold_energy_bonds[f as usize]
-                    - (self.strand_concentration[f as usize] / U0).ln();
+                let attachment_beta_dg =
+                    self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln();
 
                 let t1 = (-attachment_beta_dg).exp();
 
@@ -544,8 +552,7 @@ impl SDC {
                     match self.friends_btm.get(&scaffold[i - 1]) {
                         Some(ff) => {
                             for (k, &g) in ff.iter().enumerate() {
-                                let left_beta_dg =
-                                    self.strand_energy_bonds[(g as usize, f as usize)];
+                                let left_beta_dg = self.bond_between_strands(g, f);
                                 t2 += z_prev[k] * (-left_beta_dg).exp();
                             }
                         }
@@ -602,8 +609,8 @@ impl SDC {
 
             // Iterating through each possible attachment at the current location.
             for (j, &f) in friends.iter().enumerate() {
-                let attachment_beta_dg = self.scaffold_energy_bonds[f as usize]
-                    - (self.strand_concentration[f as usize] / U0).ln();
+                let attachment_beta_dg =
+                    self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln();
 
                 let t1 = Float::with_val(PREC, -attachment_beta_dg).exp();
 
@@ -621,8 +628,7 @@ impl SDC {
                     match self.friends_btm.get(&scaffold[i - 1]) {
                         Some(ff) => {
                             for (k, &g) in ff.iter().enumerate() {
-                                let left_beta_dg =
-                                    self.strand_energy_bonds[(g as usize, f as usize)];
+                                let left_beta_dg = self.bond_between_strands(g, f);
                                 t2 +=
                                     z_prev[k].clone() * Float::with_val(PREC, -left_beta_dg).exp();
                             }
@@ -667,18 +673,17 @@ impl SDC {
     ///
     /// Return energy in the ideal case
     fn best_energy_for_right_strand(&self, left_possible: &Vec<(f64, Tile)>, right: &Tile) -> f64 {
-        let right = *right as usize;
         if left_possible.is_empty() {
-            return self.scaffold_energy_bonds[right];
+            return self.bond_with_scaffold(*right);
         }
 
         left_possible
             .iter()
             .fold(f64::MAX, |acc, &(lenergy, left)| {
-                let nenergy = lenergy + self.strand_energy_bonds[(left as usize, right as usize)];
+                let nenergy = lenergy + self.bond_between_strands(left, *right);
                 acc.min(nenergy)
             })
-            + self.scaffold_energy_bonds[right]
+            + self.bond_with_scaffold(*right)
     }
 
     /// This is for the standard case where the acc is not empty and the friends here hashset is
@@ -699,7 +704,7 @@ impl SDC {
     fn mfe_next_vector_empty_case(&self, friends_here: &HashSet<Tile>) -> Vec<(f64, Tile)> {
         friends_here
             .iter()
-            .map(|&tile| (self.scaffold_energy_bonds[tile as usize], tile))
+            .map(|&tile| (self.bond_with_scaffold(tile), tile))
             .collect()
     }
 
@@ -798,17 +803,17 @@ impl System for SDC {
                 }
                 let p = PointSafe2((i, j));
 
-                let t = state.tile_at_point(p) as usize;
+                let t = state.tile_at_point(p);
 
                 if t == 0 {
                     continue;
                 }
 
-                let te = state.tile_to_e(p) as usize;
-                let tw = state.tile_to_w(p) as usize;
+                let te = state.tile_to_e(p);
+                let tw = state.tile_to_w(p);
 
-                let mm_e = ((te != 0) & (self.strand_energy_bonds[(t, te)] > threshold)) as usize;
-                let mm_w = ((tw != 0) & (self.strand_energy_bonds[(tw, t)] > threshold)) as usize;
+                let mm_e = ((te != 0) & (self.bond_between_strands(t, te) > threshold)) as usize;
+                let mm_w = ((tw != 0) & (self.bond_between_strands(tw, t) > threshold)) as usize;
 
                 // Should we repurpose one of these to represent strand-scaffold mismatches?
                 // These are currently impossible, but could be added in the future.
