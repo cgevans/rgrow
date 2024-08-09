@@ -10,7 +10,6 @@ serde = {version = "^1.0.185", features=["derive", "rc"]}
 pyo3 = {version = "^0.21", features = ["extension-module", "multiple-pymethods"]}
 rayon = { version = "1" }
 numpy = "^0.21"
-enum_dispatch = "0.3"
 approx = "^0.5"
 pyo3-polars = "^0.15"
 polars = {version = "^0.41", features = ["lazy", "parquet", "product"]}
@@ -22,7 +21,5 @@ edition = "2021"
 repository = "https://github.com/cgevans/rgrow"
 license = "BSD-3-Clause"
 categories = ["science", "simulation"]
-
-[profile.release]
 # debug = true
 # lto = true

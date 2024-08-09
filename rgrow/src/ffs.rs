@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
-#[cfg(feature="python")]
+#[cfg(feature = "python")]
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
 

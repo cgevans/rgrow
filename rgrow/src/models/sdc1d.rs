@@ -23,12 +23,10 @@ use std::{
     sync::OnceLock,
 };
 
+use astro_float::{BigFloat, RoundingMode, Sign};
 use cached::once_cell::unsync::OnceCell;
 use rand::Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-
-use az::Az;
-use rug::Float;
 
 use crate::{
     base::{Energy, Glue, GrowError, Rate, Tile},
@@ -54,6 +52,47 @@ const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 const U0: f64 = 1.0;
+
+fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
+    let mut big_float = big_float.clone();
+    big_float.set_precision(64, rounding_mode).unwrap();
+    let sign = big_float.sign().unwrap();
+    let exponent = big_float.exponent().unwrap();
+    let mantissa = big_float.mantissa_digits().unwrap()[0];
+    if mantissa == 0 {
+        return 0.0;
+    }
+    let mut exponent: isize = exponent as isize + 0b1111111111;
+    let mut ret = 0;
+    if exponent >= 0b11111111111 {
+        match sign {
+            Sign::Pos => f64::INFINITY,
+            Sign::Neg => f64::NEG_INFINITY,
+        }
+    } else if exponent <= 0 {
+        let shift = -exponent;
+        if shift < 52 {
+            ret |= mantissa >> (shift + 12);
+            if sign == Sign::Neg {
+                ret |= 0x8000000000000000u64;
+            }
+            f64::from_bits(ret)
+        } else {
+            0.0
+        }
+    } else {
+        let mantissa = mantissa << 1;
+        exponent -= 1;
+        if sign == Sign::Neg {
+            ret |= 1;
+        }
+        ret <<= 11;
+        ret |= exponent as u64;
+        ret <<= 52;
+        ret |= mantissa >> 12;
+        f64::from_bits(ret)
+    }
+}
 
 #[cfg_attr(feature = "python", pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -593,6 +632,10 @@ impl SDC {
         let scaffold = self.scaffold();
 
         let PREC = 64;
+        let RM = astro_float::RoundingMode::None;
+        let mut cc =
+            astro_float::Consts::new().expect("An error occured when initializing constants");
+        // let ctx = astro_float::ctx::Context::new(PREC, RM, cc, -100000, 100000);
 
         let max_competition = scaffold
             .iter()
@@ -600,22 +643,22 @@ impl SDC {
             .max()
             .unwrap();
 
-        let mut z_curr = Array1::from_elem(max_competition, Float::with_val(PREC, 0.));
-        let mut z_prev = Array1::from_elem(max_competition, Float::with_val(PREC, 0.));
-        let mut z_sum = Float::with_val(PREC, 1.0);
-        let mut sum_a = Float::with_val(PREC, 0.0);
+        let mut z_curr = Array1::from_elem(max_competition, BigFloat::from_i32(0, PREC));
+        let mut z_prev = Array1::from_elem(max_competition, BigFloat::from_i32(0, PREC));
+        let mut z_sum = BigFloat::from_i64(0, PREC);
+        let mut sum_a = BigFloat::from_i64(1, PREC);
 
         for (i, b) in scaffold.iter().enumerate() {
             // This is the partial partition function assuming that the previous site is empty:
             // it sums previous, previous partition functions (location i-2).
             for v in z_prev.iter() {
-                sum_a += v;
+                sum_a = sum_a.add(v, PREC, RM);
             }
 
             // We now move the previous (location i-1) location partial partition functions to the previous
             // array, and reset the current arry.
             z_prev.assign(&z_curr);
-            z_curr.fill(Float::with_val(PREC, 0.));
+            z_curr.fill(BigFloat::from_i32(0, PREC));
 
             let friends = match self.friends_btm.get(b) {
                 Some(f) => f,
@@ -627,7 +670,7 @@ impl SDC {
                 let attachment_beta_dg =
                     self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln();
 
-                let t1 = Float::with_val(PREC, -attachment_beta_dg).exp();
+                let t1 = BigFloat::from_f64(-attachment_beta_dg, PREC).exp(PREC, RM, &mut cc);
 
                 if i == 0 {
                     // First scaffold site.
@@ -638,14 +681,19 @@ impl SDC {
                 } else {
                     // Every other scaffold site
                     // t2 will hold the different cases where side i-1 has tile g in it.
-                    let mut t2 = Float::with_val(PREC, 0.);
+                    let mut t2 = BigFloat::from_f64(0., PREC);
 
                     match self.friends_btm.get(&scaffold[i - 1]) {
                         Some(ff) => {
                             for (k, &g) in ff.iter().enumerate() {
                                 let left_beta_dg = self.bond_between_strands(g, f);
-                                t2 +=
-                                    z_prev[k].clone() * Float::with_val(PREC, -left_beta_dg).exp();
+                                t2 = t2.add(
+                                    &BigFloat::from_f64(-left_beta_dg, PREC)
+                                        .exp(PREC, RM, &mut cc)
+                                        .mul(&z_prev[k], PREC, RM),
+                                    PREC,
+                                    RM,
+                                );
                             }
                         }
                         None => {}
@@ -654,13 +702,18 @@ impl SDC {
                     // 1.0 -> *only* tile f is attached at position i.
                     // sum_a -> tile f is at position i, no tile is at position i-1.
                     // t2 -> tile f is at position i, another tile is at position i-1.
-                    z_curr[j] = t1 * (1.0 + t2 + sum_a.clone());
+                    z_curr[j] = t1.mul(
+                        &t2.add(&BigFloat::from_i64(1, PREC), PREC, RM)
+                            .add(&sum_a, PREC, RM),
+                        PREC,
+                        RM,
+                    );
                 }
-                z_sum += z_curr[j].clone();
+                z_sum = z_sum.add(&z_curr[j], PREC, RM);
             }
         }
 
-        z_sum.ln().az()
+        bigfloat_to_f64(&z_sum.ln(PREC, RM, &mut cc), RM)
     }
 
     pub fn partition_function(&self) -> f64 {
