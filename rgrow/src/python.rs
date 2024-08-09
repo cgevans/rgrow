@@ -8,6 +8,7 @@ use crate::ffs::{FFSRunConfig, FFSRunResult, FFSStateRef};
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
+use crate::models::sdc1d::{SDCParams, SDC};
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TrackerData};
 use crate::system::{
@@ -31,11 +32,18 @@ pub struct PyState(pub(crate) StateEnum);
 #[pymethods]
 impl PyState {
     #[new]
-    pub fn empty(shape: (usize, usize), kind: &str, tracking: &str) -> PyResult<Self> {
+    #[pyo3(signature = (shape, kind="Square", tracking="None", n_tile_types=None))]
+    pub fn empty(
+        shape: (usize, usize),
+        kind: &str,
+        tracking: &str,
+        n_tile_types: Option<usize>,
+    ) -> PyResult<Self> {
         Ok(PyState(StateEnum::empty(
             shape,
             kind.try_into()?,
             tracking.try_into()?,
+            n_tile_types.unwrap_or(1),
         )?))
     }
 
@@ -204,10 +212,7 @@ macro_rules! create_py_system {
         #[cfg(feature = "python")]
         #[pymethods]
         impl $name {
-            #[new]
-            pub fn new(_model: &str, _kwargs: Option<Bound<PyDict>>) -> PyResult<Self> {
-                todo!()
-            }
+
 
             #[allow(clippy::too_many_arguments)]
             #[pyo3(
@@ -591,3 +596,4 @@ macro_rules! create_py_system {
 create_py_system!(KTAM);
 create_py_system!(ATAM);
 create_py_system!(OldKTAM);
+create_py_system!(SDC);

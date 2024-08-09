@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
-#[cfg(feature="python")]
+#[cfg(feature = "python")]
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
 
@@ -251,7 +251,8 @@ impl TileSet {
 
         match model {
             Model::KTAM => KTAM::from_tileset(self)?.run_ffs(&config),
-            Model::ATAM => Err(GrowError::FFSCannotRunATAM.into()),
+            Model::ATAM => Err(RgrowError::FFSCannotRunModel("aTAM".into())),
+            Model::SDC => Err(RgrowError::FFSCannotRunModel("SDC".into())),
             Model::OldKTAM => OldKTAM::from_tileset(self)?.run_ffs(&config),
         }
     }

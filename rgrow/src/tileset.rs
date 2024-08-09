@@ -5,6 +5,7 @@ use crate::colors::get_color_or_random;
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
+use crate::models::sdc1d::SDC;
 use crate::state::{NullStateTracker, QuadTreeState, StateWithCreate};
 use crate::system::{DynSystem, EvolveBounds};
 
@@ -572,6 +573,8 @@ pub enum Model {
     ATAM,
     #[serde(alias = "OldkTAM", alias = "oldktam")]
     OldKTAM,
+    #[serde(alias = "SDC1D", alias = "sdc1d")]
+    SDC,
 }
 
 use std::convert::TryFrom;
@@ -584,6 +587,7 @@ impl TryFrom<&str> for Model {
             "ktam" => Ok(Model::KTAM),
             "atam" => Ok(Model::ATAM),
             "oldktam" => Ok(Model::OldKTAM),
+            "sdc1d" => Ok(Model::SDC),
             _ => Err(StringConvError(format!(
                 "Unknown model {}. Valid options are kTAM, aTAM, and oldkTAM.",
                 s
@@ -645,6 +649,7 @@ impl TileSet {
             Model::KTAM => SystemEnum::KTAM(KTAM::from_tileset(self)?),
             Model::ATAM => SystemEnum::ATAM(ATAM::from_tileset(self)?),
             Model::OldKTAM => SystemEnum::OldKTAM(OldKTAM::from_tileset(self)?),
+            Model::SDC => SystemEnum::SDC(SDC::from_tileset(self)?),
         })
     }
 
@@ -663,7 +668,7 @@ impl TileSet {
         let kind = self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT);
         let tracking = self.tracking.unwrap_or(TrackingType::None);
 
-        Ok(StateEnum::empty(shape, kind, tracking)?)
+        Ok(StateEnum::empty(shape, kind, tracking, 1)?) // FIXME
     }
 
     /// Creates an empty state, without any setup by a System.
@@ -1006,7 +1011,7 @@ impl ProcessedTileSet {
             tile_stoics: Array1::from_vec(tile_stoics),
             tile_names,
             tile_colors,
-            glue_names: Vec::new(),
+            glue_names: Vec::new(), // FIXME
             glue_strengths,
             has_duples,
             glue_map,

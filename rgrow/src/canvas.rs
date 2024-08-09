@@ -38,6 +38,8 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     fn raw_array(&self) -> ArrayView2<Tile>;
     fn nrows(&self) -> usize;
     fn ncols(&self) -> usize;
+    fn nrows_usable(&self) -> usize;
+    fn ncols_usable(&self) -> usize;
 
     fn set_sa_countabletilearray(
         &mut self,
@@ -481,6 +483,14 @@ impl Canvas for CanvasSquare {
         self.0
             .fold(0, |x, y| x + u32::from(should_be_counted[*y as usize]))
     }
+
+    fn nrows_usable(&self) -> usize {
+        self.0.nrows() - 2
+    }
+
+    fn ncols_usable(&self) -> usize {
+        self.0.ncols() - 2
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -553,6 +563,14 @@ impl Canvas for CanvasPeriodic {
     }
 
     fn ncols(&self) -> usize {
+        self.0.ncols()
+    }
+
+    fn nrows_usable(&self) -> usize {
+        self.0.nrows()
+    }
+
+    fn ncols_usable(&self) -> usize {
         self.0.ncols()
     }
 }
@@ -776,5 +794,13 @@ impl Canvas for CanvasTube {
 
     fn center(&self) -> PointSafe2 {
         PointSafe2((self.nrows() / 2, self.ncols() / 2))
+    }
+
+    fn nrows_usable(&self) -> usize {
+        self.0.nrows() // FIXME: is this correct?
+    }
+
+    fn ncols_usable(&self) -> usize {
+        self.0.ncols() // FIXME: is this correct?
     }
 }

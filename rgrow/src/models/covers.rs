@@ -262,6 +262,7 @@ impl StaticKTAMCover {
 
         PossibleChoice::Remainder(acc)
     }
+
     fn composite_to_cover_rate<S: State>(&self, state: &S, p: PointSafe2, t: Tile) -> Rate {
         let cc = &self.composite_detach_info[t as usize];
 

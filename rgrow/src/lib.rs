@@ -6,6 +6,8 @@
 extern crate ndarray;
 extern crate phf;
 
+pub mod utils;
+
 pub mod tileset;
 
 pub mod parser_xgrow;
