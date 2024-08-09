@@ -628,7 +628,7 @@ impl SDC {
     ///
     /// Notes:
     /// - This only works for a single scaffold type.
-    pub fn log_big_partition_function_fast(&self) -> f64 {
+    pub fn big_partition_function_fast(&self) -> BigFloat {
         let scaffold = self.scaffold();
 
         let PREC = 64;
@@ -645,8 +645,8 @@ impl SDC {
 
         let mut z_curr = Array1::from_elem(max_competition, BigFloat::from_i32(0, PREC));
         let mut z_prev = Array1::from_elem(max_competition, BigFloat::from_i32(0, PREC));
-        let mut z_sum = BigFloat::from_i64(0, PREC);
-        let mut sum_a = BigFloat::from_i64(1, PREC);
+        let mut z_sum = BigFloat::from_i64(1, PREC);
+        let mut sum_a = BigFloat::from_i64(0, PREC);
 
         for (i, b) in scaffold.iter().enumerate() {
             // This is the partial partition function assuming that the previous site is empty:
@@ -712,18 +712,32 @@ impl SDC {
                 z_sum = z_sum.add(&z_curr[j], PREC, RM);
             }
         }
+        z_sum
+    }
 
-        bigfloat_to_f64(&z_sum.ln(PREC, RM, &mut cc), RM)
+    pub fn log_big_partition_function_fast(&self) -> f64 {
+        let PREC = 64;
+        let RM = astro_float::RoundingMode::None;
+        let mut cc =
+            astro_float::Consts::new().expect("An error occured when initializing constants"); // FIXME: don't keep making this
+        bigfloat_to_f64(
+            &self.big_partition_function_fast().ln(PREC, RM, &mut cc),
+            RM,
+        )
     }
 
     pub fn partition_function(&self) -> f64 {
         self.partition_function_fast()
     }
 
-    pub fn probability_of_state(&self, system: &Vec<u32>) -> f64 {
+    pub fn probability_of_state_full(&self, system: &Vec<u32>) -> f64 {
         let sum_z = self.partition_function_fast();
         let this_system = self.boltzman_function(system);
         this_system / sum_z
+    }
+
+    pub fn probability_of_state(&self, system: &Vec<u32>) -> f64 {
+        (-self.g_system(system) / self.rtval() - self.log_big_partition_function_fast()).exp()
     }
 }
 
