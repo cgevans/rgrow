@@ -94,7 +94,7 @@ fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(subclass))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC {
     /// The anchor tiles for each of the scaffolds
@@ -1000,7 +1000,7 @@ impl FromTileSet for SDC {
             glue_links[(i, i)] = *strength;
         }
         for (i, j, strength) in pc.glue_links.iter() {
-            glue_links[(*i, *j)] = *strength;
+            glue_links[(*i, *j)] = *strength;   
         }
 
         // Just generate the stuff that will be filled by the model.
