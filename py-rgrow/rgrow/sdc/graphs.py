@@ -1,6 +1,6 @@
-from .reporter_methods import ReportingMethod
 from .anneal import Anneal, AnnealOutputs
 from .sdc import SDC
+from .reporter_methods import ReportingMethod
 
 import matplotlib.pyplot as plt
 

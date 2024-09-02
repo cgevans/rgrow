@@ -3,8 +3,8 @@ from abc import ABCMeta, abstractmethod
 
 
 class ReportingMethod(metaclass=ABCMeta):
-    @abstractmethod
     @property
+    @abstractmethod
     def desc(self) -> str: ...
 
     @abstractmethod
