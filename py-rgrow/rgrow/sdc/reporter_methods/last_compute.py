@@ -6,13 +6,13 @@ class LastComputeDomain(ReportingMethod):
     """
     Reporting method:
 
-    Check percentage of scaffolds that contained the quenching strand
+    Check percentage of scaffolds that contained the strand with a given name
     in the last computational domain.
     """
 
     desc = "Correct Computation"
 
-    def __init__(self, last_strand_name=None):
+    def __init__(self, last_strand_name):
         self.last_strand_name = last_strand_name
 
     def reporter_method(self, anneal_outp: AnnealOutputs):
@@ -26,13 +26,9 @@ class LastComputeDomain(ReportingMethod):
         # positions
         scaffold_len = len(anneal_outp.canvas_arr[0]) - 4
 
-        if self.last_strand_name is None:
-            strand_name = anneal_outp.system.quencher_name
-        else:
-            strand_name = self.last_strand_name
-
         rgrows = anneal_outp.system.rgrow_system
-        quencher_strand_index = rgrows.tile_number_from_name(strand_name)
+        quencher_strand_index = rgrows.tile_number_from_name(
+            self.last_strand_name)
 
         percentage_quencher = (
             (

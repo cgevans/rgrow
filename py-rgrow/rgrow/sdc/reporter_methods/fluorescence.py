@@ -8,7 +8,14 @@ import numpy as np
 class Fluorescence(ReportingMethod):
     """
     Reporting method: Mean fluorescence
+
+    Given the name of the quenching strand and of the reporter strand,
+    calculate the mean fluorescence of the system
     """
+
+    def __init__(self, quencher_strand_name, reporter_strand_name):
+        self.quencher_n = quencher_strand_name
+        self.reporter_n = reporter_strand_name
 
     desc = "Fluorescence"
     _R = 1.98720425864083e-3
@@ -27,10 +34,12 @@ class Fluorescence(ReportingMethod):
         ep = np.exp(-delta_g * beta)
 
         minus_b = (
-            ep * (concentration_strand + concentration_quencher_or_fluorophore) + 1
+            ep * (concentration_strand +
+                  concentration_quencher_or_fluorophore) + 1
         )
         b_squared = (
-            ep * (concentration_strand + concentration_quencher_or_fluorophore) + 1
+            ep * (concentration_strand +
+                  concentration_quencher_or_fluorophore) + 1
         ) ** 2
         ac = ep * ep * concentration_quencher_or_fluorophore * concentration_strand
 
@@ -77,10 +86,10 @@ class Fluorescence(ReportingMethod):
         # Check the percentage quencher_strand and reporter_strand that are
         # attached to the scaffold
         percentage_quencher = Fluorescence._percentage_acc(
-            anneal_outp, quencher_position_index, anneal_outp.system.quencher_name
+            anneal_outp, quencher_position_index, self.quencher_n
         )
         percentage_reporter = Fluorescence._percentage_acc(
-            anneal_outp, reporter_position_index, anneal_outp.system.reporter_name
+            anneal_outp, reporter_position_index, self.reporter_n
         )
 
         attached_fluo = Fluorescence.calc_percentages(

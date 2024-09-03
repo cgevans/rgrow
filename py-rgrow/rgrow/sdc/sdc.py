@@ -7,6 +7,7 @@ import tqdm
 import dataclasses
 import json
 from .strand import SDCStrand
+from .reporter_methods import *
 
 
 @dataclasses.dataclass
@@ -69,15 +70,12 @@ class SDCParams:
 
 class SDC(rg.rgrow.SDC):
     params: SDCParams
-    quencher_name: str
-    reporter_name: str
+    # Name of the system -- Used for plotting
     name: str
 
-    def __new__(cls, params, quencher_name, reporter_name, system_name):
+    def __new__(cls, params, system_name):
         self = super().__new__(cls, params)
         self.params = params
-        self.quencher_name = quencher_name
-        self.reporter_name = reporter_name
         self.name = system_name
         return self
 
@@ -87,10 +85,8 @@ class SDC(rg.rgrow.SDC):
 
     def __str__(self):
         header_line = f"SDC System {self.name} info:"
-        rep_quench = f"With reporter {
-            self.reporter_name} and quencher {self.quencher_name}"
         strand_info = f"Parameters:\n{self.params.__str__()}"
-        return f"{header_line}\n{rep_quench}\n{strand_info}\n\n"
+        return f"{header_line}\n{strand_info}\n\n"
 
     def run_anneal(self, anneal: Anneal):
         times, temperatures = anneal.gen_arrays()

@@ -12,6 +12,10 @@ class ReporterAndComputational(ReportingMethod):
 
     desc = "Reporter + Computation"
 
+    def __init__(self,  quencher_name, reporter_name):
+        self.quencher_n = quencher_name
+        self.reporter_n = reporter_name
+
     def reporter_method(self, anneal_outp: AnnealOutputs):
         # This assumes that the scaffold looks like this:
         #
@@ -27,7 +31,7 @@ class ReporterAndComputational(ReportingMethod):
 
         # Check the percentage quencher_strand attached
         quencher_strand_index = rgrows.tile_number_from_name(
-            anneal_outp.system.quencher_name
+            self.quencher_n
         )
         percentage_quencher = (
             (
@@ -38,7 +42,7 @@ class ReporterAndComputational(ReportingMethod):
 
         # Check the percentage reporter attached
         reporter_strand_index = rgrows.tile_number_from_name(
-            anneal_outp.system.reporter_name
+            self.reporter_n
         )
         percentage_reporter = (
             (
