@@ -77,6 +77,11 @@ jobs:
           python-version: "3.12"
       - name: setup uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Setup virtual environment
+        run: |
+          uv venv venv
+          source venv/bin/activate
+          uv pip install -U pip setuptools wheel
       - name: Install mypy
         run: uv pip install --upgrade mypy
       - name: Run mypy
@@ -87,11 +92,6 @@ jobs:
           src: "./py-rgrow"
       - name: Install carge llvm-cov
         run: cargo install cargo-llvm-cov
-      - name: Setup virtual environment
-        run: |
-          uv venv venv
-          source venv/bin/activate
-          uv pip install -U pip setuptools wheel
       - name: Install maturin and pytest
         run: |
           source venv/bin/activate
