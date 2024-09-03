@@ -5,6 +5,7 @@ from numpy import ndarray
 import numpy as np
 import polars as pl
 from numpy.typing import NDArray
+from matplotlib.axes import Axes
 
 class ATAM:
     @property
@@ -249,17 +250,18 @@ class ATAM:
             The name of the file to write to.
         """
 
-    def color_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.uint8]: ...
-    def name_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.str_]: ...
+    def color_canvas(
+        self, state: State | FFSStateRef | NDArray[np.uint]
+    ) -> NDArray[np.uint8]: ...
+    def name_canvas(
+        self, state: State | FFSStateRef | NDArray[np.uint]
+    ) -> NDArray[np.str_]: ...
 
 class SDC:
-
     @property
     def tile_names(self) -> list[str]: ...
-
     @property
     def tile_colors(self) -> NDArray[np.uint]: ...
-    
     def calc_dimers(self) -> List[DimerInfo]:
         """
         Calculate information about the dimers the system is able to form.
@@ -309,8 +311,6 @@ class SDC:
           Calculate the location and direction of mismatches, not jus the number.
         """
 
-      
-
     @overload
     def evolve(
         self,
@@ -326,7 +326,6 @@ class SDC:
         show_window: bool = False,
         parallel: bool = True,
     ) -> EvolveOutcome: ...
-
     @overload
     def evolve(
         self,
@@ -342,7 +341,6 @@ class SDC:
         show_window: bool = False,
         parallel: bool = True,
     ) -> List[EvolveOutcome]: ...
-
     @overload
     def evolve(
         self,
@@ -399,7 +397,6 @@ class SDC:
 
     def get_param(self, param_name): ...
     def print_debug(self): ...
-
     @staticmethod
     def read_json(filename: str) -> None:
         """
@@ -502,13 +499,13 @@ class SDC:
         filename : str
             The name of the file to write to.
         """
-                
-    def color_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.uint8]:
-      ...
 
-    def name_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.str_]:
-      ...
-
+    def color_canvas(
+        self, state: State | FFSStateRef | NDArray[np.uint]
+    ) -> NDArray[np.uint8]: ...
+    def name_canvas(
+        self, state: State | FFSStateRef | NDArray[np.uint]
+    ) -> NDArray[np.str_]: ...
 
 class EvolveBounds:
     def __init__(self, for_time: float | None = None): ...
@@ -822,16 +819,33 @@ class KTAM:
         filename : str
             The name of the file to write to.
         """
-    def color_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.uint8]: ...
-    def name_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.str_]: ...
+
+    def color_canvas(
+        self, state: State | FFSStateRef | NDArray[np.uint]
+    ) -> NDArray[np.uint8]: ...
+    def name_canvas(
+        self, state: State | FFSStateRef | NDArray[np.uint]
+    ) -> NDArray[np.str_]: ...
+    def plot_canvas(
+        self,
+        state: State | np.ndarray | FFSStateRef,
+        ax: "Axes" | None = None,
+        annotate_tiles: bool = False,
+        annotate_mismatches: bool = False,
+        crop: bool = False,
+    ) -> "Axes": ...
 
 class OldKTAM:
     @property
     def tile_names(self) -> list[str]: ...
     @property
     def tile_colors(self) -> NDArray[np.uint]: ...
-    def color_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.uint8]: ...
-    def name_canvas(self, state: State | FFSStateRef | NDArray[np.uint]) -> NDArray[np.str_]: ...
+    def color_canvas(
+        self, state: State | FFSStateRef | NDArray[np.uint]
+    ) -> NDArray[np.uint8]: ...
+    def name_canvas(
+        self, state: State | FFSStateRef | NDArray[np.uint]
+    ) -> NDArray[np.str_]: ...
     def calc_dimers(self) -> List[DimerInfo]:
         """
         Calculate information about the dimers the system is able to form.
