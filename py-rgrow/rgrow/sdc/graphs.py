@@ -93,21 +93,19 @@ def run_and_graph_system_with_many_reporting_methods(
 
 
 def graph_many_systems_with(
-    systems: Iterable[SDC],
-    anneal: Anneal,
+    outputs: Iterable[AnnealOutputs],
     method: ReportingMethod,
     # TODO: Fix this for windows
     path: str = "/tmp/sdc_image.png",
     title: str | None = None,
 ):
     plt.clf()
-    times, temps = anneal.gen_arrays()
+    times, temps = outputs[0].anneal.gen_arrays()
     times_hours = times / HOUR
 
-    for system in systems:
-        anneal_output = system.run_anneal(anneal)
-        measurement = method.reporter_method(anneal_output)
-        plt.plot(times_hours, measurement, label=system.name)
+    for o in outputs:
+        measurement = method.reporter_method(o)
+        plt.plot(times_hours, measurement, label=o.system.name)
 
     plt.xlabel("Time (hours)")
     plt.ylabel(method.desc)
@@ -124,3 +122,15 @@ def graph_many_systems_with(
         plt.title(title)
 
     plt.savefig(path)
+
+
+def run_and_graph_many_systems_with(
+    systems: Iterable[SDC],
+    anneal: Anneal,
+    method: ReportingMethod,
+    # TODO: Fix this for windows
+    path: str = "/tmp/sdc_image.png",
+    title: str | None = None,
+):
+    outs = [s.run_anneal(anneal) for s in systems]
+    graph_many_systems_with(outs, method, path, title)
