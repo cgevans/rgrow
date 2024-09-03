@@ -83,9 +83,13 @@ jobs:
           source venv/bin/activate
           uv pip install -U pip setuptools wheel
       - name: Install mypy
-        run: uv pip install --upgrade mypy
+        run: |
+          source venv/bin/activate
+          uv pip install --upgrade mypy
       - name: Run mypy
-        run: mypy --cache-dir .mypy_cache/ --install-types --ignore-missing-imports --non-interactive --show-traceback py-rgrow/rgrow/
+        run: |
+          source venv/bin/activate
+          mypy --cache-dir .mypy_cache/ --install-types --ignore-missing-imports --non-interactive --show-traceback py-rgrow/rgrow/
       - name: Run Ruff on Python code
         uses: chartboost/ruff-action@v1
         with:
