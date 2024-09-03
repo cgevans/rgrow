@@ -22,7 +22,9 @@ class SDCParams:
         | Mapping[str, tuple[float, float] | str]
         | Mapping[tuple[str, str], tuple[float, float] | str]
     )
-    scaffold: list[str | None] | list[list[str | None]]
+    scaffold: list[
+        str | None
+    ]  # | list[list[str | None]] # FIXME: can't deal with typing for this
     strands: list[SDCStrand]
     scaffold_concentration: float = 1e-100
     k_n: float = 0.0
@@ -35,7 +37,7 @@ class SDCParams:
         strands_info = ""
         for strand in self.strands:
             strands_info += "\n\t" + strand.__str__()
-        return f"Forward Rate: {self.k_f}\nStrands: {strands_info}\nScaffold: {', '.join(self.scaffold[2:-2])}"
+        return f"Forward Rate: {self.k_f}\nStrands: {strands_info}\nScaffold: {', '.join(x if x is not None else "None" for x in self.scaffold[2:-2])}"
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -66,6 +68,11 @@ class SDCParams:
 
 
 class SDC(rg.rgrow.SDC):
+    params: SDCParams
+    quencher_name: str
+    reporter_name: str
+    name: str
+
     def __new__(cls, params, quencher_name, reporter_name, system_name):
         self = super().__new__(cls, params)
         self.params = params

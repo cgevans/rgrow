@@ -1,3 +1,4 @@
+from typing import Iterable
 from .anneal import Anneal, AnnealOutputs
 from .sdc import SDC
 from .reporter_methods import ReportingMethod
@@ -92,12 +93,12 @@ def run_and_graph_system_with_many_reporting_methods(
 
 
 def graph_many_systems_with(
-    systems: [SDC],
+    systems: Iterable[SDC],
     anneal: Anneal,
     method: ReportingMethod,
     # TODO: Fix this for windows
     path: str = "/tmp/sdc_image.png",
-    title: str = None,
+    title: str | None = None,
 ):
     plt.clf()
     times, temps = anneal.gen_arrays()

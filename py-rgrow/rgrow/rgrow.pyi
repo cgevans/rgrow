@@ -1087,6 +1087,13 @@ class OldKTAM:
 System: TypeAlias = ATAM | KTAM | OldKTAM
 
 class State:
+    def __init__(
+        self,
+        shape: tuple[int, int],
+        kind: str = "Square",
+        tracking: str = "None",
+        n_tile_types: int | None = None,
+    ): ...
     @property
     def canvas_view(self) -> NDArray[np.uint]:
         """A view of the state's canvas.  This is fast but unsafe."""
@@ -1141,3 +1148,5 @@ class TileSet:
 class TileShape: ...
 class DimerInfo: ...
 class NeededUpdate: ...
+
+def string_dna_dg_ds(dna_sequence: str) -> tuple[float, float]: ...
