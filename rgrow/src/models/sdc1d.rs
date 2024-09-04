@@ -19,22 +19,19 @@ use core::f64;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
-    ops::Deref,
     sync::OnceLock,
 };
 
 use astro_float::{BigFloat, RoundingMode, Sign};
-use cached::once_cell::unsync::OnceCell;
 use rand::Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    base::{Energy, Glue, GrowError, Rate, Tile},
+    base::{Glue, GrowError, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     colors::get_color_or_random,
     state::{State, StateEnum},
-    system::{self, DynSystem, Event, EvolveBounds, NeededUpdate, System, TileBondInfo},
-    tileset::{FromTileSet, ProcessedTileSet, Size},
+    system::{Event, EvolveBounds, NeededUpdate, System, TileBondInfo},
 };
 
 use ndarray::prelude::{Array1, Array2};
@@ -631,8 +628,8 @@ impl SDC {
     pub fn big_partition_function_fast(&self) -> BigFloat {
         let scaffold = self.scaffold();
 
-        let PREC = 64;
-        let RM = astro_float::RoundingMode::None;
+        let prec = 64;
+        let rm = astro_float::RoundingMode::None;
         let mut cc =
             astro_float::Consts::new().expect("An error occured when initializing constants");
         // let ctx = astro_float::ctx::Context::new(PREC, RM, cc, -100000, 100000);
@@ -643,22 +640,22 @@ impl SDC {
             .max()
             .unwrap();
 
-        let mut z_curr = Array1::from_elem(max_competition, BigFloat::from_i32(0, PREC));
-        let mut z_prev = Array1::from_elem(max_competition, BigFloat::from_i32(0, PREC));
-        let mut z_sum = BigFloat::from_i64(1, PREC);
-        let mut sum_a = BigFloat::from_i64(0, PREC);
+        let mut z_curr = Array1::from_elem(max_competition, BigFloat::from_i32(0, prec));
+        let mut z_prev = Array1::from_elem(max_competition, BigFloat::from_i32(0, prec));
+        let mut z_sum = BigFloat::from_i64(1, prec);
+        let mut sum_a = BigFloat::from_i64(0, prec);
 
         for (i, b) in scaffold.iter().enumerate() {
             // This is the partial partition function assuming that the previous site is empty:
             // it sums previous, previous partition functions (location i-2).
             for v in z_prev.iter() {
-                sum_a = sum_a.add(v, PREC, RM);
+                sum_a = sum_a.add(v, prec, rm);
             }
 
             // We now move the previous (location i-1) location partial partition functions to the previous
             // array, and reset the current arry.
             z_prev.assign(&z_curr);
-            z_curr.fill(BigFloat::from_i32(0, PREC));
+            z_curr.fill(BigFloat::from_i32(0, prec));
 
             let friends = match self.friends_btm.get(b) {
                 Some(f) => f,
@@ -670,7 +667,7 @@ impl SDC {
                 let attachment_beta_dg =
                     self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln();
 
-                let t1 = BigFloat::from_f64(-attachment_beta_dg, PREC).exp(PREC, RM, &mut cc);
+                let t1 = BigFloat::from_f64(-attachment_beta_dg, prec).exp(prec, rm, &mut cc);
 
                 if i == 0 {
                     // First scaffold site.
@@ -681,18 +678,18 @@ impl SDC {
                 } else {
                     // Every other scaffold site
                     // t2 will hold the different cases where side i-1 has tile g in it.
-                    let mut t2 = BigFloat::from_f64(0., PREC);
+                    let mut t2 = BigFloat::from_f64(0., prec);
 
                     match self.friends_btm.get(&scaffold[i - 1]) {
                         Some(ff) => {
                             for (k, &g) in ff.iter().enumerate() {
                                 let left_beta_dg = self.bond_between_strands(g, f);
                                 t2 = t2.add(
-                                    &BigFloat::from_f64(-left_beta_dg, PREC)
-                                        .exp(PREC, RM, &mut cc)
-                                        .mul(&z_prev[k], PREC, RM),
-                                    PREC,
-                                    RM,
+                                    &BigFloat::from_f64(-left_beta_dg, prec)
+                                        .exp(prec, rm, &mut cc)
+                                        .mul(&z_prev[k], prec, rm),
+                                    prec,
+                                    rm,
                                 );
                             }
                         }
@@ -703,26 +700,26 @@ impl SDC {
                     // sum_a -> tile f is at position i, no tile is at position i-1.
                     // t2 -> tile f is at position i, another tile is at position i-1.
                     z_curr[j] = t1.mul(
-                        &t2.add(&BigFloat::from_i64(1, PREC), PREC, RM)
-                            .add(&sum_a, PREC, RM),
-                        PREC,
-                        RM,
+                        &t2.add(&BigFloat::from_i64(1, prec), prec, rm)
+                            .add(&sum_a, prec, rm),
+                        prec,
+                        rm,
                     );
                 }
-                z_sum = z_sum.add(&z_curr[j], PREC, RM);
+                z_sum = z_sum.add(&z_curr[j], prec, rm);
             }
         }
         z_sum
     }
 
     pub fn log_big_partition_function_fast(&self) -> f64 {
-        let PREC = 64;
-        let RM = astro_float::RoundingMode::None;
+        let prec = 64;
+        let rm = astro_float::RoundingMode::None;
         let mut cc =
             astro_float::Consts::new().expect("An error occured when initializing constants"); // FIXME: don't keep making this
         bigfloat_to_f64(
-            &self.big_partition_function_fast().ln(PREC, RM, &mut cc),
-            RM,
+            &self.big_partition_function_fast().ln(prec, rm, &mut cc),
+            rm,
         )
     }
 
@@ -987,80 +984,77 @@ impl TileBondInfo for SDC {
     }
 }
 
-impl FromTileSet for SDC {
-    fn from_tileset(tileset: &crate::tileset::TileSet) -> Result<Self, crate::base::RgrowError> {
-        // This gives us parsed names / etc for tiles and glues.  It makes some wrong assumptions (like
-        // that each tile has four edges), but it will do for now.
-        let pc = ProcessedTileSet::from_tileset(tileset)?;
+// impl FromTileSet for SDC {
+//     fn from_tileset(tileset: &crate::tileset::TileSet) -> Result<Self, crate::base::RgrowError> {
+//         // This gives us parsed names / etc for tiles and glues.  It makes some wrong assumptions (like
+//         // that each tile has four edges), but it will do for now.
+//         let pc = ProcessedTileSet::from_tileset(tileset)?;
 
-        // Combine glue strengths (between like numbers) and glue links (between two numbers)
-        let n_glues = pc.glue_strengths.len();
-        let mut glue_links = Array2::zeros((n_glues, n_glues));
-        for (i, strength) in pc.glue_strengths.indexed_iter() {
-            glue_links[(i, i)] = *strength;
-        }
-        for (i, j, strength) in pc.glue_links.iter() {
-            glue_links[(*i, *j)] = *strength;   
-        }
+//         // Combine glue strengths (between like numbers) and glue links (between two numbers)
+//         let n_glues = pc.glue_strengths.len();
+//         let mut glue_links = Array2::zeros((n_glues, n_glues));
+//         for (i, strength) in pc.glue_strengths.indexed_iter() {
+//             glue_links[(i, i)] = *strength;
+//         }
+//         for (i, j, strength) in pc.glue_links.iter() {
+//             glue_links[(*i, *j)] = *strength;
+//         }
 
-        // Just generate the stuff that will be filled by the model.
-        let energy_bonds = Array2::default((pc.tile_names.len(), pc.tile_names.len()));
+//         // Just generate the stuff that will be filled by the model.
+//         let energy_bonds = Array2::default((pc.tile_names.len(), pc.tile_names.len()));
 
-        // We'll default to 64 scaffolds.
-        let (n_scaffolds, scaffold_length) = match tileset.size {
-            Some(Size::Single(x)) => (64, x),
-            Some(Size::Pair((j, x))) => (j, x),
-            None => panic!("Size not specified for SDC model."),
-        };
+//         // We'll default to 64 scaffolds.
+//         let (n_scaffolds, scaffold_length) = match tileset.size {
+//             Some(Size::Single(x)) => (64, x),
+//             Some(Size::Pair((j, x))) => (j, x),
+//             None => panic!("Size not specified for SDC model."),
+//         };
 
-        // The tileset input doesn't have a way to specify scaffolds right now.  This generates a buch of 'fake' scaffolds
-        // each with just glues 0 to scaffold_length, which we can at least play around with.
-        let mut scaffold = Array2::<Glue>::zeros((n_scaffolds, scaffold_length));
-        for ((i, j), v) in scaffold.indexed_iter_mut() {
-            *v = j;
-        }
+//         // The tileset input doesn't have a way to specify scaffolds right now.  This generates a buch of 'fake' scaffolds
+//         // each with just glues 0 to scaffold_length, which we can at least play around with.
+//         let mut scaffold = Array2::<Glue>::zeros((n_scaffolds, scaffold_length));
+//         for ((i, j), v) in scaffold.indexed_iter_mut() {
+//             *v = j;
+//         }
 
-        let alpha = tileset.alpha.unwrap_or(0.0);
+//         let alpha = tileset.alpha.unwrap_or(0.0);
 
-        // We'll set strand concentrations using stoic and the traditional kTAM Gmc, where
-        // conc = stoic * u0 * exp(-Gmc + alpha) and u0 = 1M, but we really should just have
-        // a way to specify concentrations directly.
-        let strand_concentration = pc
-            .tile_stoics
-            .mapv(|x| x * (-tileset.gmc.unwrap_or(16.0) + alpha).exp());
+//         // We'll set strand concentrations using stoic and the traditional kTAM Gmc, where
+//         // conc = stoic * u0 * exp(-Gmc + alpha) and u0 = 1M, but we really should just have
+//         // a way to specify concentrations directly.
+//         let strand_concentration = pc
+//             .tile_stoics
+//             .mapv(|x| x * (-tileset.gmc.unwrap_or(16.0) + alpha).exp());
 
-        let mut sys = SDC {
-            strand_names: pc.tile_names,
-            glue_names: pc.glue_names,
-            colors: pc.tile_colors,
-            glues: pc.tile_edges,
-            anchor_tiles: Vec::new(),
-            scaffold,
-            // FIXME
-            scaffold_concentration: 0.0,
-            strand_concentration,
-            kf: tileset.kf.unwrap_or(1.0e6),
-            delta_g_matrix: todo!(),
-            entropy_matrix: todo!(),
-            temperature: todo!(),
-            friends_btm: HashMap::new(),
-            strand_energy_bonds: energy_bonds,
-            scaffold_energy_bonds: todo!(),
-        };
+//         let mut sys = SDC {
+//             strand_names: pc.tile_names,
+//             glue_names: pc.glue_names,
+//             colors: pc.tile_colors,
+//             glues: pc.tile_edges,
+//             anchor_tiles: Vec::new(),
+//             scaffold,
+//             // FIXME
+//             scaffold_concentration: 0.0,
+//             strand_concentration,
+//             kf: tileset.kf.unwrap_or(1.0e6),
+//             delta_g_matrix: todo!(),
+//             entropy_matrix: todo!(),
+//             temperature: todo!(),
+//             friends_btm: HashMap::new(),
+//             strand_energy_bonds: energy_bonds,
+//             scaffold_energy_bonds: todo!(),
+//         };
 
-        // This will generate the friends hashamp, as well as the glues, and the energy bonds
-        sys.update_system();
+//         // This will generate the friends hashamp, as well as the glues, and the energy bonds
+//         sys.update_system();
 
-        Ok(sys)
-    }
-}
+//         Ok(sys)
+//     }
+// }
 
 // Here is potentially another way to process this, though not done.  Feel free to delete or modify.
 
 use std::hash::Hash;
-
-#[cfg(python)]
-use pyo3::prelude::*;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
@@ -1447,7 +1441,7 @@ impl AnnealProtocol {
             sdc.temperature = *tmp;
             sdc.update_system();
 
-            // crate::system::System::update_all(&sdc, &mut state, &needed);
+            crate::system::System::update_state(&sdc, &mut state, &needed);
             crate::system::System::evolve(&sdc, &mut state, bounds)?;
             // FIXME: This is flattening the canvas, so it doesnt work nicely
             // it should be Vec<Vec<_>>, not Vec<_>

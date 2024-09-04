@@ -124,18 +124,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      # - name: Install X components
-      #   run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
-          container: off
           sccache: "true"
           manylinux: "auto"
           working-directory: py-rgrow
-          rust-toolchain: nightly
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
