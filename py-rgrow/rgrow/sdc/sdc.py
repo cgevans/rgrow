@@ -7,7 +7,7 @@ import tqdm
 import dataclasses
 import json
 from .strand import SDCStrand
-from .reporter_methods import *
+from .reporter_methods import ReportingMethod  # noqa: F401
 
 
 @dataclasses.dataclass
