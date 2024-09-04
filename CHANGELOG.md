@@ -1,3 +1,7 @@
+# 0.18.0
+
+- Initial 1D SDC support.
+
 # 0.17.0
 
 - Significant change in Python organization: there are now model-specific System class, rather than one System class.  Tileset definitions will return a specific class, and classes should eventually be able to be created directly.  This should make it much easier to add ways to view and manipulate system objects in model-dependent ways.
