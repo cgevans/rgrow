@@ -37,4 +37,4 @@ default-features = false
 
 [dependencies.pyo3]
 workspace = true
-features = ["extension-module"]
+features = ["extension-module", "abi3-py310"]
