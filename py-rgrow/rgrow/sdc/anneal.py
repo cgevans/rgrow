@@ -1,9 +1,15 @@
 import numpy as np
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .sdc import SDC
 
 MIN = 60
 HOUR = MIN * 60
 
 
+@dataclass
 class Anneal:
     """
     An anneal protocol.
@@ -27,31 +33,26 @@ class Anneal:
         timestep (float): Simulated time cannot be continuous. How big do you
             want each time jump to be ? The smaller, the more accurete the
             system will be, but it will take longer.
+        temperature_adjustment (float): How much to adjust the temperature
+            to correct for a model temperature offset.
     """
 
-    def __init__(
-        self,
-        initial_hold: float,
-        initial_tmp: float,
-        delta_time: float,
-        final_tmp: float,
-        final_hold: float,
-        scaffold_count: int = 100,
-        timestep: float = 2.0,
-    ):
-        self.initial_hold = initial_hold
-        self.initial_tmp = initial_tmp + 8
-        self.delta_time = delta_time
-        self.final_tmp = final_tmp + 8
-        self.final_hold = final_hold
-        self.scaffold_count = scaffold_count
+    initial_hold: float
+    initial_tmp: float
+    delta_time: float
+    final_tmp: float
+    final_hold: float
+    scaffold_count: int = 100
+    timestep: float = 2.0
+    temperature_adjustment: float = 8.0
 
-        # How many seconds to spend in each step
-        #
-        # By default, this is two. This means that if we have a 10 second anneal,
-        # The times array will look like:
-        # 2, 4, 6, 8, 10
-        self.timestep = timestep
+    @property
+    def adjusted_initial_tmp(self):
+        return self.initial_tmp + self.temperature_adjustment
+
+    @property
+    def adjusted_final_tmp(self):
+        return self.final_tmp + self.temperature_adjustment
 
     @staticmethod
     def standard_long_anneal(from_tmp=80, final_tmp=20, scaffold_count=100):
@@ -78,12 +79,14 @@ class Anneal:
         number_of_steps = int(self.delta_time * steps_per_sec)
 
         delta_temperatures = np.linspace(
-            self.initial_tmp, self.final_tmp, int(number_of_steps + 1)
+            self.adjusted_initial_tmp, self.adjusted_final_tmp, int(number_of_steps + 1)
         )
         initial_temp = np.repeat(
-            self.initial_tmp, int(self.initial_hold * steps_per_sec) - 1
+            self.adjusted_initial_tmp, int(self.initial_hold * steps_per_sec) - 1
         )
-        ending_temp = np.repeat(self.final_tmp, int(self.final_hold * steps_per_sec))
+        ending_temp = np.repeat(
+            self.adjusted_final_tmp, int(self.final_hold * steps_per_sec)
+        )
         temperatures = np.concatenate([initial_temp, delta_temperatures, ending_temp])
 
         total_time = self.initial_hold + self.final_hold + self.delta_time
@@ -92,6 +95,7 @@ class Anneal:
         return times, temperatures
 
 
+@dataclass
 class AnnealOutputs:
     """
     The output generated when a system runs an anneal
@@ -121,10 +125,6 @@ class AnnealOutputs:
             since some of its data is relevant when measuring error / graphing)
     """
 
-    def __init__(self, system, anneal: Anneal, canvas_arr):
-        # The anneal that was executed
-        self.system = system
-        # Snapshots of the canvas
-        self.canvas_arr = canvas_arr
-        # The anneal that was executed
-        self.anneal = anneal
+    system: "SDC"
+    canvas_arr: "np.NDArray[np.int_]"
+    anneal: Anneal

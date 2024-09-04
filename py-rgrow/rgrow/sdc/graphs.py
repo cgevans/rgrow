@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, Sequence
 from .anneal import Anneal, AnnealOutputs
 from .sdc import SDC
 from .reporter_methods import ReportingMethod
@@ -93,7 +93,7 @@ def run_and_graph_system_with_many_reporting_methods(
 
 
 def graph_many_systems_with(
-    outputs: Iterable[AnnealOutputs],
+    outputs: Sequence[AnnealOutputs],
     method: ReportingMethod,
     # TODO: Fix this for windows
     path: str = "/tmp/sdc_image.png",

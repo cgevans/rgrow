@@ -22,6 +22,7 @@ def test_times_values():
         final_hold=2,
         initial_tmp=100,
         final_tmp=60,
+        temperature_adjustment=0,
     )
 
     times, temps = anneal.gen_arrays()
