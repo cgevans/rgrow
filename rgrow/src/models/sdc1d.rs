@@ -770,7 +770,7 @@ impl SDC {
     /// Return energy in the ideal case
     fn best_energy_for_right_strand(&self, left_possible: &MfeValues, right: &Tile) -> f64 {
         if left_possible.is_empty() {
-            return self.bond_with_scaffold(*right) + self.penalty(right);
+            return self.bond_with_scaffold(*right) - self.penalty(right);
         }
 
         left_possible
@@ -780,7 +780,7 @@ impl SDC {
                 f64::min(acc, nenergy)
             })
             + self.bond_with_scaffold(*right)
-            + self.penalty(right)
+            - self.penalty(right)
     }
 
     /// This is for the standard case where the acc is not empty and the friends here hashset is
@@ -797,7 +797,7 @@ impl SDC {
     fn mfe_next_vector_empty_case(&self, friends_here: &HashSet<Tile>) -> MfeValues {
         friends_here
             .iter()
-            .map(|&tile| (self.bond_with_scaffold(tile) + self.penalty(&tile), tile))
+            .map(|&tile| (self.bond_with_scaffold(tile) - self.penalty(&tile), tile))
             .collect()
     }
 
@@ -817,8 +817,14 @@ impl SDC {
                     .map(|&(lenergy, _)| (lenergy, 0))
                     .collect::<Vec<(f64, u32)>>(),
             };
+
             *acc = n_vec;
-            Some(acc.clone())
+
+            Some(
+                acc.iter()
+                    .map(|(energy, tile)| (energy * self.rtval(), *tile))
+                    .collect(),
+            )
         });
 
         connection_matrix.collect()
