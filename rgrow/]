@@ -802,7 +802,7 @@ impl SDC {
     ///
     /// To get the overall MFE, look at the last index of the scaffold, and select the minimum
     /// energy among all possible final strands
-    fn mfe_matrix(&self) -> Vec<Vec<(f64, u32)>> {
+    fn mfe(&self) -> Vec<Vec<(f64, u32)>> {
         let connection_matrix = self.scaffold().into_iter().scan(vec![], |acc, glue| {
             // Next vector
             let n_vec = match self.friends_btm.get(&glue) {
@@ -2090,8 +2090,9 @@ mod test_sdc_model {
     #[test]
     fn mfe_test() {
         let sdc = scaffold_for_tests();
-        let x = sdc.mfe_matrix();
+        let x = sdc.mfe();
 
+        // Some INFO for debugging
         for (index, v) in x.iter().enumerate() {
             println!("At index {index}:");
             for (energy, final_strand) in v {
@@ -2107,6 +2108,7 @@ mod test_sdc_model {
         let last_compute_domain = x[x.len() - 4].clone();
         let (f_energy, strand_id) = last_compute_domain[0];
         let (s_energy, _) = last_compute_domain[1];
+
         if sdc.tile_name(strand_id).contains('0') {
             assert!(f_energy < s_energy);
         } else {
