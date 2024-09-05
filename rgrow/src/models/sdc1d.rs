@@ -744,6 +744,12 @@ impl SDC {
 // MFE of system
 // FIXME: Hashset needs some sort of ordering (by tile id? Will that be consistent between runs?)
 impl SDC {
+    // Concentration penalty
+    #[inline(always)]
+    fn penalty(&self, strand: &Tile) -> f64 {
+        (self.strand_concentration[*strand as usize] / U0).ln()
+    }
+
     /// Given some set of strands xi (see the graph below), and some tile for the
     /// y position, find the best match
     ///
@@ -756,16 +762,17 @@ impl SDC {
     /// Return energy in the ideal case
     fn best_energy_for_right_strand(&self, left_possible: &Vec<(f64, Tile)>, right: &Tile) -> f64 {
         if left_possible.is_empty() {
-            return self.bond_with_scaffold(*right);
+            return self.bond_with_scaffold(*right) + self.penalty(right);
         }
 
         left_possible
             .iter()
             .fold(f64::MAX, |acc, &(lenergy, left)| {
                 let nenergy = lenergy + self.bond_between_strands(left, *right);
-                acc.min(nenergy)
+                f64::min(acc, nenergy)
             })
             + self.bond_with_scaffold(*right)
+            + self.penalty(right)
     }
 
     /// This is for the standard case where the acc is not empty and the friends here hashset is
@@ -786,7 +793,7 @@ impl SDC {
     fn mfe_next_vector_empty_case(&self, friends_here: &HashSet<Tile>) -> Vec<(f64, Tile)> {
         friends_here
             .iter()
-            .map(|&tile| (self.bond_with_scaffold(tile), tile))
+            .map(|&tile| (self.bond_with_scaffold(tile) + self.penalty(&tile), tile))
             .collect()
     }
 
@@ -1000,7 +1007,7 @@ impl FromTileSet for SDC {
             glue_links[(i, i)] = *strength;
         }
         for (i, j, strength) in pc.glue_links.iter() {
-            glue_links[(*i, *j)] = *strength;   
+            glue_links[(*i, *j)] = *strength;
         }
 
         // Just generate the stuff that will be filled by the model.
