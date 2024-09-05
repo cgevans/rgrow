@@ -1664,6 +1664,17 @@ impl SDC {
     fn py_mfe_matrix(&self) -> Vec<Vec<(f64, u32)>> {
         self.mfe_matrix()
     }
+
+    #[setter]
+    fn set_temperature(&mut self, tmp: f64) {
+        self.temperature = tmp;
+        self.update_system();
+    }
+
+    #[getter]
+    fn get_temperature(&self) -> f64 {
+        self.temperature
+    }
 }
 
 #[cfg(test)]
