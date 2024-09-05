@@ -798,7 +798,7 @@ impl SDC {
             .map(|tile| (self.best_energy_for_strand(acc, tile), *tile))
             .collect::<MfeValues>();
 
-        // If the acc is not empty, meaning that there exist states before this srands, then we
+        // If the acc is not empty, meaning that there exist states before this strand, then we
         // could also not attach anything here, and pass on the previous best free enrgy.
         if !acc.is_empty() {
             let min_overall = acc
@@ -806,6 +806,9 @@ impl SDC {
                 .fold(f64::MAX, |min_sf, &(e, _)| f64::min(min_sf, e));
 
             connection_answ.push((min_overall, 0));
+        } else {
+            // We're in the initial location; if it is empty, the energy is just 0.0.
+            connection_answ.push((0.0, 0));
         }
 
         connection_answ
