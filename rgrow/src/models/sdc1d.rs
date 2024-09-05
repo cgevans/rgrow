@@ -768,17 +768,22 @@ impl SDC {
     /// Ideal bond = x1 y
     ///
     /// Return energy in the ideal case
-    fn best_energy_for_right_strand(&self, left_possible: &MfeValues, right: &Tile) -> f64 {
-        if left_possible.is_empty() {
-            return self.bond_with_scaffold(*right) - self.penalty(right);
-        }
-
+    fn best_energy_for_strand(&self, left_possible: &MfeValues, right: &Tile) -> f64 {
+        // If this is empty, then None will be returned
         left_possible
             .iter()
-            .fold(f64::MAX, |acc, &(lenergy, left)| {
+            .fold(None, |acc, &(lenergy, left)| {
                 let nenergy = lenergy + self.bond_between_strands(left, *right);
-                f64::min(acc, nenergy)
+                if let Some(acc_value) = acc {
+                    Some(f64::min(acc_value, nenergy))
+                } else {
+                    Some(nenergy)
+                }
             })
+            // If there were no element in the left_possible iterator, then we will be attaching to
+            // no other strand, thus 0.0 energy from compute-domain
+            .unwrap_or(0.0)
+            // Always have a scaffold domain
             + self.bond_with_scaffold(*right)
             - self.penalty(right)
     }
@@ -786,19 +791,24 @@ impl SDC {
     /// This is for the standard case where the acc is not empty and the friends here hashset is
     /// not empty
     fn mfe_next_vector(&self, acc: &MfeValues, friends_here: &HashSet<Tile>) -> MfeValues {
-        friends_here
+        // If there are no friends, then this will not run at all, and the return type will be an
+        // empty vector.
+        let mut connection_answ = friends_here
             .iter()
-            .map(|tile| (self.best_energy_for_right_strand(acc, tile), *tile))
-            .collect()
-    }
+            .map(|tile| (self.best_energy_for_strand(acc, tile), *tile))
+            .collect::<MfeValues>();
 
-    /// Next vector in the case that the accumulator is empty (meaning this is the first set of
-    /// strand in the system, in a system with strands everywhere, this will be the 3rd index)
-    fn mfe_next_vector_empty_case(&self, friends_here: &HashSet<Tile>) -> MfeValues {
-        friends_here
-            .iter()
-            .map(|&tile| (self.bond_with_scaffold(tile) - self.penalty(&tile), tile))
-            .collect()
+        // If the acc is not empty, meaning that there exist states before this srands, then we
+        // could also not attach anything here, and pass on the previous best free enrgy.
+        if !acc.is_empty() {
+            let min_overall = acc
+                .iter()
+                .fold(f64::MAX, |min_sf, &(e, _)| f64::min(min_sf, e));
+
+            connection_answ.push((min_overall, 0));
+        }
+
+        connection_answ
     }
 
     /// At each index of the scaffold, what is the MFE of the system if it MUST end on a given
@@ -808,18 +818,12 @@ impl SDC {
     /// energy among all possible final strands
     fn mfe_matrix(&self) -> Vec<MfeValues> {
         let connection_matrix = self.scaffold().into_iter().scan(vec![], |acc, glue| {
-            // Next vector
-            let n_vec = match self.friends_btm.get(&glue) {
-                Some(friends_here) if !acc.is_empty() => self.mfe_next_vector(acc, friends_here),
-                Some(friends_here) => self.mfe_next_vector_empty_case(friends_here),
-                None => acc
-                    .iter()
-                    .map(|&(lenergy, _)| (lenergy, 0))
-                    .collect::<Vec<(f64, u32)>>(),
-            };
+            let empty_map = HashSet::new();
+            let friends = self.friends_btm.get(&glue).unwrap_or(&empty_map);
+
+            let n_vec = self.mfe_next_vector(acc, friends);
 
             *acc = n_vec;
-
             Some(
                 acc.iter()
                     .map(|(energy, tile)| (energy * self.rtval(), *tile))
