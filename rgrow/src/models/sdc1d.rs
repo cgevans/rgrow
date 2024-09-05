@@ -1646,6 +1646,11 @@ impl SDC {
     fn py_log_big_partition_function(&self) -> f64 {
         self.log_big_partition_function_fast()
     }
+
+    #[pyo3(name = "mfe_matrix")]
+    fn py_mfe_matrix(&self) -> Vec<Vec<(f64, u32)>> {
+        self.mfe_matrix()
+    }
 }
 
 #[cfg(test)]
