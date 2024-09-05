@@ -741,6 +741,14 @@ impl SDC {
     }
 }
 
+/// (energy so far, tile id)
+///
+/// This type is used in the DP algorithm. If the system were to end on a given Tile, what is the
+/// minimum energy said system can have.
+///
+/// When running the MFE algorithm, we will return a matrix of these values.
+type MfeValues = Vec<(f64, Tile)>;
+
 // MFE of system
 // FIXME: Hashset needs some sort of ordering (by tile id? Will that be consistent between runs?)
 impl SDC {
@@ -760,7 +768,7 @@ impl SDC {
     /// Ideal bond = x1 y
     ///
     /// Return energy in the ideal case
-    fn best_energy_for_right_strand(&self, left_possible: &Vec<(f64, Tile)>, right: &Tile) -> f64 {
+    fn best_energy_for_right_strand(&self, left_possible: &MfeValues, right: &Tile) -> f64 {
         if left_possible.is_empty() {
             return self.bond_with_scaffold(*right) + self.penalty(right);
         }
@@ -777,11 +785,7 @@ impl SDC {
 
     /// This is for the standard case where the acc is not empty and the friends here hashset is
     /// not empty
-    fn mfe_next_vector(
-        &self,
-        acc: &Vec<(f64, Tile)>,
-        friends_here: &HashSet<Tile>,
-    ) -> Vec<(f64, Tile)> {
+    fn mfe_next_vector(&self, acc: &MfeValues, friends_here: &HashSet<Tile>) -> MfeValues {
         friends_here
             .iter()
             .map(|tile| (self.best_energy_for_right_strand(acc, tile), *tile))
@@ -790,7 +794,7 @@ impl SDC {
 
     /// Next vector in the case that the accumulator is empty (meaning this is the first set of
     /// strand in the system, in a system with strands everywhere, this will be the 3rd index)
-    fn mfe_next_vector_empty_case(&self, friends_here: &HashSet<Tile>) -> Vec<(f64, Tile)> {
+    fn mfe_next_vector_empty_case(&self, friends_here: &HashSet<Tile>) -> MfeValues {
         friends_here
             .iter()
             .map(|&tile| (self.bond_with_scaffold(tile) + self.penalty(&tile), tile))
@@ -802,7 +806,7 @@ impl SDC {
     ///
     /// To get the overall MFE, look at the last index of the scaffold, and select the minimum
     /// energy among all possible final strands
-    fn mfe_matrix(&self) -> Vec<Vec<(f64, u32)>> {
+    fn mfe_matrix(&self) -> Vec<MfeValues> {
         let connection_matrix = self.scaffold().into_iter().scan(vec![], |acc, glue| {
             // Next vector
             let n_vec = match self.friends_btm.get(&glue) {
