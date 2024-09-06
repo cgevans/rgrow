@@ -111,4 +111,4 @@ class SDC(rg.rgrow.SDC):
             self.evolve(state, for_time=anneal.timestep)
             canvas_arr[i, :, :] = state.canvas_view
 
-        return AnnealOutputs(self, anneal, canvas_arr)
+        return AnnealOutputs(self, canvas_arr, anneal)
