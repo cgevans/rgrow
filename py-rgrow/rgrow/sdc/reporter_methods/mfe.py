@@ -22,15 +22,9 @@ class MinFreeEnergy(ReportingMethod):
         sdc = anneal_outp.system
         ans = []
 
-        new = [True] * 1000
         for temperature, outp in zip(temperatures, anneal_outp.canvas_arr):
             sdc.set_param("temperature", float(temperature))
             mfe_config, energy = sdc.mfe_config()
-
-            if new[int(temperature)] and int(temperature) % 10 == 0:
-                print("At temperature", temperature, " mfe is:", mfe_config)
-                new[int(temperature)] = False
-
             ans.append(_snapshot_value(mfe_config, outp))
 
         return ans
