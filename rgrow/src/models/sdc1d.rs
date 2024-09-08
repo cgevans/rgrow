@@ -19,6 +19,7 @@ use core::f64;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
+    iter,
     ops::Deref,
     sync::OnceLock,
 };
@@ -747,7 +748,7 @@ impl SDC {
 /// minimum energy said system can have.
 ///
 /// When running the MFE algorithm, we will return a matrix of these values.
-type MfeValues = Vec<(f64, Tile)>;
+type MfeValues = Vec<(Tile, Energy, Tile)>;
 
 // MFE of system
 // FIXME: Hashset needs some sort of ordering (by tile id? Will that be consistent between runs?)
@@ -768,24 +769,31 @@ impl SDC {
     /// Ideal bond = x1 y
     ///
     /// Return energy in the ideal case
-    fn best_energy_for_strand(&self, left_possible: &MfeValues, right: &Tile) -> f64 {
+    fn best_energy_for_strand(&self, left_possible: &MfeValues, right: &Tile) -> (Tile, f64) {
         // If this is empty, then None will be returned
-        left_possible
+        let (att, energy) = left_possible
             .iter()
-            .fold(None, |acc, &(lenergy, left)| {
+            .fold(None, |acc, &(_prior_attachement, lenergy, left)| {
                 let nenergy = lenergy + self.bond_between_strands(left, *right);
-                if let Some(acc_value) = acc {
-                    Some(f64::min(acc_value, nenergy))
+                if acc.is_none() {
+                    return Some((left, nenergy));
+                }
+                let (acc_left, acc_value) = acc.unwrap();
+                if acc_value < nenergy {
+                    Some((acc_left, acc_value))
                 } else {
-                    Some(nenergy)
+                    Some((left, nenergy))
                 }
             })
             // If there were no element in the left_possible iterator, then we will be attaching to
             // no other strand, thus 0.0 energy from compute-domain
-            .unwrap_or(0.0)
-            // Always have a scaffold domain
-            + self.bond_with_scaffold(*right)
-            - self.penalty(right)
+            .unwrap_or((0, 0.0));
+
+        // Always have a scaffold domain
+        (
+            att,
+            energy + self.bond_with_scaffold(*right) - self.penalty(right),
+        )
     }
 
     /// This is for the standard case where the acc is not empty and the friends here hashset is
@@ -795,20 +803,29 @@ impl SDC {
         // empty vector.
         let mut connection_answ = friends_here
             .iter()
-            .map(|tile| (self.best_energy_for_strand(acc, tile), *tile))
+            .map(|tile| {
+                let (l, e) = self.best_energy_for_strand(acc, tile);
+                (l, e, *tile)
+            })
             .collect::<MfeValues>();
 
         // If the acc is not empty, meaning that there exist states before this strand, then we
         // could also not attach anything here, and pass on the previous best free enrgy.
         if !acc.is_empty() {
-            let min_overall = acc
-                .iter()
-                .fold(f64::MAX, |min_sf, &(e, _)| f64::min(min_sf, e));
+            let (attached, min_energy) =
+                acc.iter()
+                    .fold((0, f64::MAX), |(att_sf, min_energy_sf), &(_, e, t)| {
+                        if min_energy_sf < e {
+                            (att_sf, min_energy_sf)
+                        } else {
+                            (t, e)
+                        }
+                    });
 
-            connection_answ.push((min_overall, 0));
+            connection_answ.push((attached, min_energy, 0));
         } else {
             // We're in the initial location; if it is empty, the energy is just 0.0.
-            connection_answ.push((0.0, 0));
+            connection_answ.push((0, 0.0, 0));
         }
 
         connection_answ
@@ -829,12 +846,47 @@ impl SDC {
             *acc = n_vec;
             Some(
                 acc.iter()
-                    .map(|(energy, tile)| (energy * self.rtval(), *tile))
+                    .map(|(left, energy, tile)| (*left, energy * self.rtval(), *tile))
                     .collect(),
             )
         });
 
         connection_matrix.collect()
+    }
+
+    /// Get the mfe configuration, as well as its energy
+    fn mfe_configuration(&self) -> (Vec<Tile>, Energy) {
+        let mfe_mat = self.mfe_matrix();
+        let l = mfe_mat.len();
+        let mut iterator = mfe_mat.into_iter().rev();
+        // Get the rightmost mfe
+        let Some(last) = iterator.next() else {
+            return (vec![], 0.0);
+        };
+
+        // Since the last two scaffold elemnts are None, None, we know that the last vector of the
+        // mfe_matrix must be *exactly* of length 1, since the last index will have no friends, so
+        // the only possible value here is (0, mfe, 0)
+        let (mut left, energy, _) = last[0];
+        let mut mfe_conf = Vec::with_capacity(l);
+        // nothing is attached at the very end
+        //
+        // note that we are building the mfe configuration from end to start -- since we know what
+        // the last strand needs to be, and what it must have attached to. So at the end we will
+        // reverse it
+        mfe_conf.push(0);
+        for v in iterator {
+            // Find the strand we attached to, and see what it is attached to
+            let (new_left, _, strand) = v
+                .iter()
+                .find(|(_, _, strand)| *strand == left)
+                .expect("Could not find strand we are meant to attach to ...");
+            mfe_conf.push(*strand);
+            left = *new_left;
+        }
+        mfe_conf.reverse();
+
+        (mfe_conf, energy)
     }
 }
 
@@ -1661,8 +1713,13 @@ impl SDC {
     }
 
     #[pyo3(name = "mfe_matrix")]
-    fn py_mfe_matrix(&self) -> Vec<Vec<(f64, u32)>> {
+    fn py_mfe_matrix(&self) -> Vec<Vec<(u32, f64, u32)>> {
         self.mfe_matrix()
+    }
+
+    #[pyo3(name = "mfe_config")]
+    fn py_mfe_config(&self) -> (Vec<Tile>, f64) {
+        self.mfe_configuration()
     }
 
     #[setter]
@@ -2127,9 +2184,10 @@ mod test_sdc_model {
 
         for (index, v) in x.iter().enumerate() {
             println!("At index {index}:");
-            for (energy, final_strand) in v {
+            for (left_attachment_id, energy, final_strand) in v {
+                let left_attachment = sdc.tile_name(*left_attachment_id);
                 let strand_name = sdc.tile_name(*final_strand);
-                println!("\t Finishing at {final_strand} = {strand_name} we have DG = {energy}")
+                println!("\t Finishing at ({left_attachment_id} = {left_attachment}) <-> ({final_strand}, {strand_name}) we have DG = {energy}")
             }
         }
 
@@ -2138,12 +2196,16 @@ mod test_sdc_model {
         // We know that there are exactly two elements here (since the SDC system used has
         // complexity of two)
         let last_compute_domain = x[x.len() - 4].clone();
-        let (f_energy, strand_id) = last_compute_domain[0];
-        let (s_energy, _) = last_compute_domain[1];
+        let (_, f_energy, strand_id) = last_compute_domain[0];
+        let (_, s_energy, _) = last_compute_domain[1];
         if sdc.tile_name(strand_id).contains('0') {
             assert!(f_energy < s_energy);
         } else {
             assert!(s_energy < f_energy);
         }
+
+        let mfe_config = [0, 0, 1, 3, 5, 7, 2, 0, 0];
+        let (acc, _) = sdc.mfe_configuration();
+        assert_eq!(mfe_config.to_vec(), acc);
     }
 }
