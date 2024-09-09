@@ -1229,6 +1229,11 @@ pub struct SDCParams {
     pub k_n: f64,
     pub k_c: f64,
     pub temperature: f64,
+    // Optinal (additive) junction penalty
+    //
+    // Meaning that negative penalty, will make binding more likely
+    pub junction_penalty_dg: Option<f64>,
+    pub junction_penalty_ds: Option<f64>,
 }
 
 /// Triple (x, y, z)
@@ -1364,10 +1369,10 @@ impl SDC {
                 _ => continue,
             };
 
-            glue_delta_g[[i, j]] = gs.0;
-            glue_delta_g[[j, i]] = gs.0;
-            glue_s[[i, j]] = gs.1;
-            glue_s[[j, i]] = gs.1;
+            glue_delta_g[[i, j]] = gs.0 + params.junction_penalty_dg.unwrap_or(0.0);
+            glue_delta_g[[j, i]] = gs.0 + params.junction_penalty_dg.unwrap_or(0.0);
+            glue_s[[i, j]] = gs.1 + params.junction_penalty_ds.unwrap_or(0.0);
+            glue_s[[j, i]] = gs.1 + params.junction_penalty_ds.unwrap_or(0.0);
         }
 
         let scaffold = match params.scaffold {

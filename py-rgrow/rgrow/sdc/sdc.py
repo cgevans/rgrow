@@ -30,6 +30,8 @@ class SDCParams:
     scaffold_concentration: float = 1e-100
     k_n: float = 0.0
     k_c: float = 0.0
+    junction_penalty_dg: float | None = None
+    junction_penalty_ds: float | None = None
 
     def __post_init__(self) -> None:
         self.scaffold = [None, None] + self.scaffold + [None, None]
