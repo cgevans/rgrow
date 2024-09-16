@@ -1737,6 +1737,11 @@ impl SDC {
     fn get_temperature(&self) -> f64 {
         self.temperature
     }
+
+    #[pyo3(name = "all_scaffolds_slow")]
+    fn py_all_scaffolds(&self) -> Vec<Vec<Tile>> {
+        self.system_states()
+    }
 }
 
 #[cfg(test)]
@@ -1852,6 +1857,8 @@ mod test_anneal {
             k_f: 1e6,
             k_n: 1e5,
             k_c: 1e4,
+            junction_penalty_dg: None,
+            junction_penalty_ds: None,
         };
 
         let mut sdc = SDC::from_params(sdc_params);
@@ -2146,6 +2153,8 @@ mod test_sdc_model {
             k_f: 1e6,
             k_n: 1e5,
             k_c: 1e4,
+            junction_penalty_dg: None,
+            junction_penalty_ds: None,
         };
 
         let mut sdc = SDC::from_params(sdc_params);
