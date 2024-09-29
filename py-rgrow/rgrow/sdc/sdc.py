@@ -5,6 +5,7 @@ import numpy as np
 from .anneal import Anneal, AnnealOutputs
 import tqdm
 import dataclasses
+from dataclasses import field
 import json
 from .strand import SDCStrand
 from .reporter_methods import ReportingMethod  # noqa: F401
@@ -16,17 +17,17 @@ class SDCParams:
     Parameters used to create an SDC system
     """
 
-    k_f: float
-    temperature: float
+    k_f: float = 1.0e6
+    temperature: float = 80.0
     glue_dg_s: (
         Mapping[str | tuple[str, str], tuple[float, float] | str]
         | Mapping[str, tuple[float, float] | str]
         | Mapping[tuple[str, str], tuple[float, float] | str]
-    )
-    scaffold: list[
-        str | None
-    ]  # | list[list[str | None]] # FIXME: can't deal with typing for this
-    strands: list[SDCStrand]
+    ) = field(default_factory=dict)
+    scaffold: list[str | None] = field(
+        default_factory=list
+    )  # | list[list[str | None]] # FIXME: can't deal with typing for this
+    strands: list[SDCStrand] = field(default_factory=list)
     scaffold_concentration: float = 1e-100
     k_n: float = 0.0
     k_c: float = 0.0
