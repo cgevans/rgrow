@@ -10,12 +10,12 @@ use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::{SDCParams, SDC};
 use crate::ratestore::RateStore;
-use crate::state::{StateEnum, StateStatus, TrackerData};
+use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo,
 };
 use ndarray::Array2;
-use numpy::{IntoPyArray, PyArray2, ToPyArray};
+use numpy::{IntoPyArray, PyArray1, PyArray2, ToPyArray};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -151,6 +151,11 @@ impl PyState {
     #[getter]
     pub fn time(&self) -> f64 {
         self.0.time()
+    }
+
+    #[getter]
+    pub fn tile_counts<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<u32>> {
+        self.0.tile_counts().to_pyarray_bound(py)
     }
 
     pub fn __repr__(&self) -> String {

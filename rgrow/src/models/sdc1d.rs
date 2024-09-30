@@ -95,7 +95,7 @@ fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass(subclass))]
+#[cfg_attr(feature = "python", pyclass(subclass, module = "rgrow.sdc"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC {
     /// The anchor tiles for each of the scaffolds
@@ -1670,6 +1670,12 @@ impl SDC {
     #[getter]
     fn get_tile_concs<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
         self.strand_concentration.to_pyarray_bound(py)
+    }
+
+    #[setter]
+    fn set_tile_concs(&mut self, concs: Vec<f64>) {
+        self.strand_concentration = Array1::from(concs);
+        self.update_system();
     }
 
     fn get_all_probs(&self) -> Vec<(Vec<u32>, f64, f64)> {
