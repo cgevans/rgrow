@@ -1,3 +1,4 @@
+#[macro_export]
 macro_rules! type_alias {
     ($($t:ty => $($i:ident),*);* $(;)?) => {
         $($(type $i = $t;)*)*
