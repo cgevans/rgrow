@@ -1,9 +1,3 @@
-/*
-*   FIXME:
-*       I think that it will be better if the leftmost 4 bits of an ID are used to get the
-*       status of a tile. Otherwise the array will contain too many blanks.
-* */
-
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 
@@ -16,13 +10,13 @@ use crate::{
 type_alias!( f64 => Concentration );
 type_alias!( u32 => TileId );
 
-const NORTH: u32 = 0b1000;
-const SOUTH: u32 = 0b0100;
+const NORTH: u32 = 0b1000 << 28;
+const SOUTH: u32 = 0b0100 << 28;
 
-const EAST: u32 = 0b0010;
-const WEST: u32 = 0b0001;
+const EAST: u32 = 0b0010 << 28;
+const WEST: u32 = 0b0001 << 28;
 
-const ALL_COVERS: u32 = 0b1111;
+const ALL_COVERS: u32 = NORTH | SOUTH | EAST | WEST;
 const NO_COVERS: u32 = !ALL_COVERS;
 
 /// Helper methods for tile id
