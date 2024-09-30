@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .sdc import SDC
+    from rgrow import State
 
 MIN = 60
 HOUR = MIN * 60
@@ -79,22 +80,18 @@ class Anneal:
         number_of_steps = int(self.delta_time * steps_per_sec)
 
         delta_temperatures = np.linspace(
-            self.adjusted_initial_tmp, self.adjusted_final_tmp, int(
-                number_of_steps + 1)
+            self.adjusted_initial_tmp, self.adjusted_final_tmp, int(number_of_steps + 1)
         )
         initial_temp = np.repeat(
-            self.adjusted_initial_tmp, int(
-                self.initial_hold * steps_per_sec) - 1
+            self.adjusted_initial_tmp, int(self.initial_hold * steps_per_sec) - 1
         )
         ending_temp = np.repeat(
             self.adjusted_final_tmp, int(self.final_hold * steps_per_sec)
         )
-        temperatures = np.concatenate(
-            [initial_temp, delta_temperatures, ending_temp])
+        temperatures = np.concatenate([initial_temp, delta_temperatures, ending_temp])
 
         total_time = self.initial_hold + self.final_hold + self.delta_time
-        times = np.arange(self.timestep, total_time +
-                          self.timestep, self.timestep)
+        times = np.arange(self.timestep, total_time + self.timestep, self.timestep)
 
         return times, temperatures
 
@@ -132,3 +129,4 @@ class AnnealOutputs:
     system: "SDC"
     canvas_arr: "np.NDArray[np.int_]"
     anneal: Anneal
+    state: "State"
