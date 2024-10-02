@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     base::{Glue, HashSetType},
-    system::TileBondInfo,
+    system::{System, TileBondInfo},
     type_alias,
 };
 
@@ -152,6 +152,45 @@ impl TileBondInfo for KCov {
     }
 
     fn bond_names(&self) -> Vec<&str> {
+        todo!()
+    }
+}
+
+impl System for KCov {
+    fn system_info(&self) -> String {
+        todo!()
+    }
+
+    fn update_after_event<St: crate::state::State>(
+        &self,
+        state: &mut St,
+        event: &crate::system::Event,
+    ) {
+        todo!()
+    }
+
+    fn event_rate_at_point<St: crate::state::State>(
+        &self,
+        state: &St,
+        p: crate::canvas::PointSafeHere,
+    ) -> crate::base::Rate {
+        todo!()
+    }
+
+    fn choose_event_at_point<St: crate::state::State>(
+        &self,
+        state: &St,
+        p: crate::canvas::PointSafe2,
+        acc: crate::base::Rate,
+    ) -> crate::system::Event {
+        todo!()
+    }
+
+    fn seed_locs(&self) -> Vec<(crate::canvas::PointSafe2, crate::base::Tile)> {
+        todo!()
+    }
+
+    fn calc_mismatch_locations<St: crate::state::State>(&self, state: &St) -> Array2<usize> {
         todo!()
     }
 }
