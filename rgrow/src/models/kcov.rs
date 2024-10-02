@@ -1,4 +1,4 @@
-use ndarray::Array2;
+use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -70,8 +70,8 @@ struct KCov {
     ///     ...
     ///     (n) -- [North, South, East, West]
     /// ]
-    tile_glues: Array2<Glue>,
-    glue_links: Array2<Strength>,
+    tile_glues: Array1<[Glue; 4]>,
+    glue_links: Array1<[Strength; 4]>,
 
     // This hashing shuold be without last four bits -- This would save a lot of space,
     // and may also help with logic
@@ -86,13 +86,17 @@ struct KCov {
     pub kf: f64,
 }
 
+#[rustfmt::skip]
+#[inline(always)]
+fn glue_inverse(glue: Glue) -> Glue {
+    if glue % 2 == 1 { glue + 1 } else { glue - 1 }
+}
+
 impl KCov {
     /// Get the glues. If there are covers, this wil look past them, and return the
     /// glue that is under it
     pub fn get_tile_raw_glues(&self, tile_id: TileId) -> Vec<Glue> {
-        self.tile_glues
-            .row(tileid_helper::base_id(tile_id) as usize)
-            .to_vec()
+        self.tile_glues[tileid_helper::base_id(tile_id) as usize].to_vec()
     }
 
     /// Get the glues, with a glue being replaced with 0 if there is a cover
@@ -115,6 +119,47 @@ impl KCov {
             glues[3] = row[3]
         }
         glues
+    }
+
+    fn get_friends(&mut self) {
+        let len = self.glue_names.len();
+        let empty_friends = vec![HashSetType::<TileId>::default(); len];
+
+        let (mut nf, mut sf, mut ef, mut wf) = (
+            empty_friends.clone(),
+            empty_friends.clone(),
+            empty_friends.clone(),
+            empty_friends,
+        );
+
+        /*
+         * For this i will use the same glue standard as in SDC1D, that is:
+         *  0 <-> Nothing
+         *  1 <-> 2
+         *  ...
+         * */
+
+        let err_message = "Vector shouldnt have empty index, as it was pre-initialized";
+        for (id, [ng, sg, eg, wg]) in self.tile_glues.iter().enumerate() {
+            let base_id = tileid_helper::base_id(id as u32);
+
+            sf.get_mut(glue_inverse(*ng))
+                .expect(err_message)
+                .insert(base_id);
+            nf.get_mut(glue_inverse(*sg))
+                .expect(err_message)
+                .insert(base_id);
+            ef.get_mut(glue_inverse(*wg))
+                .expect(err_message)
+                .insert(base_id);
+            wf.get_mut(glue_inverse(*eg))
+                .expect(err_message)
+                .insert(base_id);
+        }
+        self.north_friends = nf;
+        self.south_friends = sf;
+        self.east_friends = ef;
+        self.west_friends = wf;
     }
 }
 
