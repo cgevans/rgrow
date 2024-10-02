@@ -2,12 +2,12 @@ use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    base::{Glue, Tile},
-    system::{System, TileBondInfo},
+    base::{Glue, HashSetType},
+    system::TileBondInfo,
     type_alias,
 };
 
-type_alias!( f64 => Concentration );
+type_alias!( f64 => Concentration, Strength );
 type_alias!( u32 => TileId );
 
 const NORTH: u32 = 0b1000 << 28;
@@ -57,6 +57,8 @@ struct KCov {
     pub tile_concentration: Vec<Concentration>,
     pub tile_colors: Vec<[u8; 4]>,
 
+    pub glue_names: Vec<String>,
+
     /// Glues of a tile with a given ID
     ///
     /// This is private purposely, use getter function. There are (up to / exactly)
@@ -69,6 +71,17 @@ struct KCov {
     ///     (n) -- [North, South, East, West]
     /// ]
     tile_glues: Array2<Glue>,
+    glue_links: Array2<Strength>,
+
+    // This hashing shuold be without last four bits -- This would save a lot of space,
+    // and may also help with logic
+    //
+    // For example, if we know that some id has the right shouth glue, we instantly
+    // know the 8 possible tiles that can attach to us
+    pub north_friends: Vec<HashSetType<TileId>>,
+    pub south_friends: Vec<HashSetType<TileId>>,
+    pub east_friends: Vec<HashSetType<TileId>>,
+    pub west_friends: Vec<HashSetType<TileId>>,
 
     pub kf: f64,
 }
@@ -77,10 +90,12 @@ impl KCov {
     /// Get the glues. If there are covers, this wil look past them, and return the
     /// glue that is under it
     pub fn get_tile_raw_glues(&self, tile_id: TileId) -> Vec<Glue> {
-        let id = tileid_helper::base_id(tile_id) as usize;
-        self.tile_glues.row(id).to_vec()
+        self.tile_glues
+            .row(tileid_helper::base_id(tile_id) as usize)
+            .to_vec()
     }
 
+    /// Get the glues, with a glue being replaced with 0 if there is a cover
     pub fn get_tile_uncovered_glues(&self, tile_id: TileId) -> Vec<Glue> {
         // This MUST be exactly 4 length
         let row = self.get_tile_raw_glues(tile_id);
@@ -151,5 +166,10 @@ mod test_covtile {
         t = tileid_helper::attach_east(t);
         assert_eq!(tileid_helper::base_id(t), 0b10110000);
         assert_eq!(t, 0b10110000 | EAST);
+
+        let mut k = 1;
+        k = tileid_helper::attach_east(k);
+        k = tileid_helper::attach_west(k);
+        assert_eq!(tileid_helper::base_id(k), 1);
     }
 }
