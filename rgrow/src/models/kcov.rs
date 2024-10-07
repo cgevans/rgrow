@@ -19,6 +19,8 @@ const WEST: u32 = 0b0001 << 28;
 const ALL_COVERS: u32 = NORTH | SOUTH | EAST | WEST;
 const NO_COVERS: u32 = !ALL_COVERS;
 
+const ALL_SIDES: [u32; 4] = [NORTH, SOUTH, EAST, WEST];
+
 /// Helper methods for tile id
 ///
 /// This can help change the id to attach a cover on the north position, etc ...
@@ -48,6 +50,10 @@ mod tileid_helper {
     /// Get the "base id", this is the id of the tile if it had no covers
     pub fn base_id(id: TileId) -> TileId {
         id & NO_COVERS
+    }
+
+    pub fn is_covered<const SIDE: TileId>(id: TileId) -> bool {
+        (id & SIDE) == 0
     }
 }
 
@@ -88,15 +94,82 @@ struct KCov {
 
 #[rustfmt::skip]
 #[inline(always)]
+/// Glue cannot be 0
 fn glue_inverse(glue: Glue) -> Glue {
     if glue % 2 == 1 { glue + 1 } else { glue - 1 }
 }
 
 impl KCov {
+    pub fn new(
+        tile_names: Vec<String>,
+        tile_concentration: Vec<Concentration>,
+        tile_colors: Vec<[u8; 4]>,
+        glue_names: Vec<String>,
+        tile_glues: Array1<[Glue; 4]>,
+        glue_links: Array1<[Strength; 4]>,
+        kf: f64,
+    ) -> Self {
+        Self {
+            tile_names,
+            tile_concentration,
+            tile_colors,
+            glue_names,
+            tile_glues,
+            glue_links,
+            north_friends: Vec::default(),
+            south_friends: Vec::default(),
+            east_friends: Vec::default(),
+            west_friends: Vec::default(),
+            kf,
+        }
+    }
+
+    // Side must be north, south, east, or west
+    fn get_friends_one_side<const SIDE: TileId>(&self, tile: TileId) -> HashSetType<TileId> {
+        let tile_glue = self.glue_on_side::<SIDE>(tile);
+        let mut tile_friends = HashSetType::default();
+        tile_friends
+    }
+
+    /// Get the friends to some side
+    pub fn get_friends<const SIDE: TileId>(&self, tile: TileId) -> HashSetType<TileId> {
+        if tileid_helper::is_covered::<SIDE>(tile) {
+            return HashSetType::default();
+        }
+
+        let mut tile_friends = HashSetType::default();
+
+        if SIDE & NORTH != 0 {
+            tile_friends.extend(&self.get_friends_one_side::<NORTH>(tile));
+        }
+        if SIDE & SOUTH != 0 {
+            tile_friends.extend(&self.get_friends_one_side::<SOUTH>(tile));
+        }
+        if SIDE & EAST != 0 {
+            tile_friends.extend(&self.get_friends_one_side::<EAST>(tile));
+        }
+        if SIDE & WEST != 0 {
+            tile_friends.extend(&self.get_friends_one_side::<WEST>(tile));
+        }
+
+        tile_friends
+    }
+
     /// Get the glues. If there are covers, this wil look past them, and return the
     /// glue that is under it
     pub fn get_tile_raw_glues(&self, tile_id: TileId) -> Vec<Glue> {
         self.tile_glues[tileid_helper::base_id(tile_id) as usize].to_vec()
+    }
+
+    pub fn glue_on_side<const SIDE: TileId>(&self, tile_id: TileId) -> Glue {
+        let glues = self.get_tile_uncovered_glues(tile_id);
+        match SIDE {
+            NORTH => glues[0],
+            SOUTH => glues[1],
+            EAST => glues[2],
+            WEST => glues[3],
+            _ => panic!("Side must be NESW"),
+        }
     }
 
     /// Get the glues, with a glue being replaced with 0 if there is a cover
@@ -121,7 +194,7 @@ impl KCov {
         glues
     }
 
-    fn get_friends(&mut self) {
+    fn fill_friends(&mut self) {
         let len = self.glue_names.len();
         let empty_friends = vec![HashSetType::<TileId>::default(); len];
 
@@ -143,18 +216,26 @@ impl KCov {
         for (id, [ng, sg, eg, wg]) in self.tile_glues.iter().enumerate() {
             let base_id = tileid_helper::base_id(id as u32);
 
-            sf.get_mut(glue_inverse(*ng))
-                .expect(err_message)
-                .insert(base_id);
-            nf.get_mut(glue_inverse(*sg))
-                .expect(err_message)
-                .insert(base_id);
-            ef.get_mut(glue_inverse(*wg))
-                .expect(err_message)
-                .insert(base_id);
-            wf.get_mut(glue_inverse(*eg))
-                .expect(err_message)
-                .insert(base_id);
+            if ng != &0 {
+                sf.get_mut(glue_inverse(*ng))
+                    .expect(err_message)
+                    .insert(base_id);
+            }
+            if sg != &0 {
+                nf.get_mut(glue_inverse(*sg))
+                    .expect(err_message)
+                    .insert(base_id);
+            }
+            if wg != &0 {
+                ef.get_mut(glue_inverse(*wg))
+                    .expect(err_message)
+                    .insert(base_id);
+            }
+            if eg != &0 {
+                wf.get_mut(glue_inverse(*eg))
+                    .expect(err_message)
+                    .insert(base_id);
+            }
         }
         self.north_friends = nf;
         self.south_friends = sf;
@@ -255,5 +336,69 @@ mod test_covtile {
         k = tileid_helper::attach_east(k);
         k = tileid_helper::attach_west(k);
         assert_eq!(tileid_helper::base_id(k), 1);
+    }
+}
+
+#[cfg(test)]
+mod test_kcov {
+    use super::*;
+
+    fn sample_kcov() -> KCov {
+        const DEFAULT_COLOR: [u8; 4] = [0, 0, 0, 0];
+        let tile_glues = Array1::from_vec(vec![
+            [0, 0, 0, 0], // zero tile -- Empty
+            // N S E W
+            [1, 0, 0, 0], // f
+            [0, 2, 3, 0], // s
+            [0, 0, 0, 4], // t
+        ]);
+
+        // The example tiles may attach like this:
+        //  s t
+        //  f
+
+        let glue_linkns = Array1::from_vec(vec![[1., 1., 1., 1.]; 4]);
+        KCov::new(
+            vec![
+                "null".to_string(),
+                "f".to_string(),
+                "s".to_string(),
+                "t".to_string(),
+            ],
+            vec![1.0, 1.0, 1.0, 1.0],
+            vec![DEFAULT_COLOR; 4],
+            // Glues
+            vec![
+                "null".to_string(),
+                "1".to_string(),
+                "2".to_string(),
+                "3".to_string(),
+                "4".to_string(),
+            ],
+            tile_glues,
+            glue_linkns,
+            1e6,
+        )
+    }
+
+    #[test]
+    fn friends_build() {
+        let mut kdcov = sample_kcov();
+        println!("Tile Names: {:?}", kdcov.tile_names());
+        kdcov.fill_friends();
+
+        println!("Tile Names: {:?}", kdcov.tile_names);
+        println!("N: {:?}", kdcov.north_friends);
+        println!("S: {:?}", kdcov.south_friends);
+        println!("E: {:?}", kdcov.east_friends);
+        println!("W: {:?}", kdcov.west_friends);
+
+        let mut expected_nf = HashSetType::default();
+        expected_nf.insert(2);
+        assert_eq!(kdcov.north_friends[1], expected_nf);
+        let mut expected_wf = HashSetType::default();
+        expected_wf.insert(3);
+        assert_eq!(kdcov.west_friends[3], expected_nf);
+        assert!(false);
     }
 }
