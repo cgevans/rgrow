@@ -252,8 +252,7 @@ impl KCov {
 *    That is to say if two tile A could become tile B by
 *    attaching / detaching covers, then they are different
 *    tiles (with different ids), but they have the same base
-*    id. Then to see if two tiles have the same base id,
-*    we can just do id & 11...1110000
+*    id.
 * */
 
 impl TileBondInfo for KCov {
