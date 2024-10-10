@@ -125,31 +125,51 @@ impl KCov {
     }
 
     // Side must be north, south, east, or west
-    fn get_friends_one_side<const SIDE: TileId>(&self, tile: TileId) -> HashSetType<TileId> {
+    pub fn get_friends_one_side<const SIDE: TileId>(
+        &self,
+        tile: TileId,
+    ) -> Option<&HashSetType<TileId>> {
+        // The tile is covered, so we dont have any friends
+        if tile & SIDE != 0 {
+            return None;
+        }
+
         let tile_glue = self.glue_on_side::<SIDE>(tile);
-        let mut tile_friends = HashSetType::default();
-        tile_friends
+        Some(match SIDE {
+            NORTH => &self.north_friends[tile_glue],
+            SOUTH => &self.south_friends[tile_glue],
+            EAST => &self.east_friends[tile_glue],
+            WEST => &self.west_friends[tile_glue],
+            _ => panic!(
+                "get_friends_one_side should be called with either NORTH, SOUTH, EAST, or WEST, not a combination"
+            ),
+        })
     }
 
     /// Get the friends to some side
     pub fn get_friends<const SIDE: TileId>(&self, tile: TileId) -> HashSetType<TileId> {
-        if tileid_helper::is_covered::<SIDE>(tile) {
-            return HashSetType::default();
-        }
-
         let mut tile_friends = HashSetType::default();
 
+        // If side contains north, then we will add the north friends...
         if SIDE & NORTH != 0 {
-            tile_friends.extend(&self.get_friends_one_side::<NORTH>(tile));
+            if let Some(ext) = self.get_friends_one_side::<NORTH>(tile) {
+                tile_friends.extend(ext);
+            }
         }
         if SIDE & SOUTH != 0 {
-            tile_friends.extend(&self.get_friends_one_side::<SOUTH>(tile));
+            if let Some(ext) = self.get_friends_one_side::<SOUTH>(tile) {
+                tile_friends.extend(ext);
+            }
         }
         if SIDE & EAST != 0 {
-            tile_friends.extend(&self.get_friends_one_side::<EAST>(tile));
+            if let Some(ext) = self.get_friends_one_side::<EAST>(tile) {
+                tile_friends.extend(ext);
+            }
         }
         if SIDE & WEST != 0 {
-            tile_friends.extend(&self.get_friends_one_side::<WEST>(tile));
+            if let Some(ext) = self.get_friends_one_side::<WEST>(tile) {
+                tile_friends.extend(ext);
+            }
         }
 
         tile_friends
@@ -179,16 +199,16 @@ impl KCov {
         let mut glues = vec![0; 4];
 
         // If any of the sides have a cover, then the glue is 0
-        if tile_id & NORTH != 0 {
+        if tile_id & NORTH == 0 {
             glues[0] = row[0];
         }
-        if tile_id & SOUTH != 0 {
+        if tile_id & SOUTH == 0 {
             glues[1] = row[1]
         }
-        if tile_id & EAST != 0 {
+        if tile_id & EAST == 0 {
             glues[2] = row[2];
         }
-        if tile_id & WEST != 0 {
+        if tile_id & WEST == 0 {
             glues[3] = row[3]
         }
         glues
@@ -381,23 +401,41 @@ mod test_kcov {
     }
 
     #[test]
+    fn glue_side() {
+        let kdcov = sample_kcov();
+        assert_eq!(kdcov.glue_on_side::<NORTH>(1), 1);
+        assert_eq!(kdcov.glue_on_side::<SOUTH>(1), 0);
+        assert_eq!(kdcov.glue_on_side::<WEST>(3), 4);
+    }
+
+    #[test]
     fn friends_build() {
         let mut kdcov = sample_kcov();
-        println!("Tile Names: {:?}", kdcov.tile_names());
+        //println!("Tile Names: {:?}", kdcov.tile_names());
         kdcov.fill_friends();
 
-        println!("Tile Names: {:?}", kdcov.tile_names);
-        println!("N: {:?}", kdcov.north_friends);
-        println!("S: {:?}", kdcov.south_friends);
-        println!("E: {:?}", kdcov.east_friends);
-        println!("W: {:?}", kdcov.west_friends);
+        //println!("Tile Names: {:?}", kdcov.tile_names);
+        //println!("N: {:?}", kdcov.north_friends);
+        //println!("S: {:?}", kdcov.south_friends);
+        //println!("E: {:?}", kdcov.east_friends);
+        //println!("W: {:?}", kdcov.west_friends);
 
         let mut expected_nf = HashSetType::default();
+
         expected_nf.insert(2);
+        // This is a little strange to use, as you need to know the glue on the north side of the
+        // tile.
         assert_eq!(kdcov.north_friends[1], expected_nf);
+        // These helper methods make it so that you can find every tile that can bond to the north
+        // of some tile id
+        assert_eq!(kdcov.get_friends_one_side::<NORTH>(1), Some(&expected_nf));
+        assert_eq!(kdcov.get_friends::<NORTH>(1), expected_nf);
+        // You can also get frineds to multiple sides at once
+        assert_eq!(kdcov.get_friends::<{ NORTH | EAST }>(1), expected_nf);
+
         let mut expected_wf = HashSetType::default();
         expected_wf.insert(3);
-        assert_eq!(kdcov.west_friends[3], expected_nf);
-        assert!(false);
+        assert_eq!(kdcov.west_friends[4], expected_nf);
+        assert_eq!(kdcov.get_friends::<WEST>(3), expected_nf);
     }
 }
