@@ -2,12 +2,14 @@ use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    base::{Glue, HashSetType},
+    base::{Energy, Glue, HashSetType},
+    canvas::PointSafe2,
+    state::State,
     system::{System, TileBondInfo},
     type_alias,
 };
 
-type_alias!( f64 => Concentration, Strength );
+type_alias!( f64 => Concentration, Strength, Rate );
 type_alias!( u32 => TileId );
 
 const NORTH: u32 = 0b1000 << 28;
@@ -55,6 +57,18 @@ mod tileid_helper {
     pub fn is_covered<const SIDE: TileId>(id: TileId) -> bool {
         (id & SIDE) == 0
     }
+
+    // TODO: This should be compile time, I think
+    #[inline(always)]
+    pub const fn inverse<const SIDE: TileId>() -> TileId {
+        match SIDE {
+            NORTH => SOUTH,
+            SOUTH => NORTH,
+            EAST => WEST,
+            WEST => EAST,
+            _ => panic!("Can only find the inverse of NSEW"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +78,7 @@ struct KCov {
     pub tile_colors: Vec<[u8; 4]>,
 
     pub glue_names: Vec<String>,
+    pub temperature: f64,
 
     /// Glues of a tile with a given ID
     ///
@@ -89,6 +104,9 @@ struct KCov {
     pub east_friends: Vec<HashSetType<TileId>>,
     pub west_friends: Vec<HashSetType<TileId>>,
 
+    energy_ns: Array2<Energy>,
+    energy_we: Array2<Energy>,
+
     pub kf: f64,
 }
 
@@ -100,6 +118,8 @@ fn glue_inverse(glue: Glue) -> Glue {
 }
 
 impl KCov {
+    const ZERO_RATE: Rate = 0.0;
+
     pub fn new(
         tile_names: Vec<String>,
         tile_concentration: Vec<Concentration>,
@@ -107,8 +127,10 @@ impl KCov {
         glue_names: Vec<String>,
         tile_glues: Array1<[Glue; 4]>,
         glue_links: Array1<[Strength; 4]>,
+        temperature: f64,
         kf: f64,
     ) -> Self {
+        let tilecount = tile_names.len();
         Self {
             tile_names,
             tile_concentration,
@@ -116,10 +138,13 @@ impl KCov {
             glue_names,
             tile_glues,
             glue_links,
+            temperature,
             north_friends: Vec::default(),
             south_friends: Vec::default(),
             east_friends: Vec::default(),
             west_friends: Vec::default(),
+            energy_ns: Array2::zeros((tilecount, tilecount)),
+            energy_we: Array2::zeros((tilecount, tilecount)),
             kf,
         }
     }
@@ -262,6 +287,53 @@ impl KCov {
         self.east_friends = ef;
         self.west_friends = wf;
     }
+
+    /// SIDE here must be NSEW
+    pub fn energy_to<const SIDE: TileId>(&self, tile1: TileId, tile2: TileId) -> Energy {
+        // If we are covered on the sticking side, or the other tile has a cover, then we
+        // have no binding energy
+        if tileid_helper::is_covered::<SIDE>(tile1)
+            || match SIDE {
+                NORTH => tileid_helper::is_covered::<SOUTH>(tile2),
+                SOUTH => tileid_helper::is_covered::<NORTH>(tile2),
+                EAST => tileid_helper::is_covered::<WEST>(tile2),
+                WEST => tileid_helper::is_covered::<EAST>(tile2),
+                _ => false,
+            }
+        {
+            return 0.0;
+        }
+
+        todo!()
+    }
+
+    pub fn energy_at_point<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        tile_id: TileId,
+    ) -> Energy {
+        let mut energy = 0.0;
+        let neighbour_tile = state.tile_to_n(point);
+        energy += self.energy_to::<NORTH>(tile_id, neighbour_tile);
+        let neighbour_tile = state.tile_to_s(point);
+        energy += self.energy_to::<SOUTH>(tile_id, neighbour_tile);
+        let neighbour_tile = state.tile_to_e(point);
+        energy += self.energy_to::<EAST>(tile_id, neighbour_tile);
+        let neighbour_tile = state.tile_to_w(point);
+        energy += self.energy_to::<WEST>(tile_id, neighbour_tile);
+        energy
+    }
+
+    pub fn tile_detachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
+        let tile = state.tile_at_point(p);
+        if tile == 0 {
+            return Self::ZERO_RATE;
+        }
+
+        let energy_with_neighbours = self.energy_at_point(state, p, tile);
+        todo!("Make function to get bond energy of a point")
+    }
 }
 
 /*
@@ -396,6 +468,7 @@ mod test_kcov {
             ],
             tile_glues,
             glue_linkns,
+            60.0,
             1e6,
         )
     }
