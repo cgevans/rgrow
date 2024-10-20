@@ -304,7 +304,14 @@ impl KCov {
             return 0.0;
         }
 
-        todo!()
+        // Now we know that neither the tile, nor the one were attaching to is covered
+        match SIDE {
+            NORTH => self.energy_ns[(tile2 as usize, tile1 as usize)],
+            SOUTH => self.energy_ns[(tile1 as usize, tile2 as usize)],
+            EAST => self.energy_we[(tile1 as usize, tile2 as usize)],
+            WEST => self.energy_we[(tile2 as usize, tile1 as usize)],
+            _ => panic!("Must enter NSEW"),
+        }
     }
 
     pub fn energy_at_point<S: State>(
