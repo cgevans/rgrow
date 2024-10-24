@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 
@@ -5,7 +7,7 @@ use crate::{
     base::{Energy, Glue, HashSetType},
     canvas::PointSafe2,
     state::State,
-    system::{System, TileBondInfo},
+    system::{Event, System, TileBondInfo},
     type_alias,
 };
 
@@ -22,6 +24,8 @@ const ALL_COVERS: u32 = NORTH | SOUTH | EAST | WEST;
 const NO_COVERS: u32 = !ALL_COVERS;
 
 const ALL_SIDES: [u32; 4] = [NORTH, SOUTH, EAST, WEST];
+
+const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 
 /// Helper methods for tile id
 ///
@@ -107,6 +111,7 @@ struct KCov {
     energy_ns: Array2<Energy>,
     energy_we: Array2<Energy>,
 
+    pub alpha: Energy,
     pub kf: f64,
 }
 
@@ -129,6 +134,7 @@ impl KCov {
         glue_links: Array1<[Strength; 4]>,
         temperature: f64,
         kf: f64,
+        alpha: f64,
     ) -> Self {
         let tilecount = tile_names.len();
         Self {
@@ -145,6 +151,7 @@ impl KCov {
             west_friends: Vec::default(),
             energy_ns: Array2::zeros((tilecount, tilecount)),
             energy_we: Array2::zeros((tilecount, tilecount)),
+            alpha,
             kf,
         }
     }
@@ -332,6 +339,11 @@ impl KCov {
         energy
     }
 
+    #[inline(always)]
+    fn rtval(&self) -> Energy {
+        R * (self.temperature + 273.15)
+    }
+
     pub fn tile_detachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
         let tile = state.tile_at_point(p);
         if tile == 0 {
@@ -339,7 +351,114 @@ impl KCov {
         }
 
         let energy_with_neighbours = self.energy_at_point(state, p, tile);
-        todo!("Make function to get bond energy of a point")
+        self.kf * (energy_with_neighbours * self.rtval()).exp()
+    }
+
+    pub fn tile_attachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
+        let tile = state.tile_at_point(p);
+        if tile == 0 {
+            return Self::ZERO_RATE;
+        }
+        let conc = self.tile_concentration[tile as usize];
+        // TODO:Select the 5 kf values: k1, k2, k3, k4, k0
+        self.kf * conc
+    }
+
+    fn get_friend_side_if_empty<const SIDE: TileId, S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+    ) -> Option<&HashSetType<TileId>> {
+        let neighbour = match SIDE {
+            NORTH => state.tile_to_n(point),
+            SOUTH => state.tile_to_s(point),
+            EAST => state.tile_to_e(point),
+            WEST => state.tile_to_w(point),
+            _ => panic!("Side must me NSEW"),
+        };
+
+        // If there has already been an attachemnt, then nothing can attach there
+        if neighbour != 0 {
+            return None;
+        }
+        let tile = state.tile_at_point(point);
+        self.get_friends_one_side::<SIDE>(tile)
+    }
+
+    pub fn event_monomer_detachment<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        mut acc: Rate,
+    ) -> (bool, Rate, Event) {
+        acc -= self.tile_detachment_rate(state, point);
+        if acc > 0.0 {
+            (false, acc, Event::None)
+        } else {
+            (true, acc, Event::MonomerDetachment(point))
+        }
+    }
+
+    pub fn event_monomer_attachment<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        mut acc: Rate,
+    ) -> (bool, Rate, Event) {
+        let tile = state.tile_at_point(point);
+        let mut friends: HashSetType<TileId> = HashSet::default();
+        let neighbour_tile = state.tile_to_n(point);
+        if neighbour_tile == 0 {
+            if let Some(northf) = self.get_friends_one_side::<NORTH>(tile) {
+                friends.extend(northf);
+            }
+        }
+        let neighbour_tile = state.tile_to_s(point);
+        if neighbour_tile == 0 {
+            if let Some(southf) = self.get_friends_one_side::<SOUTH>(tile) {
+                friends.extend(southf);
+            }
+        }
+        let neighbour_tile = state.tile_to_e(point);
+        if neighbour_tile == 0 {
+            if let Some(eastf) = self.get_friends_one_side::<EAST>(tile) {
+                friends.extend(eastf);
+            }
+        }
+        let neighbour_tile = state.tile_to_w(point);
+        if neighbour_tile == 0 {
+            if let Some(westf) = self.get_friends_one_side::<WEST>(tile) {
+                friends.extend(westf);
+            }
+        }
+
+        for tile in friends {
+            acc -= self.kf * self.tile_concentration[tile as usize];
+            if acc <= 0.0 {
+                return (true, acc, Event::MonomerAttachment(point, tile));
+            }
+        }
+        (false, acc, Event::None)
+    }
+
+    // Attach a cover to a tile
+    pub fn event_monomer_cover_attachment<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        mut acc: Rate,
+    ) -> (bool, Rate, Event) {
+        todo!()
+    }
+
+    /// Detach a cover from tile
+    pub fn event_monomer_cover_dettachment<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        mut acc: Rate,
+    ) -> (bool, Rate, Event) {
+        todo!()
     }
 }
 
@@ -383,6 +502,18 @@ impl TileBondInfo for KCov {
 impl System for KCov {
     fn system_info(&self) -> String {
         todo!()
+    }
+
+    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
+        match event {
+            Event::None => panic!("Canot perform None event"),
+            Event::MonomerAttachment(point_safe2, _) => todo!(),
+            Event::MonomerDetachment(point_safe2) => todo!(),
+            Event::MonomerChange(point_safe2, _) => todo!(),
+            Event::PolymerAttachment(vec) => todo!(),
+            Event::PolymerDetachment(vec) => todo!(),
+            Event::PolymerChange(vec) => todo!(),
+        }
     }
 
     fn update_after_event<St: crate::state::State>(
@@ -477,6 +608,7 @@ mod test_kcov {
             glue_linkns,
             60.0,
             1e6,
+            0.0,
         )
     }
 
@@ -518,4 +650,6 @@ mod test_kcov {
         assert_eq!(kdcov.west_friends[4], expected_nf);
         assert_eq!(kdcov.get_friends::<WEST>(3), expected_nf);
     }
+
+    fn check_energy_at_point() {}
 }
