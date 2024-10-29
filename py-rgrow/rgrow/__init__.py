@@ -346,9 +346,9 @@ class TileSet:
             d["gmc"] = d.pop("Gmc")
         # remove unknown keys, and warn
         for k in list(d.keys()):
-            if k not in cls.__dict__:
-                print(f"Warning: unknown key {k!r} in tileset")
-                del d[k]
+           if k not in cls.__dict__:
+            #    print(f"Warning: unknown key {k!r} in tileset")
+               del d[k]
         return cls(**d)
 
     def run_ffs(
