@@ -4,14 +4,14 @@ use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    base::{Energy, Glue, HashSetType},
+    base::{Energy, Glue, HashSetType, Rate},
     canvas::PointSafe2,
     state::State,
     system::{Event, System, TileBondInfo},
     type_alias,
 };
 
-type_alias!( f64 => Concentration, Strength, Rate );
+type_alias!( f64 => Concentration, Strength );
 type_alias!( u32 => TileId );
 
 const NORTH: u32 = 0b1000 << 28;
@@ -321,6 +321,7 @@ impl KCov {
         }
     }
 
+    /// Energy of neighbour bonds
     pub fn energy_at_point<S: State>(
         &self,
         state: &S,
@@ -346,6 +347,7 @@ impl KCov {
 
     pub fn tile_detachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
         let tile = state.tile_at_point(p);
+        // If there is no tile, then nothing to attach
         if tile == 0 {
             return Self::ZERO_RATE;
         }
@@ -354,14 +356,8 @@ impl KCov {
         self.kf * (energy_with_neighbours * self.rtval()).exp()
     }
 
-    pub fn tile_attachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
-        let tile = state.tile_at_point(p);
-        if tile == 0 {
-            return Self::ZERO_RATE;
-        }
-        let conc = self.tile_concentration[tile as usize];
-        // TODO:Select the 5 kf values: k1, k2, k3, k4, k0
-        self.kf * conc
+    pub fn tile_attachment_rate(&self, tile: TileId) -> f64 {
+        self.tile_concentration[tile as usize] * self.kf
     }
 
     fn get_friend_side_if_empty<const SIDE: TileId, S: State>(
@@ -399,6 +395,7 @@ impl KCov {
         }
     }
 
+    // Probability of any tile attaching at a point
     pub fn event_monomer_attachment<S: State>(
         &self,
         state: &S,
@@ -406,28 +403,35 @@ impl KCov {
         mut acc: Rate,
     ) -> (bool, Rate, Event) {
         let tile = state.tile_at_point(point);
+        // tile aready attached here
+        if tile != 0 {
+            return (false, acc, Event::None);
+        }
+
         let mut friends: HashSetType<TileId> = HashSet::default();
+
+        // If there is tile to the north of this point
         let neighbour_tile = state.tile_to_n(point);
-        if neighbour_tile == 0 {
-            if let Some(northf) = self.get_friends_one_side::<NORTH>(tile) {
+        if neighbour_tile != 0 {
+            if let Some(northf) = self.get_friends_one_side::<SOUTH>(neighbour_tile) {
                 friends.extend(northf);
             }
         }
         let neighbour_tile = state.tile_to_s(point);
-        if neighbour_tile == 0 {
-            if let Some(southf) = self.get_friends_one_side::<SOUTH>(tile) {
+        if neighbour_tile != 0 {
+            if let Some(southf) = self.get_friends_one_side::<NORTH>(neighbour_tile) {
                 friends.extend(southf);
             }
         }
         let neighbour_tile = state.tile_to_e(point);
-        if neighbour_tile == 0 {
-            if let Some(eastf) = self.get_friends_one_side::<EAST>(tile) {
+        if neighbour_tile != 0 {
+            if let Some(eastf) = self.get_friends_one_side::<EAST>(neighbour_tile) {
                 friends.extend(eastf);
             }
         }
         let neighbour_tile = state.tile_to_w(point);
-        if neighbour_tile == 0 {
-            if let Some(westf) = self.get_friends_one_side::<WEST>(tile) {
+        if neighbour_tile != 0 {
+            if let Some(westf) = self.get_friends_one_side::<WEST>(neighbour_tile) {
                 friends.extend(westf);
             }
         }
