@@ -322,12 +322,8 @@ impl KCov {
     }
 
     /// Energy of neighbour bonds
-    pub fn energy_at_point<S: State>(
-        &self,
-        state: &S,
-        point: PointSafe2,
-        tile_id: TileId,
-    ) -> Energy {
+    pub fn energy_at_point<S: State>(&self, state: &S, point: PointSafe2) -> Energy {
+        let tile_id: TileId = state.tile_at_point(point);
         let mut energy = 0.0;
         let neighbour_tile = state.tile_to_n(point);
         energy += self.energy_to::<NORTH>(tile_id, neighbour_tile);
