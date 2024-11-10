@@ -347,8 +347,7 @@ impl KCov {
         if tile == 0 {
             return Self::ZERO_RATE;
         }
-
-        let energy_with_neighbours = self.energy_at_point(state, p, tile);
+        let energy_with_neighbours = self.energy_at_point(state, p);
         self.kf * (energy_with_neighbours * self.rtval()).exp()
     }
 
