@@ -108,6 +108,8 @@ struct KCov {
     pub east_friends: Vec<HashSetType<TileId>>,
     pub west_friends: Vec<HashSetType<TileId>>,
 
+    /// Energy of tile and cover, cover i contains [N, S, E, W]
+    energy_cover: Array1<[Energy; 4]>,
     energy_ns: Array2<Energy>,
     energy_we: Array2<Energy>,
 
@@ -151,6 +153,7 @@ impl KCov {
             west_friends: Vec::default(),
             energy_ns: Array2::zeros((tilecount, tilecount)),
             energy_we: Array2::zeros((tilecount, tilecount)),
+            energy_cover: Array1::default(tilecount),
             alpha,
             kf,
         }
@@ -351,6 +354,7 @@ impl KCov {
         self.kf * (energy_with_neighbours * self.rtval()).exp()
     }
 
+    /// The rate at which a tile will attach somewhere
     pub fn tile_attachment_rate(&self, tile: TileId) -> f64 {
         self.tile_concentration[tile as usize] * self.kf
     }
@@ -376,6 +380,62 @@ impl KCov {
         self.get_friends_one_side::<SIDE>(tile)
     }
 
+    /// Get the energy between a tile and a cover to some side
+    pub fn cover_detachment_rate<const SIDE: TileId>(&self, tile: TileId) -> Energy {
+        self.kf
+            * (match SIDE {
+                NORTH => self.energy_cover[tile as usize][0],
+                SOUTH => self.energy_cover[tile as usize][1],
+                EAST => self.energy_cover[tile as usize][2],
+                WEST => self.energy_cover[tile as usize][3],
+                _ => panic!("Side must be north south east or west"),
+            } * self.rtval())
+            .exp()
+    }
+
+    fn maybe_detach_side_event<const SIDE: TileId>(
+        &self,
+        tileid: TileId,
+        point: PointSafe2,
+        mut acc: Rate,
+    ) -> Option<(bool, Rate, Event)> {
+        // Something cannot detach if there is no cover
+        if !tileid_helper::is_covered::<SIDE>(tileid) {
+            return None;
+        }
+        acc -= self.cover_detachment_rate::<SIDE>(tileid);
+        if acc <= 0.0 {
+            // ^ SIDE will change the bit from 1 to 0, so no longer have a cover here
+            Some((true, acc, Event::MonomerChange(point, tileid ^ SIDE)))
+        } else {
+            None
+        }
+    }
+
+    /// Detach a cover from tile
+    pub fn event_monomer_cover_dettachment<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        mut acc: Rate,
+    ) -> (bool, Rate, Event) {
+        // Check what covers the tile has
+        let tile = state.tile_at_point(point);
+        if tile == 0 {
+            return (false, acc, Event::None);
+        }
+
+        // Update the acc for each side, if there is no cover, then None will be returned, if no
+        // evene takes place, then acc is updated, and none is returned.
+        //
+        // TODO: Does mutation work here ?
+        self.maybe_detach_side_event::<NORTH>(tile, point, acc)
+            .or(self.maybe_detach_side_event::<SOUTH>(tile, point, acc))
+            .or(self.maybe_detach_side_event::<EAST>(tile, point, acc))
+            .or(self.maybe_detach_side_event::<WEST>(tile, point, acc))
+            .unwrap_or((false, acc, Event::None))
+    }
+
     pub fn event_monomer_detachment<S: State>(
         &self,
         state: &S,
@@ -390,7 +450,7 @@ impl KCov {
         }
     }
 
-    // Probability of any tile attaching at a point
+    /// Probability of any tile attaching at some point
     pub fn event_monomer_attachment<S: State>(
         &self,
         state: &S,
@@ -447,16 +507,11 @@ impl KCov {
         point: PointSafe2,
         mut acc: Rate,
     ) -> (bool, Rate, Event) {
-        todo!()
-    }
+        let tile = state.tile_at_point(point);
+        if tile == 0 {
+            return (false, 0.0, Event::None);
+        }
 
-    /// Detach a cover from tile
-    pub fn event_monomer_cover_dettachment<S: State>(
-        &self,
-        state: &S,
-        point: PointSafe2,
-        mut acc: Rate,
-    ) -> (bool, Rate, Event) {
         todo!()
     }
 }
