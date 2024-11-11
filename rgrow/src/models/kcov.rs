@@ -82,6 +82,7 @@ struct KCov {
     pub tile_colors: Vec<[u8; 4]>,
 
     pub glue_names: Vec<String>,
+    pub cover_concentrations: Vec<Concentration>,
     pub temperature: f64,
 
     /// Glues of a tile with a given ID
@@ -132,6 +133,7 @@ impl KCov {
         tile_concentration: Vec<Concentration>,
         tile_colors: Vec<[u8; 4]>,
         glue_names: Vec<String>,
+        cover_concentrations: Vec<Concentration>,
         tile_glues: Array1<[Glue; 4]>,
         glue_links: Array1<[Strength; 4]>,
         temperature: f64,
@@ -144,6 +146,7 @@ impl KCov {
             tile_concentration,
             tile_colors,
             glue_names,
+            cover_concentrations,
             tile_glues,
             glue_links,
             temperature,
@@ -436,6 +439,44 @@ impl KCov {
             .unwrap_or((false, acc, Event::None))
     }
 
+    fn maybe_attach_side_event<const SIDE: TileId>(
+        &self,
+        tileid: TileId,
+        point: PointSafe2,
+        mut acc: Rate,
+    ) -> Option<(bool, Rate, Event)> {
+        // A cover cannot attach to a side with a cover already attached
+        if tileid_helper::is_covered::<SIDE>(tileid) {
+            return None;
+        }
+
+        acc -= self.kf * self.cover_concentrations[self.glue_on_side::<SIDE>(tileid)];
+        if acc <= 0.0 {
+            // | SIDE will change the bit from 0 to 1
+            Some((true, acc, Event::MonomerChange(point, tileid | SIDE)))
+        } else {
+            None
+        }
+    }
+
+    // Attach a cover to a tile
+    pub fn event_monomer_cover_attachment<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        mut acc: Rate,
+    ) -> (bool, Rate, Event) {
+        let tile = state.tile_at_point(point);
+        if tile == 0 {
+            return (false, 0.0, Event::None);
+        }
+        self.maybe_attach_side_event::<NORTH>(tile, point, acc)
+            .or(self.maybe_attach_side_event::<SOUTH>(tile, point, acc))
+            .or(self.maybe_attach_side_event::<EAST>(tile, point, acc))
+            .or(self.maybe_attach_side_event::<WEST>(tile, point, acc))
+            .unwrap_or((false, acc, Event::None))
+    }
+
     pub fn event_monomer_detachment<S: State>(
         &self,
         state: &S,
@@ -498,21 +539,6 @@ impl KCov {
             }
         }
         (false, acc, Event::None)
-    }
-
-    // Attach a cover to a tile
-    pub fn event_monomer_cover_attachment<S: State>(
-        &self,
-        state: &S,
-        point: PointSafe2,
-        mut acc: Rate,
-    ) -> (bool, Rate, Event) {
-        let tile = state.tile_at_point(point);
-        if tile == 0 {
-            return (false, 0.0, Event::None);
-        }
-
-        todo!()
     }
 }
 
@@ -658,6 +684,7 @@ mod test_kcov {
                 "3".to_string(),
                 "4".to_string(),
             ],
+            vec![0., 1., 1., 1., 1.],
             tile_glues,
             glue_linkns,
             60.0,
