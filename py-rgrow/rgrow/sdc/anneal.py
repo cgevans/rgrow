@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .sdc import SDC
+    from rgrow import State
 
 MIN = 60
 HOUR = MIN * 60
@@ -132,3 +133,4 @@ class AnnealOutputs:
     system: "SDC"
     canvas_arr: "np.NDArray[np.int_]"
     anneal: Anneal
+    state: "State"

@@ -19,6 +19,8 @@ use core::f64;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
+    iter,
+    ops::Deref,
     sync::OnceLock,
 };
 
@@ -27,7 +29,7 @@ use rand::Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    base::{Glue, GrowError, Rate, Tile},
+    base::{Energy, Glue, GrowError, Rate, Tile},
     canvas::{PointSafe2, PointSafeHere},
     colors::get_color_or_random,
     state::{State, StateEnum},
@@ -91,7 +93,7 @@ fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass(subclass))]
+#[cfg_attr(feature = "python", pyclass(subclass, module = "rgrow.sdc"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC {
     /// The anchor tiles for each of the scaffolds
@@ -738,9 +740,23 @@ impl SDC {
     }
 }
 
+/// (energy so far, tile id)
+///
+/// This type is used in the DP algorithm. If the system were to end on a given Tile, what is the
+/// minimum energy said system can have.
+///
+/// When running the MFE algorithm, we will return a matrix of these values.
+type MfeValues = Vec<(Tile, Energy, Tile)>;
+
 // MFE of system
 // FIXME: Hashset needs some sort of ordering (by tile id? Will that be consistent between runs?)
 impl SDC {
+    // Concentration penalty
+    #[inline(always)]
+    fn penalty(&self, strand: &Tile) -> f64 {
+        (self.strand_concentration[*strand as usize] / U0).ln()
+    }
+
     /// Given some set of strands xi (see the graph below), and some tile for the
     /// y position, find the best match
     ///
@@ -751,50 +767,124 @@ impl SDC {
     /// Ideal bond = x1 y
     ///
     /// Return energy in the ideal case
-    fn best_energy_for_right_strand(&self, left_possible: &Vec<(f64, Tile)>, right: &Tile) -> f64 {
-        if left_possible.is_empty() {
-            return self.bond_with_scaffold(*right);
-        }
-
-        left_possible
+    fn best_energy_for_strand(&self, left_possible: &MfeValues, right: &Tile) -> (Tile, f64) {
+        // If this is empty, then None will be returned
+        let (att, energy) = left_possible
             .iter()
-            .fold(f64::MAX, |acc, &(lenergy, left)| {
+            .fold(None, |acc, &(_prior_attachement, lenergy, left)| {
                 let nenergy = lenergy + self.bond_between_strands(left, *right);
-                acc.min(nenergy)
+                if acc.is_none() {
+                    return Some((left, nenergy));
+                }
+                let (acc_left, acc_value) = acc.unwrap();
+                if acc_value < nenergy {
+                    Some((acc_left, acc_value))
+                } else {
+                    Some((left, nenergy))
+                }
             })
-            + self.bond_with_scaffold(*right)
+            // If there were no element in the left_possible iterator, then we will be attaching to
+            // no other strand, thus 0.0 energy from compute-domain
+            .unwrap_or((0, 0.0));
+
+        // Always have a scaffold domain
+        (
+            att,
+            energy + self.bond_with_scaffold(*right) - self.penalty(right),
+        )
     }
 
     /// This is for the standard case where the acc is not empty and the friends here hashset is
     /// not empty
-    fn mfe_next_vector(
-        &self,
-        acc: Vec<(f64, Tile)>,
-        friends_here: &HashSet<Tile>,
-    ) -> Vec<(f64, Tile)> {
-        friends_here
+    fn mfe_next_vector(&self, acc: &MfeValues, friends_here: &HashSet<Tile>) -> MfeValues {
+        // If there are no friends, then this will not run at all, and the return type will be an
+        // empty vector.
+        let mut connection_answ = friends_here
             .iter()
-            .map(|tile| (self.best_energy_for_right_strand(&acc, tile), *tile))
-            .collect()
+            .map(|tile| {
+                let (l, e) = self.best_energy_for_strand(acc, tile);
+                (l, e, *tile)
+            })
+            .collect::<MfeValues>();
+
+        // If the acc is not empty, meaning that there exist states before this strand, then we
+        // could also not attach anything here, and pass on the previous best free enrgy.
+        if !acc.is_empty() {
+            let (attached, min_energy) =
+                acc.iter()
+                    .fold((0, f64::MAX), |(att_sf, min_energy_sf), &(_, e, t)| {
+                        if min_energy_sf < e {
+                            (att_sf, min_energy_sf)
+                        } else {
+                            (t, e)
+                        }
+                    });
+
+            connection_answ.push((attached, min_energy, 0));
+        } else {
+            // We're in the initial location; if it is empty, the energy is just 0.0.
+            connection_answ.push((0, 0.0, 0));
+        }
+
+        connection_answ
     }
 
-    /// Next vector in the case that the accumulator is empty (meaning this is the first set of
-    /// strand in the system, in a system with strands everywhere, this will be the 3rd index)
-    fn mfe_next_vector_empty_case(&self, friends_here: &HashSet<Tile>) -> Vec<(f64, Tile)> {
-        friends_here
-            .iter()
-            .map(|&tile| (self.bond_with_scaffold(tile), tile))
-            .collect()
+    /// At each index of the scaffold, what is the MFE of the system if it MUST end on a given
+    /// strand
+    ///
+    /// To get the overall MFE, look at the last index of the scaffold, and select the minimum
+    /// energy among all possible final strands
+    fn mfe_matrix(&self) -> Vec<MfeValues> {
+        let connection_matrix = self.scaffold().into_iter().scan(vec![], |acc, glue| {
+            let empty_map = HashSet::new();
+            let friends = self.friends_btm.get(&glue).unwrap_or(&empty_map);
+
+            let n_vec = self.mfe_next_vector(acc, friends);
+
+            *acc = n_vec;
+            Some(
+                acc.iter()
+                    .map(|(left, energy, tile)| (*left, energy * self.rtval(), *tile))
+                    .collect(),
+            )
+        });
+
+        connection_matrix.collect()
     }
 
-    fn mfe(&self) {
-        self.scaffold()
-            .iter()
-            .fold(vec![], |acc, glue| match self.friends_btm.get(glue) {
-                Some(friends_here) if !acc.is_empty() => self.mfe_next_vector(acc, friends_here),
-                Some(friends_here) => self.mfe_next_vector_empty_case(friends_here),
-                None => acc.into_iter().map(|(lenergy, _)| (lenergy, 0)).collect(),
-            });
+    /// Get the mfe configuration, as well as its energy
+    fn mfe_configuration(&self) -> (Vec<Tile>, Energy) {
+        let mfe_mat = self.mfe_matrix();
+        let l = mfe_mat.len();
+        let mut iterator = mfe_mat.into_iter().rev();
+        // Get the rightmost mfe
+        let Some(last) = iterator.next() else {
+            return (vec![], 0.0);
+        };
+
+        // Since the last two scaffold elemnts are None, None, we know that the last vector of the
+        // mfe_matrix must be *exactly* of length 1, since the last index will have no friends, so
+        // the only possible value here is (0, mfe, 0)
+        let (mut left, energy, _) = last[0];
+        let mut mfe_conf = Vec::with_capacity(l);
+        // nothing is attached at the very end
+        //
+        // note that we are building the mfe configuration from end to start -- since we know what
+        // the last strand needs to be, and what it must have attached to. So at the end we will
+        // reverse it
+        mfe_conf.push(0);
+        for v in iterator {
+            // Find the strand we attached to, and see what it is attached to
+            let (new_left, _, strand) = v
+                .iter()
+                .find(|(_, _, strand)| *strand == left)
+                .expect("Could not find strand we are meant to attach to ...");
+            mfe_conf.push(*strand);
+            left = *new_left;
+        }
+        mfe_conf.reverse();
+
+        (mfe_conf, energy)
     }
 }
 
@@ -990,15 +1080,15 @@ impl TileBondInfo for SDC {
 //         // that each tile has four edges), but it will do for now.
 //         let pc = ProcessedTileSet::from_tileset(tileset)?;
 
-//         // Combine glue strengths (between like numbers) and glue links (between two numbers)
-//         let n_glues = pc.glue_strengths.len();
-//         let mut glue_links = Array2::zeros((n_glues, n_glues));
-//         for (i, strength) in pc.glue_strengths.indexed_iter() {
-//             glue_links[(i, i)] = *strength;
-//         }
-//         for (i, j, strength) in pc.glue_links.iter() {
-//             glue_links[(*i, *j)] = *strength;
-//         }
+        // // Combine glue strengths (between like numbers) and glue links (between two numbers)
+        // let n_glues = pc.glue_strengths.len();
+        // let mut glue_links = Array2::zeros((n_glues, n_glues));
+        // for (i, strength) in pc.glue_strengths.indexed_iter() {
+        //     glue_links[(i, i)] = *strength;
+        // }
+        // for (i, j, strength) in pc.glue_links.iter() {
+        //     glue_links[(*i, *j)] = *strength;
+        // }
 
 //         // Just generate the stuff that will be filled by the model.
 //         let energy_bonds = Array2::default((pc.tile_names.len(), pc.tile_names.len()));
@@ -1134,6 +1224,11 @@ pub struct SDCParams {
     pub k_n: f64,
     pub k_c: f64,
     pub temperature: f64,
+    // Optinal (additive) junction penalty
+    //
+    // Meaning that negative penalty, will make binding more likely
+    pub junction_penalty_dg: Option<f64>,
+    pub junction_penalty_ds: Option<f64>,
 }
 
 /// Triple (x, y, z)
@@ -1269,10 +1364,10 @@ impl SDC {
                 _ => continue,
             };
 
-            glue_delta_g[[i, j]] = gs.0;
-            glue_delta_g[[j, i]] = gs.0;
-            glue_s[[i, j]] = gs.1;
-            glue_s[[j, i]] = gs.1;
+            glue_delta_g[[i, j]] = gs.0 + params.junction_penalty_dg.unwrap_or(0.0);
+            glue_delta_g[[j, i]] = gs.0 + params.junction_penalty_dg.unwrap_or(0.0);
+            glue_s[[i, j]] = gs.1 + params.junction_penalty_ds.unwrap_or(0.0);
+            glue_s[[j, i]] = gs.1 + params.junction_penalty_ds.unwrap_or(0.0);
         }
 
         let scaffold = match params.scaffold {
@@ -1572,6 +1667,12 @@ impl SDC {
         self.strand_concentration.to_pyarray_bound(py)
     }
 
+    #[setter]
+    fn set_tile_concs(&mut self, concs: Vec<f64>) {
+        self.strand_concentration = Array1::from(concs);
+        self.update_system();
+    }
+
     fn get_all_probs(&self) -> Vec<(Vec<u32>, f64, f64)> {
         let systems = self.system_states();
         let mut triples = Vec::new();
@@ -1615,6 +1716,32 @@ impl SDC {
     #[pyo3(name = "log_big_partition_function")]
     fn py_log_big_partition_function(&self) -> f64 {
         self.log_big_partition_function_fast()
+    }
+
+    #[pyo3(name = "mfe_matrix")]
+    fn py_mfe_matrix(&self) -> Vec<Vec<(u32, f64, u32)>> {
+        self.mfe_matrix()
+    }
+
+    #[pyo3(name = "mfe_config")]
+    fn py_mfe_config(&self) -> (Vec<Tile>, f64) {
+        self.mfe_configuration()
+    }
+
+    #[setter]
+    fn set_temperature(&mut self, tmp: f64) {
+        self.temperature = tmp;
+        self.update_system();
+    }
+
+    #[getter]
+    fn get_temperature(&self) -> f64 {
+        self.temperature
+    }
+
+    #[pyo3(name = "all_scaffolds_slow")]
+    fn py_all_scaffolds(&self) -> Vec<Vec<Tile>> {
+        self.system_states()
     }
 }
 
@@ -1731,6 +1858,8 @@ mod test_anneal {
             k_f: 1e6,
             k_n: 1e5,
             k_c: 1e4,
+            junction_penalty_dg: None,
+            junction_penalty_ds: None,
         };
 
         let mut sdc = SDC::from_params(sdc_params);
@@ -2025,6 +2154,8 @@ mod test_sdc_model {
             k_f: 1e6,
             k_n: 1e5,
             k_c: 1e4,
+            junction_penalty_dg: None,
+            junction_penalty_ds: None,
         };
 
         let mut sdc = SDC::from_params(sdc_params);
@@ -2059,5 +2190,37 @@ mod test_sdc_model {
         // });
 
         assert_eq!(probs[0].0, vec![0, 0, 1, 3, 5, 7, 2, 0, 0]);
+    }
+
+    #[test]
+    fn mfe_test() {
+        let sdc = scaffold_for_tests();
+        let x = sdc.mfe_matrix();
+
+        for (index, v) in x.iter().enumerate() {
+            println!("At index {index}:");
+            for (left_attachment_id, energy, final_strand) in v {
+                let left_attachment = sdc.tile_name(*left_attachment_id);
+                let strand_name = sdc.tile_name(*final_strand);
+                println!("\t Finishing at ({left_attachment_id} = {left_attachment}) <-> ({final_strand}, {strand_name}) we have DG = {energy}")
+            }
+        }
+
+        // Since the input is 0, we shuold see that MFE is reached when last strand is 0
+        //
+        // We know that there are exactly two elements here (since the SDC system used has
+        // complexity of two)
+        let last_compute_domain = x[x.len() - 4].clone();
+        let (_, f_energy, strand_id) = last_compute_domain[0];
+        let (_, s_energy, _) = last_compute_domain[1];
+        if sdc.tile_name(strand_id).contains('0') {
+            assert!(f_energy < s_energy);
+        } else {
+            assert!(s_energy < f_energy);
+        }
+
+        let mfe_config = [0, 0, 1, 3, 5, 7, 2, 0, 0];
+        let (acc, _) = sdc.mfe_configuration();
+        assert_eq!(mfe_config.to_vec(), acc);
     }
 }
