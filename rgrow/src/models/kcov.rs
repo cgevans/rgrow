@@ -14,6 +14,11 @@ use crate::{
 type_alias!( f64 => Concentration, Strength );
 type_alias!( u32 => TileId );
 
+/*
+*   Note:
+*   - Change to north east south west
+* */
+
 const NORTH: u32 = 0b1000 << 28;
 const SOUTH: u32 = 0b0100 << 28;
 
@@ -354,7 +359,7 @@ impl KCov {
             return Self::ZERO_RATE;
         }
         let energy_with_neighbours = self.energy_at_point(state, p);
-        self.kf * (energy_with_neighbours * self.rtval()).exp()
+        self.kf * (energy_with_neighbours * (1.0 / self.rtval())).exp()
     }
 
     /// The rate at which a tile will attach somewhere
@@ -392,7 +397,7 @@ impl KCov {
                 EAST => self.energy_cover[tile as usize][2],
                 WEST => self.energy_cover[tile as usize][3],
                 _ => panic!("Side must be north south east or west"),
-            } * self.rtval())
+            } * (1.0 / self.rtval()))
             .exp()
     }
 
@@ -400,16 +405,16 @@ impl KCov {
         &self,
         tileid: TileId,
         point: PointSafe2,
-        mut acc: Rate,
+        acc: &mut Rate,
     ) -> Option<(bool, Rate, Event)> {
         // Something cannot detach if there is no cover
         if !tileid_helper::is_covered::<SIDE>(tileid) {
             return None;
         }
-        acc -= self.cover_detachment_rate::<SIDE>(tileid);
-        if acc <= 0.0 {
+        *acc -= self.cover_detachment_rate::<SIDE>(tileid);
+        if *acc <= 0.0 {
             // ^ SIDE will change the bit from 1 to 0, so no longer have a cover here
-            Some((true, acc, Event::MonomerChange(point, tileid ^ SIDE)))
+            Some((true, *acc, Event::MonomerChange(point, tileid ^ SIDE)))
         } else {
             None
         }
@@ -430,12 +435,10 @@ impl KCov {
 
         // Update the acc for each side, if there is no cover, then None will be returned, if no
         // evene takes place, then acc is updated, and none is returned.
-        //
-        // TODO: Does mutation work here ?
-        self.maybe_detach_side_event::<NORTH>(tile, point, acc)
-            .or(self.maybe_detach_side_event::<SOUTH>(tile, point, acc))
-            .or(self.maybe_detach_side_event::<EAST>(tile, point, acc))
-            .or(self.maybe_detach_side_event::<WEST>(tile, point, acc))
+        self.maybe_detach_side_event::<NORTH>(tile, point, &mut acc)
+            .or(self.maybe_detach_side_event::<SOUTH>(tile, point, &mut acc))
+            .or(self.maybe_detach_side_event::<EAST>(tile, point, &mut acc))
+            .or(self.maybe_detach_side_event::<WEST>(tile, point, &mut acc))
             .unwrap_or((false, acc, Event::None))
     }
 
@@ -449,6 +452,8 @@ impl KCov {
         if tileid_helper::is_covered::<SIDE>(tileid) {
             return None;
         }
+
+        // TODO: If there is a tile on that side, then nothing can attach
 
         acc -= self.kf * self.cover_concentrations[self.glue_on_side::<SIDE>(tileid)];
         if acc <= 0.0 {
@@ -591,6 +596,7 @@ impl System for KCov {
             Event::MonomerDetachment(point_safe2) => todo!(),
             Event::MonomerChange(point_safe2, _) => todo!(),
             Event::PolymerAttachment(vec) => todo!(),
+            // This is when the body gets separated
             Event::PolymerDetachment(vec) => todo!(),
             Event::PolymerChange(vec) => todo!(),
         }
