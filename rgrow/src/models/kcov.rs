@@ -425,28 +425,28 @@ impl KCov {
         &self,
         state: &S,
         point: PointSafe2,
-        mut acc: Rate,
+        acc: &mut Rate,
     ) -> (bool, Rate, Event) {
         // Check what covers the tile has
         let tile = state.tile_at_point(point);
         if tile == 0 {
-            return (false, acc, Event::None);
+            return (false, *acc, Event::None);
         }
 
         // Update the acc for each side, if there is no cover, then None will be returned, if no
         // evene takes place, then acc is updated, and none is returned.
-        self.maybe_detach_side_event::<NORTH>(tile, point, &mut acc)
-            .or(self.maybe_detach_side_event::<SOUTH>(tile, point, &mut acc))
-            .or(self.maybe_detach_side_event::<EAST>(tile, point, &mut acc))
-            .or(self.maybe_detach_side_event::<WEST>(tile, point, &mut acc))
-            .unwrap_or((false, acc, Event::None))
+        self.maybe_detach_side_event::<NORTH>(tile, point, acc)
+            .or(self.maybe_detach_side_event::<SOUTH>(tile, point, acc))
+            .or(self.maybe_detach_side_event::<EAST>(tile, point, acc))
+            .or(self.maybe_detach_side_event::<WEST>(tile, point, acc))
+            .unwrap_or((false, *acc, Event::None))
     }
 
     fn maybe_attach_side_event<const SIDE: TileId>(
         &self,
         tileid: TileId,
         point: PointSafe2,
-        mut acc: Rate,
+        acc: &mut Rate,
     ) -> Option<(bool, Rate, Event)> {
         // A cover cannot attach to a side with a cover already attached
         if tileid_helper::is_covered::<SIDE>(tileid) {
@@ -455,10 +455,10 @@ impl KCov {
 
         // TODO: If there is a tile on that side, then nothing can attach
 
-        acc -= self.kf * self.cover_concentrations[self.glue_on_side::<SIDE>(tileid)];
-        if acc <= 0.0 {
+        *acc -= self.kf * self.cover_concentrations[self.glue_on_side::<SIDE>(tileid)];
+        if *acc <= 0.0 {
             // | SIDE will change the bit from 0 to 1
-            Some((true, acc, Event::MonomerChange(point, tileid | SIDE)))
+            Some((true, *acc, Event::MonomerChange(point, tileid | SIDE)))
         } else {
             None
         }
@@ -469,7 +469,7 @@ impl KCov {
         &self,
         state: &S,
         point: PointSafe2,
-        mut acc: Rate,
+        acc: &mut Rate,
     ) -> (bool, Rate, Event) {
         let tile = state.tile_at_point(point);
         if tile == 0 {
@@ -479,20 +479,20 @@ impl KCov {
             .or(self.maybe_attach_side_event::<SOUTH>(tile, point, acc))
             .or(self.maybe_attach_side_event::<EAST>(tile, point, acc))
             .or(self.maybe_attach_side_event::<WEST>(tile, point, acc))
-            .unwrap_or((false, acc, Event::None))
+            .unwrap_or((false, *acc, Event::None))
     }
 
     pub fn event_monomer_detachment<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
-        mut acc: Rate,
+        acc: &mut Rate,
     ) -> (bool, Rate, Event) {
-        acc -= self.tile_detachment_rate(state, point);
-        if acc > 0.0 {
-            (false, acc, Event::None)
+        *acc -= self.tile_detachment_rate(state, point);
+        if *acc > 0.0 {
+            (false, *acc, Event::None)
         } else {
-            (true, acc, Event::MonomerDetachment(point))
+            (true, *acc, Event::MonomerDetachment(point))
         }
     }
 
@@ -501,12 +501,12 @@ impl KCov {
         &self,
         state: &S,
         point: PointSafe2,
-        mut acc: Rate,
+        acc: &mut Rate,
     ) -> (bool, Rate, Event) {
         let tile = state.tile_at_point(point);
         // tile aready attached here
         if tile != 0 {
-            return (false, acc, Event::None);
+            return (false, *acc, Event::None);
         }
 
         let mut friends: HashSetType<TileId> = HashSet::default();
@@ -538,12 +538,12 @@ impl KCov {
         }
 
         for tile in friends {
-            acc -= self.kf * self.tile_concentration[tile as usize];
-            if acc <= 0.0 {
-                return (true, acc, Event::MonomerAttachment(point, tile));
+            *acc -= self.kf * self.tile_concentration[tile as usize];
+            if *acc <= 0.0 {
+                return (true, *acc, Event::MonomerAttachment(point, tile));
             }
         }
-        (false, acc, Event::None)
+        (false, *acc, Event::None)
     }
 }
 
