@@ -81,7 +81,7 @@ mod tileid_helper {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct KCov {
+pub struct KCov {
     pub tile_names: Vec<String>,
     pub tile_concentration: Vec<Concentration>,
     pub tile_colors: Vec<[u8; 4]>,
