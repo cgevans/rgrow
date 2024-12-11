@@ -389,7 +389,12 @@ impl KCov {
     }
 
     /// Get the energy between a tile and a cover to some side
-    pub fn cover_detachment_rate<const SIDE: TileId>(&self, tile: TileId) -> Energy {
+    pub fn cover_detachment_rate_at_side<const SIDE: TileId>(&self, tile: TileId) -> Rate {
+        // If there is no cover in that side, then the detachment rate will be 0
+        if !tileid_helper::is_covered::<SIDE>(tile) {
+            return 0.0;
+        };
+
         self.kf
             * (match SIDE {
                 NORTH => self.energy_cover[tile as usize][0],
@@ -399,6 +404,13 @@ impl KCov {
                 _ => panic!("Side must be north south east or west"),
             } * (1.0 / self.rtval()))
             .exp()
+    }
+
+    pub fn cover_detachment_rate_total(&self, tile: TileId) -> Rate {
+        self.cover_detachment_rate_at_side::<NORTH>(tile)
+            + self.cover_detachment_rate_at_side::<EAST>(tile)
+            + self.cover_detachment_rate_at_side::<SOUTH>(tile)
+            + self.cover_detachment_rate_at_side::<WEST>(tile)
     }
 
     fn maybe_detach_side_event<const SIDE: TileId>(
@@ -411,7 +423,7 @@ impl KCov {
         if !tileid_helper::is_covered::<SIDE>(tileid) {
             return None;
         }
-        *acc -= self.cover_detachment_rate::<SIDE>(tileid);
+        *acc -= self.cover_detachment_rate_at_side::<SIDE>(tileid);
         if *acc <= 0.0 {
             // ^ SIDE will change the bit from 1 to 0, so no longer have a cover here
             Some((true, *acc, Event::MonomerChange(point, tileid ^ SIDE)))
@@ -557,6 +569,29 @@ impl KCov {
         }
         (false, *acc, Event::None)
     }
+
+    pub fn total_cover_attachment_rate<S: State>(&self, state: &S, point: PointSafe2) -> Rate {
+        // Check that there is a tile at this point
+        let tile = state.tile_at_point(point);
+        if tile == 0 {
+            return 0.0;
+        }
+
+        let mut rate = 0.0;
+        if !tileid_helper::is_covered::<NORTH>(tile) && state.tile_to_n(point) == 0 {
+            rate += self.kf * self.cover_concentrations[self.glue_on_side::<NORTH>(tile)];
+        }
+        if !tileid_helper::is_covered::<SOUTH>(tile) && state.tile_to_s(point) == 0 {
+            rate += self.kf * self.cover_concentrations[self.glue_on_side::<SOUTH>(tile)];
+        }
+        if !tileid_helper::is_covered::<EAST>(tile) && state.tile_to_e(point) == 0 {
+            rate += self.kf * self.cover_concentrations[self.glue_on_side::<EAST>(tile)];
+        }
+        if !tileid_helper::is_covered::<WEST>(tile) && state.tile_to_w(point) == 0 {
+            rate += self.kf * self.cover_concentrations[self.glue_on_side::<WEST>(tile)];
+        }
+        return rate;
+    }
 }
 
 /*
@@ -622,12 +657,24 @@ impl System for KCov {
         todo!()
     }
 
-    fn event_rate_at_point<St: crate::state::State>(
+    fn event_rate_at_point<S: crate::state::State>(
         &self,
-        state: &St,
+        state: &S,
         p: crate::canvas::PointSafeHere,
     ) -> crate::base::Rate {
-        todo!()
+        let p = if state.inbounds(p.0) {
+            PointSafe2(p.0)
+        } else {
+            return 0.0;
+        };
+        let tile = { state.tile_at_point(p) };
+        if tile != 0 {
+            self.tile_detachment_rate(state, p)
+                + self.cover_detachment_rate_total(tile)
+                + self.total_cover_attachment_rate(state, p)
+        } else {
+            todo!()
+        }
     }
 
     fn choose_event_at_point<St: crate::state::State>(
