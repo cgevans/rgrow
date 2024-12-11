@@ -442,18 +442,30 @@ impl KCov {
             .unwrap_or((false, *acc, Event::None))
     }
 
-    fn maybe_attach_side_event<const SIDE: TileId>(
+    pub fn tile_to_side<const SIDE: TileId, S: State>(state: &S, p: PointSafe2) -> TileId {
+        match SIDE {
+            NORTH => state.tile_to_n(p),
+            SOUTH => state.tile_to_s(p),
+            EAST => state.tile_to_e(p),
+            WEST => state.tile_to_w(p),
+            _ => panic!("Side must be North, South, East, or West"),
+        }
+    }
+
+    fn maybe_attach_side_event<const SIDE: TileId, S: State>(
         &self,
         tileid: TileId,
         point: PointSafe2,
+        state: &S,
         acc: &mut Rate,
     ) -> Option<(bool, Rate, Event)> {
         // A cover cannot attach to a side with a cover already attached
-        if tileid_helper::is_covered::<SIDE>(tileid) {
+        if tileid_helper::is_covered::<SIDE>(tileid)
+        // If a tile is already attached to that side, then nothing can attach
+            || Self::tile_to_side::<SIDE, S>(state, point) != 0
+        {
             return None;
         }
-
-        // TODO: If there is a tile on that side, then nothing can attach
 
         *acc -= self.kf * self.cover_concentrations[self.glue_on_side::<SIDE>(tileid)];
         if *acc <= 0.0 {
@@ -475,10 +487,10 @@ impl KCov {
         if tile == 0 {
             return (false, 0.0, Event::None);
         }
-        self.maybe_attach_side_event::<NORTH>(tile, point, acc)
-            .or(self.maybe_attach_side_event::<SOUTH>(tile, point, acc))
-            .or(self.maybe_attach_side_event::<EAST>(tile, point, acc))
-            .or(self.maybe_attach_side_event::<WEST>(tile, point, acc))
+        self.maybe_attach_side_event::<NORTH, S>(tile, point, state, acc)
+            .or(self.maybe_attach_side_event::<SOUTH, S>(tile, point, state, acc))
+            .or(self.maybe_attach_side_event::<EAST, S>(tile, point, state, acc))
+            .or(self.maybe_attach_side_event::<WEST, S>(tile, point, state, acc))
             .unwrap_or((false, *acc, Event::None))
     }
 
