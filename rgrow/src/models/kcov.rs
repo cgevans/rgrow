@@ -520,20 +520,18 @@ impl KCov {
         }
     }
 
-    /// Probability of any tile attaching at some point
-    pub fn event_monomer_attachment<S: State>(
+    pub fn possible_tiles_at_point<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
-        acc: &mut Rate,
-    ) -> (bool, Rate, Event) {
+    ) -> HashSetType<TileId> {
         let tile = state.tile_at_point(point);
+        let mut friends: HashSetType<TileId> = HashSet::default();
+
         // tile aready attached here
         if tile != 0 {
-            return (false, *acc, Event::None);
+            return friends;
         }
-
-        let mut friends: HashSetType<TileId> = HashSet::default();
 
         // If there is tile to the north of this point
         let neighbour_tile = state.tile_to_n(point);
@@ -560,7 +558,31 @@ impl KCov {
                 friends.extend(westf);
             }
         }
+        friends
+    }
 
+    pub fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> Rate {
+        self.possible_tiles_at_point(state, point)
+            .iter()
+            .fold(0.0, |acc, &x| {
+                acc + (self.kf * self.tile_concentration[x as usize])
+            })
+    }
+
+    /// Probability of any tile attaching at some point
+    pub fn event_monomer_attachment<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        acc: &mut Rate,
+    ) -> (bool, Rate, Event) {
+        let tile = state.tile_at_point(point);
+        // tile aready attached here
+        if tile != 0 {
+            return (false, *acc, Event::None);
+        }
+
+        let friends: HashSetType<TileId> = self.possible_tiles_at_point(state, point);
         for tile in friends {
             *acc -= self.kf * self.tile_concentration[tile as usize];
             if *acc <= 0.0 {
@@ -673,7 +695,7 @@ impl System for KCov {
                 + self.cover_detachment_rate_total(tile)
                 + self.total_cover_attachment_rate(state, p)
         } else {
-            todo!()
+            self.total_attachment_rate_at_point(p, state)
         }
     }
 
