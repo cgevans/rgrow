@@ -20,15 +20,14 @@ type_alias!( u32 => TileId );
 * */
 
 const NORTH: u32 = 0b1000 << 28;
-const SOUTH: u32 = 0b0100 << 28;
-
-const EAST: u32 = 0b0010 << 28;
+const EAST: u32 = 0b0100 << 28;
+const SOUTH: u32 = 0b0010 << 28;
 const WEST: u32 = 0b0001 << 28;
 
-const ALL_COVERS: u32 = NORTH | SOUTH | EAST | WEST;
+const ALL_COVERS: u32 = NORTH | EAST | SOUTH | WEST;
 const NO_COVERS: u32 = !ALL_COVERS;
 
-const ALL_SIDES: [u32; 4] = [NORTH, SOUTH, EAST, WEST];
+const ALL_SIDES: [u32; 4] = [NORTH, EAST, SOUTH, WEST];
 
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 
@@ -75,7 +74,7 @@ mod tileid_helper {
             SOUTH => NORTH,
             EAST => WEST,
             WEST => EAST,
-            _ => panic!("Can only find the inverse of NSEW"),
+            _ => panic!("Can only find the inverse of NESW"),
         }
     }
 }
@@ -97,9 +96,9 @@ pub struct KCov {
     /// enforced by the getter
     ///
     /// [
-    ///     (0) -- [North, South, East, West]
+    ///     (0) -- [North, East, South, West]
     ///     ...
-    ///     (n) -- [North, South, East, West]
+    ///     (n) -- [North, East, South, West]
     /// ]
     tile_glues: Array1<[Glue; 4]>,
     glue_links: Array1<[Strength; 4]>,
@@ -114,7 +113,7 @@ pub struct KCov {
     pub east_friends: Vec<HashSetType<TileId>>,
     pub west_friends: Vec<HashSetType<TileId>>,
 
-    /// Energy of tile and cover, cover i contains [N, S, E, W]
+    /// Energy of tile and cover, cover i contains [N, E, S, W]
     energy_cover: Array1<[Energy; 4]>,
     energy_ns: Array2<Energy>,
     energy_we: Array2<Energy>,
@@ -228,8 +227,8 @@ impl KCov {
         let glues = self.get_tile_uncovered_glues(tile_id);
         match SIDE {
             NORTH => glues[0],
-            SOUTH => glues[1],
-            EAST => glues[2],
+            EAST => glues[1],
+            SOUTH => glues[2],
             WEST => glues[3],
             _ => panic!("Side must be NESW"),
         }
@@ -245,10 +244,10 @@ impl KCov {
         if tile_id & NORTH == 0 {
             glues[0] = row[0];
         }
-        if tile_id & SOUTH == 0 {
+        if tile_id & EAST == 0 {
             glues[1] = row[1]
         }
-        if tile_id & EAST == 0 {
+        if tile_id & SOUTH == 0 {
             glues[2] = row[2];
         }
         if tile_id & WEST == 0 {
@@ -257,7 +256,7 @@ impl KCov {
         glues
     }
 
-    fn fill_friends(&mut self) {
+    pub fn fill_friends(&mut self) {
         let len = self.glue_names.len();
         let empty_friends = vec![HashSetType::<TileId>::default(); len];
 
@@ -276,7 +275,7 @@ impl KCov {
          * */
 
         let err_message = "Vector shouldnt have empty index, as it was pre-initialized";
-        for (id, [ng, sg, eg, wg]) in self.tile_glues.iter().enumerate() {
+        for (id, [ng, eg, sg, wg]) in self.tile_glues.iter().enumerate() {
             let base_id = tileid_helper::base_id(id as u32);
 
             if ng != &0 {
@@ -301,8 +300,8 @@ impl KCov {
             }
         }
         self.north_friends = nf;
-        self.south_friends = sf;
         self.east_friends = ef;
+        self.south_friends = sf;
         self.west_friends = wf;
     }
 
@@ -313,8 +312,8 @@ impl KCov {
         if tileid_helper::is_covered::<SIDE>(tile1)
             || match SIDE {
                 NORTH => tileid_helper::is_covered::<SOUTH>(tile2),
-                SOUTH => tileid_helper::is_covered::<NORTH>(tile2),
                 EAST => tileid_helper::is_covered::<WEST>(tile2),
+                SOUTH => tileid_helper::is_covered::<NORTH>(tile2),
                 WEST => tileid_helper::is_covered::<EAST>(tile2),
                 _ => false,
             }
@@ -325,8 +324,8 @@ impl KCov {
         // Now we know that neither the tile, nor the one were attaching to is covered
         match SIDE {
             NORTH => self.energy_ns[(tile2 as usize, tile1 as usize)],
-            SOUTH => self.energy_ns[(tile1 as usize, tile2 as usize)],
             EAST => self.energy_we[(tile1 as usize, tile2 as usize)],
+            SOUTH => self.energy_ns[(tile1 as usize, tile2 as usize)],
             WEST => self.energy_we[(tile2 as usize, tile1 as usize)],
             _ => panic!("Must enter NSEW"),
         }
@@ -374,8 +373,8 @@ impl KCov {
     ) -> Option<&HashSetType<TileId>> {
         let neighbour = match SIDE {
             NORTH => state.tile_to_n(point),
-            SOUTH => state.tile_to_s(point),
             EAST => state.tile_to_e(point),
+            SOUTH => state.tile_to_s(point),
             WEST => state.tile_to_w(point),
             _ => panic!("Side must me NSEW"),
         };
@@ -398,10 +397,10 @@ impl KCov {
         self.kf
             * (match SIDE {
                 NORTH => self.energy_cover[tile as usize][0],
-                SOUTH => self.energy_cover[tile as usize][1],
-                EAST => self.energy_cover[tile as usize][2],
+                EAST => self.energy_cover[tile as usize][1],
+                SOUTH => self.energy_cover[tile as usize][2],
                 WEST => self.energy_cover[tile as usize][3],
-                _ => panic!("Side must be north south east or west"),
+                _ => panic!("Side must be NESW"),
             } * (1.0 / self.rtval()))
             .exp()
     }
@@ -448,8 +447,8 @@ impl KCov {
         // Update the acc for each side, if there is no cover, then None will be returned, if no
         // evene takes place, then acc is updated, and none is returned.
         self.maybe_detach_side_event::<NORTH>(tile, point, acc)
-            .or(self.maybe_detach_side_event::<SOUTH>(tile, point, acc))
             .or(self.maybe_detach_side_event::<EAST>(tile, point, acc))
+            .or(self.maybe_detach_side_event::<SOUTH>(tile, point, acc))
             .or(self.maybe_detach_side_event::<WEST>(tile, point, acc))
             .unwrap_or((false, *acc, Event::None))
     }
@@ -457,8 +456,8 @@ impl KCov {
     pub fn tile_to_side<const SIDE: TileId, S: State>(state: &S, p: PointSafe2) -> TileId {
         match SIDE {
             NORTH => state.tile_to_n(p),
-            SOUTH => state.tile_to_s(p),
             EAST => state.tile_to_e(p),
+            SOUTH => state.tile_to_s(p),
             WEST => state.tile_to_w(p),
             _ => panic!("Side must be North, South, East, or West"),
         }
@@ -500,8 +499,8 @@ impl KCov {
             return (false, 0.0, Event::None);
         }
         self.maybe_attach_side_event::<NORTH, S>(tile, point, state, acc)
-            .or(self.maybe_attach_side_event::<SOUTH, S>(tile, point, state, acc))
             .or(self.maybe_attach_side_event::<EAST, S>(tile, point, state, acc))
+            .or(self.maybe_attach_side_event::<SOUTH, S>(tile, point, state, acc))
             .or(self.maybe_attach_side_event::<WEST, S>(tile, point, state, acc))
             .unwrap_or((false, *acc, Event::None))
     }
@@ -743,9 +742,9 @@ mod test_kcov {
         const DEFAULT_COLOR: [u8; 4] = [0, 0, 0, 0];
         let tile_glues = Array1::from_vec(vec![
             [0, 0, 0, 0], // zero tile -- Empty
-            // N S E W
+            // N E S W
             [1, 0, 0, 0], // f
-            [0, 2, 3, 0], // s
+            [0, 3, 2, 0], // s
             [0, 0, 0, 4], // t
         ]);
 
