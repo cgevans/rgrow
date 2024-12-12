@@ -376,7 +376,7 @@ impl KCov {
             EAST => state.tile_to_e(point),
             SOUTH => state.tile_to_s(point),
             WEST => state.tile_to_w(point),
-            _ => panic!("Side must me NSEW"),
+            _ => panic!("Side must me NESW"),
         };
 
         // If there has already been an attachemnt, then nothing can attach there
@@ -547,13 +547,13 @@ impl KCov {
         }
         let neighbour_tile = state.tile_to_e(point);
         if neighbour_tile != 0 {
-            if let Some(eastf) = self.get_friends_one_side::<EAST>(neighbour_tile) {
+            if let Some(eastf) = self.get_friends_one_side::<WEST>(neighbour_tile) {
                 friends.extend(eastf);
             }
         }
         let neighbour_tile = state.tile_to_w(point);
         if neighbour_tile != 0 {
-            if let Some(westf) = self.get_friends_one_side::<WEST>(neighbour_tile) {
+            if let Some(westf) = self.get_friends_one_side::<EAST>(neighbour_tile) {
                 friends.extend(westf);
             }
         }
