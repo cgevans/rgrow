@@ -435,7 +435,7 @@ impl KCov {
     }
 
     /// Detach a cover from tile
-    pub fn event_monomer_cover_dettachment<S: State>(
+    pub fn event_monomer_cover_detachment<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
@@ -738,7 +738,7 @@ impl System for KCov {
         if let (true, _, event) = self.event_monomer_cover_attachment(state, point, &mut acc) {
             return event;
         }
-        if let (true, _, event) = self.event_monomer_cover_dettachment(state, point, &mut acc) {
+        if let (true, _, event) = self.event_monomer_cover_detachment(state, point, &mut acc) {
             return event;
         }
 
