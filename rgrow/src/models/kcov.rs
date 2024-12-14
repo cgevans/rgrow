@@ -724,10 +724,31 @@ impl System for KCov {
     fn choose_event_at_point<St: crate::state::State>(
         &self,
         state: &St,
-        p: crate::canvas::PointSafe2,
+        point: crate::canvas::PointSafe2,
         acc: crate::base::Rate,
     ) -> crate::system::Event {
-        todo!()
+        let mut acc = acc;
+
+        if let (true, _, event) = self.event_monomer_detachment(state, point, &mut acc) {
+            return event;
+        };
+        if let (true, _, event) = self.event_monomer_attachment(state, point, &mut acc) {
+            return event;
+        }
+        if let (true, _, event) = self.event_monomer_cover_attachment(state, point, &mut acc) {
+            return event;
+        }
+        if let (true, _, event) = self.event_monomer_cover_dettachment(state, point, &mut acc) {
+            return event;
+        }
+
+        panic!(
+            "Rate: {:?}, {:?}, {:?}, {:?}",
+            acc,
+            point,
+            state,
+            state.raw_array()
+        )
     }
 
     fn seed_locs(&self) -> Vec<(crate::canvas::PointSafe2, crate::base::Tile)> {
