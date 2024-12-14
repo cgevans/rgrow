@@ -661,6 +661,7 @@ impl System for KCov {
         match event {
             Event::None => panic!("Canot perform None event"),
             Event::MonomerDetachment(point) => state.set_sa(point, &0),
+            // Monomer Change -- Covers
             Event::MonomerChange(point, tile) | Event::MonomerAttachment(point, tile) => {
                 state.set_sa(point, tile)
             }
