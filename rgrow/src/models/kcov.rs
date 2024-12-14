@@ -7,7 +7,7 @@ use crate::{
     base::{Energy, Glue, HashSetType, Rate},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
-    system::{Event, System, TileBondInfo},
+    system::{Event, FissionHandling, System, TileBondInfo},
     type_alias,
 };
 
@@ -120,6 +120,7 @@ pub struct KCov {
 
     pub alpha: Energy,
     pub kf: f64,
+    fission_handling: FissionHandling,
 }
 
 #[rustfmt::skip]
@@ -143,6 +144,7 @@ impl KCov {
         temperature: f64,
         kf: f64,
         alpha: f64,
+        fission_handling: FissionHandling,
     ) -> Self {
         let tilecount = tile_names.len();
         Self {
@@ -163,6 +165,7 @@ impl KCov {
             energy_cover: Array1::default(tilecount),
             alpha,
             kf,
+            fission_handling,
         }
     }
 
@@ -791,6 +794,7 @@ mod test_kcov {
             60.0,
             1e6,
             0.0,
+            FissionHandling::JustDetach,
         )
     }
 
