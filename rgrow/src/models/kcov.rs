@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     base::{Energy, Glue, HashSetType, Rate},
-    canvas::PointSafe2,
+    canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{Event, System, TileBondInfo},
     type_alias,
@@ -660,14 +660,13 @@ impl System for KCov {
     fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
         match event {
             Event::None => panic!("Canot perform None event"),
-            Event::MonomerAttachment(point_safe2, _) => todo!(),
-            Event::MonomerDetachment(point_safe2) => todo!(),
-            Event::MonomerChange(point_safe2, _) => todo!(),
-            Event::PolymerAttachment(vec) => todo!(),
-            // This is when the body gets separated
-            Event::PolymerDetachment(vec) => todo!(),
-            Event::PolymerChange(vec) => todo!(),
-        }
+            Event::MonomerDetachment(point) => state.set_sa(point, &0),
+            Event::MonomerChange(point, tile) | Event::MonomerAttachment(point, tile) => {
+                state.set_sa(point, tile)
+            }
+            _ => panic!("Polymer not yet implemented"),
+        };
+        self
     }
 
     fn update_after_event<St: crate::state::State>(
@@ -675,7 +674,22 @@ impl System for KCov {
         state: &mut St,
         event: &crate::system::Event,
     ) {
-        todo!()
+        match event {
+            Event::None => panic!("Canot perform None event"),
+            Event::MonomerAttachment(point, _)
+            | Event::MonomerDetachment(point)
+            | Event::MonomerChange(point, _) => {
+                let points = [
+                    state.move_sa_n(*point),
+                    state.move_sa_w(*point),
+                    PointSafeHere(point.0),
+                    state.move_sa_e(*point),
+                    state.move_sa_s(*point),
+                ];
+                self.update_points(state, &points);
+            }
+            _ => panic!("Polymer not yet implemented"),
+        }
     }
 
     fn event_rate_at_point<S: crate::state::State>(
