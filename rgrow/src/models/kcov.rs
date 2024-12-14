@@ -415,7 +415,7 @@ impl KCov {
             + self.cover_detachment_rate_at_side::<WEST>(tile)
     }
 
-    fn maybe_detach_side_event<const SIDE: TileId>(
+    fn maybe_detach_cover_on_side_event<const SIDE: TileId>(
         &self,
         tileid: TileId,
         point: PointSafe2,
@@ -449,10 +449,10 @@ impl KCov {
 
         // Update the acc for each side, if there is no cover, then None will be returned, if no
         // evene takes place, then acc is updated, and none is returned.
-        self.maybe_detach_side_event::<NORTH>(tile, point, acc)
-            .or(self.maybe_detach_side_event::<EAST>(tile, point, acc))
-            .or(self.maybe_detach_side_event::<SOUTH>(tile, point, acc))
-            .or(self.maybe_detach_side_event::<WEST>(tile, point, acc))
+        self.maybe_detach_cover_on_side_event::<NORTH>(tile, point, acc)
+            .or(self.maybe_detach_cover_on_side_event::<EAST>(tile, point, acc))
+            .or(self.maybe_detach_cover_on_side_event::<SOUTH>(tile, point, acc))
+            .or(self.maybe_detach_cover_on_side_event::<WEST>(tile, point, acc))
             .unwrap_or((false, *acc, Event::None))
     }
 
