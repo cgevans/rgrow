@@ -508,6 +508,7 @@ impl KCov {
             .unwrap_or((false, *acc, Event::None))
     }
 
+    // TODO: Handle Fission Here
     pub fn event_monomer_detachment<S: State>(
         &self,
         state: &S,
@@ -516,9 +517,13 @@ impl KCov {
     ) -> (bool, Rate, Event) {
         *acc -= self.tile_detachment_rate(state, point);
         if *acc > 0.0 {
-            (false, *acc, Event::None)
-        } else {
-            (true, *acc, Event::MonomerDetachment(point))
+            return (false, *acc, Event::None);
+        }
+
+        match self.fission_handling {
+            FissionHandling::NoFission => (true, *acc, Event::None),
+            FissionHandling::JustDetach => (true, *acc, Event::MonomerDetachment(point)),
+            _ => panic!("Only NoFission, and JustDetach are supported"),
         }
     }
 
