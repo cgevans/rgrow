@@ -41,20 +41,12 @@ mod tileid_helper {
         id & ALL_COVERS
     }
 
-    pub fn attach_south(id: TileId) -> TileId {
-        id | SOUTH
+    pub fn attach<const SIDE: TileId>(id: TileId) -> TileId {
+        id | SIDE
     }
 
-    pub fn attach_north(id: TileId) -> TileId {
-        id | NORTH
-    }
-
-    pub fn attach_east(id: TileId) -> TileId {
-        id | EAST
-    }
-
-    pub fn attach_west(id: TileId) -> TileId {
-        id | WEST
+    pub fn detach<const SIDE: TileId>(id: TileId) -> TileId {
+        id & (!SIDE)
     }
 
     /// Get the "base id", this is the id of the tile if it had no covers
@@ -63,7 +55,7 @@ mod tileid_helper {
     }
 
     pub fn is_covered<const SIDE: TileId>(id: TileId) -> bool {
-        (id & SIDE) == 0
+        (id & SIDE) != 0
     }
 
     // TODO: This should be compile time, I think
@@ -175,7 +167,7 @@ impl KCov {
         tile: TileId,
     ) -> Option<&HashSetType<TileId>> {
         // The tile is covered, so we dont have any friends
-        if tile & SIDE != 0 {
+        if tileid_helper::is_covered::<SIDE>(tile) {
             return None;
         }
 
@@ -762,19 +754,32 @@ impl System for KCov {
 
 #[cfg(test)]
 mod test_covtile {
-    use crate::models::kcov::{tileid_helper, EAST};
+    use crate::models::kcov::{tileid_helper, EAST, NORTH, WEST};
 
     #[test]
     fn get_ids() {
         let mut t = 0b10110000;
-        t = tileid_helper::attach_east(t);
+        t = tileid_helper::attach::<EAST>(t);
         assert_eq!(tileid_helper::base_id(t), 0b10110000);
         assert_eq!(t, 0b10110000 | EAST);
 
         let mut k = 1;
-        k = tileid_helper::attach_east(k);
-        k = tileid_helper::attach_west(k);
+        k = tileid_helper::attach::<EAST>(k);
+        k = tileid_helper::attach::<WEST>(k);
         assert_eq!(tileid_helper::base_id(k), 1);
+    }
+
+    #[test]
+    fn is_covered_side() {
+        assert!(tileid_helper::is_covered::<NORTH>(NORTH));
+        assert!(tileid_helper::is_covered::<NORTH>(123 | NORTH));
+        assert!(!tileid_helper::is_covered::<EAST>(123 | NORTH));
+    }
+
+    #[test]
+    fn detach_side() {
+        assert_eq!(0, tileid_helper::detach::<NORTH>(NORTH));
+        assert_eq!(123, tileid_helper::detach::<NORTH>(123 | NORTH));
     }
 }
 
