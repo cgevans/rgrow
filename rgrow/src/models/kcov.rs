@@ -112,8 +112,8 @@ pub struct KCov {
     ///     (n) -- [North, East, South, West]
     /// ]
     tile_glues: Array1<[Glue; 4]>,
-    glue_links: Array1<[Strength; 4]>,
-
+    /// Binding strength between two glues
+    glue_links: Array2<Strength>,
     // This hashing shuold be without last four bits -- This would save a lot of space,
     // and may also help with logic
     //
@@ -154,14 +154,14 @@ impl KCov {
         glue_names: Vec<String>,
         cover_concentrations: Vec<Concentration>,
         tile_glues: Array1<[Glue; 4]>,
-        glue_links: Array1<[Strength; 4]>,
+        glue_links: Array2<Strength>,
         temperature: f64,
         kf: f64,
         alpha: f64,
         fission_handling: FissionHandling,
     ) -> Self {
         let tilecount = tile_names.len();
-        Self {
+        let mut s = Self {
             tile_names,
             tile_concentration,
             tile_colors,
@@ -180,7 +180,10 @@ impl KCov {
             alpha,
             kf,
             fission_handling,
-        }
+        };
+        s.fill_friends();
+        s.fill_energy_pairs();
+        s
     }
 
     // Side must be north, south, east, or west
@@ -320,7 +323,46 @@ impl KCov {
     ///
     /// This will mutate the structure
     pub fn fill_energy_pairs(&mut self) {
-        todo!()
+        // The ids of the tiles with no covers on any of their sides
+        //
+        // We will assume that tiles are uncovered when getting their energy
+        // this check is done in the energy_to function
+        let tile_ids = self.tile_names().len();
+
+        for t1 in 0..tile_ids {
+            // Glues on the sides of tile 1
+            let (t1n, t1e, t1s, t1w) = (
+                self.glue_on_side::<NORTH>(t1 as TileId),
+                self.glue_on_side::<EAST>(t1 as TileId),
+                self.glue_on_side::<SOUTH>(t1 as TileId),
+                self.glue_on_side::<WEST>(t1 as TileId),
+            );
+
+            for t2 in 0..tile_ids {
+                let (t2n, t2e, t2s, t2w) = (
+                    self.glue_on_side::<NORTH>(t2 as TileId),
+                    self.glue_on_side::<EAST>(t2 as TileId),
+                    self.glue_on_side::<SOUTH>(t2 as TileId),
+                    self.glue_on_side::<WEST>(t2 as TileId),
+                );
+
+                // t1 -- t2
+                self.energy_we[(t1, t2)] = self.glue_links[(t1e, t2w)];
+
+                // t2 -- t1
+                self.energy_we[(t2, t1)] = self.glue_links[(t2e, t1w)];
+
+                // t1
+                // ||
+                // t2
+                self.energy_ns[(t1, t2)] = self.glue_links[(t1s, t2n)];
+
+                // t2
+                // ||
+                // t1
+                self.energy_ns[(t2, t1)] = self.glue_links[(t2s, t1n)];
+            }
+        }
     }
 
     /// SIDE here must be NSEW
