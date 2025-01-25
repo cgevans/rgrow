@@ -37,6 +37,15 @@ const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 mod tileid_helper {
     use super::{TileId, ALL_COVERS, EAST, NORTH, NO_COVERS, SOUTH, WEST};
 
+    /// Unordered list containing all 16 possible tile combinations
+    pub fn combinations(id: TileId) -> [TileId; 16] {
+        let id = base_id(id);
+        // This is not ordered nicely, 1 is west, 2 is south, 3 is both west and south, ...
+        //
+        // Maybe this *could be an* ordering ?
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(|x| id & (x << 28))
+    }
+
     pub fn attachments(id: TileId) -> TileId {
         id & ALL_COVERS
     }
@@ -117,6 +126,9 @@ pub struct KCov {
 
     /// Energy of tile and cover, cover i contains [N, E, S, W]
     energy_cover: Array1<[Energy; 4]>,
+
+    /// Energy between two tiles, if tile a is to the north of tile b, then
+    /// this shoudl be indexed as [(a,b)]
     energy_ns: Array2<Energy>,
     energy_we: Array2<Energy>,
 
@@ -304,6 +316,13 @@ impl KCov {
         self.west_friends = wf;
     }
 
+    /// Fill energy_ns, energy_we: Array2<Energy>
+    ///
+    /// This will mutate the structure
+    pub fn fill_energy_pairs(&mut self) {
+        todo!()
+    }
+
     /// SIDE here must be NSEW
     pub fn energy_to<const SIDE: TileId>(&self, tile1: TileId, tile2: TileId) -> Energy {
         // If we are covered on the sticking side, or the other tile has a cover, then we
@@ -320,6 +339,8 @@ impl KCov {
             return 0.0;
         }
 
+        // Ignore covers
+        let (tile1, tile2) = (tileid_helper::base_id(tile1), tileid_helper::base_id(tile2));
         // Now we know that neither the tile, nor the one were attaching to is covered
         match SIDE {
             NORTH => self.energy_ns[(tile2 as usize, tile1 as usize)],
@@ -393,6 +414,7 @@ impl KCov {
             return 0.0;
         };
 
+        let tile = tileid_helper::base_id(tile);
         self.kf
             * (match SIDE {
                 NORTH => self.energy_cover[tile as usize][0],
