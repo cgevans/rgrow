@@ -69,6 +69,16 @@ mod tileid_helper {
             _ => panic!("Can only find the inverse of NESW"),
         }
     }
+
+    pub const fn index<const SIDE: TileId>() -> Option<usize> {
+        match SIDE {
+            NORTH => Some(0),
+            EAST => Some(1),
+            SOUTH => Some(2),
+            WEST => Some(3),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,13 +230,7 @@ impl KCov {
 
     pub fn glue_on_side<const SIDE: TileId>(&self, tile_id: TileId) -> Glue {
         let glues = self.get_tile_uncovered_glues(tile_id);
-        match SIDE {
-            NORTH => glues[0],
-            EAST => glues[1],
-            SOUTH => glues[2],
-            WEST => glues[3],
-            _ => panic!("Side must be NESW"),
-        }
+        glues[tileid_helper::index::<SIDE>().expect("Side must be NESW")]
     }
 
     /// Get the glues, with a glue being replaced with 0 if there is a cover
