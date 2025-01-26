@@ -114,15 +114,21 @@ pub struct KCov {
     tile_glues: Array1<[Glue; 4]>,
     /// Binding strength between two glues
     glue_links: Array2<Strength>,
-    // This hashing shuold be without last four bits -- This would save a lot of space,
-    // and may also help with logic
-    //
-    // For example, if we know that some id has the right shouth glue, we instantly
-    // know the 8 possible tiles that can attach to us
-    pub north_friends: Vec<HashSetType<TileId>>,
-    pub south_friends: Vec<HashSetType<TileId>>,
-    pub east_friends: Vec<HashSetType<TileId>>,
-    pub west_friends: Vec<HashSetType<TileId>>,
+
+    /// What can attach to the north of some *glue*
+    ///
+    /// For example, if some tile has the glue 6 to the north side, north_friends[6] will
+    /// return a hashset with every tile containing a 5 (1<->2, 3<->4, 5<->6)
+    ///
+    /// To get possible attachemnts to some side of a tile (which is the usual expected use), call
+    /// `get_friends_one_side` or `get_friends`
+    north_friends: Vec<HashSetType<TileId>>,
+    /// Identical to north_friends
+    south_friends: Vec<HashSetType<TileId>>,
+    /// Identical to north_friends
+    east_friends: Vec<HashSetType<TileId>>,
+    /// Identical to north_friends
+    west_friends: Vec<HashSetType<TileId>>,
 
     /// Energy of tile and cover, cover i contains [N, E, S, W]
     energy_cover: Array1<[Energy; 4]>,
