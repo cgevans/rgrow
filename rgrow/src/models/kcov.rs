@@ -143,11 +143,14 @@ pub struct KCov {
     fission_handling: FissionHandling,
 }
 
-#[rustfmt::skip]
 #[inline(always)]
 /// Glue cannot be 0
 fn glue_inverse(glue: Glue) -> Glue {
-    if glue % 2 == 1 { glue + 1 } else { glue - 1 }
+    match glue {
+        0 => 0,
+        g if g % 2 == 1 => g + 1,
+        g => g - 1,
+    }
 }
 
 impl KCov {
