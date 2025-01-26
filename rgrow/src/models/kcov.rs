@@ -189,6 +189,7 @@ impl KCov {
         };
         s.fill_friends();
         s.fill_energy_pairs();
+        s.fill_energy_covers();
         s
     }
 
@@ -323,6 +324,22 @@ impl KCov {
         self.east_friends = ef;
         self.south_friends = sf;
         self.west_friends = wf;
+    }
+
+    pub fn fill_energy_covers(&mut self) {
+        let tile_ids = self.tile_names().len();
+        for t in 0..tile_ids {
+            let (tn, te, ts, tw) = (
+                self.glue_on_side::<NORTH>(t as TileId),
+                self.glue_on_side::<EAST>(t as TileId),
+                self.glue_on_side::<SOUTH>(t as TileId),
+                self.glue_on_side::<WEST>(t as TileId),
+            );
+            self.energy_cover[t][0] = self.glue_links[(tn, glue_inverse(tn))];
+            self.energy_cover[t][1] = self.glue_links[(te, glue_inverse(te))];
+            self.energy_cover[t][2] = self.glue_links[(ts, glue_inverse(ts))];
+            self.energy_cover[t][3] = self.glue_links[(tw, glue_inverse(tw))];
+        }
     }
 
     /// Fill energy_ns, energy_we: Array2<Energy>
