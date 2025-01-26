@@ -378,7 +378,7 @@ impl KCov {
                 _ => false,
             }
         {
-            return 0.0;
+            return Self::ZERO_RATE;
         }
 
         // Ignore covers
@@ -396,7 +396,7 @@ impl KCov {
     /// Energy of neighbour bonds
     pub fn energy_at_point<S: State>(&self, state: &S, point: PointSafe2) -> Energy {
         let tile_id: TileId = state.tile_at_point(point);
-        let mut energy = 0.0;
+        let mut energy = Self::ZERO_RATE;
         let neighbour_tile = state.tile_to_n(point);
         energy += self.energy_to::<NORTH>(tile_id, neighbour_tile);
         let neighbour_tile = state.tile_to_s(point);
@@ -453,7 +453,7 @@ impl KCov {
     pub fn cover_detachment_rate_at_side<const SIDE: TileId>(&self, tile: TileId) -> Rate {
         // If there is no cover in that side, then the detachment rate will be 0
         if !tileid_helper::is_covered::<SIDE>(tile) {
-            return 0.0;
+            return Self::ZERO_RATE;
         };
 
         let tile = tileid_helper::base_id(tile);
@@ -663,10 +663,10 @@ impl KCov {
         // Check that there is a tile at this point
         let tile = state.tile_at_point(point);
         if tile == 0 {
-            return 0.0;
+            return Self::ZERO_RATE;
         }
 
-        let mut rate = 0.0;
+        let mut rate = Self::ZERO_RATE;
         if !tileid_helper::is_covered::<NORTH>(tile) && state.tile_to_n(point) == 0 {
             rate += self.kf * self.cover_concentrations[self.glue_on_side::<NORTH>(tile)];
         }
@@ -769,7 +769,7 @@ impl System for KCov {
         let p = if state.inbounds(p.0) {
             PointSafe2(p.0)
         } else {
-            return 0.0;
+            return Self::ZERO_RATE;
         };
         let tile = { state.tile_at_point(p) };
         if tile != 0 {
@@ -854,6 +854,7 @@ mod test_covtile {
 #[cfg(test)]
 mod test_kcov {
     use super::*;
+    use ndarray::array;
 
     fn sample_kcov() -> KCov {
         const DEFAULT_COLOR: [u8; 4] = [0, 0, 0, 0];
@@ -869,7 +870,15 @@ mod test_kcov {
         //  s t
         //  f
 
-        let glue_linkns = Array1::from_vec(vec![[1., 1., 1., 1.]; 4]);
+        let glue_linkns = array![
+            //0   1   2   3  4
+            [0., 0., 0., 0., 0.], // 0
+            [0., 0., 1., 0., 0.], // 1
+            [0., 1., 0., 0., 0.], // 2
+            [0., 0., 0., 0., 1.], // 3
+            [0., 0., 0., 1., 0.], // 4
+        ];
+
         KCov::new(
             vec![
                 "null".to_string(),
@@ -931,7 +940,7 @@ mod test_kcov {
         assert_eq!(kdcov.get_friends::<{ NORTH | EAST }>(1), expected_nf);
 
         let mut expected_wf = HashSetType::default();
-        expected_wf.insert(3);
+        expected_wf.insert(2);
         assert_eq!(kdcov.west_friends[4], expected_nf);
         assert_eq!(kdcov.get_friends::<WEST>(3), expected_nf);
     }
