@@ -472,6 +472,10 @@ impl KCov {
         self.get_friends_one_side::<SIDE>(tile)
     }
 
+    pub fn cover_attachment_rate_at_side<const SIDE: TileId>(&self, tile: TileId) -> Rate {
+        self.kf * self.cover_concentrations[self.glue_on_side::<SIDE>(tile)]
+    }
+
     /// Get the energy between a tile and a cover to some side
     pub fn cover_detachment_rate_at_side<const SIDE: TileId>(&self, tile: TileId) -> Rate {
         // If there is no cover in that side, then the detachment rate will be 0
@@ -680,6 +684,18 @@ impl KCov {
             }
         }
         (false, *acc, Event::None)
+    }
+
+    /// Percentage of total concentration of some tile that has a cover on a given side
+    pub fn cover_percentage<const SIDE: TileId>(&self, tile: TileId) -> f64 {
+        let detachment_rate = self.cover_detachment_rate_at_side::<SIDE>(tile | SIDE);
+        let attachment_rate = self.cover_attachment_rate_at_side::<SIDE>(tile);
+        attachment_rate / (attachment_rate + detachment_rate)
+    }
+
+    /// Percentage of total concentration of some tile that has no cover on a given side
+    pub fn uncover_percentage<const SIDE: TileId>(&self, tile: TileId) -> f64 {
+        1.0 - self.cover_percentage::<SIDE>(tile)
     }
 
     pub fn total_cover_attachment_rate<S: State>(&self, state: &S, point: PointSafe2) -> Rate {
