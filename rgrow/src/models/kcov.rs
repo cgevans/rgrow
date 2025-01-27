@@ -691,6 +691,11 @@ impl KCov {
         true
     }
 
+    /// Helper functino for choose_attachment_side
+    ///
+    /// If a tiles neighbour to some side and the tile can bond, then
+    /// this will add to some accumulator what the cance is that the
+    /// tile is uncoverd
     fn record_bonded_tile_uncovered_chance<const SIDE: TileId, S: State>(
         &self,
         state: &S,
@@ -700,13 +705,7 @@ impl KCov {
     ) {
         let neighbour = Self::tile_to_side::<SIDE, S>(state, point);
         if neighbour != 0 && self.form_bond::<SIDE>(tile, neighbour) {
-            let uncovered_chance = match SIDE {
-                NORTH => self.uncover_percentage::<SOUTH>(tile),
-                EAST => self.uncover_percentage::<WEST>(tile),
-                SOUTH => self.uncover_percentage::<NORTH>(tile),
-                WEST => self.uncover_percentage::<EAST>(tile),
-                _ => panic!("Side must be North, East, South, or West"),
-            };
+            let uncovered_chance = self.uncover_percentage::<SIDE>(tile);
             acc.push((SIDE, uncovered_chance));
         }
     }
@@ -779,6 +778,8 @@ impl KCov {
         // FIXME: This shuold be a HashMap, not hash set. Repetition is important ??
         let friends: HashSetType<TileId> = self.possible_tiles_at_point(state, point);
         for tile in friends {
+            // FIXME: This concentration is wrong! It includes, for example the tile with covers
+            // everywhere, which is no good.
             *acc -= self.kf * self.tile_concentration[tile as usize];
             if *acc <= 0.0 {
                 let attaches_to = self.choose_attachment_side(state, point, tile);
