@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use ndarray::{Array1, Array2};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -666,6 +667,102 @@ impl KCov {
             })
     }
 
+    /// Check if two tiles can bond or not by checking that:
+    /// + There are no covers
+    /// + The glues are inverses
+    fn form_bond<const SIDE: TileId>(&self, tile1: TileId, tile2: TileId) -> bool {
+        // Check if either of the tiles have a cover
+        if (tile1 & SIDE) != 0 || (tile2 & tileid_helper::inverse::<SIDE>()) != 0 {
+            return false;
+        }
+
+        let g1 = self.glue_on_side::<SIDE>(tile1);
+        let g2 = match SIDE {
+            NORTH => self.glue_on_side::<SOUTH>(tile2),
+            EAST => self.glue_on_side::<WEST>(tile2),
+            SOUTH => self.glue_on_side::<NORTH>(tile2),
+            WEST => self.glue_on_side::<EAST>(tile2),
+            _ => panic!("Must enter NSEW"),
+        };
+
+        if g1 == 0 || g1 != glue_inverse(g2) {
+            return false;
+        }
+        true
+    }
+
+    fn record_bonded_tile_uncovered_chance<const SIDE: TileId, S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        tile: TileId,
+        acc: &mut Vec<(TileId, f64)>,
+    ) {
+        let neighbour = Self::tile_to_side::<SIDE, S>(state, point);
+        if neighbour != 0 && self.form_bond::<SIDE>(tile, neighbour) {
+            let uncovered_chance = match SIDE {
+                NORTH => self.uncover_percentage::<SOUTH>(tile),
+                EAST => self.uncover_percentage::<WEST>(tile),
+                SOUTH => self.uncover_percentage::<NORTH>(tile),
+                WEST => self.uncover_percentage::<EAST>(tile),
+                _ => panic!("Side must be North, East, South, or West"),
+            };
+            acc.push((SIDE, uncovered_chance));
+        }
+    }
+
+    /// Given that some tile is being attached at some point, what other tile is it bonding to ?
+    fn choose_attachment_side<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        tile: TileId,
+    ) -> TileId {
+        let mut rates = Vec::with_capacity(4);
+        self.record_bonded_tile_uncovered_chance::<NORTH, S>(state, point, tile, &mut rates);
+        self.record_bonded_tile_uncovered_chance::<EAST, S>(state, point, tile, &mut rates);
+        self.record_bonded_tile_uncovered_chance::<SOUTH, S>(state, point, tile, &mut rates);
+        self.record_bonded_tile_uncovered_chance::<WEST, S>(state, point, tile, &mut rates);
+
+        let mut sum = 0.0;
+        for (_, uncovered_chance) in &rates {
+            sum += uncovered_chance
+        }
+        if sum == 0.0 {
+            panic!("All neighbours are covered, or not there!");
+        }
+
+        let mut r = rand::thread_rng().gen_range(0.0..sum);
+        for (side, uncovered_chance) in rates {
+            if uncovered_chance > r {
+                return side;
+            }
+            r -= uncovered_chance;
+        }
+        panic!("How did we get here!?")
+    }
+
+    pub fn maybe_cover_on_side<const SIDE: TileId>(&self, tile: TileId) -> TileId {
+        let chance = self.cover_percentage::<SIDE>(tile);
+        if chance == 0.0 {
+            return 0;
+        }
+        let r = rand::thread_rng().gen_range(0.0..1.0);
+        if r <= chance {
+            SIDE
+        } else {
+            0
+        }
+    }
+
+    pub fn choose_covers(&self, tile: TileId, except: TileId) -> TileId {
+        (self.maybe_cover_on_side::<NORTH>(tile)
+            | self.maybe_cover_on_side::<EAST>(tile)
+            | self.maybe_cover_on_side::<SOUTH>(tile)
+            | self.maybe_cover_on_side::<WEST>(tile))
+            & (!except) // Make sure that there is no cover on the except side
+    }
+
     /// Probability of any tile attaching at some point
     pub fn event_monomer_attachment<S: State>(
         &self,
@@ -679,11 +776,14 @@ impl KCov {
             return (false, *acc, Event::None);
         }
 
+        // FIXME: This shuold be a HashMap, not hash set. Repetition is important ??
         let friends: HashSetType<TileId> = self.possible_tiles_at_point(state, point);
         for tile in friends {
             *acc -= self.kf * self.tile_concentration[tile as usize];
             if *acc <= 0.0 {
-                return (true, *acc, Event::MonomerAttachment(point, tile));
+                let attaches_to = self.choose_attachment_side(state, point, tile);
+                let covers = self.choose_covers(tile, attaches_to);
+                return (true, *acc, Event::MonomerAttachment(point, tile | covers));
             }
         }
         (false, *acc, Event::None)
