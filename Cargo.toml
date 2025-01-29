@@ -5,7 +5,7 @@ resolver = "2"
 
 [workspace.dependencies]
 ndarray = {version = "^0.15", features = ["serde"]}
-rand = {version = "^0", features = ["small_rng"]}
+rand = {version = "0.8", features = ["small_rng"]}
 serde = {version = "^1.0.185", features=["derive", "rc"]}
 pyo3 = {version = "^0.21", features = ["extension-module", "multiple-pymethods"]}
 rayon = { version = "1" }
