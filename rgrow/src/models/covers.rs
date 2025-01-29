@@ -1,5 +1,5 @@
 use ndarray::Array2;
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 
 use super::oldktam::OldKTAM;
 use crate::{
@@ -158,7 +158,7 @@ impl System for StaticKTAMCover {
     }
 
     fn take_single_step<S: State>(&self, state: &mut S, max_time_step: f64) -> StepOutcome {
-        let time_step = -f64::ln(thread_rng().gen()) / state.total_rate();
+        let time_step = -f64::ln(rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
             return StepOutcome::NoEventIn(max_time_step);

@@ -1,6 +1,6 @@
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
-use rand::thread_rng;
+use rand::rng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -263,7 +263,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 
     fn take_single_step<St: State>(&self, state: &mut St, max_time_step: f64) -> StepOutcome {
-        let time_step = -f64::ln(thread_rng().gen()) / state.total_rate();
+        let time_step = -f64::ln(rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
             return StepOutcome::NoEventIn(max_time_step);

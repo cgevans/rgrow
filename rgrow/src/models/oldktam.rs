@@ -325,8 +325,8 @@ impl OldKTAM {
         let tile_names = (0..ntiles).map(|x| x.to_string()).collect();
 
         let tile_colors = {
-            let mut rng = rand::thread_rng();
-            let ug = rand::distributions::Uniform::new(100u8, 254);
+            let mut rng = rand::rng();
+            let ug = rand::distr::Uniform::new(100u8, 254).unwrap();
             (0..ntiles)
                 .map(|_x| {
                     [

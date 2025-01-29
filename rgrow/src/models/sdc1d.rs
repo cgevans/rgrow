@@ -414,7 +414,7 @@ impl SDC {
 
         let empty_map = HashSet::default();
         let friends = self.friends_btm.get(scaffold_glue).unwrap_or(&empty_map);
-        let mut rand_thread = rand::thread_rng();
+        let mut rand_thread = rand::rng();
 
         for &strand in friends {
             acc -= self.kf * self.strand_concentration[strand as usize];

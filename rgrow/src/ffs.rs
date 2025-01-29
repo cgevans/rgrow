@@ -31,9 +31,9 @@ use base::{NumTiles, Rate};
 use ndarray::{s, Array2, ArrayView2};
 #[cfg(feature = "python")]
 use numpy::{PyArray2, ToPyArray};
-use rand::{distributions::Uniform, distributions::WeightedIndex, prelude::Distribution};
+use rand::{distr::Uniform, distr::weighted::WeightedIndex, prelude::Distribution};
 use rand::{prelude::SmallRng, SeedableRng};
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
@@ -447,7 +447,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         system: &mut Sy,
         config: &FFSRunConfig,
     ) -> Result<Self, GrowError> {
-        let mut rng = thread_rng();
+        let mut rng = rng();
 
         let mut state_list = Vec::new();
         let mut previous_list = Vec::new();
@@ -461,7 +461,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             b
         };
 
-        let chooser = Uniform::new(0, self.state_list.len());
+        let chooser = Uniform::new(0, self.state_list.len()).unwrap(); // FIXME: handle error
 
         let canvas_size = self.state_list[0].get_params();
 
@@ -526,7 +526,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         system: &mut Sy,
         config: &FFSRunConfig,
     ) -> Result<(Self, Self), GrowError> {
-        let mut rng = SmallRng::from_entropy();
+        let mut rng = SmallRng::from_os_rng();
 
         let dimers = system.calc_dimers();
 

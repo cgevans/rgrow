@@ -957,8 +957,8 @@ impl KTAM {
         ktam.tile_colors = match tile_colors {
             Some(tc) => tc,
             None => {
-                let mut rng = rand::thread_rng();
-                let ug = rand::distributions::Uniform::new(100u8, 254);
+                let mut rng = rand::rng();
+                let ug = rand::distr::Uniform::new(100u8, 254).unwrap();
                 (0..ntiles)
                     .map(|_x| {
                         [

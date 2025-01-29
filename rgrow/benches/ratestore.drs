@@ -13,8 +13,8 @@ fn ratestore_qsta_update(c: &mut Criterion) {
     let mut rs_large = rs.clone();
     let mut rs_single = rs.clone();
 
-    let rng = rand::thread_rng();
-    let it = rng.sample_iter(rand::distributions::Uniform::new(0.0, 1.0));
+    let rng = rand::rng();
+    let it = rng.sample_iter(rand::distr::Uniform::new(0.0, 1.0));
 
     let allchanges = (0..256usize)
         .flat_map(|x| (0..256usize).map(move |y| (x, y)))
@@ -24,7 +24,7 @@ fn ratestore_qsta_update(c: &mut Criterion) {
 
     let allchanges_shuffled = {
         let mut v = allchanges.clone();
-        v.shuffle(&mut rand::thread_rng());
+        v.shuffle(&mut rand::rng());
         v
     };
 

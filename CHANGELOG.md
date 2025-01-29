@@ -83,7 +83,7 @@ The version number for Rust has been increased to give consistent version number
 
 - Type improvements.
 - Optimizations. 
-- thread_rng instead of SmallRng (easier code, no major performance change)
+- rng instead of SmallRng (easier code, no major performance change)
 - Tiles as u32.
 - Initial cffi interface.
 

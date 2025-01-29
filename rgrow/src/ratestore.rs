@@ -5,7 +5,7 @@ use enum_dispatch::enum_dispatch;
 use fnv::FnvHashSet;
 use ndarray::Array2;
 use ndarray::ArrayView2;
-use rand::thread_rng;
+use rand::rng;
 use rand::Rng;
 use serde::Deserialize;
 use serde::Serialize;
@@ -64,7 +64,7 @@ impl RateStore for QuadTreeSquareArray<f64> {
     }
 
     fn choose_point(&self) -> (Point, Rate) {
-        let mut threshold = self.1 * thread_rng().gen::<f64>();
+        let mut threshold = self.1 * rng().gen::<f64>();
 
         let mut x: usize = 0;
         let mut y: usize = 0;
@@ -251,8 +251,8 @@ mod tests {
         let mut rs_single = rs.clone();
         let mut rs_all = rs.clone();
 
-        let rng = rand::thread_rng();
-        let it = rng.sample_iter(rand::distributions::Uniform::new(0.0, 1.0));
+        let rng = rand::rng();
+        let it = rng.sample_iter(rand::distr::Uniform::new(0.0, 1.0).unwrap());
 
         let allchanges = (0..128usize)
             .flat_map(|x| (0..128usize).map(move |y| (x, y)))

@@ -1,7 +1,7 @@
 use crate::base::HashMapType;
 use crate::base::Tile;
 use crate::canvas::PointSafe2;
-use rand::{distributions::weighted::WeightedIndex, distributions::Distribution};
+use rand::{distr::weighted::WeightedIndex, distr::Distribution};
 
 /// An array specifying whether or not the 1 bits of the index are in a single
 /// group, with no 0s between them, when the number is seed as a u8 that is a ring,
@@ -123,7 +123,7 @@ impl GroupInfo {
 
     pub fn choose_deletions_size_weighted(&self) -> Vec<PointSafe2> {
         let mpl = self.merged_pointlist();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let sizes: Vec<usize> = mpl.iter().map(|x| x.len()).collect();
         let dist = WeightedIndex::new(sizes).unwrap();
