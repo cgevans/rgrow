@@ -117,7 +117,7 @@ pub enum TileShape {
 
 #[cfg(feature = "python")]
 impl FromPyObject<'_> for TileShape {
-    fn extract(ob: &PyAny) -> PyResult<Self> {
+    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
         let s = ob.extract::<String>()?;
         match s.to_lowercase().as_str() {
             "single" | "s" => Ok(Self::Single),

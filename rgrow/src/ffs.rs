@@ -944,11 +944,11 @@ impl FFSRunResult {
             df = df
                 .lazy()
                 .with_columns([
-                    Series::new("tracker", arrs).lit(),
-                    Series::new("tracker_min_i", minis).lit(),
-                    Series::new("tracker_min_j", minjs).lit(),
-                    Series::new("tracker_shape_i", shapeis).lit(),
-                    Series::new("tracker_shape_j", shapejs).lit(),
+                    Series::new("tracker".into(), arrs).lit(),
+                    Series::new("tracker_min_i".into(), minis).lit(),
+                    Series::new("tracker_min_j".into(), minjs).lit(),
+                    Series::new("tracker_shape_i".into(), shapeis).lit(),
+                    Series::new("tracker_shape_j".into(), shapejs).lit(),
                 ])
                 .collect()
                 .unwrap();
@@ -978,11 +978,11 @@ impl FFSRunResult {
             df = df
                 .lazy()
                 .with_columns([
-                    Series::new("tracker", arrs).lit(),
-                    Series::new("tracker_min_i", minis).lit(),
-                    Series::new("tracker_min_j", minjs).lit(),
-                    Series::new("tracker_shape_i", shapeis).lit(),
-                    Series::new("tracker_shape_j", shapejs).lit(),
+                    Series::new("tracker".into(), arrs).lit(),
+                    Series::new("tracker_min_i".into(), minis).lit(),
+                    Series::new("tracker_min_j".into(), minjs).lit(),
+                    Series::new("tracker_shape_i".into(), shapeis).lit(),
+                    Series::new("tracker_shape_j".into(), shapejs).lit(),
                 ])
                 .collect()
                 .unwrap();

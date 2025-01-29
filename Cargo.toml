@@ -4,15 +4,15 @@ default-members = ["rgrow"]
 resolver = "2"
 
 [workspace.dependencies]
-ndarray = {version = "^0.15", features = ["serde"]}
+ndarray = {version = "^0.16", features = ["serde"]}
 rand = {version = "^0.9", features = ["small_rng"]}
 serde = {version = "^1.0.185", features=["derive", "rc"]}
-pyo3 = {version = "^0.21", features = ["extension-module", "multiple-pymethods"]}
+pyo3 = {version = "^0.23.4", features = ["extension-module", "multiple-pymethods"]}
 rayon = { version = "1" }
-numpy = "^0.21"
+numpy = "^0.23"
 approx = "^0.5"
-pyo3-polars = "^0.15"
-polars = {version = "^0.41", features = ["lazy", "parquet", "product"]}
+pyo3-polars = "^0.20"
+polars = {version = "^0.46", features = ["lazy", "parquet", "product"]}
 
 [workspace.package]
 version = "0.18.0"

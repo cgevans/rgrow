@@ -62,7 +62,7 @@ rayon = { workspace = true, optional = true }
 thiserror = "1"
 anyhow = "1"
 numpy = { workspace = true, optional = true }
-pyo3 = { workspace = true, optional = true, features = ["experimental-declarative-modules"] }
+pyo3 = { workspace = true, optional = true }
 rand = { workspace = true }
 ndarray = { workspace = true }
 enum_dispatch = "0.3"

@@ -4,6 +4,8 @@ use std::any::Any;
 
 #[cfg(feature = "python")]
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
+#[cfg(feature = "python")]
+use pyo3::types::PyAnyMethods;
 use serde::{Deserialize, Serialize};
 use thiserror;
 
@@ -146,7 +148,7 @@ pub struct RustAny(pub Box<dyn Any>);
 
 #[cfg(feature = "python")]
 impl FromPyObject<'_> for RustAny {
-    fn extract(obj: &PyAny) -> PyResult<Self> {
+    fn extract_bound(obj: &pyo3::Bound<'_, pyo3::PyAny>) -> PyResult<Self> {
         if let Ok(val) = obj.extract::<u64>() {
             Ok(RustAny(Box::new(val)))
         } else if let Ok(val) = obj.extract::<f64>() {
@@ -190,13 +192,13 @@ impl IntoPy<PyObject> for RustAny {
         } else if let Some(val) = self.0.downcast_ref::<String>() {
             val.into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array1<f64>>() {
-            PyArray1::from_array_bound(py, val).into_py(py)
+            PyArray1::from_array(py, val).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array2<f64>>() {
-            PyArray2::from_array_bound(py, val).into_py(py)
+            PyArray2::from_array(py, val).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array1<u64>>() {
-            PyArray1::from_array_bound(py, val).into_py(py)
+            PyArray1::from_array(py, val).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array2<u64>>() {
-            PyArray2::from_array_bound(py, val).into_py(py)
+            PyArray2::from_array(py, val).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<(u64, u64)>() {
             (val.0, val.1).into_py(py)
         } else if let Some(val) = self.0.downcast_ref::<(usize, usize, Ident)>() {
