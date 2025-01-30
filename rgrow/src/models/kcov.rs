@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, usize};
 
 use ndarray::{Array1, Array2};
 use rand::Rng;
@@ -13,81 +13,64 @@ use crate::{
 };
 
 type_alias!( f64 => Concentration, Strength );
-type_alias!( u32 => TileId );
+type_alias!( u32 => TileId, Side );
 
-/*
-*   Note:
-*   - Change to north east south west
-* */
+const NORTH: Side = 0b0001;
+const EAST: Side = 0b0010;
+const SOUTH: Side = 0b0100;
+const WEST: Side = 0b1000;
 
-const NORTH: u32 = 0b1000 << 28;
-const EAST: u32 = 0b0100 << 28;
-const SOUTH: u32 = 0b0010 << 28;
-const WEST: u32 = 0b0001 << 28;
+const ALL_COVERS: Side = NORTH | EAST | SOUTH | WEST;
+const NO_COVERS: Side = !ALL_COVERS;
 
-const ALL_COVERS: u32 = NORTH | EAST | SOUTH | WEST;
-const NO_COVERS: u32 = !ALL_COVERS;
-
-const ALL_SIDES: [u32; 4] = [NORTH, EAST, SOUTH, WEST];
+const ALL_SIDES: [Side; 4] = [NORTH, EAST, SOUTH, WEST];
 
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 
-/// Helper methods for tile id
+pub fn attachments(id: TileId) -> TileId {
+    id & ALL_COVERS
+}
+
+pub fn attach(side: Side, id: TileId) -> TileId {
+    id | side
+}
+
+pub fn detach(side: Side, id: TileId) -> TileId {
+    id & (!side)
+}
+
+/// Get the "base id", this is the id of the tile if it had no covers
+pub fn base_id(id: TileId) -> TileId {
+    id & NO_COVERS
+}
+
+pub fn is_covered(side: Side, id: TileId) -> bool {
+    (id & side) != 0
+}
+
+#[inline(always)]
+pub const fn inverse(side: Side) -> Side {
+    match side {
+        NORTH => SOUTH,
+        SOUTH => NORTH,
+        EAST => WEST,
+        WEST => EAST,
+        _ => panic!("Can only find the inverse of NESW"),
+    }
+}
+
+/// Index array by side, north = 0, east = 1, south = 2, west = 3
 ///
-/// This can help change the id to attach a cover on the north position, etc ...
-mod tileid_helper {
-    use super::{TileId, ALL_COVERS, EAST, NORTH, NO_COVERS, SOUTH, WEST};
-
-    /// Unordered list containing all 16 possible tile combinations
-    pub fn combinations(id: TileId) -> [TileId; 16] {
-        let id = base_id(id);
-        // This is not ordered nicely, 1 is west, 2 is south, 3 is both west and south, ...
-        //
-        // Maybe this *could be an* ordering ?
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(|x| id & (x << 28))
-    }
-
-    pub fn attachments(id: TileId) -> TileId {
-        id & ALL_COVERS
-    }
-
-    pub fn attach<const SIDE: TileId>(id: TileId) -> TileId {
-        id | SIDE
-    }
-
-    pub fn detach<const SIDE: TileId>(id: TileId) -> TileId {
-        id & (!SIDE)
-    }
-
-    /// Get the "base id", this is the id of the tile if it had no covers
-    pub fn base_id(id: TileId) -> TileId {
-        id & NO_COVERS
-    }
-
-    pub fn is_covered<const SIDE: TileId>(id: TileId) -> bool {
-        (id & SIDE) != 0
-    }
-
-    // TODO: This should be compile time, I think
-    #[inline(always)]
-    pub const fn inverse<const SIDE: TileId>() -> TileId {
-        match SIDE {
-            NORTH => SOUTH,
-            SOUTH => NORTH,
-            EAST => WEST,
-            WEST => EAST,
-            _ => panic!("Can only find the inverse of NESW"),
-        }
-    }
-
-    pub const fn index<const SIDE: TileId>() -> Option<usize> {
-        match SIDE {
-            NORTH => Some(0),
-            EAST => Some(1),
-            SOUTH => Some(2),
-            WEST => Some(3),
-            _ => None,
-        }
+/// # Panic
+///
+/// This will panic when called with a mix of sides (ie, north-east)
+pub const fn index(side: Side) -> Option<usize> {
+    match side {
+        NORTH => Some(0),
+        EAST => Some(1),
+        SOUTH => Some(2),
+        WEST => Some(3),
+        _ => None,
     }
 }
 
@@ -198,17 +181,14 @@ impl KCov {
     }
 
     // Side must be north, south, east, or west
-    pub fn get_friends_one_side<const SIDE: TileId>(
-        &self,
-        tile: TileId,
-    ) -> Option<&HashSetType<TileId>> {
+    pub fn get_friends_one_side(&self, side: Side, tile: TileId) -> Option<&HashSetType<TileId>> {
         // The tile is covered, so we dont have any friends
-        if tileid_helper::is_covered::<SIDE>(tile) {
+        if is_covered(side, tile) {
             return None;
         }
 
-        let tile_glue = self.glue_on_side::<SIDE>(tile);
-        Some(match SIDE {
+        let tile_glue = self.glue_on_side(side, tile);
+        Some(match side {
             NORTH => &self.north_friends[tile_glue],
             SOUTH => &self.south_friends[tile_glue],
             EAST => &self.east_friends[tile_glue],
@@ -220,43 +200,27 @@ impl KCov {
     }
 
     /// Get the friends to some side
-    pub fn get_friends<const SIDE: TileId>(&self, tile: TileId) -> HashSetType<TileId> {
+    pub fn get_friends(&self, side: Side, tile: TileId) -> HashSetType<TileId> {
         let mut tile_friends = HashSetType::default();
-
-        // If side contains north, then we will add the north friends...
-        if SIDE & NORTH != 0 {
-            if let Some(ext) = self.get_friends_one_side::<NORTH>(tile) {
-                tile_friends.extend(ext);
+        for s in ALL_SIDES {
+            if side & s != 0 {
+                if let Some(ext) = self.get_friends_one_side(s, tile) {
+                    tile_friends.extend(ext);
+                }
             }
         }
-        if SIDE & SOUTH != 0 {
-            if let Some(ext) = self.get_friends_one_side::<SOUTH>(tile) {
-                tile_friends.extend(ext);
-            }
-        }
-        if SIDE & EAST != 0 {
-            if let Some(ext) = self.get_friends_one_side::<EAST>(tile) {
-                tile_friends.extend(ext);
-            }
-        }
-        if SIDE & WEST != 0 {
-            if let Some(ext) = self.get_friends_one_side::<WEST>(tile) {
-                tile_friends.extend(ext);
-            }
-        }
-
         tile_friends
     }
 
     /// Get the glues. If there are covers, this wil look past them, and return the
     /// glue that is under it
     pub fn get_tile_raw_glues(&self, tile_id: TileId) -> Vec<Glue> {
-        self.tile_glues[tileid_helper::base_id(tile_id) as usize].to_vec()
+        self.tile_glues[base_id(tile_id) as usize].to_vec()
     }
 
-    pub fn glue_on_side<const SIDE: TileId>(&self, tile_id: TileId) -> Glue {
+    pub fn glue_on_side(&self, side: Side, tile_id: TileId) -> Glue {
         let glues = self.get_tile_uncovered_glues(tile_id);
-        glues[tileid_helper::index::<SIDE>().expect("Side must be NESW")]
+        glues[index(side).expect("Side must be NESW")]
     }
 
     /// Get the glues, with a glue being replaced with 0 if there is a cover
@@ -264,19 +228,11 @@ impl KCov {
         // This MUST be exactly 4 length
         let row = self.get_tile_raw_glues(tile_id);
         let mut glues = vec![0; 4];
-
-        // If any of the sides have a cover, then the glue is 0
-        if tile_id & NORTH == 0 {
-            glues[0] = row[0];
-        }
-        if tile_id & EAST == 0 {
-            glues[1] = row[1]
-        }
-        if tile_id & SOUTH == 0 {
-            glues[2] = row[2];
-        }
-        if tile_id & WEST == 0 {
-            glues[3] = row[3]
+        for s in ALL_SIDES {
+            if !is_covered(s, tile_id) {
+                let i = index(s).unwrap() as usize;
+                glues[i] = row[i];
+            }
         }
         glues
     }
@@ -301,7 +257,7 @@ impl KCov {
 
         let err_message = "Vector shouldnt have empty index, as it was pre-initialized";
         for (id, [ng, eg, sg, wg]) in self.tile_glues.iter().enumerate() {
-            let base_id = tileid_helper::base_id(id as u32);
+            let base_id = base_id(id as u32);
 
             if ng != &0 {
                 sf.get_mut(glue_inverse(*ng))
@@ -334,10 +290,10 @@ impl KCov {
         let tile_ids = self.tile_names().len();
         for t in 0..tile_ids {
             let (tn, te, ts, tw) = (
-                self.glue_on_side::<NORTH>(t as TileId),
-                self.glue_on_side::<EAST>(t as TileId),
-                self.glue_on_side::<SOUTH>(t as TileId),
-                self.glue_on_side::<WEST>(t as TileId),
+                self.glue_on_side(NORTH, t as TileId),
+                self.glue_on_side(EAST, t as TileId),
+                self.glue_on_side(SOUTH, t as TileId),
+                self.glue_on_side(WEST, t as TileId),
             );
             self.energy_cover[t][0] = self.glue_links[(tn, glue_inverse(tn))];
             self.energy_cover[t][1] = self.glue_links[(te, glue_inverse(te))];
@@ -359,18 +315,18 @@ impl KCov {
         for t1 in 0..tile_ids {
             // Glues on the sides of tile 1
             let (t1n, t1e, t1s, t1w) = (
-                self.glue_on_side::<NORTH>(t1 as TileId),
-                self.glue_on_side::<EAST>(t1 as TileId),
-                self.glue_on_side::<SOUTH>(t1 as TileId),
-                self.glue_on_side::<WEST>(t1 as TileId),
+                self.glue_on_side(NORTH, t1 as TileId),
+                self.glue_on_side(EAST, t1 as TileId),
+                self.glue_on_side(SOUTH, t1 as TileId),
+                self.glue_on_side(WEST, t1 as TileId),
             );
 
             for t2 in 0..tile_ids {
                 let (t2n, t2e, t2s, t2w) = (
-                    self.glue_on_side::<NORTH>(t2 as TileId),
-                    self.glue_on_side::<EAST>(t2 as TileId),
-                    self.glue_on_side::<SOUTH>(t2 as TileId),
-                    self.glue_on_side::<WEST>(t2 as TileId),
+                    self.glue_on_side(NORTH, t2 as TileId),
+                    self.glue_on_side(EAST, t2 as TileId),
+                    self.glue_on_side(SOUTH, t2 as TileId),
+                    self.glue_on_side(WEST, t2 as TileId),
                 );
 
                 // t1 -- t2
@@ -393,25 +349,18 @@ impl KCov {
     }
 
     /// SIDE here must be NSEW
-    pub fn energy_to<const SIDE: TileId>(&self, tile1: TileId, tile2: TileId) -> Energy {
+    pub fn energy_to(&self, side: Side, tile1: TileId, tile2: TileId) -> Energy {
         // If we are covered on the sticking side, or the other tile has a cover, then we
         // have no binding energy
-        if tileid_helper::is_covered::<SIDE>(tile1)
-            || match SIDE {
-                NORTH => tileid_helper::is_covered::<SOUTH>(tile2),
-                EAST => tileid_helper::is_covered::<WEST>(tile2),
-                SOUTH => tileid_helper::is_covered::<NORTH>(tile2),
-                WEST => tileid_helper::is_covered::<EAST>(tile2),
-                _ => false,
-            }
-        {
+        if is_covered(side, tile1) || is_covered(inverse(side), tile2) {
             return Self::ZERO_RATE;
         }
 
         // Ignore covers
-        let (tile1, tile2) = (tileid_helper::base_id(tile1), tileid_helper::base_id(tile2));
+        let (tile1, tile2) = (base_id(tile1), base_id(tile2));
+
         // Now we know that neither the tile, nor the one were attaching to is covered
-        match SIDE {
+        match side {
             NORTH => self.energy_ns[(tile2 as usize, tile1 as usize)],
             EAST => self.energy_we[(tile1 as usize, tile2 as usize)],
             SOUTH => self.energy_ns[(tile1 as usize, tile2 as usize)],
@@ -424,14 +373,10 @@ impl KCov {
     pub fn energy_at_point<S: State>(&self, state: &S, point: PointSafe2) -> Energy {
         let tile_id: TileId = state.tile_at_point(point);
         let mut energy = Self::ZERO_RATE;
-        let neighbour_tile = state.tile_to_n(point);
-        energy += self.energy_to::<NORTH>(tile_id, neighbour_tile);
-        let neighbour_tile = state.tile_to_s(point);
-        energy += self.energy_to::<SOUTH>(tile_id, neighbour_tile);
-        let neighbour_tile = state.tile_to_e(point);
-        energy += self.energy_to::<EAST>(tile_id, neighbour_tile);
-        let neighbour_tile = state.tile_to_w(point);
-        energy += self.energy_to::<WEST>(tile_id, neighbour_tile);
+        for side in ALL_SIDES {
+            let neighbour_tile = Self::tile_to_side(state, side, point);
+            energy += self.energy_to(side, tile_id, neighbour_tile)
+        }
         energy
     }
 
@@ -455,71 +400,61 @@ impl KCov {
         self.tile_concentration[tile as usize] * self.kf
     }
 
-    fn get_friend_side_if_empty<const SIDE: TileId, S: State>(
+    fn get_friend_side_if_empty<S: State>(
         &self,
         state: &S,
+        side: Side,
         point: PointSafe2,
     ) -> Option<&HashSetType<TileId>> {
-        let neighbour = match SIDE {
-            NORTH => state.tile_to_n(point),
-            EAST => state.tile_to_e(point),
-            SOUTH => state.tile_to_s(point),
-            WEST => state.tile_to_w(point),
-            _ => panic!("Side must me NESW"),
-        };
-
+        let neighbour = Self::tile_to_side(state, side, point);
         // If there has already been an attachemnt, then nothing can attach there
         if neighbour != 0 {
             return None;
         }
         let tile = state.tile_at_point(point);
-        self.get_friends_one_side::<SIDE>(tile)
+        self.get_friends_one_side(side, tile)
     }
 
-    pub fn cover_attachment_rate_at_side<const SIDE: TileId>(&self, tile: TileId) -> Rate {
-        self.kf * self.cover_concentrations[self.glue_on_side::<SIDE>(tile)]
+    pub fn cover_attachment_rate_at_side(&self, side: Side, tile: TileId) -> Rate {
+        self.kf * self.cover_concentrations[self.glue_on_side(side, tile)]
     }
 
     /// Get the energy between a tile and a cover to some side
-    pub fn cover_detachment_rate_at_side<const SIDE: TileId>(&self, tile: TileId) -> Rate {
+    pub fn cover_detachment_rate_at_side(&self, side: Side, tile: TileId) -> Rate {
         // If there is no cover in that side, then the detachment rate will be 0
-        if !tileid_helper::is_covered::<SIDE>(tile) {
+        if is_covered(side, tile) {
             return Self::ZERO_RATE;
         };
 
-        let tile = tileid_helper::base_id(tile);
+        let tile = base_id(tile);
         self.kf
-            * (match SIDE {
-                NORTH => self.energy_cover[tile as usize][0],
-                EAST => self.energy_cover[tile as usize][1],
-                SOUTH => self.energy_cover[tile as usize][2],
-                WEST => self.energy_cover[tile as usize][3],
-                _ => panic!("Side must be NESW"),
-            } * (1.0 / self.rtval()))
+            * (self.energy_cover[tile as usize][index(side).expect("Side must be NESW")]
+                * (1.0 / self.rtval()))
             .exp()
     }
 
     pub fn cover_detachment_rate_total(&self, tile: TileId) -> Rate {
-        self.cover_detachment_rate_at_side::<NORTH>(tile)
-            + self.cover_detachment_rate_at_side::<EAST>(tile)
-            + self.cover_detachment_rate_at_side::<SOUTH>(tile)
-            + self.cover_detachment_rate_at_side::<WEST>(tile)
+        self.cover_detachment_rate_at_side(NORTH, tile)
+            + self.cover_detachment_rate_at_side(EAST, tile)
+            + self.cover_detachment_rate_at_side(SOUTH, tile)
+            + self.cover_detachment_rate_at_side(WEST, tile)
     }
 
-    fn maybe_detach_cover_on_side_event<const SIDE: TileId>(
+    fn maybe_detach_cover_on_side_event(
         &self,
         tileid: TileId,
         point: PointSafe2,
+        side: Side,
         acc: &mut Rate,
     ) -> Option<(bool, Rate, Event)> {
         // Something cannot detach if there is no cover
-        if !tileid_helper::is_covered::<SIDE>(tileid) {
+        if !is_covered(side, tileid) {
             return None;
         }
-        *acc -= self.cover_detachment_rate_at_side::<SIDE>(tileid);
+        *acc -= self.cover_detachment_rate_at_side(side, tileid);
         if *acc <= 0.0 {
             // ^ SIDE will change the bit from 1 to 0, so no longer have a cover here
-            Some((true, *acc, Event::MonomerChange(point, tileid ^ SIDE)))
+            Some((true, *acc, Event::MonomerChange(point, tileid ^ side)))
         } else {
             None
         }
@@ -540,15 +475,15 @@ impl KCov {
 
         // Update the acc for each side, if there is no cover, then None will be returned, if no
         // evene takes place, then acc is updated, and none is returned.
-        self.maybe_detach_cover_on_side_event::<NORTH>(tile, point, acc)
-            .or(self.maybe_detach_cover_on_side_event::<EAST>(tile, point, acc))
-            .or(self.maybe_detach_cover_on_side_event::<SOUTH>(tile, point, acc))
-            .or(self.maybe_detach_cover_on_side_event::<WEST>(tile, point, acc))
+        self.maybe_detach_cover_on_side_event(tile, point, NORTH, acc)
+            .or(self.maybe_detach_cover_on_side_event(tile, point, EAST, acc))
+            .or(self.maybe_detach_cover_on_side_event(tile, point, SOUTH, acc))
+            .or(self.maybe_detach_cover_on_side_event(tile, point, WEST, acc))
             .unwrap_or((false, *acc, Event::None))
     }
 
-    pub fn tile_to_side<const SIDE: TileId, S: State>(state: &S, p: PointSafe2) -> TileId {
-        match SIDE {
+    pub fn tile_to_side<S: State>(state: &S, side: Side, p: PointSafe2) -> TileId {
+        match side {
             NORTH => state.tile_to_n(p),
             EAST => state.tile_to_e(p),
             SOUTH => state.tile_to_s(p),
@@ -557,25 +492,26 @@ impl KCov {
         }
     }
 
-    fn maybe_attach_side_event<const SIDE: TileId, S: State>(
+    fn maybe_attach_side_event<S: State>(
         &self,
         tileid: TileId,
+        side: Side,
         point: PointSafe2,
         state: &S,
         acc: &mut Rate,
     ) -> Option<(bool, Rate, Event)> {
         // A cover cannot attach to a side with a cover already attached
-        if tileid_helper::is_covered::<SIDE>(tileid)
+        if is_covered(side, tileid)
         // If a tile is already attached to that side, then nothing can attach
-            || Self::tile_to_side::<SIDE, S>(state, point) != 0
+            || Self::tile_to_side(state,side, point) != 0
         {
             return None;
         }
 
-        *acc -= self.kf * self.cover_concentrations[self.glue_on_side::<SIDE>(tileid)];
+        *acc -= self.kf * self.cover_concentrations[self.glue_on_side(side, tileid)];
         if *acc <= 0.0 {
             // | SIDE will change the bit from 0 to 1
-            Some((true, *acc, Event::MonomerChange(point, tileid | SIDE)))
+            Some((true, *acc, Event::MonomerChange(point, tileid | side)))
         } else {
             None
         }
@@ -592,10 +528,10 @@ impl KCov {
         if tile == 0 {
             return (false, 0.0, Event::None);
         }
-        self.maybe_attach_side_event::<NORTH, S>(tile, point, state, acc)
-            .or(self.maybe_attach_side_event::<EAST, S>(tile, point, state, acc))
-            .or(self.maybe_attach_side_event::<SOUTH, S>(tile, point, state, acc))
-            .or(self.maybe_attach_side_event::<WEST, S>(tile, point, state, acc))
+        self.maybe_attach_side_event(tile, NORTH, point, state, acc)
+            .or(self.maybe_attach_side_event(tile, EAST, point, state, acc))
+            .or(self.maybe_attach_side_event(tile, SOUTH, point, state, acc))
+            .or(self.maybe_attach_side_event(tile, WEST, point, state, acc))
             .unwrap_or((false, *acc, Event::None))
     }
 
@@ -631,29 +567,15 @@ impl KCov {
             return friends;
         }
 
-        // If there is tile to the north of this point
-        let neighbour_tile = state.tile_to_n(point);
-        if neighbour_tile != 0 {
-            if let Some(northf) = self.get_friends_one_side::<SOUTH>(neighbour_tile) {
-                friends.extend(northf);
+        for side in ALL_SIDES {
+            let neighbour = Self::tile_to_side(state, side, point);
+            if neighbour == 0 {
+                continue;
             }
-        }
-        let neighbour_tile = state.tile_to_s(point);
-        if neighbour_tile != 0 {
-            if let Some(southf) = self.get_friends_one_side::<NORTH>(neighbour_tile) {
-                friends.extend(southf);
-            }
-        }
-        let neighbour_tile = state.tile_to_e(point);
-        if neighbour_tile != 0 {
-            if let Some(eastf) = self.get_friends_one_side::<WEST>(neighbour_tile) {
-                friends.extend(eastf);
-            }
-        }
-        let neighbour_tile = state.tile_to_w(point);
-        if neighbour_tile != 0 {
-            if let Some(westf) = self.get_friends_one_side::<EAST>(neighbour_tile) {
-                friends.extend(westf);
+
+            if let Some(possible_attachments) = self.get_friends_one_side(inverse(side), neighbour)
+            {
+                friends.extend(possible_attachments);
             }
         }
         friends
@@ -670,20 +592,14 @@ impl KCov {
     /// Check if two tiles can bond or not by checking that:
     /// + There are no covers
     /// + The glues are inverses
-    fn form_bond<const SIDE: TileId>(&self, tile1: TileId, tile2: TileId) -> bool {
+    fn form_bond(&self, tile1: TileId, side: Side, tile2: TileId) -> bool {
         // Check if either of the tiles have a cover
-        if (tile1 & SIDE) != 0 || (tile2 & tileid_helper::inverse::<SIDE>()) != 0 {
+        if (tile1 & side) != 0 || (tile2 & inverse(side)) != 0 {
             return false;
         }
 
-        let g1 = self.glue_on_side::<SIDE>(tile1);
-        let g2 = match SIDE {
-            NORTH => self.glue_on_side::<SOUTH>(tile2),
-            EAST => self.glue_on_side::<WEST>(tile2),
-            SOUTH => self.glue_on_side::<NORTH>(tile2),
-            WEST => self.glue_on_side::<EAST>(tile2),
-            _ => panic!("Must enter NSEW"),
-        };
+        let g1 = self.glue_on_side(side, tile1);
+        let g2 = self.glue_on_side(inverse(side), tile2);
 
         if g1 == 0 || g1 != glue_inverse(g2) {
             return false;
@@ -696,17 +612,18 @@ impl KCov {
     /// If a tiles neighbour to some side and the tile can bond, then
     /// this will add to some accumulator what the cance is that the
     /// tile is uncoverd
-    fn record_bonded_tile_uncovered_chance<const SIDE: TileId, S: State>(
+    fn record_bonded_tile_uncovered_chance<S: State>(
         &self,
         state: &S,
+        side: Side,
         point: PointSafe2,
         tile: TileId,
         acc: &mut Vec<(TileId, f64)>,
     ) {
-        let neighbour = Self::tile_to_side::<SIDE, S>(state, point);
-        if neighbour != 0 && self.form_bond::<SIDE>(tile, neighbour) {
-            let uncovered_chance = self.uncover_percentage::<SIDE>(tile);
-            acc.push((SIDE, uncovered_chance));
+        let neighbour = Self::tile_to_side(state, side, point);
+        if neighbour != 0 && self.form_bond(tile, side, neighbour) {
+            let uncovered_chance = self.uncover_percentage(side, tile);
+            acc.push((side, uncovered_chance));
         }
     }
 
@@ -718,10 +635,10 @@ impl KCov {
         tile: TileId,
     ) -> TileId {
         let mut rates = Vec::with_capacity(4);
-        self.record_bonded_tile_uncovered_chance::<NORTH, S>(state, point, tile, &mut rates);
-        self.record_bonded_tile_uncovered_chance::<EAST, S>(state, point, tile, &mut rates);
-        self.record_bonded_tile_uncovered_chance::<SOUTH, S>(state, point, tile, &mut rates);
-        self.record_bonded_tile_uncovered_chance::<WEST, S>(state, point, tile, &mut rates);
+        self.record_bonded_tile_uncovered_chance(state, NORTH, point, tile, &mut rates);
+        self.record_bonded_tile_uncovered_chance(state, EAST, point, tile, &mut rates);
+        self.record_bonded_tile_uncovered_chance(state, SOUTH, point, tile, &mut rates);
+        self.record_bonded_tile_uncovered_chance(state, WEST, point, tile, &mut rates);
 
         let mut sum = 0.0;
         for (_, uncovered_chance) in &rates {
@@ -741,24 +658,24 @@ impl KCov {
         panic!("How did we get here!?")
     }
 
-    pub fn maybe_cover_on_side<const SIDE: TileId>(&self, tile: TileId) -> TileId {
-        let chance = self.cover_percentage::<SIDE>(tile);
+    pub fn maybe_cover_on_side(&self, side: Side, tile: TileId) -> TileId {
+        let chance = self.cover_percentage(side, tile);
         if chance == 0.0 {
             return 0;
         }
         let r = rand::thread_rng().gen_range(0.0..1.0);
         if r <= chance {
-            SIDE
+            side
         } else {
             0
         }
     }
 
     pub fn choose_covers(&self, tile: TileId, except: TileId) -> TileId {
-        (self.maybe_cover_on_side::<NORTH>(tile)
-            | self.maybe_cover_on_side::<EAST>(tile)
-            | self.maybe_cover_on_side::<SOUTH>(tile)
-            | self.maybe_cover_on_side::<WEST>(tile))
+        (self.maybe_cover_on_side(NORTH, tile)
+            | self.maybe_cover_on_side(EAST, tile)
+            | self.maybe_cover_on_side(SOUTH, tile)
+            | self.maybe_cover_on_side(WEST, tile))
             & (!except) // Make sure that there is no cover on the except side
     }
 
@@ -791,15 +708,15 @@ impl KCov {
     }
 
     /// Percentage of total concentration of some tile that has a cover on a given side
-    pub fn cover_percentage<const SIDE: TileId>(&self, tile: TileId) -> f64 {
-        let detachment_rate = self.cover_detachment_rate_at_side::<SIDE>(tile | SIDE);
-        let attachment_rate = self.cover_attachment_rate_at_side::<SIDE>(tile);
+    pub fn cover_percentage(&self, side: Side, tile: TileId) -> f64 {
+        let detachment_rate = self.cover_detachment_rate_at_side(side, tile | side);
+        let attachment_rate = self.cover_attachment_rate_at_side(side, tile);
         attachment_rate / (attachment_rate + detachment_rate)
     }
 
     /// Percentage of total concentration of some tile that has no cover on a given side
-    pub fn uncover_percentage<const SIDE: TileId>(&self, tile: TileId) -> f64 {
-        1.0 - self.cover_percentage::<SIDE>(tile)
+    pub fn uncover_percentage(&self, side: Side, tile: TileId) -> f64 {
+        1.0 - self.cover_percentage(side, tile)
     }
 
     pub fn total_cover_attachment_rate<S: State>(&self, state: &S, point: PointSafe2) -> Rate {
@@ -810,17 +727,10 @@ impl KCov {
         }
 
         let mut rate = Self::ZERO_RATE;
-        if !tileid_helper::is_covered::<NORTH>(tile) && state.tile_to_n(point) == 0 {
-            rate += self.kf * self.cover_concentrations[self.glue_on_side::<NORTH>(tile)];
-        }
-        if !tileid_helper::is_covered::<SOUTH>(tile) && state.tile_to_s(point) == 0 {
-            rate += self.kf * self.cover_concentrations[self.glue_on_side::<SOUTH>(tile)];
-        }
-        if !tileid_helper::is_covered::<EAST>(tile) && state.tile_to_e(point) == 0 {
-            rate += self.kf * self.cover_concentrations[self.glue_on_side::<EAST>(tile)];
-        }
-        if !tileid_helper::is_covered::<WEST>(tile) && state.tile_to_w(point) == 0 {
-            rate += self.kf * self.cover_concentrations[self.glue_on_side::<WEST>(tile)];
+        for s in ALL_SIDES {
+            if !is_covered(s, tile) && Self::tile_to_side(state, s, point) == 0 {
+                rate += self.kf * self.cover_concentrations[self.glue_on_side(s, tile)];
+            }
         }
         return rate;
     }
@@ -839,11 +749,11 @@ impl KCov {
 
 impl TileBondInfo for KCov {
     fn tile_color(&self, tileid: TileId) -> [u8; 4] {
-        self.tile_colors[tileid_helper::base_id(tileid) as usize]
+        self.tile_colors[base_id(tileid) as usize]
     }
 
     fn tile_name(&self, tileid: TileId) -> &str {
-        self.tile_names[tileid_helper::base_id(tileid) as usize].as_str()
+        self.tile_names[base_id(tileid) as usize].as_str()
     }
 
     fn bond_name(&self, bond_number: usize) -> &str {
@@ -965,32 +875,32 @@ impl System for KCov {
 
 #[cfg(test)]
 mod test_covtile {
-    use crate::models::kcov::{tileid_helper, EAST, NORTH, WEST};
+    use crate::models::kcov::{attach, base_id, detach, is_covered, EAST, NORTH, WEST};
 
     #[test]
     fn get_ids() {
         let mut t = 0b10110000;
-        t = tileid_helper::attach::<EAST>(t);
-        assert_eq!(tileid_helper::base_id(t), 0b10110000);
+        t = attach(EAST, t);
+        assert_eq!(base_id(t), 0b10110000);
         assert_eq!(t, 0b10110000 | EAST);
 
-        let mut k = 1;
-        k = tileid_helper::attach::<EAST>(k);
-        k = tileid_helper::attach::<WEST>(k);
-        assert_eq!(tileid_helper::base_id(k), 1);
+        let mut k = 0b10000;
+        k = attach(EAST, k);
+        k = attach(WEST, k);
+        assert_eq!(base_id(k), 16);
     }
 
     #[test]
     fn is_covered_side() {
-        assert!(tileid_helper::is_covered::<NORTH>(NORTH));
-        assert!(tileid_helper::is_covered::<NORTH>(123 | NORTH));
-        assert!(!tileid_helper::is_covered::<EAST>(123 | NORTH));
+        assert!(is_covered(NORTH, NORTH));
+        assert!(is_covered(NORTH, 123 << 4 | NORTH));
+        assert!(!is_covered(EAST, 123 << 4 | NORTH));
     }
 
     #[test]
     fn detach_side() {
-        assert_eq!(0, tileid_helper::detach::<NORTH>(NORTH));
-        assert_eq!(123, tileid_helper::detach::<NORTH>(123 | NORTH));
+        assert_eq!(0, detach(NORTH, NORTH));
+        assert_eq!(123 << 4, detach(NORTH, (123 << 4) | NORTH));
     }
 }
 
@@ -1052,9 +962,9 @@ mod test_kcov {
     #[test]
     fn glue_side() {
         let kdcov = sample_kcov();
-        assert_eq!(kdcov.glue_on_side::<NORTH>(1), 1);
-        assert_eq!(kdcov.glue_on_side::<SOUTH>(1), 0);
-        assert_eq!(kdcov.glue_on_side::<WEST>(3), 4);
+        assert_eq!(kdcov.glue_on_side(NORTH, 1), 1);
+        assert_eq!(kdcov.glue_on_side(SOUTH, 1), 0);
+        assert_eq!(kdcov.glue_on_side(WEST, 3), 4);
     }
 
     #[test]
@@ -1077,15 +987,15 @@ mod test_kcov {
         assert_eq!(kdcov.north_friends[1], expected_nf);
         // These helper methods make it so that you can find every tile that can bond to the north
         // of some tile id
-        assert_eq!(kdcov.get_friends_one_side::<NORTH>(1), Some(&expected_nf));
-        assert_eq!(kdcov.get_friends::<NORTH>(1), expected_nf);
+        assert_eq!(kdcov.get_friends_one_side(NORTH, 1), Some(&expected_nf));
+        assert_eq!(kdcov.get_friends(NORTH, 1), expected_nf);
         // You can also get frineds to multiple sides at once
-        assert_eq!(kdcov.get_friends::<{ NORTH | EAST }>(1), expected_nf);
+        assert_eq!(kdcov.get_friends(NORTH | EAST, 1), expected_nf);
 
         let mut expected_wf = HashSetType::default();
         expected_wf.insert(2);
         assert_eq!(kdcov.west_friends[4], expected_nf);
-        assert_eq!(kdcov.get_friends::<WEST>(3), expected_nf);
+        assert_eq!(kdcov.get_friends(WEST, 3), expected_nf);
     }
 
     fn check_energy_at_point() {}
