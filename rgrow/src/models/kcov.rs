@@ -39,8 +39,7 @@ pub fn detach(side: Side, id: TileId) -> TileId {
     id & (!side)
 }
 
-/// Get the "base id", this is the id of the tile if it had no covers
-pub fn base_id(id: TileId) -> TileId {
+pub fn uncover_all(id: TileId) -> TileId {
     id & NO_COVERS
 }
 
@@ -59,12 +58,16 @@ pub const fn inverse(side: Side) -> Side {
     }
 }
 
+pub fn tile_index(tile: TileId) -> usize {
+    (tile >> 4) as usize
+}
+
 /// Index array by side, north = 0, east = 1, south = 2, west = 3
 ///
 /// # Panic
 ///
 /// This will panic when called with a mix of sides (ie, north-east)
-pub const fn index(side: Side) -> Option<usize> {
+pub const fn side_index(side: Side) -> Option<usize> {
     match side {
         NORTH => Some(0),
         EAST => Some(1),
@@ -215,12 +218,13 @@ impl KCov {
     /// Get the glues. If there are covers, this wil look past them, and return the
     /// glue that is under it
     pub fn get_tile_raw_glues(&self, tile_id: TileId) -> Vec<Glue> {
-        self.tile_glues[base_id(tile_id) as usize].to_vec()
+        let index = tile_index(tile_id) as usize;
+        self.tile_glues[index].to_vec()
     }
 
     pub fn glue_on_side(&self, side: Side, tile_id: TileId) -> Glue {
         let glues = self.get_tile_uncovered_glues(tile_id);
-        glues[index(side).expect("Side must be NESW")]
+        glues[side_index(side).expect("Side must be NESW")]
     }
 
     /// Get the glues, with a glue being replaced with 0 if there is a cover
@@ -230,7 +234,7 @@ impl KCov {
         let mut glues = vec![0; 4];
         for s in ALL_SIDES {
             if !is_covered(s, tile_id) {
-                let i = index(s).unwrap() as usize;
+                let i = side_index(s).unwrap() as usize;
                 glues[i] = row[i];
             }
         }
@@ -257,7 +261,8 @@ impl KCov {
 
         let err_message = "Vector shouldnt have empty index, as it was pre-initialized";
         for (id, [ng, eg, sg, wg]) in self.tile_glues.iter().enumerate() {
-            let base_id = base_id(id as u32);
+            // Add 4 zeros to the binary representation of the number
+            let base_id = (id << 4) as u32;
 
             if ng != &0 {
                 sf.get_mut(glue_inverse(*ng))
@@ -357,7 +362,7 @@ impl KCov {
         }
 
         // Ignore covers
-        let (tile1, tile2) = (base_id(tile1), base_id(tile2));
+        let (tile1, tile2) = (tile_index(tile1), tile_index(tile2));
 
         // Now we know that neither the tile, nor the one were attaching to is covered
         match side {
@@ -397,7 +402,7 @@ impl KCov {
 
     /// The rate at which a tile will attach somewhere
     pub fn tile_attachment_rate(&self, tile: TileId) -> f64 {
-        self.tile_concentration[tile as usize] * self.kf
+        self.tile_concentration[tile_index(tile)] * self.kf
     }
 
     fn get_friend_side_if_empty<S: State>(
@@ -426,9 +431,9 @@ impl KCov {
             return Self::ZERO_RATE;
         };
 
-        let tile = base_id(tile);
+        let tile = uncover_all(tile);
         self.kf
-            * (self.energy_cover[tile as usize][index(side).expect("Side must be NESW")]
+            * (self.energy_cover[tile_index(tile)][side_index(side).expect("Side must be NESW")]
                 * (1.0 / self.rtval()))
             .exp()
     }
@@ -749,11 +754,11 @@ impl KCov {
 
 impl TileBondInfo for KCov {
     fn tile_color(&self, tileid: TileId) -> [u8; 4] {
-        self.tile_colors[base_id(tileid) as usize]
+        self.tile_colors[uncover_all(tileid) as usize]
     }
 
     fn tile_name(&self, tileid: TileId) -> &str {
-        self.tile_names[base_id(tileid) as usize].as_str()
+        self.tile_names[uncover_all(tileid) as usize].as_str()
     }
 
     fn bond_name(&self, bond_number: usize) -> &str {
@@ -875,19 +880,29 @@ impl System for KCov {
 
 #[cfg(test)]
 mod test_covtile {
-    use crate::models::kcov::{attach, base_id, detach, is_covered, EAST, NORTH, WEST};
+    use crate::models::kcov::{
+        attach, detach, is_covered, tile_index, uncover_all, EAST, NORTH, WEST,
+    };
 
     #[test]
     fn get_ids() {
         let mut t = 0b10110000;
         t = attach(EAST, t);
-        assert_eq!(base_id(t), 0b10110000);
+        assert_eq!(uncover_all(t), 0b10110000);
         assert_eq!(t, 0b10110000 | EAST);
 
         let mut k = 0b10000;
         k = attach(EAST, k);
         k = attach(WEST, k);
-        assert_eq!(base_id(k), 16);
+        assert_eq!(uncover_all(k), 16);
+    }
+
+    #[test]
+    fn test_tile_index() {
+        for i in 0..16 {
+            let x = 0b10000;
+            assert_eq!(1, tile_index(x | i))
+        }
     }
 
     #[test]
@@ -962,9 +977,9 @@ mod test_kcov {
     #[test]
     fn glue_side() {
         let kdcov = sample_kcov();
-        assert_eq!(kdcov.glue_on_side(NORTH, 1), 1);
-        assert_eq!(kdcov.glue_on_side(SOUTH, 1), 0);
-        assert_eq!(kdcov.glue_on_side(WEST, 3), 4);
+        assert_eq!(kdcov.glue_on_side(NORTH, 1 << 4), 1);
+        assert_eq!(kdcov.glue_on_side(SOUTH, 1 << 4), 0);
+        assert_eq!(kdcov.glue_on_side(WEST, 3 << 4), 4);
     }
 
     #[test]
@@ -974,28 +989,31 @@ mod test_kcov {
         kdcov.fill_friends();
 
         //println!("Tile Names: {:?}", kdcov.tile_names);
-        //println!("N: {:?}", kdcov.north_friends);
+        println!("N: {:?}", kdcov.north_friends);
         //println!("S: {:?}", kdcov.south_friends);
         //println!("E: {:?}", kdcov.east_friends);
         //println!("W: {:?}", kdcov.west_friends);
 
         let mut expected_nf = HashSetType::default();
 
-        expected_nf.insert(2);
+        expected_nf.insert(2 << 4);
         // This is a little strange to use, as you need to know the glue on the north side of the
         // tile.
         assert_eq!(kdcov.north_friends[1], expected_nf);
         // These helper methods make it so that you can find every tile that can bond to the north
         // of some tile id
-        assert_eq!(kdcov.get_friends_one_side(NORTH, 1), Some(&expected_nf));
-        assert_eq!(kdcov.get_friends(NORTH, 1), expected_nf);
+        assert_eq!(
+            kdcov.get_friends_one_side(NORTH, 1 << 4),
+            Some(&expected_nf)
+        );
+        assert_eq!(kdcov.get_friends(NORTH, 1 << 4), expected_nf);
         // You can also get frineds to multiple sides at once
-        assert_eq!(kdcov.get_friends(NORTH | EAST, 1), expected_nf);
+        assert_eq!(kdcov.get_friends(NORTH | EAST, 1 << 4), expected_nf);
 
         let mut expected_wf = HashSetType::default();
         expected_wf.insert(2);
         assert_eq!(kdcov.west_friends[4], expected_nf);
-        assert_eq!(kdcov.get_friends(WEST, 3), expected_nf);
+        assert_eq!(kdcov.get_friends(WEST, 3 << 4), expected_nf);
     }
 
     fn check_energy_at_point() {}
