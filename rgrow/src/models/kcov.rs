@@ -427,7 +427,7 @@ impl KCov {
     /// Get the energy between a tile and a cover to some side
     pub fn cover_detachment_rate_at_side(&self, side: Side, tile: TileId) -> Rate {
         // If there is no cover in that side, then the detachment rate will be 0
-        if is_covered(side, tile) {
+        if !is_covered(side, tile) {
             return Self::ZERO_RATE;
         };
 
@@ -589,8 +589,8 @@ impl KCov {
     pub fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> Rate {
         self.possible_tiles_at_point(state, point)
             .iter()
-            .fold(0.0, |acc, &x| {
-                acc + (self.kf * self.tile_concentration[x as usize])
+            .fold(0.0, |acc, &tile| {
+                acc + (self.kf * self.tile_concentration[tile_index(tile)])
             })
     }
 
@@ -702,7 +702,7 @@ impl KCov {
         for tile in friends {
             // FIXME: This concentration is wrong! It includes, for example the tile with covers
             // everywhere, which is no good.
-            *acc -= self.kf * self.tile_concentration[tile as usize];
+            *acc -= self.kf * self.tile_concentration[tile_index(tile)];
             if *acc <= 0.0 {
                 let attaches_to = self.choose_attachment_side(state, point, tile);
                 let covers = self.choose_covers(tile, attaches_to);
