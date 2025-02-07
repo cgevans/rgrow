@@ -405,7 +405,7 @@ impl KCov {
 
     /// The rate at which a tile will attach somewhere
     pub fn tile_attachment_rate(&self, tile: TileId) -> f64 {
-        self.tile_concentration[tile_index(tile)] * self.kf
+        self.tile_concentration(tile) * self.kf
     }
 
     pub fn cover_attachment_rate_at_side(&self, side: Side, tile: TileId) -> Rate {
