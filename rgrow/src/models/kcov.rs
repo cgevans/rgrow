@@ -426,7 +426,7 @@ impl KCov {
             .exp()
     }
 
-    pub fn cover_detachment_rate_total(&self, tile: TileId) -> Rate {
+    pub fn cover_detachment_total_rate(&self, tile: TileId) -> Rate {
         self.cover_detachment_rate_at_side(NORTH, tile)
             + self.cover_detachment_rate_at_side(EAST, tile)
             + self.cover_detachment_rate_at_side(SOUTH, tile)
@@ -454,7 +454,7 @@ impl KCov {
     }
 
     /// Detach a cover from tile
-    pub fn event_monomer_cover_detachment<S: State>(
+    pub fn event_cover_detachment<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
@@ -485,7 +485,7 @@ impl KCov {
         }
     }
 
-    fn maybe_attach_side_event<S: State>(
+    fn maybe_attach_cover_on_side_event<S: State>(
         &self,
         tileid: TileId,
         side: Side,
@@ -511,7 +511,7 @@ impl KCov {
     }
 
     // Attach a cover to a tile
-    pub fn event_monomer_cover_attachment<S: State>(
+    pub fn event_cover_attachment<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
@@ -521,10 +521,10 @@ impl KCov {
         if tile == 0 {
             return (false, 0.0, Event::None);
         }
-        self.maybe_attach_side_event(tile, NORTH, point, state, acc)
-            .or(self.maybe_attach_side_event(tile, EAST, point, state, acc))
-            .or(self.maybe_attach_side_event(tile, SOUTH, point, state, acc))
-            .or(self.maybe_attach_side_event(tile, WEST, point, state, acc))
+        self.maybe_attach_cover_on_side_event(tile, NORTH, point, state, acc)
+            .or(self.maybe_attach_cover_on_side_event(tile, EAST, point, state, acc))
+            .or(self.maybe_attach_cover_on_side_event(tile, SOUTH, point, state, acc))
+            .or(self.maybe_attach_cover_on_side_event(tile, WEST, point, state, acc))
             .unwrap_or((false, *acc, Event::None))
     }
 
@@ -547,7 +547,7 @@ impl KCov {
         }
     }
 
-    /// Get all possible cover combinators of some tile, such that some side is uncovered
+    /// Get all possible cover combinations of some tile, such that some side is uncovered
     pub fn cover_combinations(uncovered_side: Side, tile: TileId) -> Vec<TileId> {
         (0..16)
             .filter_map(|cover| {
@@ -763,7 +763,7 @@ impl System for KCov {
         let tile = { state.tile_at_point(p) };
         if tile != 0 {
             self.tile_detachment_rate(state, p)
-                + self.cover_detachment_rate_total(tile)
+                + self.cover_detachment_total_rate(tile)
                 + self.total_cover_attachment_rate(state, p)
         } else {
             self.total_attachment_rate_at_point(p, state)
@@ -784,10 +784,10 @@ impl System for KCov {
         if let (true, _, event) = self.event_monomer_attachment(state, point, &mut acc) {
             return event;
         }
-        if let (true, _, event) = self.event_monomer_cover_attachment(state, point, &mut acc) {
+        if let (true, _, event) = self.event_cover_attachment(state, point, &mut acc) {
             return event;
         }
-        if let (true, _, event) = self.event_monomer_cover_detachment(state, point, &mut acc) {
+        if let (true, _, event) = self.event_cover_detachment(state, point, &mut acc) {
             return event;
         }
 
