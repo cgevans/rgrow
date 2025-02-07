@@ -1,7 +1,9 @@
 use std::{collections::HashSet, usize};
 
 use ndarray::{Array1, Array2};
+use polars::{chunked_array::collect, prelude::ArrayCollectIterExt};
 use rand::Rng;
+use rayon::iter::ParallelExtend;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -183,7 +185,7 @@ impl KCov {
         s
     }
 
-    // Side must be north, south, east, or west
+    /// Get the uncovered friends to one side of some given tile
     pub fn get_friends_one_side(&self, side: Side, tile: TileId) -> Option<&HashSetType<TileId>> {
         // The tile is covered, so we dont have any friends
         if is_covered(side, tile) {
@@ -559,7 +561,58 @@ impl KCov {
         }
     }
 
+    pub fn cover_combinations(uncovered_side: Side, tile: TileId) -> Vec<TileId> {
+        (0..16)
+            .filter_map(|cover| {
+                if cover & uncovered_side != 0 {
+                    None
+                } else {
+                    Some(tile | cover)
+                }
+            })
+            .collect()
+    }
+
+    /// Get all possible tiles that may attach at some given point
+    ///
+    /// This will return both, the tile that is attaching, as well as which side it is attaching
+    /// to. This will prevent us from overwritting duplicates. Ie. a tile with no covers may attach
+    /// to the north east west or south, so it is more likely to attach than a tile with covers in
+    /// the north, east, and south (assuming equal concentrations)
     pub fn possible_tiles_at_point<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+    ) -> HashSetType<(Side, TileId)> {
+        let tile = state.tile_at_point(point);
+        let mut friends: HashSetType<(Side, TileId)> = HashSet::default();
+
+        // tile aready attached here
+        if tile != 0 {
+            return friends;
+        }
+
+        for side in ALL_SIDES {
+            let neighbour = Self::tile_to_side(state, side, point);
+            if neighbour == 0 {
+                continue;
+            }
+
+            if let Some(possible_attachments) = self.get_friends_one_side(inverse(side), neighbour)
+            {
+                let attachments: HashSetType<(Side, TileId)> = HashSet::from_iter(
+                    possible_attachments
+                        .iter()
+                        .flat_map(|&tile| Self::cover_combinations(side, tile))
+                        .map(|tile| (side, tile)),
+                );
+                friends.extend(attachments);
+            }
+        }
+        friends
+    }
+
+    pub fn possible_tiles_at_point_old<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
@@ -587,7 +640,7 @@ impl KCov {
     }
 
     pub fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> Rate {
-        self.possible_tiles_at_point(state, point)
+        self.possible_tiles_at_point_old(state, point)
             .iter()
             .fold(0.0, |acc, &tile| {
                 acc + (self.kf * self.tile_concentration[tile_index(tile)])
@@ -698,7 +751,7 @@ impl KCov {
         }
 
         // FIXME: This shuold be a HashMap, not hash set. Repetition is important ??
-        let friends: HashSetType<TileId> = self.possible_tiles_at_point(state, point);
+        let friends: HashSetType<TileId> = self.possible_tiles_at_point_old(state, point);
         for tile in friends {
             // FIXME: This concentration is wrong! It includes, for example the tile with covers
             // everywhere, which is no good.
