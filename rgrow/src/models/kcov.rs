@@ -640,10 +640,10 @@ impl KCov {
     }
 
     pub fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> Rate {
-        self.possible_tiles_at_point_old(state, point)
+        self.possible_tiles_at_point(state, point)
             .iter()
-            .fold(0.0, |acc, &tile| {
-                acc + (self.kf * self.tile_concentration[tile_index(tile)])
+            .fold(0.0, |acc, &(_side, tile)| {
+                acc + (self.kf * self.tile_concentration(tile))
             })
     }
 
@@ -750,16 +750,14 @@ impl KCov {
             return (false, *acc, Event::None);
         }
 
-        // FIXME: This shuold be a HashMap, not hash set. Repetition is important ??
-        let friends: HashSetType<TileId> = self.possible_tiles_at_point_old(state, point);
-        for tile in friends {
-            // FIXME: This concentration is wrong! It includes, for example the tile with covers
-            // everywhere, which is no good.
-            *acc -= self.kf * self.tile_concentration[tile_index(tile)];
+        let friends: HashSetType<(Side, TileId)> = self.possible_tiles_at_point(state, point);
+        // attachment_side is not used, but is relevant in computation, as it accounts for
+        // duplicates (some tiles could bind to the north or east, so it should be taken into
+        // account twice)
+        for (_attachment_side, tile) in friends {
+            *acc -= self.kf * self.tile_concentration(tile);
             if *acc <= 0.0 {
-                let attaches_to = self.choose_attachment_side(state, point, tile);
-                let covers = self.choose_covers(tile, attaches_to);
-                return (true, *acc, Event::MonomerAttachment(point, tile | covers));
+                return (true, *acc, Event::MonomerAttachment(point, tile));
             }
         }
         (false, *acc, Event::None)
