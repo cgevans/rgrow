@@ -186,7 +186,11 @@ impl KCov {
     }
 
     /// Get the uncovered friends to one side of some given tile
-    pub fn get_friends_one_side(&self, side: Side, tile: TileId) -> Option<&HashSetType<TileId>> {
+    pub fn get_uncovered_friends_to_side(
+        &self,
+        side: Side,
+        tile: TileId,
+    ) -> Option<&HashSetType<TileId>> {
         // The tile is covered, so we dont have any friends
         if is_covered(side, tile) {
             return None;
@@ -209,7 +213,7 @@ impl KCov {
         let mut tile_friends = HashSetType::default();
         for s in ALL_SIDES {
             if side & s != 0 {
-                if let Some(ext) = self.get_friends_one_side(s, tile) {
+                if let Some(ext) = self.get_uncovered_friends_to_side(s, tile) {
                     tile_friends.extend(ext);
                 }
             }
@@ -419,7 +423,7 @@ impl KCov {
             return None;
         }
         let tile = state.tile_at_point(point);
-        self.get_friends_one_side(side, tile)
+        self.get_uncovered_friends_to_side(side, tile)
     }
 
     pub fn cover_attachment_rate_at_side(&self, side: Side, tile: TileId) -> Rate {
@@ -598,7 +602,8 @@ impl KCov {
                 continue;
             }
 
-            if let Some(possible_attachments) = self.get_friends_one_side(inverse(side), neighbour)
+            if let Some(possible_attachments) =
+                self.get_uncovered_friends_to_side(inverse(side), neighbour)
             {
                 let attachments: HashSetType<(Side, TileId)> = HashSet::from_iter(
                     possible_attachments
@@ -631,7 +636,8 @@ impl KCov {
                 continue;
             }
 
-            if let Some(possible_attachments) = self.get_friends_one_side(inverse(side), neighbour)
+            if let Some(possible_attachments) =
+                self.get_uncovered_friends_to_side(inverse(side), neighbour)
             {
                 friends.extend(possible_attachments);
             }
@@ -1068,7 +1074,7 @@ mod test_kcov {
         // These helper methods make it so that you can find every tile that can bond to the north
         // of some tile id
         assert_eq!(
-            kdcov.get_friends_one_side(NORTH, 1 << 4),
+            kdcov.get_uncovered_friends_to_side(NORTH, 1 << 4),
             Some(&expected_nf)
         );
         assert_eq!(kdcov.get_friends(NORTH, 1 << 4), expected_nf);
