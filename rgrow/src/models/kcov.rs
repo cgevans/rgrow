@@ -1,9 +1,6 @@
 use std::{collections::HashSet, usize};
 
 use ndarray::{Array1, Array2};
-use polars::{chunked_array::collect, prelude::ArrayCollectIterExt};
-use rand::Rng;
-use rayon::iter::ParallelExtend;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -411,21 +408,6 @@ impl KCov {
         self.tile_concentration[tile_index(tile)] * self.kf
     }
 
-    fn get_friend_side_if_empty<S: State>(
-        &self,
-        state: &S,
-        side: Side,
-        point: PointSafe2,
-    ) -> Option<&HashSetType<TileId>> {
-        let neighbour = Self::tile_to_side(state, side, point);
-        // If there has already been an attachemnt, then nothing can attach there
-        if neighbour != 0 {
-            return None;
-        }
-        let tile = state.tile_at_point(point);
-        self.get_uncovered_friends_to_side(side, tile)
-    }
-
     pub fn cover_attachment_rate_at_side(&self, side: Side, tile: TileId) -> Rate {
         self.kf * self.cover_concentrations[self.glue_on_side(side, tile)]
     }
@@ -565,6 +547,7 @@ impl KCov {
         }
     }
 
+    /// Get all possible cover combinators of some tile, such that some side is uncovered
     pub fn cover_combinations(uncovered_side: Side, tile: TileId) -> Vec<TileId> {
         (0..16)
             .filter_map(|cover| {
@@ -617,130 +600,12 @@ impl KCov {
         friends
     }
 
-    pub fn possible_tiles_at_point_old<S: State>(
-        &self,
-        state: &S,
-        point: PointSafe2,
-    ) -> HashSetType<TileId> {
-        let tile = state.tile_at_point(point);
-        let mut friends: HashSetType<TileId> = HashSet::default();
-
-        // tile aready attached here
-        if tile != 0 {
-            return friends;
-        }
-
-        for side in ALL_SIDES {
-            let neighbour = Self::tile_to_side(state, side, point);
-            if neighbour == 0 {
-                continue;
-            }
-
-            if let Some(possible_attachments) =
-                self.get_uncovered_friends_to_side(inverse(side), neighbour)
-            {
-                friends.extend(possible_attachments);
-            }
-        }
-        friends
-    }
-
     pub fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> Rate {
         self.possible_tiles_at_point(state, point)
             .iter()
             .fold(0.0, |acc, &(_side, tile)| {
                 acc + (self.kf * self.tile_concentration(tile))
             })
-    }
-
-    /// Check if two tiles can bond or not by checking that:
-    /// + There are no covers
-    /// + The glues are inverses
-    fn form_bond(&self, tile1: TileId, side: Side, tile2: TileId) -> bool {
-        // Check if either of the tiles have a cover
-        if (tile1 & side) != 0 || (tile2 & inverse(side)) != 0 {
-            return false;
-        }
-
-        let g1 = self.glue_on_side(side, tile1);
-        let g2 = self.glue_on_side(inverse(side), tile2);
-
-        if g1 == 0 || g1 != glue_inverse(g2) {
-            return false;
-        }
-        true
-    }
-
-    /// Helper functino for choose_attachment_side
-    ///
-    /// If a tiles neighbour to some side and the tile can bond, then
-    /// this will add to some accumulator what the cance is that the
-    /// tile is uncoverd
-    fn record_bonded_tile_uncovered_chance<S: State>(
-        &self,
-        state: &S,
-        side: Side,
-        point: PointSafe2,
-        tile: TileId,
-        acc: &mut Vec<(TileId, f64)>,
-    ) {
-        let neighbour = Self::tile_to_side(state, side, point);
-        if neighbour != 0 && self.form_bond(tile, side, neighbour) {
-            let uncovered_chance = self.uncover_percentage(side, tile);
-            acc.push((side, uncovered_chance));
-        }
-    }
-
-    /// Given that some tile is being attached at some point, what other tile is it bonding to ?
-    fn choose_attachment_side<S: State>(
-        &self,
-        state: &S,
-        point: PointSafe2,
-        tile: TileId,
-    ) -> TileId {
-        let mut rates = Vec::with_capacity(4);
-        self.record_bonded_tile_uncovered_chance(state, NORTH, point, tile, &mut rates);
-        self.record_bonded_tile_uncovered_chance(state, EAST, point, tile, &mut rates);
-        self.record_bonded_tile_uncovered_chance(state, SOUTH, point, tile, &mut rates);
-        self.record_bonded_tile_uncovered_chance(state, WEST, point, tile, &mut rates);
-
-        let mut sum = 0.0;
-        for (_, uncovered_chance) in &rates {
-            sum += uncovered_chance
-        }
-        if sum == 0.0 {
-            panic!("All neighbours are covered, or not there!");
-        }
-
-        let mut r = rand::thread_rng().gen_range(0.0..sum);
-        for (side, uncovered_chance) in rates {
-            if uncovered_chance > r {
-                return side;
-            }
-            r -= uncovered_chance;
-        }
-        panic!("How did we get here!?")
-    }
-
-    pub fn maybe_cover_on_side(&self, side: Side, tile: TileId) -> TileId {
-        let chance = self.cover_percentage(side, tile);
-        if chance == 0.0 {
-            return 0;
-        }
-        let r = rand::thread_rng().gen_range(0.0..1.0);
-        if r <= chance {
-            side
-        } else {
-            0
-        }
-    }
-
-    pub fn choose_covers(&self, tile: TileId, except: TileId) -> TileId {
-        (self.maybe_cover_on_side(NORTH, tile)
-            | self.maybe_cover_on_side(EAST, tile)
-            | self.maybe_cover_on_side(SOUTH, tile)
-            | self.maybe_cover_on_side(WEST, tile))
-            & (!except) // Make sure that there is no cover on the except side
     }
 
     /// Probability of any tile attaching at some point
@@ -774,11 +639,6 @@ impl KCov {
         let detachment_rate = self.cover_detachment_rate_at_side(side, tile | side);
         let attachment_rate = self.cover_attachment_rate_at_side(side, tile);
         attachment_rate / (attachment_rate + detachment_rate)
-    }
-
-    /// Percentage of total concentration of some tile that has no cover on a given side
-    pub fn uncover_percentage(&self, side: Side, tile: TileId) -> f64 {
-        1.0 - self.cover_percentage(side, tile)
     }
 
     /// Get the concentration of a specific tile, with cover as given in the TileId
