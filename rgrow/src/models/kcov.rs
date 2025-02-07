@@ -724,6 +724,20 @@ impl KCov {
         1.0 - self.cover_percentage(side, tile)
     }
 
+    /// Get the concentration of a specific tile, with cover as given in the TileId
+    pub fn tile_concentration(&self, tile: TileId) -> f64 {
+        let mut acc = 1.0;
+        for side in ALL_SIDES {
+            let cover_perc = self.cover_percentage(side, tile);
+            if is_covered(side, tile) {
+                acc *= cover_perc;
+            } else {
+                acc *= 1.0 - cover_perc;
+            }
+        }
+        self.tile_concentration[tile_index(tile)] * acc
+    }
+
     pub fn total_cover_attachment_rate<S: State>(&self, state: &S, point: PointSafe2) -> Rate {
         // Check that there is a tile at this point
         let tile = state.tile_at_point(point);
