@@ -11,6 +11,13 @@ use crate::{
     type_alias,
 };
 
+// Imports for python bindings
+
+#[cfg(feature = "python")]
+use numpy::ToPyArray;
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 type_alias!( f64 => Concentration, Strength );
 type_alias!( u32 => TileId, Side );
 
@@ -76,6 +83,7 @@ pub const fn side_index(side: Side) -> Option<usize> {
     }
 }
 
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KCov {
     pub tile_names: Vec<String>,
@@ -948,4 +956,94 @@ mod test_kcov {
     }
 
     fn check_energy_at_point() {}
+}
+
+// Python Bindings
+
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Struct used for creating KCOV system
+struct KCovTile {
+    pub name: String,
+    pub concentration: f64,
+    /// Glues for the tiles North, East, South, West in that order
+    pub glues: [Glue; 4],
+    /// Color of the tile, this is used only when displaying
+    pub color: [u8; 4],
+}
+
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct KCovParams {
+    pub tiles: Vec<KCovTile>,
+    pub cover_conc: Vec<Concentration>,
+    pub alpha: f64,
+    pub kf: f64,
+    pub temp: f64,
+    pub fission_handling: FissionHandling,
+}
+
+impl From<KCovParams> for KCov {
+    fn from(value: KCovParams) -> Self {
+        let tile_names = value.tiles.iter().map(|tile| tile.name.clone()).collect();
+        let tile_glues = value.tiles.iter().map(|tile| tile.glues).collect();
+        let tile_concentration = value.tiles.iter().map(|tile| tile.concentration).collect();
+        let tile_colors = value.tiles.iter().map(|tile| tile.color).collect();
+
+        let mut glues = value
+            .tiles
+            .iter()
+            .flat_map(|tile| tile.glues)
+            .collect::<Vec<Glue>>();
+        glues.sort_unstable();
+        glues.dedup();
+
+        let mut max_glue = *glues.iter().max().unwrap();
+        // Make sure that every glue has its inverse in the array
+        if max_glue % 2 == 1 {
+            max_glue += 1;
+        }
+        let mut glue_links = Array2::zeros((max_glue, max_glue));
+        for glue in 1..max_glue {
+            // TODO: Make this user specified in some simple way
+            // Connected == -1 else 0
+            let glue_inv = glue_inverse(glue);
+            glue_links[(glue, glue_inv)] = -1.0;
+        }
+        Self::new(
+            tile_names,
+            tile_concentration,
+            tile_colors,
+            // Glue names
+            (0..max_glue).map(|gid| format!("Glue{}", gid)).collect(),
+            value.cover_conc,
+            tile_glues,
+            glue_links,
+            value.temp,
+            value.kf,
+            value.alpha,
+            value.fission_handling,
+        )
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl KCov {
+    #[new]
+    fn kcov_from_params(kcov_params: KCovParams) -> Self {
+        Self::from(kcov_params)
+    }
+
+    // Some getters and setters
+    #[getter(kf)]
+    fn py_get_kf(&self) -> f64 {
+        self.kf
+    }
+
+    #[setter(kf)]
+    fn py_set_kf(&mut self, new_kf: f64) {
+        self.kf = new_kf;
+        // TODO: Update here (make update function)
+    }
 }

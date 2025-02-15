@@ -27,6 +27,8 @@ mod rgrow {
     #[pymodule_export]
     use rgrow::models::atam::ATAM;
     #[pymodule_export]
+    use rgrow::models::kcov::KCov;
+    #[pymodule_export]
     use rgrow::models::ktam::KTAM;
     #[pymodule_export]
     use rgrow::models::oldktam::OldKTAM;
