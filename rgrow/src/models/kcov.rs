@@ -980,7 +980,6 @@ struct KCovParams {
     pub alpha: f64,
     pub kf: f64,
     pub temp: f64,
-    pub fission_handling: FissionHandling,
 }
 
 impl From<KCovParams> for KCov {
@@ -1022,7 +1021,7 @@ impl From<KCovParams> for KCov {
             value.temp,
             value.kf,
             value.alpha,
-            value.fission_handling,
+            FissionHandling::JustDetach,
         )
     }
 }
