@@ -150,6 +150,11 @@ fn glue_inverse(glue: Glue) -> Glue {
 impl KCov {
     const ZERO_RATE: Rate = 0.0;
 
+    pub fn update(&mut self) {
+        self.fill_energy_pairs();
+        self.fill_energy_covers();
+    }
+
     pub fn new(
         tile_names: Vec<String>,
         tile_concentration: Vec<Concentration>,
@@ -185,8 +190,7 @@ impl KCov {
             fission_handling,
         };
         s.fill_friends();
-        s.fill_energy_pairs();
-        s.fill_energy_covers();
+        s.update();
         s
     }
 
@@ -1061,6 +1065,6 @@ impl KCov {
     #[setter(kf)]
     fn py_set_kf(&mut self, new_kf: f64) {
         self.kf = new_kf;
-        // TODO: Update here (make update function)
+        self.update();
     }
 }
