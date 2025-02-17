@@ -1048,23 +1048,47 @@ impl From<KCovParams> for KCov {
     }
 }
 
+use paste::paste;
+
+/// Generate the getter and the setter for a specific type
+macro_rules! getset_single {
+    ($model:ty, $name:ident, $t:ty) => {
+        paste! {
+            #[cfg(feature = "python")]
+            #[pymethods]
+            impl $model {
+                #[getter($name)]
+                fn [<py_get_ $name>](&self) -> $t {
+                    self.$name
+                }
+
+                #[setter($name)]
+                fn [<py_set_ $name>](&mut self, to: $t) {
+                    self.$name = to;
+                    self.update();
+                }
+            }
+        }
+    };
+}
+
+/// Generate many getters and setters of different types
+macro_rules! getset {
+    ($model:ty, $(($t:ty => $($name:ident),+)),+) => {
+        $($( getset_single!($model, $name, $t); )+)+
+    };
+}
+
+getset!(KCov,
+    // f64 getters and setters
+    (f64 => kf, alpha, temperature)
+);
+
 #[cfg(feature = "python")]
 #[pymethods]
 impl KCov {
     #[new]
     fn kcov_from_params(kcov_params: KCovParams) -> Self {
         Self::from(kcov_params)
-    }
-
-    // Some getters and setters
-    #[getter(kf)]
-    fn py_get_kf(&self) -> f64 {
-        self.kf
-    }
-
-    #[setter(kf)]
-    fn py_set_kf(&mut self, new_kf: f64) {
-        self.kf = new_kf;
-        self.update();
     }
 }

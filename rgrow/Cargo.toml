@@ -71,6 +71,7 @@ pyo3-polars = {workspace = true, optional = true}
 approx = { workspace = true }
 bincode = "1"
 astro-float = "0.9.4"
+paste="1.0.15"
 
 [dependencies.clap]
 version = "4"
