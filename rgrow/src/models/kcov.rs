@@ -960,9 +960,8 @@ mod test_kcov {
 
 // Python Bindings
 
-#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// Struct used for creating KCOV system
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 struct KCovTile {
     pub name: String,
     pub concentration: f64,
@@ -972,8 +971,19 @@ struct KCovTile {
     pub color: [u8; 4],
 }
 
-#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
+impl KCovTile {
+    fn empty() -> Self {
+        Self {
+            name: "empty".to_string(),
+            concentration: 0.0,
+            glues: [0, 0, 0, 0],
+            color: [0, 0, 0, 0],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 struct KCovParams {
     pub tiles: Vec<KCovTile>,
     pub cover_conc: Vec<Concentration>,
@@ -983,14 +993,16 @@ struct KCovParams {
 }
 
 impl From<KCovParams> for KCov {
-    fn from(value: KCovParams) -> Self {
-        let tile_names = value.tiles.iter().map(|tile| tile.name.clone()).collect();
-        let tile_glues = value.tiles.iter().map(|tile| tile.glues).collect();
-        let tile_concentration = value.tiles.iter().map(|tile| tile.concentration).collect();
-        let tile_colors = value.tiles.iter().map(|tile| tile.color).collect();
+    fn from(mut value: KCovParams) -> Self {
+        let mut tiles = Vec::with_capacity(value.tiles.len() + 1);
+        tiles.push(KCovTile::empty());
+        tiles.append(&mut value.tiles);
+        let tile_names = tiles.iter().map(|tile| tile.name.clone()).collect();
+        let tile_glues = tiles.iter().map(|tile| tile.glues).collect();
+        let tile_concentration = tiles.iter().map(|tile| tile.concentration).collect();
+        let tile_colors = tiles.iter().map(|tile| tile.color).collect();
 
-        let mut glues = value
-            .tiles
+        let mut glues = tiles
             .iter()
             .flat_map(|tile| tile.glues)
             .collect::<Vec<Glue>>();
@@ -1002,19 +1014,25 @@ impl From<KCovParams> for KCov {
         if max_glue % 2 == 1 {
             max_glue += 1;
         }
-        let mut glue_links = Array2::zeros((max_glue, max_glue));
-        for glue in 1..max_glue {
-            // TODO: Make this user specified in some simple way
-            // Connected == -1 else 0
+        let mut glue_links = Array2::zeros((max_glue + 1, max_glue + 1));
+        for glue in 1..=max_glue {
+            // TODO: Make this user specified in some simple way -- For now, connected == -1 else 0
             let glue_inv = glue_inverse(glue);
-            glue_links[(glue, glue_inv)] = -1.0;
+            if let Some(x) = glue_links.get_mut((glue, glue_inv)) {
+                *x = -1.0;
+            } else {
+                panic!(
+                    "({:?} {:?}) not in index ({:?} {:?})",
+                    glue, glue_inv, max_glue, max_glue
+                );
+            }
         }
         Self::new(
             tile_names,
             tile_concentration,
             tile_colors,
-            // Glue names
-            (0..max_glue).map(|gid| format!("Glue{}", gid)).collect(),
+            // Glue names -- for now we will just generate them like this
+            (0..=max_glue).map(|gid| format!("Glue{}", gid)).collect(),
             value.cover_conc,
             tile_glues,
             glue_links,
