@@ -1,4 +1,7 @@
-use std::{collections::HashSet, usize};
+use std::{
+    collections::{HashMap, HashSet},
+    usize,
+};
 
 use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
@@ -93,7 +96,7 @@ pub struct KCov {
     pub glue_names: Vec<String>,
     pub cover_concentrations: Vec<Concentration>,
     pub temperature: f64,
-
+    pub seed: HashMap<PointSafe2, TileId>,
     /// Glues of a tile with a given ID
     ///
     /// This is private purposely, use getter function. There are (up to / exactly)
@@ -178,6 +181,7 @@ impl KCov {
             tile_glues,
             glue_links,
             temperature,
+            seed: HashMap::new(),
             north_friends: Vec::default(),
             south_friends: Vec::default(),
             east_friends: Vec::default(),
@@ -368,6 +372,18 @@ impl KCov {
         }
     }
 
+    /// Add seed to system
+    pub fn add_seed<S: State>(&mut self, state: &mut S, seed: HashMap<PointSafe2, TileId>) {
+        self.seed = seed;
+        for (point, tile) in &self.seed {
+            state.set_sa(point, tile)
+        }
+    }
+
+    pub fn is_seed(&self, point: &PointSafe2) -> bool {
+        self.seed.contains_key(point)
+    }
+
     /// SIDE here must be NSEW
     pub fn energy_to(&self, side: Side, tile1: TileId, tile2: TileId) -> Energy {
         // If we are covered on the sticking side, or the other tile has a cover, then we
@@ -406,6 +422,10 @@ impl KCov {
     }
 
     pub fn tile_detachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
+        if self.is_seed(&p) {
+            return Self::ZERO_RATE;
+        }
+
         let tile = state.tile_at_point(p);
         // If there is no tile, then nothing to attach
         if tile == 0 {
@@ -813,7 +833,7 @@ impl System for KCov {
     }
 
     fn seed_locs(&self) -> Vec<(crate::canvas::PointSafe2, crate::base::Tile)> {
-        todo!()
+        self.seed.clone().into_iter().collect::<Vec<_>>()
     }
 
     fn calc_mismatch_locations<St: crate::state::State>(&self, state: &St) -> Array2<usize> {
