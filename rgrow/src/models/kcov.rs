@@ -337,20 +337,23 @@ impl KCov {
         let tile_ids = self.tile_names().len();
 
         for t1 in 0..tile_ids {
+            let t1_tile_id = t1 << 4;
+
             // Glues on the sides of tile 1
             let (t1n, t1e, t1s, t1w) = (
-                self.glue_on_side(NORTH, t1 as TileId),
-                self.glue_on_side(EAST, t1 as TileId),
-                self.glue_on_side(SOUTH, t1 as TileId),
-                self.glue_on_side(WEST, t1 as TileId),
+                self.glue_on_side(NORTH, t1_tile_id as TileId),
+                self.glue_on_side(EAST, t1_tile_id as TileId),
+                self.glue_on_side(SOUTH, t1_tile_id as TileId),
+                self.glue_on_side(WEST, t1_tile_id as TileId),
             );
 
             for t2 in 0..tile_ids {
+                let t2_tile_id = t2 << 4;
                 let (t2n, t2e, t2s, t2w) = (
-                    self.glue_on_side(NORTH, t2 as TileId),
-                    self.glue_on_side(EAST, t2 as TileId),
-                    self.glue_on_side(SOUTH, t2 as TileId),
-                    self.glue_on_side(WEST, t2 as TileId),
+                    self.glue_on_side(NORTH, t2_tile_id as TileId),
+                    self.glue_on_side(EAST, t2_tile_id as TileId),
+                    self.glue_on_side(SOUTH, t2_tile_id as TileId),
+                    self.glue_on_side(WEST, t2_tile_id as TileId),
                 );
 
                 // t1 -- t2
