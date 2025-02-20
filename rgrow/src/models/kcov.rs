@@ -577,7 +577,13 @@ impl KCov {
 
         match self.fission_handling {
             FissionHandling::NoFission => (true, *acc, Event::None),
-            FissionHandling::JustDetach => (true, *acc, Event::MonomerDetachment(point)),
+            FissionHandling::JustDetach => {
+                if self.is_seed(&point) {
+                    (true, *acc, Event::None)
+                } else {
+                    (true, *acc, Event::MonomerDetachment(point))
+                }
+            }
             FissionHandling::KeepSeeded => {
                 let mut remove = self.unseeded(state, point);
                 remove.push(point);
