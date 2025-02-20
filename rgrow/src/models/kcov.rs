@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     base::{Energy, Glue, HashSetType, Rate},
-    canvas::{PointSafe2, PointSafeHere},
+    canvas::{Canvas, PointSafe2, PointSafeHere},
     state::State,
     system::{Event, FissionHandling, System, TileBondInfo},
     type_alias,
@@ -578,6 +578,11 @@ impl KCov {
         match self.fission_handling {
             FissionHandling::NoFission => (true, *acc, Event::None),
             FissionHandling::JustDetach => (true, *acc, Event::MonomerDetachment(point)),
+            FissionHandling::KeepSeeded => {
+                let mut remove = self.unseeded(state, point);
+                remove.push(point);
+                (true, *acc, Event::PolymerDetachment(remove))
+            }
             _ => panic!("Only NoFission, and JustDetach are supported"),
         }
     }
@@ -704,6 +709,85 @@ impl KCov {
             }
         }
         return rate;
+    }
+
+    fn can_bond(&self, tile1: TileId, side: Side, tile2: TileId) -> bool {
+        let g1 = self.glue_on_side(side, tile1);
+        let g2 = self.glue_on_side(inverse(side), tile2);
+        g1 == glue_inverse(g2)
+    }
+
+    /// BFS to see where we can get without passing through the `avoid` point
+    fn bfs<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        avoid: PointSafe2,
+    ) -> HashSet<PointSafe2> {
+        let mut visited = HashSet::new();
+        let mut stack = vec![point];
+        while !stack.is_empty() {
+            let head = stack.pop().unwrap();
+            let head_tile = state.tile_at_point(head);
+
+            // We have already processed this node, or we dont have to at all
+            if head_tile == 0 || visited.contains(&head) {
+                continue;
+            }
+            visited.insert(head);
+
+            [
+                (NORTH, state.move_sa_n(head)),
+                (EAST, state.move_sa_e(head)),
+                (SOUTH, state.move_sa_s(head)),
+                (WEST, state.move_sa_w(head)),
+            ]
+            .iter()
+            .for_each(|(side, PointSafeHere(x))| {
+                let p = PointSafe2(*x);
+                if p == avoid {
+                    return;
+                }
+
+                let neighbour_tile = state.tile_at_point(PointSafe2(*x));
+                if self.can_bond(head_tile, *side, neighbour_tile) {
+                    stack.push(p);
+                }
+            });
+        }
+        visited
+    }
+
+    fn unseeded<S: State>(&self, state: &S, point: PointSafe2) -> Vec<PointSafe2> {
+        let seed = self
+            .seed_locs()
+            .get(0)
+            .expect("Must have a seed to use KeepSeed")
+            .0;
+
+        [
+            state.move_sa_n(point),
+            state.move_sa_e(point),
+            state.move_sa_s(point),
+            state.move_sa_w(point),
+        ]
+        .iter()
+        .fold(
+            (HashSet::<PointSafe2>::new(), Vec::new()),
+            |(mut acc, mut unseeded), neighbour| {
+                let neighbour = PointSafe2(neighbour.0);
+                if acc.contains(&neighbour) {
+                    return (acc, unseeded);
+                }
+                let b = self.bfs(state, neighbour, point);
+                acc.extend(&b);
+                if !b.contains(&seed) {
+                    unseeded.extend(&b);
+                }
+                (acc, unseeded)
+            },
+        )
+        .1
     }
 }
 
@@ -887,6 +971,11 @@ mod test_covtile {
 
 #[cfg(test)]
 mod test_kcov {
+    use crate::{
+        state::StateEnum,
+        tileset::{CanvasType, TrackingType},
+    };
+
     use super::*;
     use ndarray::array;
 
@@ -982,7 +1071,51 @@ mod test_kcov {
         assert_eq!(kdcov.get_friends(WEST, 3 << 4), expected_nf);
     }
 
-    fn check_energy_at_point() {}
+    #[test]
+    fn test_bfs() {
+        let tile_a = KCovTile {
+            name: "TileA".to_string(),
+            concentration: 1e-2,
+            glues: [1, 1, 2, 2],
+            color: [0, 0, 0, 0],
+        };
+        let mut kcov: KCov = KCovParams {
+            tiles: vec![tile_a],
+            cover_conc: vec![1e6, 1e6],
+            alpha: 1.0,
+            kf: 1.0,
+            temp: 40.0,
+        }
+        .into();
+
+        let mut se =
+            StateEnum::empty((20, 20), CanvasType::Square, TrackingType::None, 40).unwrap();
+        // Add a seed tile (just one)
+        kcov.add_seed(&mut se, HashMap::from([(PointSafe2((2, 2)), 1 << 4)]));
+
+        // Make an L
+        se.set_sa(&PointSafe2((3, 2)), &(1 << 4));
+        se.set_sa(&PointSafe2((4, 2)), &(1 << 4));
+        se.set_sa(&PointSafe2((5, 2)), &(1 << 4));
+        se.set_sa(&PointSafe2((6, 2)), &(1 << 4));
+        se.set_sa(&PointSafe2((5, 3)), &(1 << 4));
+        se.set_sa(&PointSafe2((5, 4)), &(1 << 4));
+
+        let removals = kcov.unseeded(&se, PointSafe2((3, 2)));
+        println!("{:?}", removals);
+        assert_eq!(removals.len(), 5);
+        assert!(removals.contains(&PointSafe2((4, 2))));
+        assert!(removals.contains(&PointSafe2((5, 2))));
+        assert!(removals.contains(&PointSafe2((5, 3))));
+        assert!(removals.contains(&PointSafe2((5, 4))));
+        assert!(removals.contains(&PointSafe2((6, 2))));
+
+        let removals = kcov.unseeded(&se, PointSafe2((5, 2)));
+        assert_eq!(removals.len(), 3);
+        assert!(removals.contains(&PointSafe2((5, 3))));
+        assert!(removals.contains(&PointSafe2((5, 4))));
+        assert!(removals.contains(&PointSafe2((6, 2))));
+    }
 }
 
 // Python Bindings
