@@ -520,6 +520,12 @@ macro_rules! create_py_system {
                 DynSystem::update_state(self, &mut state.0, needed)
             }
 
+            #[pyo3(name = "setup_state")]
+            fn py_setup_state(&self, state: &mut PyState) -> PyResult<()> {
+                DynSystem::setup_state(self, &mut state.0).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+                Ok(())
+            }
+
             /// Run FFS.
             ///
             /// Parameters
@@ -575,6 +581,8 @@ macro_rules! create_py_system {
                 serde_json::to_writer(File::create(filename)?, self).unwrap();
                 Ok(())
             }
+
+
 
             /// Read a system from a JSON file.
             ///
