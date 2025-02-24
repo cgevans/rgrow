@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::ops::DerefMut;
 use std::time::Duration;
 
 use crate::base::{NumEvents, NumTiles, RgrowError, RustAny, Tile};
-use crate::canvas::{Canvas, PointSafeHere};
+use crate::canvas::{Canvas, PointSafe2, PointSafeHere};
 use crate::ffs::{FFSRunConfig, FFSRunResult, FFSStateRef};
 use crate::models::atam::ATAM;
 use crate::models::kcov::KCov;
@@ -607,3 +608,16 @@ create_py_system!(ATAM);
 create_py_system!(OldKTAM);
 create_py_system!(SDC);
 create_py_system!(KCov);
+
+#[pymethods]
+impl KCov {
+    #[getter]
+    fn get_seed(&self) -> HashMap<(usize, usize), u32> {
+        self.seed.clone().into_iter().map(|(k, v)| (k.0, v)).collect()
+    }
+
+    #[setter]
+    fn set_seed(&mut self, seed: HashMap<(usize, usize), u32>) {
+        self.seed = seed.into_iter().map(|(k, v)| (PointSafe2(k), v)).collect();
+    }
+}

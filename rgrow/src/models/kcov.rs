@@ -836,7 +836,7 @@ impl TileBondInfo for KCov {
 
 impl System for KCov {
     fn system_info(&self) -> String {
-        todo!()
+        format!("{:?}", self)
     }
 
     fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
