@@ -673,14 +673,14 @@ impl Canvas for CanvasTube {
 
     fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
         let s = self.nrows() + self.ncols();
-        let mut px: usize;
-        let mut py: usize;
+        let mut pi: usize;
+        let mut pj: usize;
         let mut pos: usize;
 
-        for ((x, y), t) in self.0.indexed_iter() {
-            py = y;
-            px = x + y;
-            pos = 4 * (px * s + py);
+        for ((i, j), t) in self.0.indexed_iter() {
+            pj = j;
+            pi = i + j;
+            pos = 4 * (pi * s + pj);
             frame[pos..pos + 4].copy_from_slice(&colors[*t as usize])
         }
     }
