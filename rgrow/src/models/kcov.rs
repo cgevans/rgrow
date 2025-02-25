@@ -416,7 +416,7 @@ impl KCov {
             let neighbour_tile = Self::tile_to_side(state, side, point);
             energy += self.energy_to(side, tile_id, neighbour_tile)
         }
-        energy
+        energy + self.alpha * self.rtval()
     }
 
     #[inline(always)]
