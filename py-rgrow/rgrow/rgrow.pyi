@@ -1341,7 +1341,7 @@ class KCov:
     ) -> NDArray[np.str_]: ...
 
 
-System: TypeAlias = ATAM | KTAM | OldKTAM
+System: TypeAlias = ATAM | KTAM | OldKTAM | KCov
 
 class State:
     def __init__(
