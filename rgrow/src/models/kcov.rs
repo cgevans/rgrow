@@ -166,6 +166,7 @@ impl KCov {
         cover_concentrations: Vec<Concentration>,
         tile_glues: Array1<[Glue; 4]>,
         glue_links: Array2<Strength>,
+        seed: HashMap<PointSafe2, TileId>,
         temperature: f64,
         kf: f64,
         alpha: f64,
@@ -181,7 +182,7 @@ impl KCov {
             tile_glues,
             glue_links,
             temperature,
-            seed: HashMap::new(),
+            seed,
             north_friends: Vec::default(),
             south_friends: Vec::default(),
             east_friends: Vec::default(),
@@ -1028,6 +1029,7 @@ mod test_kcov {
             vec![0., 1., 1., 1., 1.],
             tile_glues,
             glue_linkns,
+            HashMap::default(),
             60.0,
             1e6,
             0.0,
@@ -1091,6 +1093,7 @@ mod test_kcov {
             alpha: 1.0,
             kf: 1.0,
             temp: 40.0,
+            seed: HashMap::default(),
         }
         .into();
 
@@ -1153,6 +1156,7 @@ impl KCovTile {
 struct KCovParams {
     pub tiles: Vec<KCovTile>,
     pub cover_conc: Vec<Concentration>,
+    pub seed: HashMap<(usize, usize), TileId>,
     pub alpha: f64,
     pub kf: f64,
     pub temp: f64,
@@ -1167,6 +1171,11 @@ impl From<KCovParams> for KCov {
         let tile_glues = tiles.iter().map(|tile| tile.glues).collect();
         let tile_concentration = tiles.iter().map(|tile| tile.concentration).collect();
         let tile_colors = tiles.iter().map(|tile| tile.color).collect();
+        let seed = value
+            .seed
+            .iter()
+            .map(|(tuple, tile)| (PointSafe2(*tuple), *tile))
+            .collect();
 
         let mut glues = tiles
             .iter()
@@ -1202,6 +1211,7 @@ impl From<KCovParams> for KCov {
             value.cover_conc,
             tile_glues,
             glue_links,
+            seed,
             value.temp,
             value.kf,
             value.alpha,
