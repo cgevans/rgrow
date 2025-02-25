@@ -110,7 +110,7 @@ pub struct KCov {
     /// ]
     tile_glues: Array1<[Glue; 4]>,
     /// Binding strength between two glues
-    glue_links: Array2<Strength>,
+    pub(crate) glue_links: Array2<Strength>,
 
     /// What can attach to the north of some *glue*
     ///

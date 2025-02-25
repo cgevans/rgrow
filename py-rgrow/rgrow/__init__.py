@@ -25,6 +25,7 @@ from .rgrow import (
     State,
     EvolveBounds,
     FFSStateRef,
+    KCov
 )
 from .sdc import SDC
 import attrs
@@ -40,8 +41,8 @@ from typing import (
     TypeAlias,
 )
 
-System: TypeAlias = ATAM | KTAM | OldKTAM
-SYSTEMS = (ATAM, KTAM, OldKTAM, SDC)
+System: TypeAlias = ATAM | KTAM | OldKTAM | KCov
+SYSTEMS = (ATAM, KTAM, OldKTAM, SDC, KCov)
 
 if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt
