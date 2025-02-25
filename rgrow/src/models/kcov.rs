@@ -314,10 +314,10 @@ impl KCov {
         let tile_ids = self.tile_names().len();
         for t in 0..tile_ids {
             let (tn, te, ts, tw) = (
-                self.glue_on_side(NORTH, t as TileId),
-                self.glue_on_side(EAST, t as TileId),
-                self.glue_on_side(SOUTH, t as TileId),
-                self.glue_on_side(WEST, t as TileId),
+                self.glue_on_side(NORTH, (t << 4) as TileId),
+                self.glue_on_side(EAST, (t << 4) as TileId),
+                self.glue_on_side(SOUTH, (t << 4) as TileId),
+                self.glue_on_side(WEST, (t << 4) as TileId),
             );
             self.energy_cover[t][0] = self.glue_links[(tn, glue_inverse(tn))];
             self.energy_cover[t][1] = self.glue_links[(te, glue_inverse(te))];
