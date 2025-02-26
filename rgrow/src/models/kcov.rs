@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use crate::{
     base::{Energy, Glue, HashSetType, Rate},
     canvas::{Canvas, PointSafe2, PointSafeHere},
-    python::PyState,
     state::State,
     system::{Event, FissionHandling, System, TileBondInfo},
     type_alias,
@@ -17,6 +16,8 @@ use crate::{
 
 // Imports for python bindings
 
+#[cfg(feature = "python")]
+use crate::python::PyState;
 #[cfg(feature = "python")]
 use numpy::ToPyArray;
 #[cfg(feature = "python")]
