@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     base::{Energy, Glue, HashSetType, Rate},
     canvas::{Canvas, PointSafe2, PointSafeHere},
+    python::PyState,
     state::State,
     system::{Event, FissionHandling, System, TileBondInfo},
     type_alias,
@@ -86,6 +87,16 @@ pub const fn side_index(side: Side) -> Option<usize> {
     }
 }
 
+/// Helper function to help print sides
+pub fn side_as_str(side: Side) -> &'static str {
+    match side {
+        NORTH => "north",
+        EAST => "east",
+        SOUTH => "south",
+        WEST => "west",
+        _ => panic!("Input was not a side"),
+    }
+}
 #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KCov {
@@ -1262,5 +1273,40 @@ impl KCov {
     #[new]
     fn kcov_from_params(kcov_params: KCovParams) -> Self {
         Self::from(kcov_params)
+    }
+
+    /// Returns a string breaking down the attachment rate at some point
+    fn detailed_rate_at_point(&self, state: &PyState, point: (usize, usize)) -> String {
+        let point = PointSafe2(point);
+        let tile = state.0.tile_at_point(point);
+
+        if tile == 0 {
+            let a_rate = self.total_attachment_rate_at_point(point, &state.0);
+            return format!("Attachment rate: {a_rate}");
+        }
+
+        let mut acc = String::new();
+        for side in ALL_SIDES {
+            let (kind, rate) = if is_covered(side, tile) {
+                let rate = self.cover_detachment_rate_at_side(side, tile);
+                ("detachment", rate)
+            } else {
+                let rate = self.cover_attachment_rate_at_side(side, tile);
+                ("attachment", rate)
+            };
+
+            let message = format!(
+                "Cover {} rate on side {}: {}",
+                kind,
+                side_as_str(side),
+                rate
+            );
+            acc.push_str(message.as_str());
+            acc.push('\n');
+        }
+        // Tile detachment
+        let detachment_rate = self.tile_detachment_rate(&state.0, point);
+        acc.push_str(format!("Tile detachment rate {}", detachment_rate).as_str());
+        acc
     }
 }
