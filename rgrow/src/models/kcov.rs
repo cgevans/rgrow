@@ -1276,14 +1276,15 @@ impl KCov {
         Self::from(kcov_params)
     }
 
-    /// Returns a string breaking down the attachment rate at some point
-    fn detailed_rate_at_point(&self, state: &PyState, point: (usize, usize)) -> String {
+    /// Print a string breaking down the total rate at some point
+    fn detailed_rate_at_point(&self, state: &PyState, point: (usize, usize)) {
         let point = PointSafe2(point);
         let tile = state.0.tile_at_point(point);
 
         if tile == 0 {
             let a_rate = self.total_attachment_rate_at_point(point, &state.0);
-            return format!("Attachment rate: {a_rate}");
+            println!("Attachment rate: {a_rate}");
+            return;
         }
 
         let mut acc = String::new();
@@ -1292,7 +1293,12 @@ impl KCov {
                 let rate = self.cover_detachment_rate_at_side(side, tile);
                 ("detachment", rate)
             } else {
-                let rate = self.cover_attachment_rate_at_side(side, tile);
+                // This assumes that there is nothing to the side, so a cover can in fact attach
+                let mut rate = self.cover_attachment_rate_at_side(side, tile);
+                // If there is a tile already attached on that side, then the attachment rate is 0
+                if Self::tile_to_side(&state.0, side, point) != 0 {
+                    rate = 0.0;
+                };
                 ("attachment", rate)
             };
 
@@ -1308,6 +1314,6 @@ impl KCov {
         // Tile detachment
         let detachment_rate = self.tile_detachment_rate(&state.0, point);
         acc.push_str(format!("Tile detachment rate {}", detachment_rate).as_str());
-        acc
+        println!("{}", acc)
     }
 }
