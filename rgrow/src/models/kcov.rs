@@ -1106,6 +1106,7 @@ mod test_kcov {
             kf: 1.0,
             temp: 40.0,
             seed: HashMap::default(),
+            binding_strength: HashMap::default(),
         }
         .into();
 
