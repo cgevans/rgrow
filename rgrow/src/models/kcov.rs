@@ -1169,6 +1169,7 @@ struct KCovParams {
     pub tiles: Vec<KCovTile>,
     pub cover_conc: Vec<Concentration>,
     pub seed: HashMap<(usize, usize), TileId>,
+    pub binding_strength: HashMap<Glue, Strength>,
     pub alpha: f64,
     pub kf: f64,
     pub temp: f64,
@@ -1203,10 +1204,27 @@ impl From<KCovParams> for KCov {
         }
         let mut glue_links = Array2::zeros((max_glue + 1, max_glue + 1));
         for glue in 1..=max_glue {
-            // TODO: Make this user specified in some simple way -- For now, connected == -1 else 0
             let glue_inv = glue_inverse(glue);
-            if let Some(x) = glue_links.get_mut((glue, glue_inv)) {
-                *x = -1.0;
+            let binding_str_glue = value.binding_strength.get(&glue);
+            let binding_str_glue_inv = value.binding_strength.get(&glue_inv);
+
+            // Leave it set to 0
+            if binding_str_glue.or(binding_str_glue_inv).is_none() {
+                continue;
+            }
+
+            if binding_str_glue_inv.is_some()
+                && binding_str_glue.is_some()
+                && binding_str_glue.unwrap() != binding_str_glue_inv.unwrap()
+            {
+                panic!(
+                    "Glue {} and its inverse {} had different binding strengths as input",
+                    glue, glue_inv
+                )
+            }
+
+            if let Some(stren) = glue_links.get_mut((glue, glue_inv)) {
+                *stren = *binding_str_glue.or(binding_str_glue_inv).unwrap();
             } else {
                 panic!(
                     "({:?} {:?}) not in index ({:?} {:?})",
