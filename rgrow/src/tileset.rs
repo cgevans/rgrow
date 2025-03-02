@@ -514,7 +514,6 @@ impl IntoPy<PyObject> for Size {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 
 pub enum CanvasType {
     #[serde(alias = "square")]
@@ -523,6 +522,25 @@ pub enum CanvasType {
     Periodic,
     #[serde(alias = "tube")]
     Tube,
+}
+
+#[cfg(feature = "python")]
+impl FromPyObject<'_> for CanvasType {
+    fn extract(ob: &PyAny) -> PyResult<Self> {
+        let s: &str = ob.extract()?;
+        CanvasType::try_from(s).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+    }
+}
+
+#[cfg(feature = "python")]
+impl IntoPy<PyObject> for CanvasType {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            CanvasType::Square => "square".into_py(py),
+            CanvasType::Periodic => "periodic".into_py(py),
+            CanvasType::Tube => "tube".into_py(py),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]

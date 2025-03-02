@@ -139,6 +139,8 @@ impl FFSRunConfig {
             "target_size" => self.target_size = v.extract()?,
             "store_ffs_config" => self.store_ffs_config = v.extract()?,
             "store_system" => self.store_system = v.extract()?,
+            "canvas_type" => self.canvas_type = v.extract()?,
+            "tracking" => self.tracking = v.extract()?,
             _ => {
                 return Err(PyTypeError::new_err(format!(
                     "Unknown FFSRunConfig setting: {k}"
