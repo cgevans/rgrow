@@ -772,12 +772,6 @@ impl SystemWithDimers for SDC {
     }
 }
 
-impl SystemWithDimers for KCov {
-    fn calc_dimers(&self) -> Vec<DimerInfo> {
-        panic!("Not implemented")
-    }
-}
-
 #[enum_dispatch]
 pub trait TileBondInfo {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4];

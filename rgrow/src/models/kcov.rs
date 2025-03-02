@@ -10,7 +10,7 @@ use crate::{
     base::{Energy, Glue, HashSetType, Rate},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     state::State,
-    system::{Event, FissionHandling, System, TileBondInfo},
+    system::{DimerInfo, Event, FissionHandling, Orientation, System, SystemWithDimers, TileBondInfo},
     type_alias,
 };
 
@@ -810,6 +810,49 @@ impl KCov {
     }
 }
 
+
+impl SystemWithDimers for KCov {
+    fn calc_dimers(&self) -> Vec<DimerInfo> {
+        let mut dvec = Vec::new();
+
+        for (t1, _) in self.tile_concentration.iter().enumerate() {
+            let t1 = t1 << 4;
+            if let Some(friends) = self.get_uncovered_friends_to_side(EAST, t1 as u32) {
+                for t2 in friends.iter() {
+                    let biconc = self.tile_concentration(t1 as u32) * self.tile_concentration(*t2 as u32);
+                    dvec.push(DimerInfo {
+                    t1: t1 as u32,
+                    t2: *t2 as u32,
+                    orientation: Orientation::WE,
+                    formation_rate: self.kf * biconc,
+                    equilibrium_conc: biconc * (self.energy_we[(tile_index(t1 as u32), tile_index(*t2 as u32))]/self.rtval() - self.alpha).exp(),
+                });
+            }
+            }
+
+            if let Some(friends) = self.get_uncovered_friends_to_side(SOUTH, t1 as u32) {
+                for t2 in friends.iter() {
+                    let biconc = self.tile_concentration(t1 as u32) * self.tile_concentration(*t2 as u32);
+                    dvec.push(DimerInfo {
+                        t1: t1 as u32,
+                        t2: *t2 as u32,
+                        orientation: Orientation::NS,
+                        formation_rate: self.kf * biconc,
+                        equilibrium_conc: biconc * (self.energy_ns[(tile_index(t1 as u32), tile_index(*t2 as u32))]/self.rtval() - self.alpha).exp(),
+                    });
+                }
+            }
+        
+        
+        }
+
+        
+        dvec
+    }
+}
+
+
+
 /*
 * The idea right now is that:
 * 1. All tiles have a different id
@@ -860,6 +903,16 @@ impl System for KCov {
             Event::MonomerChange(point, tile) | Event::MonomerAttachment(point, tile) => {
                 state.set_sa(point, tile)
             }
+            Event::PolymerAttachment(points) | Event::PolymerChange(points) => {
+                for (point, tile) in points.iter() {
+                    state.set_sa(point, tile);
+                }
+            }
+            Event::PolymerDetachment(points) => {
+                for point in points.iter() {
+                    state.set_sa(point, &0);
+                }
+            }
             _ => panic!("Polymer not yet implemented"),
         };
         self
@@ -884,8 +937,37 @@ impl System for KCov {
                 ];
                 self.update_points(state, &points);
             }
-            _ => panic!("Polymer not yet implemented"),
-        }
+            Event::PolymerDetachment(v) => {
+                let mut points = Vec::new();
+                for p in v {
+                    points.extend_from_slice(&[
+                        // Single moves (no dimer chunks, no duples)
+                        state.move_sa_n(*p),
+                        state.move_sa_w(*p),
+                        PointSafeHere(p.0),
+                        state.move_sa_e(*p),
+                        state.move_sa_s(*p),
+                    ]);
+                }
+                points.sort_unstable();
+                points.dedup();
+                self.update_points(state, &points);
+            }
+            Event::PolymerAttachment(t) | Event::PolymerChange(t) => {
+                let mut points = Vec::new();
+                for (p, _) in t {
+                    points.extend_from_slice(&[
+                        state.move_sa_n(*p),
+                        state.move_sa_w(*p),
+                        PointSafeHere(p.0),
+                        state.move_sa_e(*p),
+                        state.move_sa_s(*p),
+                    ]);
+                }
+                points.sort_unstable();
+                points.dedup();
+                self.update_points(state, &points);
+            }        }
     }
 
     fn event_rate_at_point<S: crate::state::State>(
