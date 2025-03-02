@@ -1295,6 +1295,11 @@ impl KCov {
         Self::from(kcov_params)
     }
 
+    /// Get the concentration of a tile with given covers
+    fn tile_conc(&self, tile: TileId) -> Concentration {
+        self.tile_concentration(tile)
+    }
+
     /// Print a string breaking down the total rate at some point
     fn detailed_rate_at_point(&self, state: &PyState, point: (usize, usize)) {
         let point = PointSafe2(point);
