@@ -470,7 +470,7 @@ impl KCov {
         let tile = uncover_all(tile);
         self.kf
             * (self.energy_cover[tile_index(tile)][side_index(side).expect("Side must be NESW")]
-                * (1.0 / self.rtval()))
+                * (1.0 / self.rtval()) + self.alpha)
             .exp()
     }
 
