@@ -10,7 +10,9 @@ use crate::{
     base::{Energy, Glue, HashSetType, Rate},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     state::State,
-    system::{DimerInfo, Event, FissionHandling, Orientation, System, SystemWithDimers, TileBondInfo},
+    system::{
+        DimerInfo, Event, FissionHandling, Orientation, System, SystemWithDimers, TileBondInfo,
+    },
     type_alias,
 };
 
@@ -470,8 +472,9 @@ impl KCov {
         let tile = uncover_all(tile);
         self.kf
             * (self.energy_cover[tile_index(tile)][side_index(side).expect("Side must be NESW")]
-                * (1.0 / self.rtval()) + self.alpha)
-            .exp()
+                * (1.0 / self.rtval())
+                + self.alpha)
+                .exp()
     }
 
     pub fn cover_detachment_total_rate(&self, tile: TileId) -> Rate {
@@ -810,7 +813,6 @@ impl KCov {
     }
 }
 
-
 impl SystemWithDimers for KCov {
     fn calc_dimers(&self) -> Vec<DimerInfo> {
         let mut dvec = Vec::new();
@@ -819,39 +821,44 @@ impl SystemWithDimers for KCov {
             let t1 = t1 << 4;
             if let Some(friends) = self.get_uncovered_friends_to_side(EAST, t1 as u32) {
                 for t2 in friends.iter() {
-                    let biconc = self.tile_concentration(t1 as u32) * self.tile_concentration(*t2 as u32);
+                    let biconc =
+                        self.tile_concentration(t1 as u32) * self.tile_concentration(*t2 as u32);
                     dvec.push(DimerInfo {
-                    t1: t1 as u32,
-                    t2: *t2 as u32,
-                    orientation: Orientation::WE,
-                    formation_rate: self.kf * biconc,
-                    equilibrium_conc: biconc * (self.energy_we[(tile_index(t1 as u32), tile_index(*t2 as u32))]/self.rtval() - self.alpha).exp(),
-                });
-            }
+                        t1: t1 as u32,
+                        t2: *t2 as u32,
+                        orientation: Orientation::WE,
+                        formation_rate: self.kf * biconc,
+                        equilibrium_conc: biconc
+                            * (self.energy_we[(tile_index(t1 as u32), tile_index(*t2 as u32))]
+                                / self.rtval()
+                                - self.alpha)
+                                .exp(),
+                    });
+                }
             }
 
             if let Some(friends) = self.get_uncovered_friends_to_side(SOUTH, t1 as u32) {
                 for t2 in friends.iter() {
-                    let biconc = self.tile_concentration(t1 as u32) * self.tile_concentration(*t2 as u32);
+                    let biconc =
+                        self.tile_concentration(t1 as u32) * self.tile_concentration(*t2 as u32);
                     dvec.push(DimerInfo {
                         t1: t1 as u32,
                         t2: *t2 as u32,
                         orientation: Orientation::NS,
                         formation_rate: self.kf * biconc,
-                        equilibrium_conc: biconc * (self.energy_ns[(tile_index(t1 as u32), tile_index(*t2 as u32))]/self.rtval() - self.alpha).exp(),
+                        equilibrium_conc: biconc
+                            * (self.energy_ns[(tile_index(t1 as u32), tile_index(*t2 as u32))]
+                                / self.rtval()
+                                - self.alpha)
+                                .exp(),
                     });
                 }
             }
-        
-        
         }
 
-        
         dvec
     }
 }
-
-
 
 /*
 * The idea right now is that:
@@ -967,7 +974,8 @@ impl System for KCov {
                 points.sort_unstable();
                 points.dedup();
                 self.update_points(state, &points);
-            }        }
+            }
+        }
     }
 
     fn event_rate_at_point<S: crate::state::State>(
