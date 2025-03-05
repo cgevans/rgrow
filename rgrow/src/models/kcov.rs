@@ -1186,7 +1186,7 @@ mod test_kcov {
         let tile_a = KCovTile {
             name: "TileA".to_string(),
             concentration: 1e-2,
-            glues: [1, 1, 2, 2],
+            glues: ["A", "A", "A*", "A*"].map(String::from),
             color: [0, 0, 0, 0],
         };
         let mut kcov: KCov = KCovParams {
@@ -1238,7 +1238,7 @@ struct KCovTile {
     pub name: String,
     pub concentration: f64,
     /// Glues for the tiles North, East, South, West in that order
-    pub glues: [Glue; 4],
+    pub glues: [String; 4],
     /// Color of the tile, this is used only when displaying
     pub color: [u8; 4],
 }
@@ -1248,7 +1248,7 @@ impl KCovTile {
         Self {
             name: "empty".to_string(),
             concentration: 0.0,
-            glues: [0, 0, 0, 0],
+            glues: ["null"; 4].map(String::from),
             color: [0, 0, 0, 0],
         }
     }
@@ -1260,10 +1260,18 @@ struct KCovParams {
     pub tiles: Vec<KCovTile>,
     pub cover_conc: Vec<Concentration>,
     pub seed: HashMap<(usize, usize), TileId>,
-    pub binding_strength: HashMap<Glue, Strength>,
+    pub binding_strength: HashMap<String, Strength>,
     pub alpha: f64,
     pub kf: f64,
     pub temp: f64,
+}
+
+/// Given some glue, in the form (a|z)+* or (a|z), return itself, as well as its inverse
+fn base_inv(mut s: String) -> (String, String) {
+    if s.ends_with("*") {
+        s.pop();
+    }
+    (s.clone(), format!("{s}*"))
 }
 
 impl From<KCovParams> for KCov {
@@ -1272,7 +1280,6 @@ impl From<KCovParams> for KCov {
         tiles.push(KCovTile::empty());
         tiles.append(&mut value.tiles);
         let tile_names = tiles.iter().map(|tile| tile.name.clone()).collect();
-        let tile_glues = tiles.iter().map(|tile| tile.glues).collect();
         let tile_concentration = tiles.iter().map(|tile| tile.concentration).collect();
         let tile_colors = tiles.iter().map(|tile| tile.color).collect();
         let seed = value
@@ -1280,55 +1287,56 @@ impl From<KCovParams> for KCov {
             .iter()
             .map(|(tuple, tile)| (PointSafe2(*tuple), *tile))
             .collect();
-
         let mut glues = tiles
             .iter()
-            .flat_map(|tile| tile.glues)
-            .collect::<Vec<Glue>>();
-        glues.sort_unstable();
+            .flat_map(|tile| tile.glues.clone())
+            .collect::<Vec<_>>();
         glues.dedup();
 
-        let mut max_glue = *glues.iter().max().unwrap();
-        // Make sure that every glue has its inverse in the array
-        if max_glue % 2 == 1 {
-            max_glue += 1;
-        }
-        let mut glue_links = Array2::zeros((max_glue + 1, max_glue + 1));
-        for glue in 1..=max_glue {
-            let glue_inv = glue_inverse(glue);
-            let binding_str_glue = value.binding_strength.get(&glue);
-            let binding_str_glue_inv = value.binding_strength.get(&glue_inv);
-
-            // Leave it set to 0
-            if binding_str_glue.or(binding_str_glue_inv).is_none() {
+        let mut glue_id = 1;
+        let mut glue_hashmap: HashMap<String, Glue> = HashMap::from([("null".to_string(), 0)]);
+        for glue in glues.iter() {
+            // We have already generated a key for this glue
+            if glue_hashmap.contains_key(glue) {
                 continue;
             }
+            let (base, inverse) = base_inv(glue.clone());
+            glue_hashmap.insert(base, glue_id);
+            glue_hashmap.insert(inverse, glue_id + 1);
+            glue_id += 2;
+        }
 
-            if binding_str_glue_inv.is_some()
-                && binding_str_glue.is_some()
-                && binding_str_glue.unwrap() != binding_str_glue_inv.unwrap()
-            {
-                panic!(
-                    "Glue {} and its inverse {} had different binding strengths as input",
-                    glue, glue_inv
-                )
-            }
+        let tile_glues = tiles
+            .iter()
+            .map(|tile| tile.glues.clone().map(|x| *glue_hashmap.get(&x).unwrap()))
+            .collect();
 
-            if let Some(stren) = glue_links.get_mut((glue, glue_inv)) {
-                *stren = *binding_str_glue.or(binding_str_glue_inv).unwrap();
-            } else {
+        // Make sure that every glue has its inverse in the array
+        let mut glue_links = Array2::zeros((glue_id + 1, glue_id + 1));
+        for (glue, strength_new) in value.binding_strength {
+            let (glue_str, inverse_str) = base_inv(glue);
+
+            let msg = "Glue was assigned strength, but was not used";
+            let glue = *glue_hashmap.get(&glue_str).expect(msg);
+            let inverse = *glue_hashmap.get(&inverse_str).expect(msg);
+
+            // Lets check that we are in bounds
+            if glue_links.get((glue, inverse)).is_none() {
                 panic!(
                     "({:?} {:?}) not in index ({:?} {:?})",
-                    glue, glue_inv, max_glue, max_glue
+                    glue, inverse, glue_id, glue_id
                 );
             }
+            glue_links[(glue, inverse)] = strength_new;
+            glue_links[(inverse, glue)] = strength_new;
         }
+
         Self::new(
             tile_names,
             tile_concentration,
             tile_colors,
             // Glue names -- for now we will just generate them like this
-            (0..=max_glue).map(|gid| format!("Glue{}", gid)).collect(),
+            (0..glue_id).map(|gid| format!("Glue{}", gid)).collect(),
             value.cover_conc,
             tile_glues,
             glue_links,
