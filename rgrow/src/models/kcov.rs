@@ -1256,11 +1256,18 @@ impl KCovTile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
+enum StrenOrSeq {
+    DG(Strength),
+    Sequence(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 struct KCovParams {
     pub tiles: Vec<KCovTile>,
     pub cover_conc: Vec<Concentration>,
     pub seed: HashMap<(usize, usize), TileId>,
-    pub binding_strength: HashMap<String, Strength>,
+    pub binding_strength: HashMap<String, StrenOrSeq>,
     pub alpha: f64,
     pub kf: f64,
     pub temp: f64,
@@ -1327,8 +1334,18 @@ impl From<KCovParams> for KCov {
                     glue, inverse, glue_id, glue_id
                 );
             }
-            glue_links[(glue, inverse)] = strength_new;
-            glue_links[(inverse, glue)] = strength_new;
+
+            let stren_dg = match strength_new {
+                StrenOrSeq::DG(dg) => dg,
+                StrenOrSeq::Sequence(seq) => {
+                    // If we want annealing, we need to save the sequences, or store dh & ds
+                    // instead of dg
+                    crate::utils::string_dna_delta_g(&seq, value.temp) - value.alpha
+                }
+            };
+
+            glue_links[(glue, inverse)] = stren_dg;
+            glue_links[(inverse, glue)] = stren_dg;
         }
 
         Self::new(
