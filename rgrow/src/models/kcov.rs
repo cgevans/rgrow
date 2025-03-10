@@ -1340,7 +1340,9 @@ impl From<KCovParams> for KCov {
                 StrenOrSeq::Sequence(seq) => {
                     // If we want annealing, we need to save the sequences, or store dh & ds
                     // instead of dg
-                    crate::utils::string_dna_delta_g(&seq, value.temp) - value.alpha
+                    // cge: it turns out I made some mistakes with alpha.  We need to use RT*alpha here, which messes
+                    // up temperature dependence.  But that doesn't matter right now I suppose.
+                    crate::utils::string_dna_delta_g(&seq, value.temp) - R * (273.15 + value.temp) * value.alpha
                 }
             };
 
