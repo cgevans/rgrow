@@ -648,5 +648,15 @@ impl KCov {
         self.get_tile_uncovered_glues(tile as u32)
     }
     
+    #[getter]
+    fn get_cover_concentrations(&self) -> Vec<f64> {
+        self.cover_concentrations.clone()
+    }
+
+    #[setter]
+    fn set_cover_concentrations(&mut self, cover_concentrations: Vec<f64>) {
+        self.cover_concentrations = cover_concentrations;
+        self.update();
+    }
     
 }
