@@ -449,6 +449,14 @@ macro_rules! create_py_system {
                     .collect()
             }
 
+            #[getter]
+            fn bond_names(&self) -> Vec<String> {
+                TileBondInfo::bond_names(self)
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect()
+            }
+
             /// Given a tile name, return the tile number.
             ///
             /// Parameters

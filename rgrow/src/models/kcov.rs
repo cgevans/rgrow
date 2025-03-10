@@ -881,7 +881,7 @@ impl TileBondInfo for KCov {
     }
 
     fn bond_name(&self, bond_number: usize) -> &str {
-        todo!()
+        &self.glue_names[bond_number]
     }
 
     fn tile_colors(&self) -> &Vec<[u8; 4]> {
@@ -893,7 +893,7 @@ impl TileBondInfo for KCov {
     }
 
     fn bond_names(&self) -> Vec<&str> {
-        todo!()
+        self.glue_names.iter().map(|s| s.as_str()).collect()
     }
 }
 
@@ -1350,12 +1350,16 @@ impl From<KCovParams> for KCov {
             glue_links[(inverse, glue)] = stren_dg;
         }
 
+        let mut glue_names = vec!["".to_string(); glue_id];
+        for (name, id) in glue_hashmap {
+            glue_names[id] = name;
+        }
+
         Self::new(
             tile_names,
             tile_concentration,
             tile_colors,
-            // Glue names -- for now we will just generate them like this
-            (0..glue_id).map(|gid| format!("Glue{}", gid)).collect(),
+            glue_names,
             value.cover_conc,
             tile_glues,
             glue_links,
