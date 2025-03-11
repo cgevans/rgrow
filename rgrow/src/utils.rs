@@ -322,12 +322,14 @@ mod test_utils {
     use super::_loop_penalty;
     use super::string_dna_delta_g;
     use super::two_window_fold;
-    use approx::assert_relative_eq;
     use approx::assert_ulps_eq;
 
     #[test]
+    #[allow(clippy::neg_multiply)]
+    #[allow(clippy::identity_op)]
+    #[allow(clippy::erasing_op)]
     fn test_sliding_window() {
-        let v = vec![1., 2., 0., -1., 5.];
+        let v = [1., 2., 0., -1., 5.];
         let expected = ((1 + 2) + (2 + 0) + (0 + (-1)) + ((-1) + 5)) as f64;
         let acc = two_window_fold(v.iter(), |acc: f64, (a, b)| acc + (*a + *b));
         assert_eq!(Some(expected), acc);
