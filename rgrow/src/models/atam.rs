@@ -3,7 +3,7 @@ use crate::{
     canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{Event, System, SystemInfo, SystemWithDimers, TileBondInfo},
-    tileset::{FromTileSet, ProcessedTileSet, TileSet},
+    tileset::{ProcessedTileSet, TileSet},
 };
 
 #[cfg(feature = "python")]
@@ -879,8 +879,10 @@ impl TileBondInfo for ATAM {
     }
 }
 
-impl FromTileSet for ATAM {
-    fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
+impl TryFrom<&TileSet> for ATAM {
+    type Error = RgrowError;
+
+    fn try_from(tileset: &TileSet) -> Result<Self, Self::Error> {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
         let seed = if proc.seed.is_empty() {
             Seed::None()
@@ -942,6 +944,6 @@ impl ATAM {
     #[pyo3(name = "from_tileset")]
     fn py_from_tileset(tileset: &Bound<PyAny>) -> PyResult<Self> {
         let tileset: TileSet = tileset.extract()?;
-        Ok(Self::from_tileset(&tileset)?)
+        Ok(Self::try_from(&tileset)?)
     }
 }

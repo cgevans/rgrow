@@ -36,7 +36,7 @@ name = "rgrow"
 path = "src/main.rs"
 
 [features]
-default = ["use_rayon", "ui"]
+default = ["use_rayon", "ui", "python"]
 ui = ["fltk", "pixels"]
 use_rayon = ["rayon"]
 python = ["pyo3", "numpy", "pyo3-polars"]

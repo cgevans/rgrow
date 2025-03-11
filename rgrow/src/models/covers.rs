@@ -11,7 +11,7 @@ use crate::{
         ChunkSize, DimerInfo, Event, StepOutcome, System, SystemInfo, SystemWithDimers,
         TileBondInfo,
     },
-    tileset::{FromTileSet, ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
+    tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
 };
 
 #[derive(Debug, Clone)]
@@ -329,8 +329,10 @@ impl TileBondInfo for StaticKTAMCover {
     }
 }
 
-impl FromTileSet for StaticKTAMCover {
-    fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
+impl TryFrom<&TileSet> for StaticKTAMCover {
+    type Error = RgrowError;
+
+    fn try_from(tileset: &TileSet) -> Result<Self, Self::Error> {
         let mut tsc: TileSet = (*tileset).to_owned();
 
         let cs = tsc.cover_strands.as_ref().unwrap();

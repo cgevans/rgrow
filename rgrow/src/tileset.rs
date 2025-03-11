@@ -622,10 +622,6 @@ impl Display for Size {
     }
 }
 
-pub trait FromTileSet: Sized {
-    fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError>;
-}
-
 impl TileSet {
     pub fn from_json(data: &str) -> serde_json::Result<Self> {
         serde_json::from_str(data)
@@ -663,9 +659,9 @@ impl TileSet {
 
     pub fn create_dynsystem(&self) -> Result<SystemEnum, RgrowError> {
         Ok(match self.model.unwrap_or(MODEL_DEFAULT) {
-            Model::KTAM => SystemEnum::KTAM(KTAM::from_tileset(self)?),
-            Model::ATAM => SystemEnum::ATAM(ATAM::from_tileset(self)?),
-            Model::OldKTAM => SystemEnum::OldKTAM(OldKTAM::from_tileset(self)?),
+            Model::KTAM => SystemEnum::KTAM(KTAM::try_from(self)?),
+            Model::ATAM => SystemEnum::ATAM(ATAM::try_from(self)?),
+            Model::OldKTAM => SystemEnum::OldKTAM(OldKTAM::try_from(self)?),
             Model::SDC => panic!("SDC not yet implemented from dynsystem create"),
         })
     }

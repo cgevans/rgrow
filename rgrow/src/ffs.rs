@@ -10,7 +10,7 @@ use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
 use crate::system::{EvolveBounds, SystemWithDimers};
-use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
+use crate::tileset::{CanvasType, Model, TileSet, SIZE_DEFAULT};
 
 use canvas::Canvas;
 use num_traits::{Float, Num};
@@ -252,10 +252,10 @@ impl TileSet {
         };
 
         match model {
-            Model::KTAM => KTAM::from_tileset(self)?.run_ffs(&config),
+            Model::KTAM => KTAM::try_from(self)?.run_ffs(&config),
             Model::ATAM => Err(RgrowError::FFSCannotRunModel("aTAM".into())),
             Model::SDC => Err(RgrowError::FFSCannotRunModel("SDC".into())),
-            Model::OldKTAM => OldKTAM::from_tileset(self)?.run_ffs(&config),
+            Model::OldKTAM => OldKTAM::try_from(self)?.run_ffs(&config),
         }
     }
 }
@@ -410,11 +410,11 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
-    pub fn create_from_tileset<Sy: SystemWithDimers + System + FromTileSet>(
-        tileset: &TileSet,
+    pub fn create_from_tileset<'a, Sy: SystemWithDimers + System + TryFrom<&'a TileSet, Error = RgrowError>>(
+        tileset: &'a TileSet,
         config: &FFSRunConfig,
     ) -> Result<Self, RgrowError> {
-        let mut sys = Sy::from_tileset(tileset)?;
+        let mut sys = Sy::try_from(tileset)?;
         let c = {
             let mut c = config.clone();
             c.canvas_size = match tileset.size.unwrap_or(SIZE_DEFAULT) {
