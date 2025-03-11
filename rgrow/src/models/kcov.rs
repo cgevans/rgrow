@@ -825,7 +825,7 @@ impl SystemWithDimers for KCov {
                         self.tile_concentration(t1 as u32) * self.tile_concentration(*t2 as u32);
                     dvec.push(DimerInfo {
                         t1: t1 as u32,
-                        t2: *t2 as u32,
+                        t2: *t2,
                         orientation: Orientation::WE,
                         formation_rate: self.kf * biconc,
                         equilibrium_conc: biconc
@@ -843,7 +843,7 @@ impl SystemWithDimers for KCov {
                         self.tile_concentration(t1 as u32) * self.tile_concentration(*t2 as u32);
                     dvec.push(DimerInfo {
                         t1: t1 as u32,
-                        t2: *t2 as u32,
+                        t2: *t2,
                         orientation: Orientation::NS,
                         formation_rate: self.kf * biconc,
                         equilibrium_conc: biconc

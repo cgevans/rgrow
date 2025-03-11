@@ -8,7 +8,7 @@ use rgrow::{
     canvas::{Canvas, CanvasPeriodic, PointSafe2},
     state::{NullStateTracker, QuadTreeState, StateStatus},
     system::{DynSystem, EvolveBounds, FissionHandling, System},
-    tileset::{FromTileSet, Seed, Size, TileSet},
+    tileset::{Seed, Size, TileSet},
 };
 
 fn test_sim(ts: &TileSet) -> Result<()> {
@@ -91,7 +91,7 @@ fn ktam_test() -> Result<()> {
     ts.size = Some(Size::Single(64));
     ts.seed = Some(Seed::Single(60, 60, 1.into()));
 
-    let mut sys = rgrow::models::ktam::KTAM::from_tileset(&ts)?;
+    let mut sys = rgrow::models::ktam::KTAM::try_from(&ts)?;
 
     let mut st = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((64, 64))?;
 
@@ -166,7 +166,7 @@ fn oldktam_test() -> Result<()> {
     ts.seed = Some(Seed::Single(60, 60, 1.into()));
     ts.gse = Some(8.1);
 
-    let sys = rgrow::models::oldktam::OldKTAM::from_tileset(&ts)?;
+    let sys = rgrow::models::oldktam::OldKTAM::try_from(&ts)?;
 
     let mut st = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((64, 64))?;
 
@@ -183,7 +183,7 @@ fn oldktam_test() -> Result<()> {
     assert!(st.n_tiles() > 200);
 
     ts.gse = Some(7.8);
-    let sys = rgrow::models::oldktam::OldKTAM::from_tileset(&ts)?;
+    let sys = rgrow::models::oldktam::OldKTAM::try_from(&ts)?;
 
     System::evolve(
         &sys,
