@@ -327,6 +327,13 @@ fn variance_over_mean2(num_success: usize, num_trials: usize) -> f64 {
     (1. - p) / (ns)
 }
 
+/// Calculates 95% upper bound on probability of success given number of trials and number of successes.
+fn max_prob(num_success: usize, num_trials: usize) -> f64 {
+    let z = 1.96;
+    let p = num_success as f64 / num_trials as f64;
+    p + z * (p * (1. - p) / num_trials as f64).sqrt()
+}
+
 pub struct FFSRun<St: ClonableState> {
     pub level_list: Vec<FFSLevel<St>>,
     pub dimerization_rate: f64,
@@ -367,18 +374,19 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
         let mut above_cutoff: usize = 0;
 
         while current_size < config.target_size {
-            let last = ret.level_list.last_mut().unwrap();
+            let min_prob = config.min_nuc_rate.map(
+                |min_nuc_rate|
+                min_nuc_rate / ret.nucleation_rate()
+            );
 
-            let next = last.next_level(system, config)?;
+            let last = ret.level_list.last_mut().unwrap();
+            let next = last.next_level(system, config, min_prob)?;
             if !config.keep_configs {
                 last.drop_states();
             }
             let pf = next.p_r;
             ret.forward_prob.push(pf);
-            // println!(
-            //     "Done with target size {}: p_f {}, used {} trials for {} states.",
-            //     last.target_size, pf, next.num_trials, next.num_states
-            // );
+
             current_size = next.target_size;
             ret.level_list.push(next);
 
@@ -448,6 +456,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         &self,
         system: &mut Sy,
         config: &FFSRunConfig,
+        min_prob: Option<f64>,
     ) -> Result<Self, GrowError> {
         let mut rng = thread_rng();
 
@@ -510,6 +519,12 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             {
                 break;
             }
+
+            if let Some(min_prob) = min_prob {
+                if max_prob(state_list.len(), i) < min_prob {
+                    break;
+                }
+            }
         }
         let p_r = (state_list.len() as f64) / (i as f64);
         let num_states = state_list.len();
@@ -554,6 +569,13 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
         let cvar = if config.constant_variance {
             config.var_per_mean2
+        } else {
+            0.
+        };
+
+        let min_prob = if let Some(min_nuc_rate) = config.min_nuc_rate {
+            let dimerization_rate = dimers.iter().fold(0.0, |acc, d| acc + d.formation_rate);
+            min_nuc_rate / dimerization_rate
         } else {
             0.
         };
@@ -620,6 +642,10 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             }
 
             if (variance_over_mean2(num_states, i) < cvar) & (num_states >= config.min_configs) {
+                break;
+            }
+
+            if max_prob(num_states, i) < min_prob {
                 break;
             }
         }
