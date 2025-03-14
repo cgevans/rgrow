@@ -123,6 +123,21 @@ pub enum StateEnum {
 }
 
 impl StateEnum {
+
+    pub fn from_array(
+        array: ArrayView2<Tile>,
+        kind: CanvasType,
+        tracking: TrackingType,
+        n_tile_types: usize,
+    ) -> Result<StateEnum, GrowError> {
+        let shape = array.shape();
+        let mut state = StateEnum::empty((shape[0], shape[1]), kind, tracking, n_tile_types)?;
+        let mut state_array = state.raw_array_mut();
+        state_array.assign(&array);
+        Ok(state)
+    }
+    
+
     pub fn empty(
         shape: (usize, usize),
         kind: CanvasType,
@@ -386,6 +401,10 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
 
     fn raw_array(&self) -> ArrayView2<Tile> {
         self.canvas.raw_array()
+    }
+
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+        self.canvas.raw_array_mut()
     }
 
     fn nrows(&self) -> usize {

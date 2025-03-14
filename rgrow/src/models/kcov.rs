@@ -419,7 +419,7 @@ impl KCov {
             EAST => self.energy_we[(tile1 as usize, tile2 as usize)],
             SOUTH => self.energy_ns[(tile1 as usize, tile2 as usize)],
             WEST => self.energy_we[(tile2 as usize, tile1 as usize)],
-            _ => panic!("Must enter NSEW"),
+            _ => panic!("Must enter NESW"),
         }
     }
 
@@ -1033,7 +1033,41 @@ impl System for KCov {
     }
 
     fn calc_mismatch_locations<St: crate::state::State>(&self, state: &St) -> Array2<usize> {
-        todo!()
+        // cge: Roughly copied from kTAM, because I need this for playing with
+        // some algorithmic self-assembly stuff.
+
+        let threshold = -0.05; // Todo: fix this (note for kCov, energies are negative)
+        let mut mismatch_locations = Array2::<usize>::zeros((state.nrows(), state.ncols()));
+
+        // TODO: this should use an iterator from the canvas, which we should implement.
+        for i in 0..state.nrows() {
+            for j in 0..state.ncols() {
+                if !state.inbounds((i, j)) {
+                    continue;
+                }
+                let p = PointSafe2((i, j));
+
+                let t = state.tile_at_point(p);
+
+                if t == 0 {
+                    continue;
+                }
+
+                let tn = state.tile_to_n(p);
+                let te = state.tile_to_e(p);
+                let ts = state.tile_to_s(p);
+                let tw = state.tile_to_w(p);                
+                
+                let mm_n = ((tn != 0) & (self.energy_to(NORTH, t, tn) > threshold)) as usize;
+                let mm_e = ((te != 0) & (self.energy_to(EAST, t, te) > threshold)) as usize;
+                let mm_s = ((ts != 0) & (self.energy_to(SOUTH, t, ts) > threshold)) as usize;
+                let mm_w = ((tw != 0) & (self.energy_to(WEST, t, tw) > threshold)) as usize;
+
+                mismatch_locations[(i, j)] = 8 * mm_n + 4 * mm_e + 2 * mm_s + mm_w;
+            }
+        }
+
+        mismatch_locations
     }
 }
 

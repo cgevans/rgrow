@@ -75,9 +75,14 @@ def _system_color_canvas(
     """Returns the current canvas for state, as an array of tile colors."""
 
     if isinstance(state, (State, FFSStateRef)):
-        return self.tile_colors[state.canvas_view]
+        cv = state.canvas_view
     else:
-        return self.tile_colors[state]
+        cv = state
+
+    if isinstance(self, KCov):
+        cv = cv >> 4
+
+    return self.tile_colors[cv]
 
 
 def _system_plot_canvas(
@@ -98,6 +103,9 @@ def _system_plot_canvas(
         cv = state.canvas_view
     else:
         cv = state
+
+    if isinstance(sys, KCov):
+        cv = cv >> 4
 
     rows, cols = cv.shape
 

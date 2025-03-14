@@ -17,7 +17,7 @@ use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo,
 };
 use ndarray::Array2;
-use numpy::{IntoPyArray, PyArray2, PyArrayMethods, ToPyArray};
+use numpy::{IntoPyArray, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -47,6 +47,11 @@ impl PyState {
             tracking.try_into()?,
             n_tile_types.unwrap_or(1),
         )?))
+    }
+
+    #[staticmethod]
+    pub fn from_array(array: PyReadonlyArray2<crate::base::Tile>, kind: &str, tracking: &str, n_tile_types: Option<usize>) -> PyResult<Self> {
+        Ok(PyState(StateEnum::from_array(array.as_array(), kind.try_into()?, tracking.try_into()?, n_tile_types.unwrap_or(1))?))
     }
 
     /// Return a cloned copy of an array with the total possible next event rate for each point in the canvas.

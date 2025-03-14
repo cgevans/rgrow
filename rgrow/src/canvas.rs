@@ -36,6 +36,7 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     fn calc_n_tiles(&self) -> NumTiles;
     fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles;
     fn raw_array(&self) -> ArrayView2<Tile>;
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile>;
     fn nrows(&self) -> usize;
     fn ncols(&self) -> usize;
     fn nrows_usable(&self) -> usize;
@@ -471,6 +472,10 @@ impl Canvas for CanvasSquare {
         self.0.view()
     }
 
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+        self.0.view_mut()
+    }
+
     fn nrows(&self) -> usize {
         self.0.nrows()
     }
@@ -556,6 +561,10 @@ impl Canvas for CanvasPeriodic {
 
     fn raw_array(&self) -> ArrayView2<Tile> {
         self.0.view()
+    }
+
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+        self.0.view_mut()
     }
 
     fn nrows(&self) -> usize {
@@ -658,6 +667,10 @@ impl Canvas for CanvasTube {
         self.0.view()
     }
 
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+        self.0.view_mut()
+    }
+    
     fn nrows(&self) -> usize {
         self.0.nrows()
     }
