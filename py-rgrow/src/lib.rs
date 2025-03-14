@@ -44,4 +44,9 @@ mod rgrow {
     use rgrow::utils::loop_penalty;
     #[pymodule_export]
     use rgrow::utils::string_dna_dg_ds;
+    #[pymodule_export]
+    use rgrow::colors::get_color;
+
+    #[pymodule_export]
+    use rgrow::colors::get_color_or_random;
 }

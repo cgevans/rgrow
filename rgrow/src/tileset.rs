@@ -924,7 +924,7 @@ impl ProcessedTileSet {
 
             let tile_stoic = tile.stoic.unwrap_or(1.);
 
-            let tile_color = get_color_or_random(&tile.color.as_deref())?;
+            let tile_color = get_color_or_random(tile.color.as_deref())?;
 
             let mut v: Vec<usize> = tile
                 .edges

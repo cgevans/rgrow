@@ -1147,8 +1147,8 @@ impl SDC {
             // Add the name and the color
             strand_names.push(name.unwrap_or(id.to_string()));
 
-            let color_as_str = color.as_ref().map(|x| x.as_str());
-            let color_or_rand = get_color_or_random(&color_as_str).unwrap();
+            let color_as_str = color.as_deref();
+            let color_or_rand = get_color_or_random(color_as_str).unwrap();
             strand_colors.push(color_or_rand);
 
             // Add the glues, note that we want to leave idnex (0, _) empty (for the empty tile)
