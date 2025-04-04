@@ -133,9 +133,9 @@ jobs:
           manylinux: "auto"
           working-directory: py-rgrow
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-linux-${{ matrix.target }}
           path: py-rgrow/dist
   # deploy-docs:
   #   runs-on: ubuntu-latest
@@ -177,9 +177,9 @@ jobs:
           working-directory: py-rgrow
           rust-toolchain: nightly
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-windows-${{ matrix.target }}
           path: py-rgrow/dist
 
   macos:
@@ -203,9 +203,9 @@ jobs:
           working-directory: py-rgrow
           rust-toolchain: nightly
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-macos-${{ matrix.target }}
           path: py-rgrow/dist
 
   sdist:
@@ -219,9 +219,9 @@ jobs:
           command: sdist
           working-directory: py-rgrow
       - name: Upload sdist
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-sdist
           path: target/wheels
 
   python_release:
@@ -230,9 +230,10 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     needs: [linux, windows, macos, sdist]
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: wheels-*
+          merge-multiple: true
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         env:
