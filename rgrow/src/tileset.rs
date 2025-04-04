@@ -17,7 +17,6 @@ use super::*;
 use anyhow::Context;
 use base::{NumEvents, NumTiles};
 use bimap::BiMap;
-use pyo3::IntoPyObjectExt;
 use core::fmt;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -32,6 +31,8 @@ use system::{ChunkHandling, ChunkSize};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
+#[cfg(feature = "python")]
+use pyo3::IntoPyObjectExt;
 
 use thiserror;
 
