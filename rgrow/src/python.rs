@@ -1,11 +1,13 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::ops::DerefMut;
 use std::time::Duration;
 
 use crate::base::{NumEvents, NumTiles, RgrowError, RustAny, Tile};
-use crate::canvas::{Canvas, PointSafeHere};
+use crate::canvas::{Canvas, PointSafe2, PointSafeHere};
 use crate::ffs::{FFSRunConfig, FFSRunResult, FFSStateRef};
 use crate::models::atam::ATAM;
+use crate::models::kcov::KCov;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::{SDCParams, SDC};
@@ -15,7 +17,7 @@ use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo,
 };
 use ndarray::Array2;
-use numpy::{IntoPyArray, PyArray1, PyArray2, ToPyArray};
+use numpy::{IntoPyArray, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray, PyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -45,6 +47,11 @@ impl PyState {
             tracking.try_into()?,
             n_tile_types.unwrap_or(1),
         )?))
+    }
+
+    #[staticmethod]
+    pub fn from_array(array: PyReadonlyArray2<crate::base::Tile>, kind: &str, tracking: &str, n_tile_types: Option<usize>) -> PyResult<Self> {
+        Ok(PyState(StateEnum::from_array(array.as_array(), kind.try_into()?, tracking.try_into()?, n_tile_types.unwrap_or(1))?))
     }
 
     /// Return a cloned copy of an array with the total possible next event rate for each point in the canvas.
@@ -452,6 +459,14 @@ macro_rules! create_py_system {
                     .collect()
             }
 
+            #[getter]
+            fn bond_names(&self) -> Vec<String> {
+                TileBondInfo::bond_names(self)
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect()
+            }
+
             /// Given a tile name, return the tile number.
             ///
             /// Parameters
@@ -524,6 +539,12 @@ macro_rules! create_py_system {
                 DynSystem::update_state(self, &mut state.0, needed)
             }
 
+            #[pyo3(name = "setup_state")]
+            fn py_setup_state(&self, state: &mut PyState) -> PyResult<()> {
+                DynSystem::setup_state(self, &mut state.0).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+                Ok(())
+            }
+
             /// Run FFS.
             ///
             /// Parameters
@@ -580,6 +601,8 @@ macro_rules! create_py_system {
                 Ok(())
             }
 
+
+
             /// Read a system from a JSON file.
             ///
             /// Parameters
@@ -602,3 +625,48 @@ create_py_system!(KTAM);
 create_py_system!(ATAM);
 create_py_system!(OldKTAM);
 create_py_system!(SDC);
+create_py_system!(KCov);
+
+#[pymethods]
+impl KCov {
+    #[getter]
+    fn get_seed(&self) -> HashMap<(usize, usize), u32> {
+        self.seed.clone().into_iter().map(|(k, v)| (k.0, v)).collect()
+    }
+
+    #[setter]
+    fn set_seed(&mut self, seed: HashMap<(usize, usize), u32>) {
+        self.seed = seed.into_iter().map(|(k, v)| (PointSafe2(k), v)).collect();
+    }
+
+    #[getter]
+    fn get_glue_links<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+        self.glue_links.to_pyarray_bound(py)
+    }
+
+    #[setter]
+    fn set_glue_links<'py>(&mut self, glue_links: &Bound<'py, PyArray2<f64>>) {
+        self.glue_links = glue_links.to_owned_array();
+        self.update();
+    }
+
+    fn py_get_tile_raw_glues(&self, tile: usize) -> Vec<usize> {
+        self.get_tile_raw_glues(tile as u32)
+    }
+
+    fn py_get_tile_uncovered_glues(&self, tile: usize) -> Vec<usize> {
+        self.get_tile_uncovered_glues(tile as u32)
+    }
+    
+    #[getter]
+    fn get_cover_concentrations(&self) -> Vec<f64> {
+        self.cover_concentrations.clone()
+    }
+
+    #[setter]
+    fn set_cover_concentrations(&mut self, cover_concentrations: Vec<f64>) {
+        self.cover_concentrations = cover_concentrations;
+        self.update();
+    }
+    
+}

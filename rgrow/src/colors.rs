@@ -1,5 +1,10 @@
 use phf::phf_map;
+#[cfg(feature = "python")]
+use pyo3::exceptions::{PyValueError};
 use thiserror::Error;
+
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
 
 #[derive(Error, Debug)]
 pub enum ColorError {
@@ -9,6 +14,17 @@ pub enum ColorError {
     ParseIntError(#[from] std::num::ParseIntError),
 }
 
+#[cfg(feature = "python")]
+impl From<ColorError> for PyErr {
+    fn from(value: ColorError) -> Self {
+        match value {
+            ColorError::InvalidColorName(s) => PyValueError::new_err(s),
+            ColorError::ParseIntError(_) => PyValueError::new_err("Invalid color name"),
+        }
+    }
+}
+
+#[cfg_attr(feature = "python", pyfunction)]
 pub fn get_color(cs: &str) -> Result<[u8; 4], ColorError> {
     if let Some(c) = COLORS.get(cs) {
         return Ok(*c);
@@ -36,7 +52,8 @@ pub fn get_color(cs: &str) -> Result<[u8; 4], ColorError> {
     Ok(c)
 }
 
-pub fn get_color_or_random(cs: &Option<&str>) -> Result<[u8; 4], ColorError> {
+#[cfg_attr(feature = "python", pyfunction)]
+pub fn get_color_or_random(cs: Option<&str>) -> Result<[u8; 4], ColorError> {
     match cs {
         Some(c) => get_color(c),
         None => Ok([rand::random(), rand::random(), rand::random(), 255]),
@@ -847,8 +864,8 @@ mod test {
 
     #[test]
     fn test_get_color_or_random() -> anyhow::Result<()> {
-        assert_eq!(super::get_color_or_random(&Some("red"))?, [255, 0, 0, 255]);
-        assert_eq!(super::get_color_or_random(&None)?.len(), 4);
+        assert_eq!(super::get_color_or_random(Some("red"))?, [255, 0, 0, 255]);
+        assert_eq!(super::get_color_or_random(None)?.len(), 4);
         Ok(())
     }
 

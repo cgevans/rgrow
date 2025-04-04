@@ -39,7 +39,7 @@ path = "src/main.rs"
 default = ["use_rayon", "ui"]
 ui = ["fltk", "pixels"]
 use_rayon = ["rayon"]
-python = ["pyo3", "numpy"]
+python = ["pyo3", "numpy", "pyo3-polars"]
 
 [dependencies]
 fltk = { version = "^1.4", features = [
@@ -67,10 +67,11 @@ rand = { workspace = true }
 ndarray = { workspace = true }
 enum_dispatch = "0.3"
 polars = { workspace = true }
-pyo3-polars = {workspace = true}
+pyo3-polars = {workspace = true, optional = true}
 approx = { workspace = true }
 bincode = "1"
 astro-float = "0.9.4"
+paste="1.0.15"
 
 [dependencies.clap]
 version = "4"

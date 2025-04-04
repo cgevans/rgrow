@@ -514,7 +514,6 @@ impl IntoPy<PyObject> for Size {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 
 pub enum CanvasType {
     #[serde(alias = "square")]
@@ -523,6 +522,25 @@ pub enum CanvasType {
     Periodic,
     #[serde(alias = "tube")]
     Tube,
+}
+
+#[cfg(feature = "python")]
+impl FromPyObject<'_> for CanvasType {
+    fn extract(ob: &PyAny) -> PyResult<Self> {
+        let s: &str = ob.extract()?;
+        CanvasType::try_from(s).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+    }
+}
+
+#[cfg(feature = "python")]
+impl IntoPy<PyObject> for CanvasType {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            CanvasType::Square => "square".into_py(py),
+            CanvasType::Periodic => "periodic".into_py(py),
+            CanvasType::Tube => "tube".into_py(py),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
@@ -604,10 +622,6 @@ impl Display for Size {
     }
 }
 
-pub trait FromTileSet: Sized {
-    fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError>;
-}
-
 impl TileSet {
     pub fn from_json(data: &str) -> serde_json::Result<Self> {
         serde_json::from_str(data)
@@ -645,9 +659,9 @@ impl TileSet {
 
     pub fn create_dynsystem(&self) -> Result<SystemEnum, RgrowError> {
         Ok(match self.model.unwrap_or(MODEL_DEFAULT) {
-            Model::KTAM => SystemEnum::KTAM(KTAM::from_tileset(self)?),
-            Model::ATAM => SystemEnum::ATAM(ATAM::from_tileset(self)?),
-            Model::OldKTAM => SystemEnum::OldKTAM(OldKTAM::from_tileset(self)?),
+            Model::KTAM => SystemEnum::KTAM(KTAM::try_from(self)?),
+            Model::ATAM => SystemEnum::ATAM(ATAM::try_from(self)?),
+            Model::OldKTAM => SystemEnum::OldKTAM(OldKTAM::try_from(self)?),
             Model::SDC => panic!("SDC not yet implemented from dynsystem create"),
         })
     }
@@ -910,7 +924,7 @@ impl ProcessedTileSet {
 
             let tile_stoic = tile.stoic.unwrap_or(1.);
 
-            let tile_color = get_color_or_random(&tile.color.as_deref())?;
+            let tile_color = get_color_or_random(tile.color.as_deref())?;
 
             let mut v: Vec<usize> = tile
                 .edges

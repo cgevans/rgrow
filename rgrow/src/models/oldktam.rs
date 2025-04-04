@@ -22,7 +22,7 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
         SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{FromTileSet, ProcessedTileSet, TileSet},
+    tileset::{ProcessedTileSet, TileSet},
 };
 
 #[cfg(feature = "python")]
@@ -152,7 +152,7 @@ impl OldKTAM {
     #[pyo3(name = "from_tileset")]
     fn py_from_tileset(tileset: &Bound<PyAny>) -> PyResult<Self> {
         let tileset: TileSet = tileset.extract()?;
-        Ok(Self::from_tileset(&tileset)?)
+        Ok(Self::try_from(&tileset)?)
     }
 }
 
@@ -1035,8 +1035,10 @@ impl SystemWithDimers for OldKTAM {
     }
 }
 
-impl FromTileSet for OldKTAM {
-    fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
+impl TryFrom<&TileSet> for OldKTAM {
+    type Error = RgrowError;
+
+    fn try_from(tileset: &TileSet) -> Result<Self, Self::Error> {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
 
         if proc.has_duples {

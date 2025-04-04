@@ -5,7 +5,7 @@ use rgrow::{
     models::ktam::KTAM,
     state::{NullStateTracker, QuadTreeState},
     system::{EvolveBounds, System},
-    tileset::{FromTileSet, Seed, TileSet},
+    tileset::{Seed, TileSet},
 };
 
 const BOUNDS10K: EvolveBounds = EvolveBounds {
@@ -23,7 +23,7 @@ fn raw_sim_run(c: &mut Criterion) {
 
     ts.seed = Some(Seed::Single(2045, 2045, 1.into()));
 
-    let sys = KTAM::from_tileset(&ts).unwrap();
+    let sys = KTAM::try_from(&ts).unwrap();
 
     let mut st = sys
         .new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((2048, 2048))

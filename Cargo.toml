@@ -15,11 +15,11 @@ pyo3-polars = "^0.20"
 polars = {version = "^0.46", features = ["lazy", "parquet", "product"]}
 
 [workspace.package]
-version = "0.18.0"
+version = "0.18.0+kcov"
 authors = ["Constantine Evans <const@costi.net>"]
 edition = "2021"
 repository = "https://github.com/cgevans/rgrow"
 license = "BSD-3-Clause"
 categories = ["science", "simulation"]
-# debug = true
+debug = true
 # lto = true

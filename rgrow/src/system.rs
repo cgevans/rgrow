@@ -9,6 +9,7 @@ use crate::base::StringConvError;
 use crate::ffs::FFSRunConfig;
 use crate::ffs::FFSRunResult;
 use crate::models::atam::ATAM;
+use crate::models::kcov::KCov;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
@@ -743,6 +744,7 @@ pub enum SystemEnum {
     OldKTAM,
     ATAM,
     SDC, // StaticKTAMCover
+    KCov,
 }
 
 #[cfg(feature = "python")]
@@ -753,6 +755,7 @@ impl IntoPy<PyObject> for SystemEnum {
             SystemEnum::OldKTAM(oldktam) => oldktam.into_py(py),
             SystemEnum::ATAM(atam) => atam.into_py(py),
             SystemEnum::SDC(sdc) => sdc.into_py(py),
+            SystemEnum::KCov(kcov) => kcov.into_py(py),
         }
     }
 }

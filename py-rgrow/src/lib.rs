@@ -27,6 +27,8 @@ mod rgrow {
     #[pymodule_export]
     use rgrow::models::atam::ATAM;
     #[pymodule_export]
+    use rgrow::models::kcov::KCov;
+    #[pymodule_export]
     use rgrow::models::ktam::KTAM;
     #[pymodule_export]
     use rgrow::models::oldktam::OldKTAM;
@@ -42,4 +44,9 @@ mod rgrow {
     use rgrow::utils::loop_penalty;
     #[pymodule_export]
     use rgrow::utils::string_dna_dg_ds;
+    #[pymodule_export]
+    use rgrow::colors::get_color;
+
+    #[pymodule_export]
+    use rgrow::colors::get_color_or_random;
 }

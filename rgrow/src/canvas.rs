@@ -36,6 +36,7 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     fn calc_n_tiles(&self) -> NumTiles;
     fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles;
     fn raw_array(&self) -> ArrayView2<Tile>;
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile>;
     fn nrows(&self) -> usize;
     fn ncols(&self) -> usize;
     fn nrows_usable(&self) -> usize;
@@ -471,6 +472,10 @@ impl Canvas for CanvasSquare {
         self.0.view()
     }
 
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+        self.0.view_mut()
+    }
+
     fn nrows(&self) -> usize {
         self.0.nrows()
     }
@@ -556,6 +561,10 @@ impl Canvas for CanvasPeriodic {
 
     fn raw_array(&self) -> ArrayView2<Tile> {
         self.0.view()
+    }
+
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+        self.0.view_mut()
     }
 
     fn nrows(&self) -> usize {
@@ -658,6 +667,10 @@ impl Canvas for CanvasTube {
         self.0.view()
     }
 
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+        self.0.view_mut()
+    }
+    
     fn nrows(&self) -> usize {
         self.0.nrows()
     }
@@ -673,14 +686,14 @@ impl Canvas for CanvasTube {
 
     fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
         let s = self.nrows() + self.ncols();
-        let mut px: usize;
-        let mut py: usize;
+        let mut pi: usize;
+        let mut pj: usize;
         let mut pos: usize;
 
-        for ((x, y), t) in self.0.indexed_iter() {
-            py = y;
-            px = x + y;
-            pos = 4 * (px * s + py);
+        for ((i, j), t) in self.0.indexed_iter() {
+            pj = j;
+            pi = i + j;
+            pos = 4 * (pi * s + pj);
             frame[pos..pos + 4].copy_from_slice(&colors[*t as usize])
         }
     }

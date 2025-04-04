@@ -10,7 +10,7 @@ use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
 use crate::system::{EvolveBounds, SystemWithDimers};
-use crate::tileset::{CanvasType, FromTileSet, Model, TileSet, SIZE_DEFAULT};
+use crate::tileset::{CanvasType, Model, TileSet, SIZE_DEFAULT};
 
 use canvas::Canvas;
 use num_traits::{Float, Num};
@@ -139,6 +139,8 @@ impl FFSRunConfig {
             "target_size" => self.target_size = v.extract()?,
             "store_ffs_config" => self.store_ffs_config = v.extract()?,
             "store_system" => self.store_system = v.extract()?,
+            "canvas_type" => self.canvas_type = v.extract()?,
+            "tracking" => self.tracking = v.extract()?,
             _ => {
                 return Err(PyTypeError::new_err(format!(
                     "Unknown FFSRunConfig setting: {k}"
@@ -250,10 +252,10 @@ impl TileSet {
         };
 
         match model {
-            Model::KTAM => KTAM::from_tileset(self)?.run_ffs(&config),
+            Model::KTAM => KTAM::try_from(self)?.run_ffs(&config),
             Model::ATAM => Err(RgrowError::FFSCannotRunModel("aTAM".into())),
             Model::SDC => Err(RgrowError::FFSCannotRunModel("SDC".into())),
-            Model::OldKTAM => OldKTAM::from_tileset(self)?.run_ffs(&config),
+            Model::OldKTAM => OldKTAM::try_from(self)?.run_ffs(&config),
         }
     }
 }
@@ -325,6 +327,13 @@ fn variance_over_mean2(num_success: usize, num_trials: usize) -> f64 {
     (1. - p) / (ns)
 }
 
+/// Calculates 95% upper bound on probability of success given number of trials and number of successes.
+fn max_prob(num_success: usize, num_trials: usize) -> f64 {
+    let z = 1.96;
+    let p = num_success as f64 / num_trials as f64;
+    p + z * (p * (1. - p) / num_trials as f64).sqrt()
+}
+
 pub struct FFSRun<St: ClonableState> {
     pub level_list: Vec<FFSLevel<St>>,
     pub dimerization_rate: f64,
@@ -365,18 +374,19 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
         let mut above_cutoff: usize = 0;
 
         while current_size < config.target_size {
-            let last = ret.level_list.last_mut().unwrap();
+            let min_prob = config.min_nuc_rate.map(
+                |min_nuc_rate|
+                min_nuc_rate / ret.nucleation_rate()
+            );
 
-            let next = last.next_level(system, config)?;
+            let last = ret.level_list.last_mut().unwrap();
+            let next = last.next_level(system, config, min_prob)?;
             if !config.keep_configs {
                 last.drop_states();
             }
             let pf = next.p_r;
             ret.forward_prob.push(pf);
-            // println!(
-            //     "Done with target size {}: p_f {}, used {} trials for {} states.",
-            //     last.target_size, pf, next.num_trials, next.num_states
-            // );
+
             current_size = next.target_size;
             ret.level_list.push(next);
 
@@ -408,11 +418,11 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
-    pub fn create_from_tileset<Sy: SystemWithDimers + System + FromTileSet>(
-        tileset: &TileSet,
+    pub fn create_from_tileset<'a, Sy: SystemWithDimers + System + TryFrom<&'a TileSet, Error = RgrowError>>(
+        tileset: &'a TileSet,
         config: &FFSRunConfig,
     ) -> Result<Self, RgrowError> {
-        let mut sys = Sy::from_tileset(tileset)?;
+        let mut sys = Sy::try_from(tileset)?;
         let c = {
             let mut c = config.clone();
             c.canvas_size = match tileset.size.unwrap_or(SIZE_DEFAULT) {
@@ -446,6 +456,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         &self,
         system: &mut Sy,
         config: &FFSRunConfig,
+        min_prob: Option<f64>,
     ) -> Result<Self, GrowError> {
         let mut rng = rng();
 
@@ -508,6 +519,12 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             {
                 break;
             }
+
+            if let Some(min_prob) = min_prob {
+                if max_prob(state_list.len(), i) < min_prob {
+                    break;
+                }
+            }
         }
         let p_r = (state_list.len() as f64) / (i as f64);
         let num_states = state_list.len();
@@ -552,6 +569,13 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
         let cvar = if config.constant_variance {
             config.var_per_mean2
+        } else {
+            0.
+        };
+
+        let min_prob = if let Some(min_nuc_rate) = config.min_nuc_rate {
+            let dimerization_rate = dimers.iter().fold(0.0, |acc, d| acc + d.formation_rate);
+            min_nuc_rate / dimerization_rate
         } else {
             0.
         };
@@ -618,6 +642,10 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             }
 
             if (variance_over_mean2(num_states, i) < cvar) & (num_states >= config.min_configs) {
+                break;
+            }
+
+            if max_prob(num_states, i) < min_prob {
                 break;
             }
         }

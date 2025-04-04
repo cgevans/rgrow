@@ -17,7 +17,7 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
         System, SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{FromTileSet, ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
+    tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
 };
 
 use crate::base::{HashMapType, HashSetType};
@@ -212,7 +212,7 @@ impl KTAM {
     #[pyo3(name = "from_tileset")]
     fn py_from_tileset(tileset: &Bound<PyAny>) -> PyResult<Self> {
         let tileset: TileSet = tileset.extract()?;
-        Ok(Self::from_tileset(&tileset)?)
+        Ok(Self::try_from(&tileset)?)
     }
 }
 
@@ -1873,8 +1873,9 @@ impl KTAM {
     }
 }
 
-impl FromTileSet for KTAM {
-    fn from_tileset(tileset: &TileSet) -> Result<Self, RgrowError> {
+impl TryFrom<&TileSet> for KTAM {
+    type Error = RgrowError;
+    fn try_from(tileset: &TileSet) -> Result<Self, RgrowError> {
         let proc = ProcessedTileSet::from_tileset(tileset)?;
 
         let seed = if proc.seed.is_empty() {
