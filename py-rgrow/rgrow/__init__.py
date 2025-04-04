@@ -80,7 +80,7 @@ def _system_color_canvas(
         cv = state
 
     if isinstance(self, KCov):
-        cv = cv >> 4
+        cv = cv >> 4 # type: ignore
 
     return self.tile_colors[cv]
 
@@ -105,7 +105,7 @@ def _system_plot_canvas(
         cv = state
 
     if isinstance(sys, KCov):
-        cv = cv >> 4
+        cv = cv >> 4 # type: ignore
 
     rows, cols = cv.shape
 

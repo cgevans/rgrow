@@ -17,6 +17,7 @@ use super::*;
 use anyhow::Context;
 use base::{NumEvents, NumTiles};
 use bimap::BiMap;
+use pyo3::IntoPyObjectExt;
 use core::fmt;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -96,13 +97,17 @@ impl Display for Seed {
 }
 
 #[cfg(feature = "python")]
-impl IntoPy<PyObject> for Seed {
-    fn into_py(self, py: Python<'_>) -> PyObject {
+impl<'py> IntoPyObject<'py> for Seed {
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
         match self {
-            Seed::Single(x, y, z) => (x, y, z).into_py(py),
-            Seed::Multi(v) => v.into_py(py),
+            Seed::Single(x, y, z) => (x, y, z).into_bound_py_any(py),
+            Seed::Multi(v) => v.into_bound_py_any(py),
         }
     }
+
+    type Target = pyo3::PyAny; // the Python type
+    type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = pyo3::PyErr;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -504,13 +509,17 @@ pub enum Size {
 }
 
 #[cfg(feature = "python")]
-impl IntoPy<PyObject> for Size {
-    fn into_py(self, py: Python<'_>) -> PyObject {
+impl<'py> IntoPyObject<'py> for Size {
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
         match self {
-            Size::Single(x) => x.into_py(py),
-            Size::Pair(p) => p.into_py(py),
+            Size::Single(x) => x.into_bound_py_any(py),
+            Size::Pair(p) => p.into_bound_py_any(py),
         }
     }
+
+    type Target = pyo3::PyAny; // the Python type
+    type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = pyo3::PyErr;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
@@ -526,25 +535,29 @@ pub enum CanvasType {
 
 #[cfg(feature = "python")]
 impl FromPyObject<'_> for CanvasType {
-    fn extract(ob: &PyAny) -> PyResult<Self> {
+    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
         let s: &str = ob.extract()?;
         CanvasType::try_from(s).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 }
 
 #[cfg(feature = "python")]
-impl IntoPy<PyObject> for CanvasType {
-    fn into_py(self, py: Python<'_>) -> PyObject {
+impl<'py> IntoPyObject<'py> for CanvasType {
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
         match self {
-            CanvasType::Square => "square".into_py(py),
-            CanvasType::Periodic => "periodic".into_py(py),
-            CanvasType::Tube => "tube".into_py(py),
+            CanvasType::Square => "square".into_bound_py_any(py),
+            CanvasType::Periodic => "periodic".into_bound_py_any(py),
+            CanvasType::Tube => "tube".into_bound_py_any(py),
         }
     }
+
+    type Target = pyo3::PyAny; // the Python type
+    type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = pyo3::PyErr;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow", eq, eq_int))]
 pub enum TrackingType {
     None,
     Order,

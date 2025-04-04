@@ -130,7 +130,7 @@ class AnnealOutputs:
             since some of its data is relevant when measuring error / graphing)
     """
 
-    system: "SDC"
-    canvas_arr: "np.NDArray[np.int_]"
-    anneal: Anneal
-    state: "State"
+    system: SDC
+    canvas_arr: np.ndarray
+    anneal: Anneal 
+    state: State

@@ -258,6 +258,17 @@ class ATAM:
     ) -> NDArray[np.str_]: ...
 
 class SDC:
+    def mfe_config(self) -> tuple[list[int], float]:
+        """
+        Calculate the minimum free energy configuration.
+
+        Returns
+        -------
+        tuple[list[int], float]
+            A tuple containing the minimum free energy configuration as a list of tile numbers,
+            and the free energy of that configuration.
+        """
+
     @property
     def tile_names(self) -> list[str]: ...
     @property

@@ -33,7 +33,7 @@ def graph_system(
 
     # Now plot the temperature
     plt2 = plt.twinx()
-    plt2.plot(times_hours, temps, "k--", label="temperature C")
+    plt2.plot(times_hours, temps, "k--", label="temperature C")  # type: ignore
     plt2.set_ylabel("temperature")
 
     plt.savefig(path)
@@ -62,7 +62,7 @@ def graph_system_with_many_reporting_methods(
 
     # Now plot the temperature
     plt2 = plt.twinx()
-    plt2.plot(times_hours, temps, "k--", label="temperature C")
+    plt2.plot(times_hours, temps, "k--", label="temperature C")  # type: ignore
     plt2.set_ylabel("temperature")
 
     plt.title(system.name)
@@ -115,7 +115,7 @@ def graph_many_systems_with(
 
     # Now plot the temperature
     plt2 = plt.twinx()
-    plt2.plot(times_hours, temps, "k--", label="temperature C")
+    plt2.plot(times_hours, temps, "k--", label="temperature C")  # type: ignore
     plt2.set_ylabel("temperature")
 
     if title is not None:

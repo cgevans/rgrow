@@ -15,7 +15,7 @@ pyo3-polars = "^0.20"
 polars = {version = "^0.46", features = ["lazy", "parquet", "product"]}
 
 [workspace.package]
-version = "0.18.0+kcov"
+version = "0.19.0-rc1"
 authors = ["Constantine Evans <const@costi.net>"]
 edition = "2021"
 repository = "https://github.com/cgevans/rgrow"

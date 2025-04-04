@@ -5,7 +5,7 @@ use std::any::Any;
 #[cfg(feature = "python")]
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
 #[cfg(feature = "python")]
-use pyo3::types::PyAnyMethods;
+use pyo3::{types::PyAnyMethods, IntoPyObjectExt};
 use serde::{Deserialize, Serialize};
 use thiserror;
 
@@ -32,7 +32,7 @@ impl From<StringConvError> for pyo3::PyErr {
 }
 
 #[cfg(feature = "python")]
-use pyo3::{FromPyObject, IntoPy, PyAny, PyErr, PyObject, PyResult, Python};
+use pyo3::{FromPyObject, IntoPyObject, PyErr, PyObject, PyResult, Python};
 
 #[derive(Error, Debug)]
 pub enum GrowError {
@@ -108,13 +108,17 @@ pub enum Ident {
 }
 
 #[cfg(feature = "python")]
-impl IntoPy<PyObject> for Ident {
-    fn into_py(self, py: Python) -> PyObject {
+impl<'py> IntoPyObject<'py> for Ident {
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match self {
-            Ident::Num(num) => num.into_py(py),
-            Ident::Name(name) => name.into_py(py),
+            Ident::Num(num) => num.into_bound_py_any(py),
+            Ident::Name(name) => name.into_bound_py_any(py),
         }
     }
+    
+    type Target = pyo3::PyAny; // the Python type
+    type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = pyo3::PyErr;
 }
 
 impl From<u32> for Ident {
@@ -179,34 +183,38 @@ impl FromPyObject<'_> for RustAny {
 }
 
 #[cfg(feature = "python")]
-impl IntoPy<PyObject> for RustAny {
-    fn into_py(self, py: Python<'_>) -> PyObject {
+impl<'py> IntoPyObject<'py> for RustAny {
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         if let Some(val) = self.0.downcast_ref::<f64>() {
-            val.into_py(py)
+            val.into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<u64>() {
-            val.into_py(py)
+            val.into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<i64>() {
-            val.into_py(py)
+            val.into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<bool>() {
-            val.into_py(py)
+            val.into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<String>() {
-            val.into_py(py)
+            val.into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array1<f64>>() {
-            PyArray1::from_array(py, val).into_py(py)
+            PyArray1::from_array(py, val).into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array2<f64>>() {
-            PyArray2::from_array(py, val).into_py(py)
+            PyArray2::from_array(py, val).into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array1<u64>>() {
-            PyArray1::from_array(py, val).into_py(py)
+            PyArray1::from_array(py, val).into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<ndarray::Array2<u64>>() {
-            PyArray2::from_array(py, val).into_py(py)
+            PyArray2::from_array(py, val).into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<(u64, u64)>() {
-            (val.0, val.1).into_py(py)
+            (val.0, val.1).into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<(usize, usize, Ident)>() {
-            (val.0, val.1, val.2.clone()).into_py(py)
+            (val.0, val.1, val.2.clone()).into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<()>() {
-            val.into_py(py)
+            val.into_bound_py_any(py)
         } else {
             panic!("Cannot convert Any to PyAny");
         }
     }
+
+    type Target = pyo3::PyAny; // the Python type
+    type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = pyo3::PyErr;
 }

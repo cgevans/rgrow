@@ -1,3 +1,8 @@
+# 0.19.0
+
+- Improvements to SDC support.
+- Initial covers model support.
+
 # 0.18.0
 
 - Initial 1D SDC support.
