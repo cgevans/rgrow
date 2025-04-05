@@ -20,8 +20,6 @@ pub mod ffs;
 pub mod state;
 pub mod system;
 
-pub mod canvas_tube_zz;
-
 pub mod ratestore;
 
 pub mod models;

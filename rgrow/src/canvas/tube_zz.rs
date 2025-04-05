@@ -4,15 +4,15 @@ use ndarray::{Array1, Array2, ArrayView2, ArrayViewMut2};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CanvasTubeZZ(Array2<Tile>);
+pub struct CanvasTube(Array2<Tile>);
 
-impl CanvasTubeZZ {
+impl CanvasTube {
     pub fn half_width(&self) -> usize {
         self.0.nrows() / 2
     }
 }
 
-impl CanvasCreate for CanvasTubeZZ {
+impl CanvasCreate for CanvasTube {
     type Params = (usize, usize);
 
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
@@ -33,7 +33,7 @@ impl CanvasCreate for CanvasTubeZZ {
     }
 }
 
-impl Canvas for CanvasTubeZZ {
+impl Canvas for CanvasTube {
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
         self.0.uget(p)
     }
