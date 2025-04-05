@@ -1270,7 +1270,6 @@ mod test_kcov {
 // Python Bindings
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 struct KCovTile {
     pub name: String,
     pub concentration: f64,
@@ -1278,6 +1277,37 @@ struct KCovTile {
     pub glues: [String; 4],
     /// Color of the tile, this is used only when displaying
     pub color: [u8; 4],
+}
+
+#[cfg(feature = "python")]
+impl pyo3::FromPyObject<'_> for KCovTile {
+    fn extract_bound(ob: &pyo3::Bound<'_, pyo3::PyAny>) -> pyo3::PyResult<Self> {
+        use pyo3::prelude::*;
+
+        let name: String = ob.getattr("name")?.extract()?;
+        let concentration: f64 = ob.getattr("concentration")?.extract()?;
+        let glues: [String; 4] = ob.getattr("glues")?.extract()?;
+        
+        // Try to extract color as an array first
+        let color_result: Result<[u8; 4], _> = ob.getattr("color")?.extract();
+        
+        let color = match color_result {
+            Ok(color_array) => color_array,
+            Err(_) => {
+                // If that fails, try to extract as a string and use get_color
+                let color_str: String = ob.getattr("color")?.extract()?;
+                crate::colors::get_color(&color_str)
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{}", e)))?
+            }
+        };
+        
+        Ok(Self {
+            name,
+            concentration,
+            glues,
+            color,
+        })
+    }
 }
 
 impl KCovTile {
