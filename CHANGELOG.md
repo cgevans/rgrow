@@ -1,3 +1,7 @@
+# 0.19.1
+
+- Some convenience functions for covers.
+
 # 0.19.0
 
 - Improvements to SDC support.
