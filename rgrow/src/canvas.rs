@@ -587,6 +587,12 @@ impl Canvas for CanvasPeriodic {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CanvasTube(Array2<Tile>);
 
+impl CanvasTube {
+    pub fn half_width(&self) -> usize {
+        self.0.nrows() / 2
+    }
+}
+
 impl CanvasCreate for CanvasTube {
     type Params = (usize, usize);
 
@@ -619,7 +625,7 @@ impl Canvas for CanvasTube {
 
     fn u_move_point_n(&self, p: Point) -> Point {
         if p.0 == 0 {
-            (self.nrows() - 1, p.1 - 2)
+            (self.nrows() - 1, p.1 - self.half_width())
         } else {
             (p.0 - 1, p.1)
         }
@@ -627,7 +633,7 @@ impl Canvas for CanvasTube {
 
     fn u_move_point_e(&self, p: Point) -> Point {
         if p.0 == 0 {
-            (self.nrows() - 1, p.1 - 1)
+            (self.nrows() - 1, p.1 - self.half_width() + 1)
         } else {
             (p.0 - 1, p.1 + 1)
         }
@@ -635,7 +641,7 @@ impl Canvas for CanvasTube {
 
     fn u_move_point_s(&self, p: Point) -> Point {
         if p.0 == self.nrows() - 1 {
-            (0, p.1 + 2)
+            (0, p.1 + self.half_width())
         } else {
             (p.0 + 1, p.1)
         }
@@ -643,7 +649,7 @@ impl Canvas for CanvasTube {
 
     fn u_move_point_w(&self, p: Point) -> Point {
         if p.0 == self.nrows() - 1 {
-            (0, p.1 + 1)
+            (0, p.1 + self.half_width() - 1)
         } else {
             (p.0 + 1, p.1 - 1)
         }
@@ -651,7 +657,7 @@ impl Canvas for CanvasTube {
 
     fn inbounds(&self, p: Point) -> bool {
         let (xs, ys) = self.0.dim();
-        (p.0 < xs) & (p.1 < ys - 2 - (self.nrows() / 2)) & (p.1 >= 2 + (self.nrows() / 2))
+        (p.0 < xs) & (p.1 < ys - 2 - self.half_width()) & (p.1 >= 2 + self.half_width())
     }
 
     fn calc_n_tiles(&self) -> NumTiles {

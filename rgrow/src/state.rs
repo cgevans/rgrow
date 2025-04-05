@@ -1,5 +1,6 @@
 use super::base::*;
 use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube};
+use crate::canvas_tube_zz::CanvasTubeZZ;
 use crate::tileset::{CanvasType, TrackingType};
 use crate::{
     canvas::PointSafe2,
@@ -111,15 +112,19 @@ pub enum StateEnum {
     SquareCanvasNullTracker(QuadTreeState<CanvasSquare, NullStateTracker>),
     PeriodicCanvasNoTracker(QuadTreeState<CanvasPeriodic, NullStateTracker>),
     TubeNoTracking(QuadTreeState<CanvasTube, NullStateTracker>),
+    TubeZZNoTracking(QuadTreeState<CanvasTubeZZ, NullStateTracker>),
     SquareOrderTracking(QuadTreeState<CanvasSquare, OrderTracker>),
     PeriodicOrderTracking(QuadTreeState<CanvasPeriodic, OrderTracker>),
     TubeOrderTracking(QuadTreeState<CanvasTube, OrderTracker>),
+    TubeZZOrderTracking(QuadTreeState<CanvasTubeZZ, OrderTracker>),
     SquareLastAttachTimeTracking(QuadTreeState<CanvasSquare, LastAttachTimeTracker>),
     PeriodicLastAttachTimeTracking(QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>),
     TubeLastAttachTimeTracking(QuadTreeState<CanvasTube, LastAttachTimeTracker>),
+    TubeZZLastAttachTimeTracking(QuadTreeState<CanvasTubeZZ, LastAttachTimeTracker>),
     SquarePrintEventTracking(QuadTreeState<CanvasSquare, PrintEventTracker>),
     PeriodicPrintEventTracking(QuadTreeState<CanvasPeriodic, PrintEventTracker>),
     TubePrintEventTracking(QuadTreeState<CanvasTube, PrintEventTracker>),
+    TubeZZPrintEventTracking(QuadTreeState<CanvasTubeZZ, PrintEventTracker>),
 }
 
 impl StateEnum {
