@@ -1225,7 +1225,10 @@ mod test_kcov {
         };
         let mut kcov: KCov = KCovParams {
             tiles: vec![tile_a],
-            cover_conc: vec![1e6, 1e6],
+            cover_conc: HashMap::from([
+                (GlueIdentifier::Index(0), 1e6),
+                (GlueIdentifier::Index(1), 1e6),
+            ]),
             alpha: 1.0,
             kf: 1.0,
             temp: 40.0,
@@ -1295,12 +1298,26 @@ enum StrenOrSeq {
     Sequence(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
+pub enum TileIdentifier {
+    Id(TileId),
+    Name(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
+pub enum GlueIdentifier {
+    Index(usize),
+    Name(String),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 struct KCovParams {
     pub tiles: Vec<KCovTile>,
-    pub cover_conc: Vec<Concentration>,
-    pub seed: HashMap<(usize, usize), TileId>,
+    pub cover_conc: HashMap<GlueIdentifier, Concentration>,
+    pub seed: HashMap<(usize, usize), TileIdentifier>,
     pub binding_strength: HashMap<String, StrenOrSeq>,
     pub alpha: f64,
     pub kf: f64,
@@ -1323,11 +1340,7 @@ impl From<KCovParams> for KCov {
         let tile_names = tiles.iter().map(|tile| tile.name.clone()).collect();
         let tile_concentration = tiles.iter().map(|tile| tile.concentration).collect();
         let tile_colors = tiles.iter().map(|tile| tile.color).collect();
-        let seed = value
-            .seed
-            .iter()
-            .map(|(tuple, tile)| (PointSafe2(*tuple), *tile))
-            .collect();
+        
         let mut glues = tiles
             .iter()
             .flat_map(|tile| tile.glues.clone())
@@ -1351,6 +1364,37 @@ impl From<KCovParams> for KCov {
             .iter()
             .map(|tile| tile.glues.clone().map(|x| *glue_hashmap.get(&x).unwrap()))
             .collect();
+
+        // Generate cover concentrations vector from HashMap
+        let mut cover_concentrations = vec![0.0; glue_id];
+        for (glue_id, conc) in value.cover_conc {
+            match glue_id {
+                GlueIdentifier::Index(index) => {
+                    if index < cover_concentrations.len() {
+                        cover_concentrations[index] = conc;
+                    }
+                },
+                GlueIdentifier::Name(name) => {
+                    if let Some(&index) = glue_hashmap.get(&name) {
+                        cover_concentrations[index] = conc;
+                    }
+                }
+            }
+        }
+
+        // Process seed with either TileId or tile name
+        let seed = value.seed.iter().map(|(pos, tile_id_or_name)| {
+            let tile_id = match tile_id_or_name {
+                TileIdentifier::Id(id) => *id,
+                TileIdentifier::Name(name) => {
+                    // Find position in tile_names and convert to TileId
+                    let pos = tiles.iter().position(|t| t.name == *name)
+                        .expect(&format!("Tile name '{}' not found", name));
+                    (pos as TileId) << 4
+                }
+            };
+            (PointSafe2(*pos), tile_id)
+        }).collect();
 
         // Make sure that every glue has its inverse in the array
         let mut glue_links = Array2::zeros((glue_id + 1, glue_id + 1));
@@ -1394,7 +1438,7 @@ impl From<KCovParams> for KCov {
             tile_concentration,
             tile_colors,
             glue_names,
-            value.cover_conc,
+            cover_concentrations,
             tile_glues,
             glue_links,
             seed,
