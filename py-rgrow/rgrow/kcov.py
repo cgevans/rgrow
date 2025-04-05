@@ -6,7 +6,7 @@ class KCovTile:
     name: str
     concentration: float
     glues: Sequence[Sequence[str]]
-    color: Sequence[Sequence[int]] | str = field(default_factory=lambda: [100, 100, 100, 255])
+    color: Sequence[int] | str = field(default_factory=lambda: [100, 100, 100, 255])
 
 
 @dataclass
