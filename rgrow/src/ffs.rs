@@ -5,7 +5,7 @@ use std::ops::Deref;
 use std::sync::{Arc, Weak};
 
 use crate::base::{GrowError, RgrowError, Tile};
-use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, PointSafe2};
+use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals, PointSafe2};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
@@ -1094,6 +1094,23 @@ impl FFSRunResult {
                 FFSRun::<QuadTreeState<CanvasTube, PrintEventTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
+            (CanvasType::TubeDiagonals, TrackingType::None) => {
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::TubeDiagonals, TrackingType::Order) => {
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::TubeDiagonals, TrackingType::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::TubeDiagonals, TrackingType::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            
         })?;
 
         if config.store_ffs_config {

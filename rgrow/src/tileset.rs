@@ -532,6 +532,8 @@ pub enum CanvasType {
     Periodic,
     #[serde(alias = "tube")]
     Tube,
+    #[serde(alias = "tube-diagonals")]
+    TubeDiagonals,
 }
 
 #[cfg(feature = "python")]
@@ -549,6 +551,7 @@ impl<'py> IntoPyObject<'py> for CanvasType {
             CanvasType::Square => "square".into_bound_py_any(py),
             CanvasType::Periodic => "periodic".into_bound_py_any(py),
             CanvasType::Tube => "tube".into_bound_py_any(py),
+            CanvasType::TubeDiagonals => "tube-diagonals".into_bound_py_any(py),
         }
     }
 
@@ -703,44 +706,7 @@ impl TileSet {
         let kind = self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT);
         let tracking = self.tracking.unwrap_or(TrackingType::None);
 
-        let mut st = match (kind, tracking) {
-            (CanvasType::Square, TrackingType::None) => {
-                QuadTreeState::<CanvasSquare, NullStateTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Periodic, TrackingType::None) => {
-                QuadTreeState::<CanvasPeriodic, NullStateTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Tube, TrackingType::None) => {
-                QuadTreeState::<CanvasTube, NullStateTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Square, TrackingType::Order) => {
-                QuadTreeState::<CanvasSquare, OrderTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Periodic, TrackingType::Order) => {
-                QuadTreeState::<CanvasPeriodic, OrderTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Tube, TrackingType::Order) => {
-                QuadTreeState::<CanvasTube, OrderTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Square, TrackingType::LastAttachTime) => {
-                QuadTreeState::<CanvasSquare, LastAttachTimeTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Periodic, TrackingType::LastAttachTime) => {
-                QuadTreeState::<CanvasPeriodic, LastAttachTimeTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Tube, TrackingType::LastAttachTime) => {
-                QuadTreeState::<CanvasTube, LastAttachTimeTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Square, TrackingType::PrintEvent) => {
-                QuadTreeState::<CanvasSquare, PrintEventTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Periodic, TrackingType::PrintEvent) => {
-                QuadTreeState::<CanvasPeriodic, PrintEventTracker>::from_array(canvas)?.into()
-            }
-            (CanvasType::Tube, TrackingType::PrintEvent) => {
-                QuadTreeState::<CanvasTube, PrintEventTracker>::from_array(canvas)?.into()
-            }
-        };
+        let mut st = StateEnum::from_array(canvas.view(), kind, tracking, 1)?;
 
         let sys = self.create_dynsystem()?;
 

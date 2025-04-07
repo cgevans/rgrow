@@ -22,4 +22,4 @@ options:
   size: [6, 64]
   update_rate: 10
   fission: keep-seeded
-  canvas_type: Tube 
+  canvas_type: tube-diagonals

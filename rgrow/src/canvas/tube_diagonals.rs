@@ -1,5 +1,4 @@
-use super::base::*;
-use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube};
+use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare};
 use crate::tileset::{CanvasType, TrackingType};
 use crate::{
     canvas::PointSafe2,
@@ -8,6 +7,7 @@ use crate::{
     system,
 };
 use ndarray::prelude::*;
+use crate::base::{GrowError, GrowResult, NumTiles, Point, Tile};
 
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
@@ -15,15 +15,15 @@ use std::fmt::Debug;
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CanvasTube(Array2<Tile>);
+pub struct CanvasTubeDiagonals(Array2<Tile>);
 
-impl CanvasTube {
+impl CanvasTubeDiagonals {
     pub fn half_width(&self) -> usize {
         self.0.nrows() / 2
     }
 }
 
-impl CanvasCreate for CanvasTube {
+impl CanvasCreate for CanvasTubeDiagonals {
     type Params = (usize, usize);
 
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
@@ -44,7 +44,7 @@ impl CanvasCreate for CanvasTube {
     }
 }
 
-impl Canvas for CanvasTube {
+impl Canvas for CanvasTubeDiagonals {
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
         self.0.uget(p)
     }

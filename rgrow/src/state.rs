@@ -1,5 +1,5 @@
 use super::base::*;
-use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube};
+use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals};
 use crate::tileset::{CanvasType, TrackingType};
 use crate::{
     canvas::PointSafe2,
@@ -20,81 +20,41 @@ pub trait State: RateStore + Canvas + StateStatus + Sync + Send + TrackerData + 
 
 #[enum_dispatch]
 pub trait ClonableState: State {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        panic!("Not implemented")
-    }
+    fn clone_as_stateenum(&self) -> StateEnum;
 }
 
-impl ClonableState for QuadTreeState<CanvasSquare, OrderTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::SquareOrderTracking(self.clone())
-    }
+macro_rules! impl_clonable_state {
+    ($(($canvas:ty, $tracker:ty) => $variant:ident),*) => {
+        $(
+            impl ClonableState for QuadTreeState<$canvas, $tracker> {
+                fn clone_as_stateenum(&self) -> StateEnum {
+                    StateEnum::$variant(self.clone())
+                }
+            }
+        )*
+    };
 }
 
-impl ClonableState for QuadTreeState<CanvasSquare, NullStateTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::SquareCanvasNullTracker(self.clone())
-    }
-}
-
-impl ClonableState for QuadTreeState<CanvasPeriodic, OrderTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::PeriodicOrderTracking(self.clone())
-    }
-}
-
-impl ClonableState for QuadTreeState<CanvasPeriodic, NullStateTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::PeriodicCanvasNoTracker(self.clone())
-    }
-}
-
-impl ClonableState for QuadTreeState<CanvasTube, OrderTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::TubeOrderTracking(self.clone())
-    }
-}
-
-impl ClonableState for QuadTreeState<CanvasTube, NullStateTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::TubeNoTracking(self.clone())
-    }
-}
-
-impl ClonableState for QuadTreeState<CanvasSquare, LastAttachTimeTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::SquareLastAttachTimeTracking(self.clone())
-    }
-}
-
-impl ClonableState for QuadTreeState<CanvasPeriodic, LastAttachTimeTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::PeriodicLastAttachTimeTracking(self.clone())
-    }
-}
-
-impl ClonableState for QuadTreeState<CanvasTube, LastAttachTimeTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::TubeLastAttachTimeTracking(self.clone())
-    }
-}
-
-impl ClonableState for QuadTreeState<CanvasSquare, PrintEventTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::SquarePrintEventTracking(self.clone())
-    }
-}
-
-impl ClonableState for QuadTreeState<CanvasPeriodic, PrintEventTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::PeriodicPrintEventTracking(self.clone())
-    }
-}
-
-impl ClonableState for QuadTreeState<CanvasTube, PrintEventTracker> {
-    fn clone_as_stateenum(&self) -> StateEnum {
-        StateEnum::TubePrintEventTracking(self.clone())
-    }
+impl_clonable_state! {
+    (CanvasSquare, NullStateTracker) => SquareCanvasNullTracker,
+    (CanvasPeriodic, NullStateTracker) => PeriodicCanvasNoTracker,
+    (CanvasTube, NullStateTracker) => TubeNoTracking,
+    (CanvasTubeDiagonals, NullStateTracker) => TubeDiagonalsNoTracking,
+    
+    (CanvasSquare, OrderTracker) => SquareOrderTracking,
+    (CanvasPeriodic, OrderTracker) => PeriodicOrderTracking,
+    (CanvasTube, OrderTracker) => TubeOrderTracking,
+    (CanvasTubeDiagonals, OrderTracker) => TubeDiagonalsOrderTracking,
+    
+    (CanvasSquare, LastAttachTimeTracker) => SquareLastAttachTimeTracking,
+    (CanvasPeriodic, LastAttachTimeTracker) => PeriodicLastAttachTimeTracking,
+    (CanvasTube, LastAttachTimeTracker) => TubeLastAttachTimeTracking,
+    (CanvasTubeDiagonals, LastAttachTimeTracker) => TubeDiagonalsLastAttachTimeTracking,
+    
+    (CanvasSquare, PrintEventTracker) => SquarePrintEventTracking,
+    (CanvasPeriodic, PrintEventTracker) => PeriodicPrintEventTracking,
+    (CanvasTube, PrintEventTracker) => TubePrintEventTracking,
+    (CanvasTubeDiagonals, PrintEventTracker) => TubeDiagonalsPrintEventTracking
 }
 
 #[enum_dispatch(
@@ -111,15 +71,19 @@ pub enum StateEnum {
     SquareCanvasNullTracker(QuadTreeState<CanvasSquare, NullStateTracker>),
     PeriodicCanvasNoTracker(QuadTreeState<CanvasPeriodic, NullStateTracker>),
     TubeNoTracking(QuadTreeState<CanvasTube, NullStateTracker>),
+    TubeDiagonalsNoTracking(QuadTreeState<CanvasTubeDiagonals, NullStateTracker>),
     SquareOrderTracking(QuadTreeState<CanvasSquare, OrderTracker>),
     PeriodicOrderTracking(QuadTreeState<CanvasPeriodic, OrderTracker>),
     TubeOrderTracking(QuadTreeState<CanvasTube, OrderTracker>),
+    TubeDiagonalsOrderTracking(QuadTreeState<CanvasTubeDiagonals, OrderTracker>),
     SquareLastAttachTimeTracking(QuadTreeState<CanvasSquare, LastAttachTimeTracker>),
     PeriodicLastAttachTimeTracking(QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>),
     TubeLastAttachTimeTracking(QuadTreeState<CanvasTube, LastAttachTimeTracker>),
+    TubeDiagonalsLastAttachTimeTracking(QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>),
     SquarePrintEventTracking(QuadTreeState<CanvasSquare, PrintEventTracker>),
     PeriodicPrintEventTracking(QuadTreeState<CanvasPeriodic, PrintEventTracker>),
     TubePrintEventTracking(QuadTreeState<CanvasTube, PrintEventTracker>),
+    TubeDiagonalsPrintEventTracking(QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>),
 }
 
 impl StateEnum {
@@ -144,95 +108,32 @@ impl StateEnum {
         tracking: TrackingType,
         n_tile_types: usize,
     ) -> Result<StateEnum, GrowError> {
-        Ok(match kind {
-            CanvasType::Square => match tracking {
-                TrackingType::None => {
-                    QuadTreeState::<CanvasSquare, NullStateTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
-                }
-                TrackingType::Order => {
-                    QuadTreeState::<CanvasSquare, OrderTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
-                }
-                TrackingType::LastAttachTime => {
-                    QuadTreeState::<CanvasSquare, LastAttachTimeTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
-                }
-                TrackingType::PrintEvent => {
-                    QuadTreeState::<CanvasSquare, PrintEventTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
-                }
-            },
-            CanvasType::Periodic => match tracking {
-                TrackingType::None => {
-                    QuadTreeState::<CanvasPeriodic, NullStateTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
-                }
-                TrackingType::Order => {
-                    QuadTreeState::<CanvasPeriodic, OrderTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
-                }
-                TrackingType::LastAttachTime => {
-                    QuadTreeState::<CanvasPeriodic, LastAttachTimeTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
-                }
-                TrackingType::PrintEvent => {
-                    QuadTreeState::<CanvasPeriodic, PrintEventTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
-                }
-            },
-            CanvasType::Tube => match tracking {
-                TrackingType::None => {
-                    QuadTreeState::<CanvasTube, NullStateTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
-                }
-                TrackingType::Order => QuadTreeState::<CanvasTube, OrderTracker>::empty_with_types(
+        macro_rules! create_state {
+            ($canvas:ty, $tracker:ty) => {
+                QuadTreeState::<$canvas, $tracker>::empty_with_types(
                     shape,
                     n_tile_types,
                 )?
-                .into(),
-                TrackingType::LastAttachTime => {
-                    QuadTreeState::<CanvasTube, LastAttachTimeTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
+                .into()
+            };
+        }
+
+        macro_rules! match_tracking {
+            ($canvas:ty) => {
+                match tracking {
+                    TrackingType::None => create_state!($canvas, NullStateTracker),
+                    TrackingType::Order => create_state!($canvas, OrderTracker),
+                    TrackingType::LastAttachTime => create_state!($canvas, LastAttachTimeTracker),
+                    TrackingType::PrintEvent => create_state!($canvas, PrintEventTracker),
                 }
-                TrackingType::PrintEvent => {
-                    QuadTreeState::<CanvasTube, PrintEventTracker>::empty_with_types(
-                        shape,
-                        n_tile_types,
-                    )?
-                    .into()
-                }
-            },
+            };
+        }
+
+        Ok(match kind {
+            CanvasType::Square => match_tracking!(CanvasSquare),
+            CanvasType::Periodic => match_tracking!(CanvasPeriodic),
+            CanvasType::Tube => match_tracking!(CanvasTube),
+            CanvasType::TubeDiagonals => match_tracking!(CanvasTubeDiagonals),
         })
     }
 }
