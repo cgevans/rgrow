@@ -44,17 +44,17 @@ impl Canvas for CanvasTube {
 
     fn u_move_point_n(&self, p: Point) -> Point {
         if p.0 % 2 == 0 {
-            ((p.0 - 1).rem_euclid(self.nrows()), p.1 - 1)
+            ((p.0 as i64 - 1).rem_euclid(self.nrows() as i64) as usize, p.1 - 1)
         } else {
-            ((p.0 - 1).rem_euclid(self.nrows()), p.1)
+            ((p.0 as i64 - 1).rem_euclid(self.nrows() as i64) as usize, p.1)
         }
     }
 
     fn u_move_point_e(&self, p: Point) -> Point {
         if p.0 % 2 == 0 {
-            ((p.0 - 1).rem_euclid(self.nrows()), p.1)
+            ((p.0 as i64 - 1).rem_euclid(self.nrows() as i64) as usize, p.1)
         } else {
-            ((p.0 - 1).rem_euclid(self.nrows()), p.1 + 1)
+            ((p.0 as i64 - 1).rem_euclid(self.nrows() as i64) as usize, p.1 + 1)
         }
     }
 
