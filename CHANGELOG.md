@@ -1,3 +1,8 @@
+# 0.19.2
+
+- Modified tube canvas format, now zig-zagging in the j direction rather than being diagonal.
+  The older diagonal format is now TubeDiagonals.
+
 # 0.19.1
 
 - Some convenience functions for covers.

@@ -21,3 +21,6 @@ norecursedirs = [
     "build",
     ".tox"]
 testpaths = ["tests"]
+
+[tool.maturn]
+bindings = "pyo3"
