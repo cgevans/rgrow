@@ -632,9 +632,9 @@ impl KCov {
         &self,
         state: &S,
         point: PointSafe2,
-    ) -> HashSetType<(Side, TileId)> {
+    ) -> HashSetType<TileId> {
         let tile = state.tile_at_point(point);
-        let mut friends: HashSetType<(Side, TileId)> = HashSet::default();
+        let mut friends: HashSetType<TileId> = HashSet::default();
 
         // tile aready attached here
         if tile != 0 {
@@ -650,11 +650,10 @@ impl KCov {
             if let Some(possible_attachments) =
                 self.get_uncovered_friends_to_side(inverse(side), neighbour)
             {
-                let attachments: HashSetType<(Side, TileId)> = HashSet::from_iter(
+                let attachments: HashSetType<TileId> = HashSet::from_iter(
                     possible_attachments
                         .iter()
                         .flat_map(|&tile| Self::cover_combinations(side, tile))
-                        .map(|tile| (side, tile)),
                 );
                 friends.extend(attachments);
             }
@@ -665,7 +664,7 @@ impl KCov {
     pub fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> Rate {
         self.possible_tiles_at_point(state, point)
             .iter()
-            .fold(0.0, |acc, &(_side, tile)| {
+            .fold(0.0, |acc, &tile| {
                 acc + (self.kf * self.tile_concentration(tile))
             })
     }
@@ -683,11 +682,11 @@ impl KCov {
             return (false, *acc, Event::None);
         }
 
-        let friends: HashSetType<(Side, TileId)> = self.possible_tiles_at_point(state, point);
+        let friends: HashSetType<TileId> = self.possible_tiles_at_point(state, point);
         // attachment_side is not used, but is relevant in computation, as it accounts for
         // duplicates (some tiles could bind to the north or east, so it should be taken into
         // account twice)
-        for (_attachment_side, tile) in friends {
+        for tile in friends {
             *acc -= self.kf * self.tile_concentration(tile);
             if *acc <= 0.0 {
                 return (true, *acc, Event::MonomerAttachment(point, tile));
@@ -698,9 +697,21 @@ impl KCov {
 
     /// Percentage of total concentration of some tile that has a cover on a given side
     pub fn cover_percentage(&self, side: Side, tile: TileId) -> f64 {
-        let detachment_rate = self.cover_detachment_rate_at_side(side, tile | side);
-        let attachment_rate = self.cover_attachment_rate_at_side(side, tile);
-        attachment_rate / (attachment_rate + detachment_rate)
+        // let detachment_rate = self.cover_detachment_rate_at_side(side, tile | side);
+        // let attachment_rate = self.cover_attachment_rate_at_side(side, tile);
+        // attachment_rate / (attachment_rate + detachment_rate)
+        // println!("tile: {}, side: {}", tile_index(tile), side);
+        let cov_dg = self.energy_cover[tile_index(tile)][side_index(side).expect("Side must be valid")];
+        let cov_bdg = cov_dg / self.rtval() + self.alpha;
+        let ebdg = cov_bdg.exp();
+        let ct = self.tile_concentration[tile_index(tile)];
+        let cb = self.cover_concentrations[self.glue_on_side(side, tile)];
+
+        // println!("ct: {}, cb: {}, ebdg: {}, cov_bdg: {}", ct, cb, ebdg, cov_bdg);
+
+        let ca = 0.5 * (ct - cb -  ebdg + ((cb - ct + ebdg).powi(2) + 4.0 * ct * ebdg).sqrt());
+        // println!("pa: {}", ca/ct);
+        1.0 - ca / ct
     }
 
     /// Get the concentration of a specific tile, with cover as given in the TileId
