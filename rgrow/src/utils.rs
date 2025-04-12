@@ -271,7 +271,8 @@ fn sequence_pair_dg_ds(dna_a: Vec<DnaNucleotideBase>, dna_b: Vec<DnaNucleotideBa
 
 #[cfg_attr(feature = "python", pyfunction)]
 pub fn string_dna_dg_ds(dna_sequence: &str) -> (f64, f64) {
-    single_sequence_dg_ds(dna_sequence.chars().map(DnaNucleotideBase::from))
+    let (g37, s) = single_sequence_dg_ds(dna_sequence.chars().map(DnaNucleotideBase::from));
+    (g37 + PENALTY_G, s + PENALTY_S)
 }
 
 /// Get delta g for some string dna sequence and its "perfect match".  For example:
