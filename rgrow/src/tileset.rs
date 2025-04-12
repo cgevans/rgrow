@@ -577,6 +577,7 @@ impl TryFrom<&str> for CanvasType {
             "square" => Ok(CanvasType::Square),
             "periodic" => Ok(CanvasType::Periodic),
             "tube" => Ok(CanvasType::Tube),
+            "tube-diagonals" => Ok(CanvasType::TubeDiagonals),
             _ => Err(StringConvError(format!("Unknown canvas type {}.  Valid options are \"square\", \"periodic\", and \"tube\".", value))),
         }
     }
