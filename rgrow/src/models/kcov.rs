@@ -623,11 +623,6 @@ impl KCov {
     }
 
     /// Get all possible tiles that may attach at some given point
-    ///
-    /// This will return both, the tile that is attaching, as well as which side it is attaching
-    /// to. This will prevent us from overwritting duplicates. Ie. a tile with no covers may attach
-    /// to the north east west or south, so it is more likely to attach than a tile with covers in
-    /// the north, east, and south (assuming equal concentrations)
     pub fn possible_tiles_at_point<S: State>(
         &self,
         state: &S,
@@ -884,11 +879,11 @@ impl SystemWithDimers for KCov {
 
 impl TileBondInfo for KCov {
     fn tile_color(&self, tileid: TileId) -> [u8; 4] {
-        self.tile_colors[uncover_all(tileid) as usize]
+        self.tile_colors[tile_index(tileid)]
     }
 
     fn tile_name(&self, tileid: TileId) -> &str {
-        self.tile_names[uncover_all(tileid) as usize].as_str()
+        self.tile_names[tile_index(tileid)].as_str()
     }
 
     fn bond_name(&self, bond_number: usize) -> &str {
@@ -1546,8 +1541,35 @@ impl KCov {
         let tile = state.0.tile_at_point(point);
 
         if tile == 0 {
-            let a_rate = self.total_attachment_rate_at_point(point, &state.0);
-            println!("Attachment rate: {a_rate}");
+            let possible_tiles = self.possible_tiles_at_point(&state.0, point);
+            
+            if possible_tiles.is_empty() {
+                println!("No possible tile attachments at this point.");
+                return;
+            }
+            
+            println!("Possible tile attachments:");
+            let mut total_rate = 0.0;
+            
+            for &tile in possible_tiles.iter() {
+                let rate = self.kf * self.tile_concentration(tile);
+                let tile_name = self.tile_name(tile);
+                let tile_idx = tile_index(tile);
+                total_rate += rate;
+                
+                // Show tile info with its covers
+                let covers = &[
+                    if is_covered(NORTH, tile) { "N" } else { "" },
+                    if is_covered(EAST, tile) { "E" } else { "" },
+                    if is_covered(SOUTH, tile) { "S" } else { "" },
+                    if is_covered(WEST, tile) { "W" } else { "" },
+                ].join("");
+                
+                let cover_info = if covers.is_empty() { "no covers".to_string() } else { format!("covers: {}", covers) };
+                println!("  {} (id: {}, {}) - rate: {:.e}", tile_name, tile_idx, cover_info, rate);
+            }
+            
+            println!("Total attachment rate: {:.e}", total_rate);
             return;
         }
 
@@ -1567,7 +1589,7 @@ impl KCov {
             };
 
             let message = format!(
-                "Cover {} rate on side {}: {}",
+                "Cover {} rate on side {}: {:.e}",
                 kind,
                 side_as_str(side),
                 rate
@@ -1577,7 +1599,7 @@ impl KCov {
         }
         // Tile detachment
         let detachment_rate = self.tile_detachment_rate(&state.0, point);
-        acc.push_str(format!("Tile detachment rate {}", detachment_rate).as_str());
+        acc.push_str(format!("Tile detachment rate {:.e}", detachment_rate).as_str());
         println!("{}", acc)
     }
 }
