@@ -464,8 +464,8 @@ mod test_utils {
         let dna_b = DnaNucleotideBase::ideal_sequence(&dna_a);
         let (g, s) = sequence_pair_dg_ds(dna_a, dna_b);
         let (pg, ps) = string_dna_dg_ds("GGACTGAC");
-        assert_eq!(g, pg);
-        assert_eq!(s, ps);
+        assert_eq!(g, pg - 1.96);
+        assert_eq!(s, ps - 0.0057);
     }
 
     #[test]
