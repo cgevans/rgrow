@@ -152,6 +152,8 @@ pub struct KCov {
     pub alpha: Energy,
     pub kf: f64,
     fission_handling: FissionHandling,
+
+    pub no_partially_blocked_attachments: bool,
 }
 
 #[inline(always)]
@@ -185,6 +187,7 @@ impl KCov {
         kf: f64,
         alpha: f64,
         fission_handling: FissionHandling,
+        no_partially_blocked_attachments: bool,
     ) -> Self {
         let tilecount = tile_names.len();
         let mut s = Self {
@@ -207,6 +210,7 @@ impl KCov {
             alpha,
             kf,
             fission_handling,
+            no_partially_blocked_attachments,
         };
         s.fill_friends();
         s.update();
@@ -640,6 +644,10 @@ impl KCov {
             let neighbour = Self::tile_to_side(state, side, point);
             if neighbour == 0 {
                 continue;
+            }
+
+            if self.no_partially_blocked_attachments && is_covered(inverse(side), neighbour) {
+                return HashSet::default();
             }
 
             if let Some(possible_attachments) =
@@ -1176,6 +1184,7 @@ mod test_kcov {
             1e6,
             0.0,
             FissionHandling::JustDetach,
+            false,
         )
     }
 
@@ -1238,8 +1247,7 @@ mod test_kcov {
             alpha: 1.0,
             kf: 1.0,
             temp: 40.0,
-            seed: HashMap::default(),
-            binding_strength: HashMap::default(),
+            ..Default::default()
         }
         .into();
 
@@ -1358,6 +1366,22 @@ struct KCovParams {
     pub alpha: f64,
     pub kf: f64,
     pub temp: f64,
+    pub no_partially_blocked_attachments: bool,
+}
+
+impl Default for KCovParams {
+    fn default() -> Self {
+        Self {
+            tiles: vec![],
+            cover_conc: HashMap::default(),
+            seed: HashMap::default(),
+            binding_strength: HashMap::default(),
+            alpha: -7.1,
+            kf: 1.0e6,
+            temp: 40.0,
+            no_partially_blocked_attachments: false,
+        }
+    }
 }
 
 /// Given some glue, in the form (a|z)+* or (a|z), return itself, as well as its inverse
@@ -1482,6 +1506,7 @@ impl From<KCovParams> for KCov {
             value.kf,
             value.alpha,
             FissionHandling::JustDetach,
+            value.no_partially_blocked_attachments,
         )
     }
 }
@@ -1519,7 +1544,9 @@ macro_rules! getset {
 
 getset!(KCov,
     // f64 getters and setters
-    (f64 => kf, alpha, temperature)
+    (f64 => kf, alpha, temperature),
+    // bool getters and setters
+    (bool => no_partially_blocked_attachments)
 );
 
 #[cfg(feature = "python")]

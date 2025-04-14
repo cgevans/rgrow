@@ -18,3 +18,4 @@ class KCovParams:
     alpha: float = -7.1
     kf: float = 1e6
     temp: float = 50.0
+    no_partially_blocked_attachments: bool = False
