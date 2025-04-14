@@ -661,6 +661,20 @@ impl KCov {
                 friends.extend(attachments);
             }
         }
+
+        if self.no_partially_blocked_attachments {
+            friends.retain(|tile| {
+                let mut covered = false;
+                for side in ALL_SIDES {
+                    if is_covered(side, *tile) && Self::tile_to_side(state, side, point) != 0 {
+                        covered = true;
+                        break;
+                    }
+                }
+                !covered
+            });
+        }
+
         friends
     }
 
@@ -708,7 +722,10 @@ impl KCov {
         let cov_bdg = cov_dg / self.rtval() + self.alpha;
         let ebdg = cov_bdg.exp();
         let ct = self.tile_concentration[tile_index(tile)];
-        let cb = self.cover_concentrations[self.glue_on_side(side, tile)];
+        let cb = self.cover_concentrations[self.glue_on_side(side, uncover_all(tile))];
+        if cb == 0.0 {
+            return 0.0;
+        }
 
         // println!("ct: {}, cb: {}, ebdg: {}, cov_bdg: {}", ct, cb, ebdg, cov_bdg);
 
@@ -1560,6 +1577,15 @@ impl KCov {
     /// Get the concentration of a tile with given covers
     fn tile_conc(&self, tile: TileId) -> Concentration {
         self.tile_concentration(tile)
+    }
+
+    #[pyo3(name = "cover_percentage")]
+    fn py_cover_percentage(&self, side: Side, tile: TileId) -> f64 {
+        let cover_conc = self.cover_concentrations[self.glue_on_side(side, tile)];
+        if cover_conc == 0.0 {
+            return 0.0;
+        }
+        cover_conc / self.tile_concentration(tile)
     }
 
     /// Print a string breaking down the total rate at some point
