@@ -463,7 +463,9 @@ impl KCov {
     }
 
     pub fn cover_attachment_rate_at_side(&self, side: Side, tile: TileId) -> Rate {
-        self.kf * self.cover_concentrations[self.glue_on_side(side, tile)]
+        let total_cover_concentration = self.cover_concentrations[self.glue_on_side(side, tile)];
+        let covered_tile_conc = self.tile_concentration[tile_index(tile)] * (1.0 - self.cover_percentage(side, tile));
+        self.kf * (total_cover_concentration - covered_tile_conc)
     }
 
     /// Get the energy between a tile and a cover to some side
