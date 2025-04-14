@@ -530,12 +530,81 @@ class EvolveBounds:
 
 class EvolveOutcome: ...
 
+class FFSRunConfig:
+    """
+    Configuration options for Forward Flux Sampling (FFS).
+    
+    Parameters
+    ----------
+    constant_variance : bool, optional
+        Use constant-variance, variable-configurations-per-surface method.
+        If False, use max_configs for each surface. Default is True.
+    var_per_mean2 : float, optional
+        Variance per mean² for constant-variance method. Default is 0.01.
+    min_configs : int, optional
+        Minimum number of configurations to generate at each level. Default is 1000.
+    max_configs : int, optional
+        Maximum number of configurations to generate at each level. Default is 100000.
+    early_cutoff : bool, optional
+        Use early cutoff for constant-variance method. Default is True.
+    cutoff_probability : float, optional
+        Probability threshold for early cutoff. Default is 0.99.
+    cutoff_number : int, optional
+        Number for cutoff calculations. Default is 4.
+    min_cutoff_size : int, optional
+        Minimum number of tiles for cutoff. Default is 30.
+    init_bound : EvolveBounds, optional
+        Evolution bounds for initial surface. Default is EvolveBounds(for_time=1e7).
+    subseq_bound : EvolveBounds, optional
+        Evolution bounds for subsequent surfaces. Default is EvolveBounds(for_time=1e7).
+    start_size : int, optional
+        Starting number of tiles for first surface. Default is 3.
+    size_step : int, optional
+        Step size between surfaces. Default is 1.
+    keep_configs : bool, optional
+        Whether to keep configurations in memory. Default is False.
+    min_nuc_rate : float, optional
+        Minimum nucleation rate. Default is None.
+    canvas_size : tuple[int, int], optional
+        Size of the simulation canvas. Default is (32, 32).
+    canvas_type : Any, optional
+        Type of canvas (Periodic, etc.). Default is Periodic.
+    tracking : Any, optional
+        Type of tracking for the simulation. Default is None.
+    target_size : int, optional
+        Target assembly size. Default is 100.
+    store_ffs_config : bool, optional
+        Whether to store this configuration in the result. Default is True.
+    store_system : bool, optional
+        Whether to store the system in the result. Default is False.
+    """
+    def __init__(
+        self,
+        constant_variance: bool | None = None,
+        var_per_mean2: float | None = None,
+        min_configs: int | None = None,
+        max_configs: int | None = None,
+        early_cutoff: bool | None = None,
+        cutoff_probability: float | None = None,
+        cutoff_number: int | None = None,
+        min_cutoff_size: int | None = None,
+        init_bound: EvolveBounds | None = None,
+        subseq_bound: EvolveBounds | None = None,
+        start_size: int | None = None,
+        size_step: int | None = None,
+        keep_configs: bool | None = None,
+        min_nuc_rate: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: Any | None = None,
+        tracking: Any | None = None,
+        target_size: int | None = None,
+        store_ffs_config: bool | None = None,
+        store_system: bool | None = None,
+    ): ...
+
 class FFSLevelRef:
     def get_state(self, i): ...
     def has_stored_states(self): ...
-
-class FFSRunConfig:
-    """Configuration options for FFS."""
 
 class FFSRunResult:
     def configs_dataframe(self): ...
