@@ -1,3 +1,11 @@
+# 0.19.3
+
+- Numerous blockers/covers model improvements and fixes:
+  - tile attachment + blockers fixes.
+  - full concentration calculations for tile-blocker complexes (still one tile per blocker)
+  - add option to allow/disallow partially-blocked attachments
+  - rearrange tubes more
+
 # 0.19.2
 
 - Modified tube canvas format, now zig-zagging in the j direction rather than being diagonal.
