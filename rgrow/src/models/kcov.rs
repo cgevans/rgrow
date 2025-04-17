@@ -149,6 +149,8 @@ pub struct KCov {
     energy_ns: Array2<Energy>,
     energy_we: Array2<Energy>,
 
+    free_cover_concentrations: Array1<Concentration>,
+
     pub alpha: Energy,
     pub kf: f64,
     fission_handling: FissionHandling,
@@ -172,6 +174,7 @@ impl KCov {
     pub fn update(&mut self) {
         self.fill_energy_pairs();
         self.fill_energy_covers();
+        self.fill_free_cover_concentrations();
     }
 
     pub fn new(
@@ -195,7 +198,7 @@ impl KCov {
             tile_concentration,
             tile_colors,
             glue_names,
-            cover_concentrations,
+            cover_concentrations: cover_concentrations.clone(),
             tile_glues,
             glue_links,
             temperature,
@@ -211,6 +214,7 @@ impl KCov {
             kf,
             fission_handling,
             no_partially_blocked_attachments,
+            free_cover_concentrations: Array1::from_vec(cover_concentrations),
         };
         s.fill_friends();
         s.update();
@@ -235,7 +239,7 @@ impl KCov {
             EAST => &self.east_friends[tile_glue],
             WEST => &self.west_friends[tile_glue],
             _ => panic!(
-                "get_friends_one_side should be called with either NORTH, SOUTH, EAST, or WEST, not a combination"
+                "get_friends_one_side should be called with either NORTH, EAST, SOUTH, or WEST, not a combination"
             ),
         })
     }
@@ -394,6 +398,22 @@ impl KCov {
         }
     }
 
+    pub fn fill_free_cover_concentrations(&mut self) {
+        let rtval = self.rtval();
+        self.free_cover_concentrations.indexed_iter_mut().for_each(|(gi, free_cover_conc)| {
+            let total_conc_of_tile_glue_usage = self.tile_concentration.iter().enumerate().map(
+                |(ti, &c)| self.tile_glues[ti].iter().map(|&g| if g == gi { c } else { 0.0 }).sum::<f64>()
+            ).sum::<f64>();
+            let total_cover_conc = self.cover_concentrations[gi];
+            
+            let cov_dg = self.glue_links[(gi, glue_inverse(gi))];
+            let cov_bdg = cov_dg / rtval + self.alpha;
+            let ebdg = cov_bdg.exp();
+    
+            *free_cover_conc = 0.5 * (total_cover_conc - total_conc_of_tile_glue_usage - ebdg + ((total_conc_of_tile_glue_usage - total_cover_conc + ebdg).powi(2) + 4.0 * total_cover_conc * ebdg).sqrt());
+        });
+    }
+
     /// Add seed to system
     pub fn add_seed<S: State>(&mut self, state: &mut S, seed: HashMap<PointSafe2, TileId>) {
         self.seed = seed;
@@ -463,9 +483,7 @@ impl KCov {
     }
 
     pub fn cover_attachment_rate_at_side(&self, side: Side, tile: TileId) -> Rate {
-        let total_cover_concentration = self.cover_concentrations[self.glue_on_side(side, tile)];
-        let covered_tile_conc = self.tile_concentration[tile_index(tile)] * (1.0 - self.cover_percentage(side, tile));
-        self.kf * (total_cover_concentration - covered_tile_conc)
+        self.kf * self.free_cover_concentrations[self.glue_on_side(side, tile)]
     }
 
     /// Get the energy between a tile and a cover to some side
@@ -558,7 +576,7 @@ impl KCov {
             return None;
         }
 
-        *acc -= self.kf * self.cover_concentrations[self.glue_on_side(side, tileid)];
+        *acc -= self.kf * self.free_cover_concentrations[self.glue_on_side(side, tileid)];
         if *acc <= 0.0 {
             // | SIDE will change the bit from 0 to 1
             Some((true, *acc, Event::MonomerChange(point, tileid | side)))
@@ -720,20 +738,15 @@ impl KCov {
         // let attachment_rate = self.cover_attachment_rate_at_side(side, tile);
         // attachment_rate / (attachment_rate + detachment_rate)
         // println!("tile: {}, side: {}", tile_index(tile), side);
-        let cov_dg = self.energy_cover[tile_index(tile)][side_index(side).expect("Side must be valid")];
-        let cov_bdg = cov_dg / self.rtval() + self.alpha;
-        let ebdg = cov_bdg.exp();
-        let ct = self.tile_concentration[tile_index(tile)];
-        let cb = self.cover_concentrations[self.glue_on_side(side, uncover_all(tile))];
-        if cb == 0.0 {
+        let cover_glue = self.glue_on_side(side, tile);
+        if self.cover_concentrations[cover_glue] == 0.0 {
             return 0.0;
         }
-
-        // println!("ct: {}, cb: {}, ebdg: {}, cov_bdg: {}", ct, cb, ebdg, cov_bdg);
-
-        let ca = 0.5 * (ct - cb -  ebdg + ((cb - ct + ebdg).powi(2) + 4.0 * ct * ebdg).sqrt());
-        // println!("pa: {}", ca/ct);
-        1.0 - ca / ct
+        let cov_dg = self.glue_links[(cover_glue, glue_inverse(cover_glue))];
+        let cov_bdg = cov_dg / self.rtval() + self.alpha;
+        let embdg = (-cov_bdg).exp();
+        let b = self.free_cover_concentrations[self.glue_on_side(side, uncover_all(tile))];
+        embdg / (1.0 + b * embdg)
     }
 
     /// Get the concentration of a specific tile, with cover as given in the TileId
@@ -760,7 +773,7 @@ impl KCov {
         let mut rate = Self::ZERO_RATE;
         for s in ALL_SIDES {
             if !is_covered(s, tile) && Self::tile_to_side(state, s, point) == 0 {
-                rate += self.kf * self.cover_concentrations[self.glue_on_side(s, tile)];
+                rate += self.kf * self.free_cover_concentrations[self.glue_on_side(s, tile)];
             }
         }
         return rate;
@@ -1581,14 +1594,14 @@ impl KCov {
         self.tile_concentration(tile)
     }
 
-    #[pyo3(name = "cover_percentage")]
-    fn py_cover_percentage(&self, side: Side, tile: TileId) -> f64 {
-        let cover_conc = self.cover_concentrations[self.glue_on_side(side, tile)];
-        if cover_conc == 0.0 {
-            return 0.0;
-        }
-        cover_conc / self.tile_concentration(tile)
-    }
+    // #[pyo3(name = "cover_percentage")]
+    // fn py_cover_percentage(&self, side: Side, tile: TileId) -> f64 {
+    //     let cover_conc = self.cover_concentrations[self.glue_on_side(side, tile)];
+    //     if cover_conc == 0.0 {
+    //         return 0.0;
+    //     }
+    //     cover_conc / self.tile_concentration(tile)
+    // }
 
     /// Print a string breaking down the total rate at some point
     fn detailed_rate_at_point(&self, state: &PyState, point: (usize, usize)) {
