@@ -33,8 +33,8 @@ const EAST: Sides = 0b0010;
 const SOUTH: Sides = 0b0100;
 const WEST: Sides = 0b1000;
 
-const ALL_COVERS: Sides = NORTH | EAST | SOUTH | WEST;
-const NO_COVERS: Sides = !ALL_COVERS;
+const ALL_COVERS: Sides = 0b1111;
+const NO_COVERS: Sides = !0b1111;
 
 const ALL_SIDES: [Sides; 4] = [NORTH, EAST, SOUTH, WEST];
 
@@ -405,7 +405,7 @@ impl KCov {
                 |(ti, &c)| self.tile_glues[ti].iter().map(|&g| if g == gi { c } else { 0.0 }).sum::<f64>()
             ).sum::<f64>();
             let total_cover_conc = self.cover_concentrations[gi];
-            
+                        
             let cov_dg = self.glue_links[(gi, glue_inverse(gi))];
             let cov_bdg = cov_dg / rtval + self.alpha;
             let ebdg = cov_bdg.exp();
@@ -738,6 +738,7 @@ impl KCov {
         // let attachment_rate = self.cover_attachment_rate_at_side(side, tile);
         // attachment_rate / (attachment_rate + detachment_rate)
         // println!("tile: {}, side: {}", tile_index(tile), side);
+        let tile = uncover_all(tile);
         let cover_glue = self.glue_on_side(side, tile);
         if self.cover_concentrations[cover_glue] == 0.0 {
             return 0.0;
@@ -745,8 +746,8 @@ impl KCov {
         let cov_dg = self.glue_links[(cover_glue, glue_inverse(cover_glue))];
         let cov_bdg = cov_dg / self.rtval() + self.alpha;
         let embdg = (-cov_bdg).exp();
-        let b = self.free_cover_concentrations[self.glue_on_side(side, uncover_all(tile))];
-        embdg / (1.0 + b * embdg)
+        let b = self.free_cover_concentrations[cover_glue];
+        1.0 - (1.0 + b * embdg).recip()
     }
 
     /// Get the concentration of a specific tile, with cover as given in the TileId
