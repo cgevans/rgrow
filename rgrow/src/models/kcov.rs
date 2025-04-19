@@ -156,6 +156,8 @@ pub struct KCov {
     fission_handling: FissionHandling,
 
     pub no_partially_blocked_attachments: bool,
+
+    pub blocker_energy_adj: Energy
 }
 
 #[inline(always)]
@@ -191,6 +193,7 @@ impl KCov {
         alpha: f64,
         fission_handling: FissionHandling,
         no_partially_blocked_attachments: bool,
+        blocker_energy_adj: Energy
     ) -> Self {
         let tilecount = tile_names.len();
         let mut s = Self {
@@ -215,6 +218,7 @@ impl KCov {
             fission_handling,
             no_partially_blocked_attachments,
             free_cover_concentrations: Array1::from_vec(cover_concentrations),
+            blocker_energy_adj,
         };
         s.fill_friends();
         s.update();
@@ -495,7 +499,7 @@ impl KCov {
 
         let tile = uncover_all(tile);
         self.kf
-            * (self.energy_cover[tile_index(tile)][side_index(side).expect("Side must be NESW")]
+            * ((self.energy_cover[tile_index(tile)][side_index(side).expect("Side must be NESW")] + self.blocker_energy_adj)
                 * (1.0 / self.rtval())
                 + self.alpha)
                 .exp()
@@ -1218,6 +1222,7 @@ mod test_kcov {
             0.0,
             FissionHandling::JustDetach,
             false,
+            0.0,
         )
     }
 
@@ -1400,6 +1405,7 @@ struct KCovParams {
     pub kf: f64,
     pub temp: f64,
     pub no_partially_blocked_attachments: bool,
+    pub blocker_energy_adj: Energy,
 }
 
 impl Default for KCovParams {
@@ -1413,6 +1419,7 @@ impl Default for KCovParams {
             kf: 1.0e6,
             temp: 40.0,
             no_partially_blocked_attachments: false,
+            blocker_energy_adj: 0.0,
         }
     }
 }
@@ -1540,6 +1547,7 @@ impl From<KCovParams> for KCov {
             value.alpha,
             FissionHandling::JustDetach,
             value.no_partially_blocked_attachments,
+            value.blocker_energy_adj,
         )
     }
 }
