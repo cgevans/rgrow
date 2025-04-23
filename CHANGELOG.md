@@ -1,3 +1,9 @@
+# 0.19.4
+
+- kcov:
+  - Changes to cover+tile rates in the low-cover-concentration case.
+- Version used for DNA31 submission.
+
 # 0.19.3
 
 - Numerous blockers/covers model improvements and fixes:
