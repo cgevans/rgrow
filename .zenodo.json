@@ -1,0 +1,14 @@
+{
+    "creators": [
+        {
+            "name": "Evans, Constantine",
+            "orcid": "0000-0002-7053-1670"
+        },
+        {
+            "name": "Cervera Roldan, Angel",
+            "orcid": "0009-0006-9183-5303"
+        }
+    ],
+    "title": "Rgrow tile self-assembly simulator",
+    "license": "MIT"
+}

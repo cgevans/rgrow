@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Evans"
+    given-names: "Constantine"
+    orcid: "https://orcid.org/0000-0002-7053-1670"
+  - family-names: "Cervera Roldan"
+    given-names: "Angel"
+    orcid: "https://orcid.org/0009-0006-9183-5303"
+title: "Rgrow tile self-assembly simulator"
+license: MIT
+doi: 10.5281/zenodo.15270474
+url: "https://doi.org/10.5281/zenodo.15270474"
+version: "0.19.4"
