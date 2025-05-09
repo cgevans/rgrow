@@ -6,7 +6,7 @@ use std::{
 use super::fission_base::*;
 use crate::{
     base::{HashMapType, HashSetType},
-    tileset::{GMC_DEFAULT, GSE_DEFAULT},
+    tileset::{GMC_DEFAULT, GSE_DEFAULT}, units::{RateMPS, RatePS},
 };
 use cached::{Cached, SizedCache};
 use fnv::FnvHashMap;
@@ -644,7 +644,7 @@ impl OldKTAM {
 }
 
 impl System for OldKTAM {
-    fn event_rate_at_point<S: State>(&self, canvas: &S, point: PointSafeHere) -> Rate {
+    fn event_rate_at_point<S: State>(&self, canvas: &S, point: PointSafeHere) -> RatePS {
         let p = if canvas.inbounds(point.0) {
             PointSafe2(point.0)
         } else {
@@ -738,7 +738,7 @@ impl System for OldKTAM {
         }
     }
 
-    fn choose_event_at_point<S: State>(&self, canvas: &S, p: PointSafe2, mut acc: Rate) -> Event {
+    fn choose_event_at_point<S: State>(&self, canvas: &S, p: PointSafe2, mut acc: RatePS) -> Event {
         let tile = { canvas.tile_at_point(p) };
 
         let tn = { canvas.tile_to_n(p) };
@@ -1011,7 +1011,7 @@ impl SystemWithDimers for OldKTAM {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::NS,
-                    formation_rate: self.k_f * biconc,
+                    formation_rate: RateMPS::new(self.k_f * biconc),
                     equilibrium_conc: biconc * f64::exp(*e - self.alpha),
                 });
             }
@@ -1025,7 +1025,7 @@ impl SystemWithDimers for OldKTAM {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::WE,
-                    formation_rate: self.k_f * biconc,
+                    formation_rate: RateMPS::new(self.k_f * biconc),
                     equilibrium_conc: biconc * f64::exp(*e - self.alpha),
                 });
             }

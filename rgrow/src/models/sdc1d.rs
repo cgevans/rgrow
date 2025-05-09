@@ -26,6 +26,7 @@ use std::{
 };
 
 use astro_float::{BigFloat, RoundingMode, Sign};
+use num_traits::Zero;
 use rand::Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
@@ -34,7 +35,7 @@ use crate::{
     canvas::{PointSafe2, PointSafeHere},
     colors::get_color_or_random,
     state::{State, StateEnum},
-    system::{Event, EvolveBounds, NeededUpdate, System, TileBondInfo},
+    system::{Event, EvolveBounds, NeededUpdate, System, TileBondInfo}, units::RatePS,
 };
 
 use ndarray::prelude::{Array1, Array2};
@@ -922,9 +923,9 @@ impl System for SDC {
         &self,
         state: &St,
         p: crate::canvas::PointSafeHere,
-    ) -> crate::base::Rate {
+    ) -> RatePS {
         if !state.inbounds(p.0) {
-            return 0.0;
+            return RatePS::zero();
         }
 
         let scaffold_coord = PointSafe2(p.0);
@@ -940,7 +941,7 @@ impl System for SDC {
         &self,
         state: &St,
         point: crate::canvas::PointSafe2,
-        acc: crate::base::Rate,
+        acc: RatePS,
     ) -> crate::system::Event {
         match self.choose_monomer_detachment_at_point(state, point, acc) {
             (true, _, event) => event,

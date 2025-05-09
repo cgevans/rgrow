@@ -1,5 +1,6 @@
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
+use num_traits::Zero;
 use rand::rng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -15,12 +16,14 @@ use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
 use crate::state::State;
 use crate::state::StateEnum;
+use crate::units::RateMPS;
+use crate::units::{Rate, RatePS};
 
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateWithCreate,
 };
 
-use super::base::{Point, Rate, Tile};
+use super::base::{Point, Tile};
 use crate::canvas::PointSafe2;
 
 use std::any::Any;
@@ -190,7 +193,7 @@ pub struct DimerInfo {
     pub t1: Tile,
     pub t2: Tile,
     pub orientation: Orientation,
-    pub formation_rate: Rate,
+    pub formation_rate: RateMPS,
     pub equilibrium_conc: f64,
 }
 
@@ -251,6 +254,7 @@ impl TryFrom<&str> for ChunkSize {
 }
 
 pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
+
     fn new_state<St: StateWithCreate + State>(&self, params: St::Params) -> Result<St, GrowError> {
         let mut new_state = St::empty(params)?;
         self.configure_empty_state(&mut new_state)?;
@@ -270,7 +274,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             return StepOutcome::NoEventIn(max_time_step);
         }
         let (point, remainder) = state.choose_point(); // todo: resultify
-        let event = self.choose_event_at_point(state, PointSafe2(point), remainder); // FIXME
+        let event = self.choose_event_at_point(state, PointSafe2(point), RatePS::from_per_second(remainder)); // FIXME
         if let Event::None = event {
             state.add_time(time_step);
             return StepOutcome::DeadEventAt(time_step);
@@ -440,11 +444,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn update_after_event<St: State>(&self, state: &mut St, event: &Event);
 
     /// Returns the total event rate at a given point.  These should correspond with the events chosen by `choose_event_at_point`.
-    fn event_rate_at_point<St: State>(&self, state: &St, p: PointSafeHere) -> Rate;
+    fn event_rate_at_point<St: State>(&self, state: &St, p: PointSafeHere) -> RatePS;
 
     /// Given a point, and an accumulated random rate choice `acc` (which should be less than the total rate at the point),
     /// return the event that should take place.
-    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: Rate) -> Event;
+    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: RatePS) -> Event;
 
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;
@@ -475,7 +479,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             NeededUpdate::None => todo!(),
             NeededUpdate::NonZero => (0..nrows)
                 .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))))
-                .filter(|p| state.rate_at_point(*p) > 0.)
+                .filter(|p| state.rate_at_point(*p) > RatePS::zero())
                 .collect::<Vec<_>>(),
             NeededUpdate::All => (0..nrows)
                 .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))))

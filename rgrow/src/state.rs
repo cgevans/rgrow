@@ -1,6 +1,7 @@
 use super::base::*;
 use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals};
 use crate::tileset::{CanvasType, TrackingType};
+use crate::units::RatePS;
 use crate::{
     canvas::PointSafe2,
     canvas::PointSafeHere,
@@ -233,28 +234,28 @@ impl<C: Canvas + CanvasCreate, T: StateTracker> State for QuadTreeState<C, T> {
 }
 
 impl<C: Canvas, T: StateTracker> RateStore for QuadTreeState<C, T> {
-    fn choose_point(&self) -> (Point, Rate) {
+    fn choose_point(&self) -> (Point, RatePS) {
         self.rates.choose_point()
     }
 
-    fn rate_at_point(&self, point: PointSafeHere) -> Rate {
+    fn rate_at_point(&self, point: PointSafeHere) -> RatePS {
         self.rates.rate_at_point(point)
     }
 
-    fn update_point(&mut self, point: PointSafeHere, new_rate: Rate) {
+    fn update_point(&mut self, point: PointSafeHere, new_rate: RatePS) {
         self.rates.update_point(point, new_rate)
     }
 
     #[inline]
-    fn update_multiple(&mut self, points: &[(PointSafeHere, Rate)]) {
+    fn update_multiple(&mut self, points: &[(PointSafeHere, RatePS)]) {
         self.rates.update_multiple(points);
     }
 
-    fn total_rate(&self) -> Rate {
+    fn total_rate(&self) -> RatePS {
         self.rates.total_rate()
     }
 
-    fn rate_array(&self) -> ArrayView2<Rate> {
+    fn rate_array(&self) -> ArrayView2<RatePS> {
         self.rates
             .0
             .first()

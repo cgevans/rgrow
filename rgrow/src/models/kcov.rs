@@ -4,6 +4,7 @@ use std::{
 };
 
 use ndarray::{Array1, Array2};
+use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
     system::{
         DimerInfo, Event, FissionHandling, Orientation, System, SystemWithDimers, TileBondInfo,
     },
-    type_alias,
+    type_alias, units::{ConcM, RatePMS, RatePS},
 };
 
 // Imports for python bindings
@@ -25,7 +26,7 @@ use numpy::ToPyArray;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-type_alias!( f64 => Concentration, Strength );
+type_alias!( f64 => Strength );
 type_alias!( u32 => TileState, Sides );
 
 const NORTH: Sides = 0b0001;
@@ -104,11 +105,11 @@ pub fn side_as_str(side: Sides) -> &'static str {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KCov {
     pub tile_names: Vec<String>,
-    pub tile_concentration: Vec<Concentration>,
+    pub tile_concentration: Vec<ConcM>,
     pub tile_colors: Vec<[u8; 4]>,
 
     pub glue_names: Vec<String>,
-    pub cover_concentrations: Vec<Concentration>,
+    pub cover_concentrations: Vec<ConcM>,
     pub temperature: f64,
     pub seed: HashMap<PointSafe2, TileState>,
     /// Glues of a tile with a given ID
@@ -149,10 +150,10 @@ pub struct KCov {
     energy_ns: Array2<Energy>,
     energy_we: Array2<Energy>,
 
-    free_cover_concentrations: Array1<Concentration>,
+    free_cover_concentrations: Array1<ConcM>,
 
     pub alpha: Energy,
-    pub kf: f64,
+    pub kf: RatePMS,
     fission_handling: FissionHandling,
 
     pub no_partially_blocked_attachments: bool,
@@ -181,15 +182,15 @@ impl KCov {
 
     pub fn new(
         tile_names: Vec<String>,
-        tile_concentration: Vec<Concentration>,
+        tile_concentration: Vec<ConcM>,
         tile_colors: Vec<[u8; 4]>,
         glue_names: Vec<String>,
-        cover_concentrations: Vec<Concentration>,
+        cover_concentrations: Vec<ConcM>,
         tile_glues: Array1<[Glue; 4]>,
         glue_links: Array2<Strength>,
         seed: HashMap<PointSafe2, TileState>,
         temperature: f64,
-        kf: f64,
+        kf: RatePMS,
         alpha: f64,
         fission_handling: FissionHandling,
         no_partially_blocked_attachments: bool,
@@ -406,15 +407,15 @@ impl KCov {
         let rtval = self.rtval();
         self.free_cover_concentrations.indexed_iter_mut().for_each(|(gi, free_cover_conc)| {
             let total_conc_of_tile_glue_usage = self.tile_concentration.iter().enumerate().map(
-                |(ti, &c)| self.tile_glues[ti].iter().map(|&g| if g == gi { c } else { 0.0 }).sum::<f64>()
-            ).sum::<f64>();
+                |(ti, &c)| self.tile_glues[ti].iter().map(|&g| if g == gi { c } else { ConcM::zero() }).sum::<ConcM>()
+            ).sum::<ConcM>();
             let total_cover_conc = self.cover_concentrations[gi];
                         
             let cov_dg = self.glue_links[(gi, glue_inverse(gi))];
             let cov_bdg = cov_dg / rtval + self.alpha;
-            let ebdg = cov_bdg.exp();
+            let ebdg = ConcM::new(cov_bdg.exp());
     
-            *free_cover_conc = 0.5 * (total_cover_conc - total_conc_of_tile_glue_usage - ebdg + ((total_conc_of_tile_glue_usage - total_cover_conc + ebdg).powi(2) + 4.0 * total_cover_conc * ebdg).sqrt());
+            *free_cover_conc = 0.5 * (total_cover_conc - total_conc_of_tile_glue_usage - ebdg + ((total_conc_of_tile_glue_usage - total_cover_conc + ebdg).squared() + 4.0 * total_cover_conc * ebdg).sqrt());
         });
     }
 
@@ -467,45 +468,45 @@ impl KCov {
         R * (self.temperature + 273.15)
     }
 
-    pub fn tile_detachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
+    pub fn tile_detachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> RatePS {
         if self.is_seed(&p) {
-            return Self::ZERO_RATE;
+            return RatePS::zero();
         }
 
         let tile = state.tile_at_point(p);
         // If there is no tile, then nothing to attach
         if tile == 0 {
-            return Self::ZERO_RATE;
+            return RatePS::zero();
         }
         let energy_with_neighbours = self.energy_at_point(state, p);
-        self.kf * (energy_with_neighbours * (1.0 / self.rtval())).exp()
+        self.kf * ConcM::u0_times((energy_with_neighbours * (1.0 / self.rtval())).exp())
     }
 
     /// The rate at which a tile will attach somewhere
-    pub fn tile_attachment_rate(&self, tile: TileState) -> f64 {
-        self.tile_concentration(tile) * self.kf
+    pub fn tile_attachment_rate(&self, tile: TileState) -> RatePS {
+        self.kf * self.tile_concentration(tile)
     }
 
-    pub fn cover_attachment_rate_at_side(&self, side: Sides, tile: TileState) -> Rate {
+    pub fn cover_attachment_rate_at_side(&self, side: Sides, tile: TileState) -> RatePS {
         self.kf * self.free_cover_concentrations[self.glue_on_side(side, tile)]
     }
 
     /// Get the energy between a tile and a cover to some side
-    pub fn cover_detachment_rate_at_side(&self, side: Sides, tile: TileState) -> Rate {
+    pub fn cover_detachment_rate_at_side(&self, side: Sides, tile: TileState) -> RatePS {
         // If there is no cover in that side, then the detachment rate will be 0
         if !is_covered(side, tile) {
-            return Self::ZERO_RATE;
+            return RatePS::zero();
         };
 
         let tile = uncover_all(tile);
         self.kf
-            * ((self.energy_cover[tile_index(tile)][side_index(side).expect("Side must be NESW")] + self.blocker_energy_adj)
+            * ConcM::u0_times(((self.energy_cover[tile_index(tile)][side_index(side).expect("Side must be NESW")] + self.blocker_energy_adj)
                 * (1.0 / self.rtval())
                 + self.alpha)
-                .exp()
+                .exp())
     }
 
-    pub fn cover_detachment_total_rate(&self, tile: TileState) -> Rate {
+    pub fn cover_detachment_total_rate(&self, tile: TileState) -> RatePS {
         self.cover_detachment_rate_at_side(NORTH, tile)
             + self.cover_detachment_rate_at_side(EAST, tile)
             + self.cover_detachment_rate_at_side(SOUTH, tile)
@@ -517,14 +518,14 @@ impl KCov {
         tileid: TileState,
         point: PointSafe2,
         side: Sides,
-        acc: &mut Rate,
-    ) -> Option<(bool, Rate, Event)> {
+        acc: &mut RatePS,
+    ) -> Option<(bool, RatePS, Event)> {
         // Something cannot detach if there is no cover
         if !is_covered(side, tileid) {
             return None;
         }
         *acc -= self.cover_detachment_rate_at_side(side, tileid);
-        if *acc <= 0.0 {
+        if *acc <= RatePS::zero() {
             // ^ SIDE will change the bit from 1 to 0, so no longer have a cover here
             Some((true, *acc, Event::MonomerChange(point, tileid ^ side)))
         } else {
@@ -537,8 +538,8 @@ impl KCov {
         &self,
         state: &S,
         point: PointSafe2,
-        acc: &mut Rate,
-    ) -> (bool, Rate, Event) {
+        acc: &mut RatePS,
+    ) -> (bool, RatePS, Event) {
         // Check what covers the tile has
         let tile = state.tile_at_point(point);
         if tile == 0 {
@@ -570,8 +571,8 @@ impl KCov {
         side: Sides,
         point: PointSafe2,
         state: &S,
-        acc: &mut Rate,
-    ) -> Option<(bool, Rate, Event)> {
+        acc: &mut RatePS,
+    ) -> Option<(bool, RatePS, Event)> {
         // A cover cannot attach to a side with a cover already attached
         if is_covered(side, tileid)
         // If a tile is already attached to that side, then nothing can attach
@@ -581,7 +582,7 @@ impl KCov {
         }
 
         *acc -= self.kf * self.free_cover_concentrations[self.glue_on_side(side, tileid)];
-        if *acc <= 0.0 {
+        if *acc <= RatePS::zero() {
             // | SIDE will change the bit from 0 to 1
             Some((true, *acc, Event::MonomerChange(point, tileid | side)))
         } else {
@@ -594,11 +595,11 @@ impl KCov {
         &self,
         state: &S,
         point: PointSafe2,
-        acc: &mut Rate,
-    ) -> (bool, Rate, Event) {
+        acc: &mut RatePS,
+    ) -> (bool, RatePS, Event) {
         let tile = state.tile_at_point(point);
         if tile == 0 {
-            return (false, 0.0, Event::None);
+            return (false, RatePS::zero(), Event::None);
         }
         self.maybe_attach_cover_on_side_event(tile, NORTH, point, state, acc)
             .or(self.maybe_attach_cover_on_side_event(tile, EAST, point, state, acc))
@@ -612,10 +613,10 @@ impl KCov {
         &self,
         state: &S,
         point: PointSafe2,
-        acc: &mut Rate,
-    ) -> (bool, Rate, Event) {
+        acc: &mut RatePS,
+    ) -> (bool, RatePS, Event) {
         *acc -= self.tile_detachment_rate(state, point);
-        if *acc > 0.0 {
+        if *acc > RatePS::zero() {
             return (false, *acc, Event::None);
         }
 
@@ -702,11 +703,11 @@ impl KCov {
         friends
     }
 
-    pub fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> Rate {
+    pub fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> RatePS {
         self.possible_tiles_at_point(state, point)
             .iter()
-            .fold(0.0, |acc, &tile| {
-                acc + (self.kf * self.tile_concentration(tile))
+            .fold(RatePS::zero(), |acc, &tile| {
+                acc + self.kf * self.tile_concentration(tile)
             })
     }
 
@@ -715,8 +716,8 @@ impl KCov {
         &self,
         state: &S,
         point: PointSafe2,
-        acc: &mut Rate,
-    ) -> (bool, Rate, Event) {
+        acc: &mut RatePS,
+    ) -> (bool, RatePS, Event) {
         let tile = state.tile_at_point(point);
         // tile aready attached here
         if tile != 0 {
@@ -729,7 +730,7 @@ impl KCov {
         // account twice)
         for tile in friends {
             *acc -= self.kf * self.tile_concentration(tile);
-            if *acc <= 0.0 {
+            if *acc <= RatePS::zero() {
                 return (true, *acc, Event::MonomerAttachment(point, tile));
             }
         }
@@ -744,18 +745,18 @@ impl KCov {
         // println!("tile: {}, side: {}", tile_index(tile), side);
         let tile = uncover_all(tile);
         let cover_glue = self.glue_on_side(side, tile);
-        if self.cover_concentrations[cover_glue] == 0.0 {
+        if self.cover_concentrations[cover_glue].is_zero() {
             return 0.0;
         }
         let cov_dg = self.glue_links[(cover_glue, glue_inverse(cover_glue))];
         let cov_bdg = cov_dg / self.rtval() + self.alpha;
         let embdg = (-cov_bdg).exp();
         let b = self.free_cover_concentrations[cover_glue];
-        1.0 - (1.0 + b * embdg).recip()
+        1.0 - (1.0 + b.over_u0() * embdg).recip()
     }
 
     /// Get the concentration of a specific tile, with cover as given in the TileId
-    pub fn tile_concentration(&self, tile: TileState) -> f64 {
+    pub fn tile_concentration(&self, tile: TileState) -> ConcM {
         let mut acc = 1.0;
         for side in ALL_SIDES {
             let cover_perc = self.cover_percentage(side, tile);
@@ -768,14 +769,14 @@ impl KCov {
         self.tile_concentration[tile_index(tile)] * acc
     }
 
-    pub fn total_cover_attachment_rate<S: State>(&self, state: &S, point: PointSafe2) -> Rate {
+    pub fn total_cover_attachment_rate<S: State>(&self, state: &S, point: PointSafe2) -> RatePS {
         // Check that there is a tile at this point
         let tile = state.tile_at_point(point);
         if tile == 0 {
-            return Self::ZERO_RATE;
+            return RatePS::zero();
         }
 
-        let mut rate = Self::ZERO_RATE;
+        let mut rate = RatePS::zero();
         for s in ALL_SIDES {
             if !is_covered(s, tile) && Self::tile_to_side(state, s, point) == 0 {
                 rate += self.kf * self.free_cover_concentrations[self.glue_on_side(s, tile)];
@@ -1033,11 +1034,11 @@ impl System for KCov {
         &self,
         state: &S,
         p: crate::canvas::PointSafeHere,
-    ) -> crate::base::Rate {
+    ) -> RatePS {
         let p = if state.inbounds(p.0) {
             PointSafe2(p.0)
         } else {
-            return Self::ZERO_RATE;
+            return RatePS::zero();
         };
         let tile = { state.tile_at_point(p) };
         if tile != 0 {
@@ -1053,7 +1054,7 @@ impl System for KCov {
         &self,
         state: &St,
         point: crate::canvas::PointSafe2,
-        acc: crate::base::Rate,
+        acc: RatePS,
     ) -> crate::system::Event {
         let mut acc = acc;
 
@@ -1218,7 +1219,7 @@ mod test_kcov {
             glue_linkns,
             HashMap::default(),
             60.0,
-            1e6,
+            RatePMS::new(1e6),
             0.0,
             FissionHandling::JustDetach,
             false,
@@ -1398,7 +1399,7 @@ pub enum GlueIdentifier {
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 struct KCovParams {
     pub tiles: Vec<KCovTile>,
-    pub cover_conc: HashMap<GlueIdentifier, Concentration>,
+    pub cover_conc: HashMap<GlueIdentifier, ConcM>,
     pub seed: HashMap<(usize, usize), TileIdentifier>,
     pub binding_strength: HashMap<String, StrenOrSeq>,
     pub alpha: f64,

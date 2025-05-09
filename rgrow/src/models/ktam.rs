@@ -17,11 +17,12 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
         System, SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
+    tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT}, units::{Rate, RateMPS, RatePS},
 };
 
 use crate::base::{HashMapType, HashSetType};
 use ndarray::prelude::*;
+use num_traits::Zero;
 #[cfg(feature = "python")]
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray2};
 use rand::prelude::Distribution;
@@ -44,7 +45,7 @@ type RatePerConc = f64;
 type Energy = f64;
 
 /// Rate (1/s)
-type Rate = f64;
+type Rate64 = f64;
 
 trait NonZero {
     fn nonzero(self) -> bool;
@@ -254,9 +255,9 @@ impl System for KTAM {
         &self,
         state: &S,
         p: crate::canvas::PointSafeHere,
-    ) -> crate::base::Rate {
+    ) -> RatePS {
         if !state.inbounds(p.0) {
-            return 0.;
+            return RatePS::zero();
         }
         let p = PointSafe2(p.0);
         let t = state.tile_at_point(p);
@@ -264,27 +265,27 @@ impl System for KTAM {
         match self.chunk_handling {
             ChunkHandling::None => {
                 if t.nonzero() {
-                    self.monomer_detachment_rate_at_point(state, p)
+                    self.monomer_detachment_rate_at_point(state, p).to_per_second()
                 } else {
-                    self.total_monomer_attachment_rate_at_point(state, p)
+                    self.total_monomer_attachment_rate_at_point(state, p).to_per_second()
                 }
             }
             ChunkHandling::Detach => {
                 if t.nonzero() {
-                    self.monomer_detachment_rate_at_point(state, p)
-                        + self.chunk_detach_rate(state, p, t)
+                    self.monomer_detachment_rate_at_point(state, p).to_per_second()
+                        + self.chunk_detach_rate(state, p, t).to_per_second()
                 } else {
-                    self.total_monomer_attachment_rate_at_point(state, p)
+                    self.total_monomer_attachment_rate_at_point(state, p).to_per_second()
                 }
             }
             #[allow(unreachable_code)]
             ChunkHandling::Equilibrium => {
                 if t.nonzero() {
-                    self.monomer_detachment_rate_at_point(state, p)
-                        + self.chunk_detach_rate(state, p, t)
+                    self.monomer_detachment_rate_at_point(state, p).to_per_second()
+                        + self.chunk_detach_rate(state, p, t).to_per_second()
                 } else {
                     todo!("Chunk attach rate");
-                    self.total_monomer_attachment_rate_at_point(state, p)
+                    self.total_monomer_attachment_rate_at_point(state, p).to_per_second()
                 }
             }
         }
@@ -294,9 +295,9 @@ impl System for KTAM {
         &self,
         state: &S,
         p: PointSafe2,
-        acc: crate::base::Rate,
+        acc: RatePS,
     ) -> Event {
-        match self.choose_detachment_at_point(state, p, acc) {
+        match self.choose_detachment_at_point(state, p, Rate64::from_per_second(acc)) {
             (true, _, event) => event,
             (false, acc, _) => match self.choose_attachment_at_point(state, p, acc) {
                 (true, _, event) => event,
@@ -807,7 +808,7 @@ impl SystemWithDimers for KTAM {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::NS,
-                    formation_rate: self.kf * biconc,
+                    formation_rate: RateMPS::new(self.kf * biconc),
                     equilibrium_conc: biconc * f64::exp(*e - self.alpha),
                 });
             }
@@ -820,7 +821,7 @@ impl SystemWithDimers for KTAM {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::WE,
-                    formation_rate: self.kf * biconc,
+                    formation_rate: RateMPS::new(self.kf * biconc),
                     equilibrium_conc: biconc * f64::exp(*e - self.alpha),
                 });
             }
@@ -1131,7 +1132,7 @@ impl KTAM {
         }
     }
 
-    pub fn monomer_detachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate {
+    pub fn monomer_detachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate64 {
         // If the point is a seed, then there is no detachment rate.
         // ODD HACK: we set a very low detachment rate for seeds and duple bottom/right, to allow
         // rate-based copying.  We ignore these below.
@@ -1171,8 +1172,8 @@ impl KTAM {
         &self,
         state: &S,
         p: PointSafe2,
-        mut acc: Rate,
-    ) -> (bool, Rate, Event) {
+        mut acc: Rate64,
+    ) -> (bool, Rate64, Event) {
         acc -= self.monomer_detachment_rate_at_point(state, p);
         if acc <= 0. {
             // FIXME: may slow things down
@@ -1297,7 +1298,7 @@ impl KTAM {
         &self,
         state: &S,
         p: PointSafe2,
-    ) -> Rate {
+    ) -> Rate64 {
         match self._find_monomer_attachment_possibilities_at_point(state, p, 0., true) {
             (false, acc, _) => -acc,
             _ => panic!(),
@@ -1308,8 +1309,8 @@ impl KTAM {
         &self,
         state: &S,
         p: PointSafe2,
-        acc: Rate,
-    ) -> (bool, Rate, Event) {
+        acc: Rate64,
+    ) -> (bool, Rate64, Event) {
         self.choose_monomer_attachment_at_point(state, p, acc)
     }
 
@@ -1317,8 +1318,8 @@ impl KTAM {
         &self,
         state: &S,
         p: PointSafe2,
-        acc: Rate,
-    ) -> (bool, Rate, Event) {
+        acc: Rate64,
+    ) -> (bool, Rate64, Event) {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
@@ -1333,9 +1334,9 @@ impl KTAM {
         &self,
         state: &S,
         p: PointSafe2,
-        mut acc: Rate,
+        mut acc: Rate64,
         just_calc: bool,
-    ) -> (bool, Rate, Event) {
+    ) -> (bool, Rate64, Event) {
         let tn = state.tile_to_n(p);
         let tw = state.tile_to_w(p);
         let te = state.tile_to_e(p);
@@ -1511,7 +1512,7 @@ impl KTAM {
             sys: &KTAM,
             state: &S,
             p: PointSafeHere,
-        ) -> (PointSafeHere, Rate) {
+        ) -> (PointSafeHere, RatePS) {
             (p, sys.event_rate_at_point(state, p))
         }
 
@@ -1603,7 +1604,7 @@ impl KTAM {
         p: PointSafeHere,
         t: Tile,
         ts: Energy,
-    ) -> Rate {
+    ) -> Rate64 {
         let p2 = canvas.move_sh_s(p);
         if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 }) | self.is_seed(PointSafe2(p2))
         {
@@ -1612,7 +1613,7 @@ impl KTAM {
             let t2 = unsafe { canvas.uv_p(p2) };
             {
                 self.kf
-                    * Rate::exp(
+                    * Rate64::exp(
                         -ts - self.bond_energy_of_tile_type_at_point(canvas, PointSafe2(p2), t2) // FIXME
                         + 2. * self.get_energy_ns(t, t2) + 2.*self.alpha,
                     )
@@ -1627,7 +1628,7 @@ impl KTAM {
         p: PointSafeHere,
         t: Tile,
         ts: Energy,
-    ) -> Rate {
+    ) -> Rate64 {
         let p2 = canvas.move_sh_e(p);
         if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 } | self.is_seed(PointSafe2(p2)))
         {
@@ -1636,7 +1637,7 @@ impl KTAM {
             let t2 = unsafe { canvas.uv_p(p2) };
             {
                 self.kf
-                    * Rate::exp(
+                    * Rate64::exp(
                         -ts - self.bond_energy_of_tile_type_at_point(canvas, PointSafe2(p2), t2) // FIXME
                         + 2. * self.get_energy_we(t, t2) + 2.*self.alpha,
                     )
@@ -1644,7 +1645,7 @@ impl KTAM {
         }
     }
 
-    fn chunk_detach_rate<C: State>(&self, canvas: &C, p: PointSafe2, t: Tile) -> Rate {
+    fn chunk_detach_rate<C: State>(&self, canvas: &C, p: PointSafe2, t: Tile) -> Rate64 {
         match self.chunk_size {
             ChunkSize::Single => 0.0,
             ChunkSize::Dimer => {
@@ -1660,7 +1661,7 @@ impl KTAM {
         canvas: &C,
         p: PointSafe2,
         tile: Tile,
-        acc: &mut Rate,
+        acc: &mut Rate64,
         now_empty: &mut Vec<PointSafe2>,
         possible_starts: &mut Vec<PointSafe2>,
     ) {
