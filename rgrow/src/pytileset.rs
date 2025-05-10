@@ -66,7 +66,9 @@ impl TileSet {
                         PyErr::warn(
                             py,
                             &user_warning,
-                            std::ffi::CString::new(format!("Ignoring unknown key {v}.")).unwrap().as_c_str(),
+                            std::ffi::CString::new(format!("Ignoring unknown key {v}."))
+                                .unwrap()
+                                .as_c_str(),
                             0,
                         )
                         .unwrap();

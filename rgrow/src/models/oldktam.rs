@@ -6,7 +6,8 @@ use std::{
 use super::fission_base::*;
 use crate::{
     base::{HashMapType, HashSetType},
-    tileset::{GMC_DEFAULT, GSE_DEFAULT}, units::{RateMPS, RatePS},
+    tileset::{GMC_DEFAULT, GSE_DEFAULT},
+    units::{RateMPS, RatePS},
 };
 use cached::{Cached, SizedCache};
 use fnv::FnvHashMap;
@@ -673,7 +674,8 @@ impl System for OldKTAM {
                 ChunkHandling::None => (self.k_f_hat() * Rate::exp(-bound_energy)).into(),
                 ChunkHandling::Detach | ChunkHandling::Equilibrium => {
                     (self.k_f_hat() * Rate::exp(-bound_energy)
-                        + self.chunk_detach_rate(canvas, p.0, tile)).into() // FIXME
+                        + self.chunk_detach_rate(canvas, p.0, tile))
+                    .into() // FIXME
                 }
             }
         } else {
@@ -751,7 +753,8 @@ impl System for OldKTAM {
 
         if tile != 0 {
             acc -= {
-                (self.k_f_hat() * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile))).into()
+                (self.k_f_hat() * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile)))
+                    .into()
             };
 
             let mut possible_starts = Vec::new();

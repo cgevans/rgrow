@@ -1,5 +1,7 @@
 use super::base::*;
-use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals};
+use crate::canvas::{
+    Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals,
+};
 use crate::tileset::{CanvasType, TrackingType};
 use crate::units::{RatePS, TimeS};
 use crate::{
@@ -41,17 +43,17 @@ impl_clonable_state! {
     (CanvasPeriodic, NullStateTracker) => PeriodicCanvasNoTracker,
     (CanvasTube, NullStateTracker) => TubeNoTracking,
     (CanvasTubeDiagonals, NullStateTracker) => TubeDiagonalsNoTracking,
-    
+
     (CanvasSquare, OrderTracker) => SquareOrderTracking,
     (CanvasPeriodic, OrderTracker) => PeriodicOrderTracking,
     (CanvasTube, OrderTracker) => TubeOrderTracking,
     (CanvasTubeDiagonals, OrderTracker) => TubeDiagonalsOrderTracking,
-    
+
     (CanvasSquare, LastAttachTimeTracker) => SquareLastAttachTimeTracking,
     (CanvasPeriodic, LastAttachTimeTracker) => PeriodicLastAttachTimeTracking,
     (CanvasTube, LastAttachTimeTracker) => TubeLastAttachTimeTracking,
     (CanvasTubeDiagonals, LastAttachTimeTracker) => TubeDiagonalsLastAttachTimeTracking,
-    
+
     (CanvasSquare, PrintEventTracker) => SquarePrintEventTracking,
     (CanvasPeriodic, PrintEventTracker) => PeriodicPrintEventTracking,
     (CanvasTube, PrintEventTracker) => TubePrintEventTracking,
@@ -88,7 +90,6 @@ pub enum StateEnum {
 }
 
 impl StateEnum {
-
     pub fn from_array(
         array: ArrayView2<Tile>,
         kind: CanvasType,
@@ -101,7 +102,6 @@ impl StateEnum {
         state_array.assign(&array);
         Ok(state)
     }
-    
 
     pub fn empty(
         shape: (usize, usize),
@@ -111,11 +111,7 @@ impl StateEnum {
     ) -> Result<StateEnum, GrowError> {
         macro_rules! create_state {
             ($canvas:ty, $tracker:ty) => {
-                QuadTreeState::<$canvas, $tracker>::empty_with_types(
-                    shape,
-                    n_tile_types,
-                )?
-                .into()
+                QuadTreeState::<$canvas, $tracker>::empty_with_types(shape, n_tile_types)?.into()
             };
         }
 
@@ -196,9 +192,13 @@ impl<C: Canvas, T: StateTracker> TileCounts for QuadTreeState<C, T> {
     }
 
     fn count_of_tile(&self, tile: Tile) -> NumTiles {
-        *self.tile_counts.get(tile as usize).unwrap_or_else(|| panic!("Count Of Tile out of bounds ({} not in arr of len {})",
+        *self.tile_counts.get(tile as usize).unwrap_or_else(|| {
+            panic!(
+                "Count Of Tile out of bounds ({} not in arr of len {})",
                 tile as usize,
-                self.tile_counts.len()))
+                self.tile_counts.len()
+            )
+        })
     }
 
     fn update_attachment(&mut self, tile: Tile) {

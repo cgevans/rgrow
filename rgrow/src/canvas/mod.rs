@@ -4,11 +4,11 @@ use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
 
 // pub mod tube_diagonal;
-pub mod tube_zz;
 pub mod tube_diagonals;
+pub mod tube_zz;
 // pub use tube_diagonal::CanvasTube;
-pub use tube_zz::CanvasTube;
 pub use tube_diagonals::CanvasTubeDiagonals;
+pub use tube_zz::CanvasTube;
 
 pub trait CanvasCreate: Sized + Canvas {
     type Params;

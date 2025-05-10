@@ -33,7 +33,8 @@ use crate::{
     canvas::{PointSafe2, PointSafeHere},
     colors::get_color_or_random,
     state::{State, StateEnum},
-    system::{Event, EvolveBounds, NeededUpdate, System, TileBondInfo}, units::{ConcM, RatePMS, RatePS},
+    system::{Event, EvolveBounds, NeededUpdate, System, TileBondInfo},
+    units::{ConcM, RatePMS, RatePS},
 };
 
 use ndarray::prelude::{Array1, Array2};
@@ -400,8 +401,12 @@ impl SDC {
     ) -> RatePS {
         // If we set acc = 0, would it not be the case that we just attach to the first tile we can
         // ?
-        match self.find_monomer_attachment_possibilities_at_point(state, RatePS::zero(), scaffold_coord, true)
-        {
+        match self.find_monomer_attachment_possibilities_at_point(
+            state,
+            RatePS::zero(),
+            scaffold_coord,
+            true,
+        ) {
             (false, acc, _) => -acc,
             _ => panic!(),
         }
@@ -1034,15 +1039,15 @@ impl TileBondInfo for SDC {
 //         // that each tile has four edges), but it will do for now.
 //         let pc = ProcessedTileSet::from_tileset(tileset)?;
 
-        // // Combine glue strengths (between like numbers) and glue links (between two numbers)
-        // let n_glues = pc.glue_strengths.len();
-        // let mut glue_links = Array2::zeros((n_glues, n_glues));
-        // for (i, strength) in pc.glue_strengths.indexed_iter() {
-        //     glue_links[(i, i)] = *strength;
-        // }
-        // for (i, j, strength) in pc.glue_links.iter() {
-        //     glue_links[(*i, *j)] = *strength;
-        // }
+// // Combine glue strengths (between like numbers) and glue links (between two numbers)
+// let n_glues = pc.glue_strengths.len();
+// let mut glue_links = Array2::zeros((n_glues, n_glues));
+// for (i, strength) in pc.glue_strengths.indexed_iter() {
+//     glue_links[(i, i)] = *strength;
+// }
+// for (i, j, strength) in pc.glue_links.iter() {
+//     glue_links[(*i, *j)] = *strength;
+// }
 
 //         // Just generate the stuff that will be filled by the model.
 //         let energy_bonds = Array2::default((pc.tile_names.len(), pc.tile_names.len()));
@@ -1196,11 +1201,7 @@ fn self_and_inverse(value: &str) -> (bool, String, String) {
     let star_count = value.len() - filtered.len();
     let is_from = star_count % 2 == 0;
 
-    (
-        is_from,
-        filtered.to_string(),
-        format!("{}*", filtered),
-    )
+    (is_from, filtered.to_string(), format!("{}*", filtered))
 }
 
 fn get_or_generate(
@@ -1943,9 +1944,11 @@ mod test_sdc_model {
             .map(self_and_inverse)
             .collect::<Vec<(bool, String, String)>>();
 
-        let expected = [(true, "some*str", "some*str*"),
+        let expected = [
+            (true, "some*str", "some*str*"),
             (false, "some*str", "some*str*"),
-            (true, "some*str", "some*str*")]
+            (true, "some*str", "some*str*"),
+        ]
         .iter()
         .map(|(a, b, c)| (*a, b.to_string(), c.to_string()))
         .collect::<Vec<(bool, String, String)>>();

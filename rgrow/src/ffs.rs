@@ -32,7 +32,7 @@ use base::NumTiles;
 use ndarray::{s, Array2, ArrayView2};
 #[cfg(feature = "python")]
 use numpy::{PyArray2, ToPyArray};
-use rand::{distr::Uniform, distr::weighted::WeightedIndex, prelude::Distribution};
+use rand::{distr::weighted::WeightedIndex, distr::Uniform, prelude::Distribution};
 use rand::{prelude::SmallRng, SeedableRng};
 use rand::{rng, Rng};
 
@@ -395,10 +395,9 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
         let mut above_cutoff: usize = 0;
 
         while current_size < config.target_size {
-            let min_prob = config.min_nuc_rate.map(
-                |min_nuc_rate|
-                min_nuc_rate / ret.nucleation_rate()
-            );
+            let min_prob = config
+                .min_nuc_rate
+                .map(|min_nuc_rate| min_nuc_rate / ret.nucleation_rate());
 
             let last = ret.level_list.last_mut().unwrap();
             let next = last.next_level(system, config, min_prob)?;
@@ -439,7 +438,10 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
-    pub fn create_from_tileset<'a, Sy: SystemWithDimers + System + TryFrom<&'a TileSet, Error = RgrowError>>(
+    pub fn create_from_tileset<
+        'a,
+        Sy: SystemWithDimers + System + TryFrom<&'a TileSet, Error = RgrowError>,
+    >(
         tileset: &'a TileSet,
         config: &FFSRunConfig,
     ) -> Result<Self, RgrowError> {
@@ -595,7 +597,9 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         };
 
         let min_prob = if let Some(min_nuc_rate) = config.min_nuc_rate {
-            let dimerization_rate = dimers.iter().fold(RateMPS::zero(), |acc, d| acc + d.formation_rate);
+            let dimerization_rate = dimers
+                .iter()
+                .fold(RateMPS::zero(), |acc, d| acc + d.formation_rate);
             min_nuc_rate / dimerization_rate
         } else {
             0.
@@ -1124,14 +1128,15 @@ impl FFSRunResult {
                     .map(|x| x.into())
             }
             (CanvasType::TubeDiagonals, TrackingType::LastAttachTime) => {
-                FFSRun::<QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>>::create(sys, config)
-                    .map(|x| x.into())
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>>::create(
+                    sys, config,
+                )
+                .map(|x| x.into())
             }
             (CanvasType::TubeDiagonals, TrackingType::PrintEvent) => {
                 FFSRun::<QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
-            
         })?;
 
         if config.store_ffs_config {

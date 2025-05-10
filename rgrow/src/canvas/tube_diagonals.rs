@@ -1,11 +1,10 @@
-use crate::canvas::{Canvas, CanvasCreate};
-use crate::canvas::PointSafe2;
-use ndarray::prelude::*;
 use crate::base::{GrowError, GrowResult, NumTiles, Point, Tile};
+use crate::canvas::PointSafe2;
+use crate::canvas::{Canvas, CanvasCreate};
+use ndarray::prelude::*;
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CanvasTubeDiagonals(Array2<Tile>);
@@ -99,7 +98,7 @@ impl Canvas for CanvasTubeDiagonals {
     fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
         self.0.view_mut()
     }
-    
+
     fn nrows(&self) -> usize {
         self.0.nrows()
     }

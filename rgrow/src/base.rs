@@ -113,7 +113,7 @@ impl<'py> IntoPyObject<'py> for Ident {
             Ident::Name(name) => name.into_bound_py_any(py),
         }
     }
-    
+
     type Target = pyo3::PyAny; // the Python type
     type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
     type Error = pyo3::PyErr;

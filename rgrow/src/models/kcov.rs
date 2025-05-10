@@ -11,7 +11,8 @@ use crate::{
     system::{
         DimerInfo, Event, FissionHandling, Orientation, System, SystemWithDimers, TileBondInfo,
     },
-    type_alias, units::{ConcM, RatePMS, RatePS},
+    type_alias,
+    units::{ConcM, RatePMS, RatePS},
 };
 
 // Imports for python bindings
@@ -153,7 +154,7 @@ pub struct KCov {
 
     pub no_partially_blocked_attachments: bool,
 
-    pub blocker_energy_adj: Energy
+    pub blocker_energy_adj: Energy,
 }
 
 #[inline(always)]
@@ -172,8 +173,6 @@ impl KCov {
         self.fill_energy_covers();
         self.fill_free_cover_concentrations();
     }
-
-    
 
     /// Get the uncovered friends to one side of some given tile
     pub fn get_uncovered_friends_to_side(
@@ -354,18 +353,32 @@ impl KCov {
 
     pub fn fill_free_cover_concentrations(&mut self) {
         let rtval = self.rtval();
-        self.free_cover_concentrations.indexed_iter_mut().for_each(|(gi, free_cover_conc)| {
-            let total_conc_of_tile_glue_usage = self.tile_concentration.iter().enumerate().map(
-                |(ti, &c)| self.tile_glues[ti].iter().map(|&g| if g == gi { c } else { ConcM::zero() }).sum::<ConcM>()
-            ).sum::<ConcM>();
-            let total_cover_conc = self.cover_concentrations[gi];
-                        
-            let cov_dg = self.glue_links[(gi, glue_inverse(gi))];
-            let cov_bdg = cov_dg / rtval + self.alpha;
-            let ebdg = ConcM::new(cov_bdg.exp());
-    
-            *free_cover_conc = 0.5 * (total_cover_conc - total_conc_of_tile_glue_usage - ebdg + ((total_conc_of_tile_glue_usage - total_cover_conc + ebdg).squared() + 4.0 * total_cover_conc * ebdg).sqrt());
-        });
+        self.free_cover_concentrations
+            .indexed_iter_mut()
+            .for_each(|(gi, free_cover_conc)| {
+                let total_conc_of_tile_glue_usage = self
+                    .tile_concentration
+                    .iter()
+                    .enumerate()
+                    .map(|(ti, &c)| {
+                        self.tile_glues[ti]
+                            .iter()
+                            .map(|&g| if g == gi { c } else { ConcM::zero() })
+                            .sum::<ConcM>()
+                    })
+                    .sum::<ConcM>();
+                let total_cover_conc = self.cover_concentrations[gi];
+
+                let cov_dg = self.glue_links[(gi, glue_inverse(gi))];
+                let cov_bdg = cov_dg / rtval + self.alpha;
+                let ebdg = ConcM::new(cov_bdg.exp());
+
+                *free_cover_conc = 0.5
+                    * (total_cover_conc - total_conc_of_tile_glue_usage - ebdg
+                        + ((total_conc_of_tile_glue_usage - total_cover_conc + ebdg).squared()
+                            + 4.0 * total_cover_conc * ebdg)
+                            .sqrt());
+            });
     }
 
     /// Add seed to system
@@ -449,10 +462,14 @@ impl KCov {
 
         let tile = uncover_all(tile);
         self.kf
-            * ConcM::u0_times(((self.energy_cover[tile_index(tile)][side_index(side).expect("Side must be NESW")] + self.blocker_energy_adj)
-                * (1.0 / self.rtval())
-                + self.alpha)
-                .exp())
+            * ConcM::u0_times(
+                ((self.energy_cover[tile_index(tile)]
+                    [side_index(side).expect("Side must be NESW")]
+                    + self.blocker_energy_adj)
+                    * (1.0 / self.rtval())
+                    + self.alpha)
+                    .exp(),
+            )
     }
 
     pub fn cover_detachment_total_rate(&self, tile: TileState) -> RatePS {
@@ -630,7 +647,7 @@ impl KCov {
                 let attachments: HashSetType<TileState> = HashSet::from_iter(
                     possible_attachments
                         .iter()
-                        .flat_map(|&tile| Self::cover_combinations(side, tile))
+                        .flat_map(|&tile| Self::cover_combinations(side, tile)),
                 );
                 friends.extend(attachments);
             }
@@ -750,7 +767,6 @@ impl KCov {
         let mut visited = HashSet::new();
         let mut stack = vec![point];
         while let Some(head) = stack.pop() {
-            
             let head_tile = state.tile_at_point(head);
 
             // We have already processed this node, or we dont have to at all
@@ -783,7 +799,8 @@ impl KCov {
 
     fn unseeded<S: State>(&self, state: &S, point: PointSafe2) -> Vec<PointSafe2> {
         let seed = self
-            .seed_locs().first()
+            .seed_locs()
+            .first()
             .expect("Must have a seed to use KeepSeed")
             .0;
 
@@ -821,8 +838,7 @@ impl SystemWithDimers for KCov {
             let t1 = t1 << 4;
             if let Some(friends) = self.get_uncovered_friends_to_side(EAST, t1 as u32) {
                 for t2 in friends.iter() {
-                    let biconc =
-                        self.tile_concentration(t1 as u32) * self.tile_concentration(*t2);
+                    let biconc = self.tile_concentration(t1 as u32) * self.tile_concentration(*t2);
                     dvec.push(DimerInfo {
                         t1: t1 as u32,
                         t2: *t2,
@@ -839,8 +855,7 @@ impl SystemWithDimers for KCov {
 
             if let Some(friends) = self.get_uncovered_friends_to_side(SOUTH, t1 as u32) {
                 for t2 in friends.iter() {
-                    let biconc =
-                        self.tile_concentration(t1 as u32) * self.tile_concentration(*t2);
+                    let biconc = self.tile_concentration(t1 as u32) * self.tile_concentration(*t2);
                     dvec.push(DimerInfo {
                         t1: t1 as u32,
                         t2: *t2,
@@ -1055,8 +1070,8 @@ impl System for KCov {
                 let tn = state.tile_to_n(p);
                 let te = state.tile_to_e(p);
                 let ts = state.tile_to_s(p);
-                let tw = state.tile_to_w(p);                
-                
+                let tw = state.tile_to_w(p);
+
                 let mm_n = ((tn != 0) & (self.energy_to(NORTH, t, tn) > threshold)) as usize;
                 let mm_e = ((te != 0) & (self.energy_to(EAST, t, te) > threshold)) as usize;
                 let mm_s = ((ts != 0) & (self.energy_to(SOUTH, t, ts) > threshold)) as usize;
@@ -1146,20 +1161,20 @@ mod test_kcov {
 
         {
             let tile_names = vec![
-                    "null".to_string(),
-                    "f".to_string(),
-                    "s".to_string(),
-                    "t".to_string(),
-                ];
+                "null".to_string(),
+                "f".to_string(),
+                "s".to_string(),
+                "t".to_string(),
+            ];
             let tile_concentration = &[1.0, 1.0, 1.0, 1.0];
             let tile_colors = vec![DEFAULT_COLOR; 4];
             let glue_names = vec![
-                    "null".to_string(),
-                    "1".to_string(),
-                    "2".to_string(),
-                    "3".to_string(),
-                    "4".to_string(),
-                ];
+                "null".to_string(),
+                "1".to_string(),
+                "2".to_string(),
+                "3".to_string(),
+                "4".to_string(),
+            ];
             let cover_concentrations = vec![0., 1., 1., 1., 1.];
             let seed = HashMap::default();
             let kf = RatePMS::new(1e6);
@@ -1186,7 +1201,9 @@ mod test_kcov {
                 kf,
                 fission_handling,
                 no_partially_blocked_attachments: false,
-                free_cover_concentrations: Array1::from_vec(cover_concentrations.into_iter().map(|c| c.into()).collect()),
+                free_cover_concentrations: Array1::from_vec(
+                    cover_concentrations.into_iter().map(|c| c.into()).collect(),
+                ),
                 blocker_energy_adj: 0.0,
             };
             s.fill_friends();
@@ -1308,10 +1325,10 @@ impl pyo3::FromPyObject<'_> for KCovTile {
         let name: String = ob.getattr("name")?.extract()?;
         let concentration: f64 = ob.getattr("concentration")?.extract()?;
         let glues: [String; 4] = ob.getattr("glues")?.extract()?;
-        
+
         // Try to extract color as an array first
         let color_result: Result<[u8; 4], _> = ob.getattr("color")?.extract();
-        
+
         let color = match color_result {
             Ok(color_array) => color_array,
             Err(_) => {
@@ -1321,7 +1338,7 @@ impl pyo3::FromPyObject<'_> for KCovTile {
                     .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{}", e)))?
             }
         };
-        
+
         Ok(Self {
             name,
             concentration,
@@ -1409,7 +1426,7 @@ impl From<KCovParams> for KCov {
         let tile_names: Vec<String> = tiles.iter().map(|tile| tile.name.clone()).collect();
         let tile_concentration: Vec<f64> = tiles.iter().map(|tile| tile.concentration).collect();
         let tile_colors = tiles.iter().map(|tile| tile.color).collect();
-        
+
         let mut glues = tiles
             .iter()
             .flat_map(|tile| tile.glues.clone())
@@ -1442,7 +1459,7 @@ impl From<KCovParams> for KCov {
                     if index < cover_concentrations.len() {
                         cover_concentrations[index] = conc.into();
                     }
-                },
+                }
                 GlueIdentifier::Name(name) => {
                     if let Some(&index) = glue_hashmap.get(&name) {
                         cover_concentrations[index] = conc.into();
@@ -1452,18 +1469,24 @@ impl From<KCovParams> for KCov {
         }
 
         // Process seed with either TileId or tile name
-        let seed = value.seed.iter().map(|(pos, tile_id_or_name)| {
-            let tile_id = match tile_id_or_name {
-                TileIdentifier::Id(id) => *id,
-                TileIdentifier::Name(name) => {
-                    // Find position in tile_names and convert to TileId
-                    let pos = tiles.iter().position(|t| t.name == *name)
-                        .unwrap_or_else(|| panic!("Tile name '{}' not found", name));
-                    (pos as TileState) << 4
-                }
-            };
-            (PointSafe2(*pos), tile_id)
-        }).collect();
+        let seed = value
+            .seed
+            .iter()
+            .map(|(pos, tile_id_or_name)| {
+                let tile_id = match tile_id_or_name {
+                    TileIdentifier::Id(id) => *id,
+                    TileIdentifier::Name(name) => {
+                        // Find position in tile_names and convert to TileId
+                        let pos = tiles
+                            .iter()
+                            .position(|t| t.name == *name)
+                            .unwrap_or_else(|| panic!("Tile name '{}' not found", name));
+                        (pos as TileState) << 4
+                    }
+                };
+                (PointSafe2(*pos), tile_id)
+            })
+            .collect();
 
         // Make sure that every glue has its inverse in the array
         let mut glue_links = Array2::zeros((glue_id + 1, glue_id + 1));
@@ -1489,7 +1512,8 @@ impl From<KCovParams> for KCov {
                     // instead of dg
                     // cge: it turns out I made some mistakes with alpha.  We need to use RT*alpha here, which messes
                     // up temperature dependence.  But that doesn't matter right now I suppose.
-                    crate::utils::string_dna_delta_g(&seq, value.temp) - R * (273.15 + value.temp) * value.alpha
+                    crate::utils::string_dna_delta_g(&seq, value.temp)
+                        - R * (273.15 + value.temp) * value.alpha
                 }
             };
 
@@ -1531,7 +1555,9 @@ impl From<KCovParams> for KCov {
                 kf,
                 fission_handling,
                 no_partially_blocked_attachments,
-                free_cover_concentrations: Array1::from_vec(cover_concentrations.into_iter().map(|c| c.into()).collect()),
+                free_cover_concentrations: Array1::from_vec(
+                    cover_concentrations.into_iter().map(|c| c.into()).collect(),
+                ),
                 blocker_energy_adj,
             };
             s.fill_friends();
@@ -1608,33 +1634,41 @@ impl KCov {
 
         if tile == 0 {
             let possible_tiles = self.possible_tiles_at_point(&state.0, point);
-            
+
             if possible_tiles.is_empty() {
                 println!("No possible tile attachments at this point.");
                 return;
             }
-            
+
             println!("Possible tile attachments:");
             let mut total_rate = RatePS::zero();
-            
+
             for &tile in possible_tiles.iter() {
                 let rate = self.kf * self.tile_concentration(tile);
                 let tile_name = self.tile_name(tile);
                 let tile_idx = tile_index(tile);
                 total_rate += rate;
-                
+
                 // Show tile info with its covers
                 let covers = &[
                     if is_covered(NORTH, tile) { "N" } else { "" },
                     if is_covered(EAST, tile) { "E" } else { "" },
                     if is_covered(SOUTH, tile) { "S" } else { "" },
                     if is_covered(WEST, tile) { "W" } else { "" },
-                ].join("");
-                
-                let cover_info = if covers.is_empty() { "no covers".to_string() } else { format!("covers: {}", covers) };
-                println!("  {} (id: {}, {}) - rate: {:.e}", tile_name, tile_idx, cover_info, rate);
+                ]
+                .join("");
+
+                let cover_info = if covers.is_empty() {
+                    "no covers".to_string()
+                } else {
+                    format!("covers: {}", covers)
+                };
+                println!(
+                    "  {} (id: {}, {}) - rate: {:.e}",
+                    tile_name, tile_idx, cover_info, rate
+                );
             }
-            
+
             println!("Total attachment rate: {:.e}", total_rate);
             return;
         }

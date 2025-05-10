@@ -17,12 +17,12 @@ use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo,
 };
 use ndarray::Array2;
-use numpy::{IntoPyArray, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray, PyArray1};
+use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use pyo3::IntoPyObjectExt;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 /// A State object.
 #[cfg_attr(feature = "python", pyclass(name = "State", module = "rgrow"))]
@@ -52,8 +52,18 @@ impl PyState {
 
     #[staticmethod]
     #[pyo3(signature = (array, kind="Square", tracking="None", n_tile_types=None))]
-    pub fn from_array(array: PyReadonlyArray2<crate::base::Tile>, kind: &str, tracking: &str, n_tile_types: Option<usize>) -> PyResult<Self> {
-        Ok(PyState(StateEnum::from_array(array.as_array(), kind.try_into()?, tracking.try_into()?, n_tile_types.unwrap_or(1))?))
+    pub fn from_array(
+        array: PyReadonlyArray2<crate::base::Tile>,
+        kind: &str,
+        tracking: &str,
+        n_tile_types: Option<usize>,
+    ) -> PyResult<Self> {
+        Ok(PyState(StateEnum::from_array(
+            array.as_array(),
+            kind.try_into()?,
+            tracking.try_into()?,
+            n_tile_types.unwrap_or(1),
+        )?))
     }
 
     /// Return a cloned copy of an array with the total possible next event rate for each point in the canvas.
@@ -633,7 +643,11 @@ create_py_system!(KCov);
 impl KCov {
     #[getter]
     fn get_seed(&self) -> HashMap<(usize, usize), u32> {
-        self.seed.clone().into_iter().map(|(k, v)| (k.0, v)).collect()
+        self.seed
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k.0, v))
+            .collect()
     }
 
     #[setter]
@@ -659,10 +673,14 @@ impl KCov {
     fn py_get_tile_uncovered_glues(&self, tile: usize) -> Vec<usize> {
         self.get_tile_uncovered_glues(tile as u32)
     }
-    
+
     #[getter]
     fn get_cover_concentrations(&self) -> Vec<f64> {
-        self.cover_concentrations.clone().into_iter().map(|x| x.into()).collect()
+        self.cover_concentrations
+            .clone()
+            .into_iter()
+            .map(|x| x.into())
+            .collect()
     }
 
     #[setter]
@@ -670,5 +688,4 @@ impl KCov {
         self.cover_concentrations = cover_concentrations.into_iter().map(|x| x.into()).collect();
         self.update();
     }
-    
 }

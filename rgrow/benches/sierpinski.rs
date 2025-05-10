@@ -5,7 +5,8 @@ use rgrow::{
     models::ktam::KTAM,
     state::{NullStateTracker, QuadTreeState},
     system::{EvolveBounds, System},
-    tileset::{Seed, TileSet}, units::TimeS,
+    tileset::{Seed, TileSet},
+    units::TimeS,
 };
 
 const BOUNDS10K: EvolveBounds = EvolveBounds {

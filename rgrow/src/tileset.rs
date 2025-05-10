@@ -454,7 +454,8 @@ pub enum CanvasType {
 impl FromPyObject<'_> for CanvasType {
     fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
         let s: &str = ob.extract()?;
-        CanvasType::try_from(s).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+        CanvasType::try_from(s)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 }
 

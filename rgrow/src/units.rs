@@ -1,6 +1,10 @@
-use std::{fmt::Display, iter::Sum, ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign}};
-use serde::{Deserialize, Serialize};
 use num_traits::identities::Zero;
+use serde::{Deserialize, Serialize};
+use std::{
+    fmt::Display,
+    iter::Sum,
+    ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign},
+};
 
 // trait Temperature {
 //     fn to_kelvin(self) -> f64;
@@ -254,7 +258,6 @@ impl Mul<f64> for RatePS {
     }
 }
 
-
 impl Sub for RatePS {
     type Output = RatePS;
     fn sub(self, other: RatePS) -> RatePS {
@@ -325,7 +328,7 @@ impl SubAssign for RateMPS {
 
 impl rand::distr::weighted::Weight for RateMPS {
     const ZERO: Self = RateMPS(0.0);
-    
+
     fn checked_add_assign(&mut self, v: &Self) -> Result<(), ()> {
         self.0.checked_add_assign(&v.0)
     }
@@ -438,7 +441,6 @@ impl TimeS {
     pub fn max(self, other: TimeS) -> TimeS {
         TimeS(self.0.max(other.0))
     }
-    
 }
 
 impl Sub for TimeS {
@@ -476,4 +478,4 @@ impl std::fmt::UpperExp for RatePS {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::UpperExp::fmt(&self.0, f)
     }
-}  
+}

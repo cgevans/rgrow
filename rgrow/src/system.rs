@@ -258,7 +258,6 @@ impl TryFrom<&str> for ChunkSize {
 }
 
 pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
-
     fn new_state<St: StateWithCreate + State>(&self, params: St::Params) -> Result<St, GrowError> {
         let mut new_state = St::empty(params)?;
         self.configure_empty_state(&mut new_state)?;
@@ -278,7 +277,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             return StepOutcome::NoEventIn(max_time_step);
         }
         let (point, remainder) = state.choose_point(); // todo: resultify
-        let event = self.choose_event_at_point(state, PointSafe2(point), RatePS::from_per_second(remainder)); // FIXME
+        let event = self.choose_event_at_point(
+            state,
+            PointSafe2(point),
+            RatePS::from_per_second(remainder),
+        ); // FIXME
         if let Event::None = event {
             state.add_time(time_step);
             return StepOutcome::DeadEventAt(time_step);

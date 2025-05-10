@@ -17,7 +17,8 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
         System, SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT}, units::{ConcM2, Rate, RatePMS, RatePS},
+    tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
+    units::{ConcM2, Rate, RatePMS, RatePS},
 };
 
 use crate::base::{HashMapType, HashSetType};
@@ -251,11 +252,7 @@ impl System for KTAM {
         state.calc_n_tiles_with_tilearray(&self.should_be_counted)
     }
 
-    fn event_rate_at_point<S: State>(
-        &self,
-        state: &S,
-        p: crate::canvas::PointSafeHere,
-    ) -> RatePS {
+    fn event_rate_at_point<S: State>(&self, state: &S, p: crate::canvas::PointSafeHere) -> RatePS {
         if !state.inbounds(p.0) {
             return RatePS::zero();
         }
@@ -265,38 +262,39 @@ impl System for KTAM {
         match self.chunk_handling {
             ChunkHandling::None => {
                 if t.nonzero() {
-                    self.monomer_detachment_rate_at_point(state, p).to_per_second()
+                    self.monomer_detachment_rate_at_point(state, p)
+                        .to_per_second()
                 } else {
-                    self.total_monomer_attachment_rate_at_point(state, p).to_per_second()
+                    self.total_monomer_attachment_rate_at_point(state, p)
+                        .to_per_second()
                 }
             }
             ChunkHandling::Detach => {
                 if t.nonzero() {
-                    self.monomer_detachment_rate_at_point(state, p).to_per_second()
+                    self.monomer_detachment_rate_at_point(state, p)
+                        .to_per_second()
                         + self.chunk_detach_rate(state, p, t).to_per_second()
                 } else {
-                    self.total_monomer_attachment_rate_at_point(state, p).to_per_second()
+                    self.total_monomer_attachment_rate_at_point(state, p)
+                        .to_per_second()
                 }
             }
             #[allow(unreachable_code)]
             ChunkHandling::Equilibrium => {
                 if t.nonzero() {
-                    self.monomer_detachment_rate_at_point(state, p).to_per_second()
+                    self.monomer_detachment_rate_at_point(state, p)
+                        .to_per_second()
                         + self.chunk_detach_rate(state, p, t).to_per_second()
                 } else {
                     todo!("Chunk attach rate");
-                    self.total_monomer_attachment_rate_at_point(state, p).to_per_second()
+                    self.total_monomer_attachment_rate_at_point(state, p)
+                        .to_per_second()
                 }
             }
         }
     }
 
-    fn choose_event_at_point<S: State>(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        acc: RatePS,
-    ) -> Event {
+    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: RatePS) -> Event {
         match self.choose_detachment_at_point(state, p, Rate64::from_per_second(acc)) {
             (true, _, event) => event,
             (false, acc, _) => match self.choose_attachment_at_point(state, p, acc) {

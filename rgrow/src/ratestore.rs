@@ -14,7 +14,7 @@ use serde::Serialize;
 use crate::base::Point;
 
 use crate::canvas::PointSafeHere;
-use crate::units::{RatePS, Rate};
+use crate::units::{Rate, RatePS};
 
 // A RateStore stores event rates for points on a canvas, and allows a continuous-time Markov chain
 // choice of a point based on those rates.  It makes no assumptions about relationships between the
@@ -250,7 +250,9 @@ mod tests {
         let mut rs_all = rs.clone();
 
         let rng = rand::rng();
-        let it = rng.sample_iter(rand::distr::Uniform::new(0.0, 1.0).unwrap()).map(RatePS::new);
+        let it = rng
+            .sample_iter(rand::distr::Uniform::new(0.0, 1.0).unwrap())
+            .map(RatePS::new);
 
         let allchanges = (0..128usize)
             .flat_map(|x| (0..128usize).map(move |y| (x, y)))
