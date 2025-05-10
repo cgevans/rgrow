@@ -17,7 +17,7 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
         System, SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT}, units::{Rate, RateMPS, RatePS},
+    tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT}, units::{ConcM2, Rate, RateMPS, RatePMS, RatePS},
 };
 
 use crate::base::{HashMapType, HashSetType};
@@ -803,26 +803,26 @@ impl SystemWithDimers for KTAM {
 
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
             if *e > 0. {
-                let biconc = self.tile_concs[t1] * self.tile_concs[t2];
+                let biconc: ConcM2 = (self.tile_concs[t1] * self.tile_concs[t2]).into();
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::NS,
-                    formation_rate: RateMPS::new(self.kf * biconc),
-                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
+                    formation_rate: std::convert::Into::<RatePMS>::into(self.kf) * biconc,
+                    equilibrium_conc: biconc.over_u0() * f64::exp(*e - self.alpha),
                 });
             }
         }
 
         for ((t1, t2), e) in self.energy_we.indexed_iter() {
             if *e > 0. {
-                let biconc = self.tile_concs[t1] * self.tile_concs[t2];
+                let biconc: ConcM2 = (self.tile_concs[t1] * self.tile_concs[t2]).into();
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::WE,
-                    formation_rate: RateMPS::new(self.kf * biconc),
-                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
+                    formation_rate: std::convert::Into::<RatePMS>::into(self.kf) * biconc,
+                    equilibrium_conc: biconc.over_u0() * f64::exp(*e - self.alpha),
                 });
             }
         }

@@ -5,7 +5,7 @@ use rgrow::{
     models::ktam::KTAM,
     state::{NullStateTracker, QuadTreeState},
     system::{EvolveBounds, System},
-    tileset::{Seed, TileSet},
+    tileset::{Seed, TileSet}, units::TimeS,
 };
 
 const BOUNDS10K: EvolveBounds = EvolveBounds {
@@ -36,7 +36,7 @@ fn raw_sim_run(c: &mut Criterion) {
     });
 
     c.bench_function("evolve unistep", |b| {
-        b.iter(|| sys.take_single_step(&mut st, 1000000.))
+        b.iter(|| sys.take_single_step(&mut st, TimeS::new(1000000.)))
     });
 }
 //

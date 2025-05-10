@@ -11,9 +11,10 @@ use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
 use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, Model, TileSet, SIZE_DEFAULT};
+use crate::units::{RateMPS, RatePS};
 
 use canvas::Canvas;
-use num_traits::{Float, Num};
+use num_traits::{Float, Num, Zero};
 use polars::prelude::*;
 #[cfg(feature = "python")]
 use pyo3_polars::error::PyPolarsErr;
@@ -81,7 +82,7 @@ pub struct FFSRunConfig {
     pub start_size: NumTiles,
     pub size_step: NumTiles,
     pub keep_configs: bool,
-    pub min_nuc_rate: Option<Rate>,
+    pub min_nuc_rate: Option<RateMPS>,
     pub canvas_size: (usize, usize),
     pub canvas_type: CanvasType,
     pub tracking: TrackingType,
@@ -169,7 +170,7 @@ impl FFSRunConfig {
         start_size: Option<NumTiles>,
         size_step: Option<NumTiles>,
         keep_configs: Option<bool>,
-        min_nuc_rate: Option<Rate>,
+        min_nuc_rate: Option<f64>,
         canvas_size: Option<(usize, usize)>,
         target_size: Option<NumTiles>,
         store_ffs_config: Option<bool>,
@@ -219,7 +220,7 @@ impl FFSRunConfig {
             rc.keep_configs = x;
         }
 
-        rc.min_nuc_rate = min_nuc_rate;
+        rc.min_nuc_rate = min_nuc_rate.map(|x| RateMPS::new(x));
 
         if let Some(x) = canvas_size {
             rc.canvas_size = x;
@@ -336,7 +337,7 @@ fn max_prob(num_success: usize, num_trials: usize) -> f64 {
 
 pub struct FFSRun<St: ClonableState> {
     pub level_list: Vec<FFSLevel<St>>,
-    pub dimerization_rate: f64,
+    pub dimerization_rate: RateMPS,
     pub forward_prob: Vec<f64>,
 }
 
@@ -347,10 +348,10 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
     ) -> Result<Self, GrowError> {
         let level_list = Vec::new();
 
-        let dimerization_rate = system
+        let dimerization_rate: RateMPS = system
             .calc_dimers()
             .iter()
-            .fold(0., |acc, d| acc + d.formation_rate);
+            .fold(RateMPS::zero(), |acc, d| acc + d.formation_rate);
 
         let mut ret = Self {
             level_list,
@@ -488,7 +489,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             let mut i_old_state: usize = 0;
 
             while state.n_tiles() == 0 {
-                if state.total_rate() != 0. {
+                if state.total_rate() != RatePS::zero() {
                     panic!("Total rate is not zero! {state:?}");
                 };
                 i_old_state = chooser.sample(&mut rng);
@@ -553,7 +554,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
         let mut dimer_state_list = Vec::with_capacity(config.min_configs);
 
-        let weights: Vec<_> = dimers.iter().map(|d| d.formation_rate).collect();
+        let weights: Vec<_> = dimers.iter().map(|d| f64::from(d.formation_rate)).collect();
         let chooser = WeightedIndex::new(weights).unwrap();
 
         if config.canvas_size.0 < 4 || config.canvas_size.1 < 4 {
@@ -574,7 +575,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         };
 
         let min_prob = if let Some(min_nuc_rate) = config.min_nuc_rate {
-            let dimerization_rate = dimers.iter().fold(0.0, |acc, d| acc + d.formation_rate);
+            let dimerization_rate = dimers.iter().fold(RateMPS::zero(), |acc, d| acc + d.formation_rate);
             min_nuc_rate / dimerization_rate
         } else {
             0.
@@ -635,7 +636,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     if state.n_tiles() != 0 {
                         panic!("{}", state.panicinfo())
                     }
-                    if state.total_rate() != 0. {
+                    if state.total_rate() != RatePS::zero() {
                         panic!("{}", state.panicinfo())
                     };
                 }
@@ -680,7 +681,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 pub struct FFSRunResult {
     #[serde(skip)]
     pub level_list: Vec<Arc<FFSLevelResult>>,
-    pub dimerization_rate: f64,
+    pub dimerization_rate: RateMPS,
     pub forward_prob: Vec<f64>,
     pub ffs_config: Option<FFSRunConfig>,
     #[serde(skip)]
@@ -696,7 +697,7 @@ pub struct FFSRunResultDF {
     pub configs_df: DataFrame,
     pub ffs_config: Option<FFSRunConfig>,
     pub system: Option<SystemEnum>,
-    pub dimerization_rate: f64,
+    pub dimerization_rate: RateMPS,
 }
 
 impl From<FFSRunResult> for FFSRunResultDF {
@@ -755,7 +756,7 @@ impl FFSRunResultDF {
         it.map(|x| x.unwrap()).collect()
     }
 
-    pub fn nucleation_rate(&self) -> Rate {
+    pub fn nucleation_rate(&self) -> RateMPS {
         let ptot: f64 = self
             .surfaces_df
             .column("p_r")
@@ -842,13 +843,13 @@ pub trait FFSSurface: Send + Sync {
 }
 
 impl<St: ClonableState> FFSRun<St> {
-    fn nucleation_rate(&self) -> Rate {
+    fn nucleation_rate(&self) -> RateMPS {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
 }
 
 impl FFSRunResult {
-    pub fn nucleation_rate(&self) -> Rate {
+    pub fn nucleation_rate(&self) -> RateMPS {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
 
@@ -864,7 +865,7 @@ impl FFSRunResult {
         self.level_list.get(i).map(|x| (*x).clone())
     }
 
-    pub fn dimerization_rate(&self) -> f64 {
+    pub fn dimerization_rate(&self) -> RateMPS {
         self.dimerization_rate
     }
 
@@ -885,7 +886,7 @@ impl FFSRunResult {
 
     fn configs_dataframe(&self) -> Result<DataFrame, PolarsError> {
         let mut sizes = Vec::new();
-        let mut times = Vec::new();
+        let mut times: Vec<f64> = Vec::new();
         let mut previndices = Vec::new();
         let mut canvases = Vec::new();
         let mut arr_mini = Vec::new();
@@ -898,7 +899,7 @@ impl FFSRunResult {
         for (i, surface) in self.surfaces().iter().enumerate() {
             for (j, state) in surface.upgrade().unwrap().state_list.iter().enumerate() {
                 sizes.push(state.n_tiles());
-                times.push(state.time());
+                times.push(state.time().into());
                 let ss = &state.raw_array();
                 let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(ss);
                 canvases.push(m.iter().collect::<Series>());
@@ -1165,7 +1166,7 @@ impl FFSRunResult {
     /// and dimerization rate.
     #[getter]
     fn get_nucleation_rate(&self) -> f64 {
-        self.nucleation_rate()
+        self.nucleation_rate().into()
     }
 
     /// list[float]: Forward probability vector.
@@ -1177,7 +1178,7 @@ impl FFSRunResult {
     /// float: Dimerization rate, in M/s.
     #[getter]
     fn get_dimerization_rate(&self) -> f64 {
-        self.dimerization_rate()
+        self.dimerization_rate().into()
     }
 
     /// list[FFSLevelRef]: list of surfaces.
@@ -1232,7 +1233,7 @@ impl FFSRunResult {
     fn __str__(&self) -> String {
         format!(
             "FFSResult({:1.4e} M/s, {:?})",
-            self.nucleation_rate(),
+            f64::from(self.nucleation_rate()),
             self.forward_vec()
         )
     }
@@ -1274,7 +1275,7 @@ impl FFSRunResultDF {
     /// and dimerization rate.
     #[getter]
     fn get_nucleation_rate(&self) -> f64 {
-        self.nucleation_rate()
+        self.nucleation_rate().into()
     }
 
     /// list[float]: Forward probability vector.
@@ -1286,7 +1287,7 @@ impl FFSRunResultDF {
     /// float: Dimerization rate, in M/s.
     #[getter]
     fn get_dimerization_rate(&self) -> f64 {
-        self.dimerization_rate
+        self.dimerization_rate.into()
     }
 
     // #[getter]
@@ -1320,7 +1321,7 @@ impl FFSRunResultDF {
     fn __str__(&self) -> String {
         format!(
             "FFSResultDF({:1.4e} M/s, {:?})",
-            self.nucleation_rate(),
+            f64::from(self.nucleation_rate()),
             self.forward_vec()
         )
     }
@@ -1436,7 +1437,7 @@ impl FFSStateRef {
     /// float: the total time the state has simulated, in seconds.
     #[getter]
     pub fn time(&self) -> f64 {
-        (*self.0).time()
+        (*self.0).time().into()
     }
 
     /// int: the total number of events that have occurred in the state.
@@ -1520,12 +1521,12 @@ impl FFSStateRef {
     /// -------
     /// NDArray[np.uint]
     pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<crate::base::Rate>> {
-        self.0.rate_array().to_pyarray_bound(py)
+        self.0.rate_array().mapv(f64::from).to_pyarray_bound(py)
     }
 
     /// float: the total rate of possible next events for the state.
     #[getter]
     pub fn total_rate(&self) -> crate::base::Rate {
-        RateStore::total_rate(self.0.deref())
+        RateStore::total_rate(self.0.deref()).into()
     }
 }

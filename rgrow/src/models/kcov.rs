@@ -182,10 +182,10 @@ impl KCov {
 
     pub fn new(
         tile_names: Vec<String>,
-        tile_concentration: Vec<ConcM>,
+        tile_concentration: Vec<impl Into<ConcM> + Copy>,
         tile_colors: Vec<[u8; 4]>,
         glue_names: Vec<String>,
-        cover_concentrations: Vec<ConcM>,
+        cover_concentrations: Vec<impl Into<ConcM> + Copy>,
         tile_glues: Array1<[Glue; 4]>,
         glue_links: Array2<Strength>,
         seed: HashMap<PointSafe2, TileState>,
@@ -199,10 +199,10 @@ impl KCov {
         let tilecount = tile_names.len();
         let mut s = Self {
             tile_names,
-            tile_concentration,
+            tile_concentration: tile_concentration.iter().map(|c| (*c).into()).collect(),
             tile_colors,
             glue_names,
-            cover_concentrations: cover_concentrations.clone(),
+            cover_concentrations: cover_concentrations.iter().map(|c| (*c).into()).collect(),
             tile_glues,
             glue_links,
             temperature,
@@ -218,7 +218,7 @@ impl KCov {
             kf,
             fission_handling,
             no_partially_blocked_attachments,
-            free_cover_concentrations: Array1::from_vec(cover_concentrations),
+            free_cover_concentrations: Array1::from_vec(cover_concentrations.into_iter().map(|c| c.into()).collect()),
             blocker_energy_adj,
         };
         s.fill_friends();
@@ -880,7 +880,7 @@ impl SystemWithDimers for KCov {
                         t2: *t2,
                         orientation: Orientation::WE,
                         formation_rate: self.kf * biconc,
-                        equilibrium_conc: biconc
+                        equilibrium_conc: biconc.over_u0()
                             * (self.energy_we[(tile_index(t1 as u32), tile_index(*t2 as u32))]
                                 / self.rtval()
                                 - self.alpha)
@@ -898,7 +898,7 @@ impl SystemWithDimers for KCov {
                         t2: *t2,
                         orientation: Orientation::NS,
                         formation_rate: self.kf * biconc,
-                        equilibrium_conc: biconc
+                        equilibrium_conc: biconc.over_u0()
                             * (self.energy_ns[(tile_index(t1 as u32), tile_index(*t2 as u32))]
                                 / self.rtval()
                                 - self.alpha)
@@ -1280,8 +1280,8 @@ mod test_kcov {
         let mut kcov: KCov = KCovParams {
             tiles: vec![tile_a],
             cover_conc: HashMap::from([
-                (GlueIdentifier::Index(0), 1e6),
-                (GlueIdentifier::Index(1), 1e6),
+                (GlueIdentifier::Index(0), 1e6.into()),
+                (GlueIdentifier::Index(1), 1e6.into()),
             ]),
             alpha: 1.0,
             kf: 1.0,
@@ -1472,12 +1472,12 @@ impl From<KCovParams> for KCov {
             match glue_id {
                 GlueIdentifier::Index(index) => {
                     if index < cover_concentrations.len() {
-                        cover_concentrations[index] = conc;
+                        cover_concentrations[index] = conc.into();
                     }
                 },
                 GlueIdentifier::Name(name) => {
                     if let Some(&index) = glue_hashmap.get(&name) {
-                        cover_concentrations[index] = conc;
+                        cover_concentrations[index] = conc.into();
                     }
                 }
             }
@@ -1544,7 +1544,7 @@ impl From<KCovParams> for KCov {
             glue_links,
             seed,
             value.temp,
-            value.kf,
+            value.kf.into(),
             value.alpha,
             FissionHandling::JustDetach,
             value.no_partially_blocked_attachments,
@@ -1564,12 +1564,12 @@ macro_rules! getset_single {
             impl $model {
                 #[getter($name)]
                 fn [<py_get_ $name>](&self) -> $t {
-                    self.$name
+                    self.$name.into()
                 }
 
                 #[setter($name)]
                 fn [<py_set_ $name>](&mut self, to: $t) {
-                    self.$name = to;
+                    self.$name = to.into();
                     self.update();
                 }
             }
@@ -1600,8 +1600,8 @@ impl KCov {
     }
 
     /// Get the concentration of a tile with given covers
-    fn tile_conc(&self, tile: TileState) -> Concentration {
-        self.tile_concentration(tile)
+    fn tile_conc(&self, tile: TileState) -> f64 {
+        self.tile_concentration(tile).into()
     }
 
     // #[pyo3(name = "cover_percentage")]
@@ -1627,7 +1627,7 @@ impl KCov {
             }
             
             println!("Possible tile attachments:");
-            let mut total_rate = 0.0;
+            let mut total_rate = RatePS::zero();
             
             for &tile in possible_tiles.iter() {
                 let rate = self.kf * self.tile_concentration(tile);
@@ -1661,7 +1661,7 @@ impl KCov {
                 let mut rate = self.cover_attachment_rate_at_side(side, tile);
                 // If there is a tile already attached on that side, then the attachment rate is 0
                 if Self::tile_to_side(&state.0, side, point) != 0 {
-                    rate = 0.0;
+                    rate = RatePS::zero();
                 };
                 ("attachment", rate)
             };

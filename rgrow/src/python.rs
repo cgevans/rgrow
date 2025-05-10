@@ -61,13 +61,13 @@ impl PyState {
     /// -------
     /// NDArray[np.uint]
     pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<crate::base::Rate>> {
-        self.0.rate_array().to_pyarray_bound(py)
+        self.0.rate_array().mapv(|x| x.into()).to_pyarray_bound(py)
     }
 
     #[getter]
     /// float: the total rate of possible next events for the state.
     pub fn total_rate(&self) -> crate::base::Rate {
-        RateStore::total_rate(&self.0)
+        RateStore::total_rate(&self.0).into()
     }
 
     #[getter]
@@ -115,7 +115,7 @@ impl PyState {
     ///     if `point` is out of bounds for the canvas.
     pub fn rate_at_point(&self, point: (usize, usize)) -> PyResult<f64> {
         if self.0.inbounds(point) {
-            Ok(self.0.rate_at_point(PointSafeHere(point)))
+            Ok(self.0.rate_at_point(PointSafeHere(point)).into())
         } else {
             Err(PyValueError::new_err(format!(
                 "Point {:?} is out of bounds.",
@@ -157,7 +157,7 @@ impl PyState {
     /// float: the total time the state has simulated, in seconds.
     #[getter]
     pub fn time(&self) -> f64 {
-        self.0.time()
+        self.0.time().into()
     }
 
     #[getter]
@@ -660,12 +660,12 @@ impl KCov {
     
     #[getter]
     fn get_cover_concentrations(&self) -> Vec<f64> {
-        self.cover_concentrations.clone()
+        self.cover_concentrations.clone().into_iter().map(|x| x.into()).collect()
     }
 
     #[setter]
     fn set_cover_concentrations(&mut self, cover_concentrations: Vec<f64>) {
-        self.cover_concentrations = cover_concentrations;
+        self.cover_concentrations = cover_concentrations.into_iter().map(|x| x.into()).collect();
         self.update();
     }
     

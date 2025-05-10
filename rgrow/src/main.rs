@@ -91,7 +91,7 @@ fn nucrate(po: FFSOptions) -> Result<(), RgrowError> {
 
     let ffsrun = tileset.run_ffs(&po.into())?;
 
-    println!("Nuc rate: {:e}", ffsrun.nucleation_rate());
+    println!("Nuc rate: {:e}", f64::from(ffsrun.nucleation_rate()));
     let forward_vec_string = ffsrun
         .forward_vec()
         .iter()

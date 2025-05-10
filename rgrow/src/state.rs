@@ -1,7 +1,7 @@
 use super::base::*;
 use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals};
 use crate::tileset::{CanvasType, TrackingType};
-use crate::units::RatePS;
+use crate::units::{RatePS, TimeS};
 use crate::{
     canvas::PointSafe2,
     canvas::PointSafeHere,
@@ -145,8 +145,8 @@ pub trait StateStatus {
     fn total_events(&self) -> NumEvents;
     fn add_events(&mut self, n: NumEvents);
     fn reset_events(&mut self);
-    fn add_time(&mut self, time: f64);
-    fn time(&self) -> f64;
+    fn add_time(&mut self, time: TimeS);
+    fn time(&self) -> TimeS;
     fn record_event(&mut self, event: &system::Event);
     fn reset_tracking_assuming_empty_state(&mut self);
 }
@@ -175,11 +175,11 @@ pub trait StateWithCreate: State + Sized {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuadTreeState<C: Canvas, T: StateTracker> {
     // #[serde(skip_serializing)]
-    pub rates: QuadTreeSquareArray<Rate>,
+    pub rates: QuadTreeSquareArray<RatePS>,
     pub canvas: C,
     ntiles: NumTiles,
     total_events: NumEvents,
-    time: f64,
+    time: TimeS,
     pub tracker: T,
     tile_counts: Array1<NumTiles>,
 }
@@ -399,7 +399,7 @@ where
     type Params = (usize, usize);
 
     fn empty(params: Self::Params) -> Result<Self, GrowError> {
-        let rates: QuadTreeSquareArray<f64> =
+        let rates: QuadTreeSquareArray<RatePS> =
             QuadTreeSquareArray::new_with_size(params.0, params.1);
         let canvas = C::new_sized(params)?;
         let tracker = T::default(&canvas);
@@ -408,14 +408,14 @@ where
             canvas,
             ntiles: 0,
             total_events: 0,
-            time: 0.,
+            time: TimeS::new(0.),
             tracker,
             tile_counts: Array1::<NumTiles>::zeros(1),
         })
     }
 
     fn empty_with_types(params: Self::Params, n_tile_types: usize) -> Result<Self, GrowError> {
-        let rates: QuadTreeSquareArray<f64> =
+        let rates: QuadTreeSquareArray<RatePS> =
             QuadTreeSquareArray::new_with_size(params.0, params.1);
         let canvas = C::new_sized(params)?;
         let tracker = T::default(&canvas);
@@ -424,7 +424,7 @@ where
             canvas,
             ntiles: 0,
             total_events: 0,
-            time: 0.,
+            time: TimeS::new(0.),
             tracker,
             tile_counts: Array1::<NumTiles>::zeros(n_tile_types),
         })
@@ -432,7 +432,7 @@ where
 
     fn from_array(arr: Array2<Tile>) -> Result<Self, GrowError> {
         let shape = arr.shape();
-        let rates: QuadTreeSquareArray<f64> =
+        let rates: QuadTreeSquareArray<RatePS> =
             QuadTreeSquareArray::new_with_size(shape[0], shape[1]);
         let canvas = C::from_array(arr)?;
         let tracker = T::default(&canvas);
@@ -441,7 +441,7 @@ where
             canvas,
             ntiles: 0,
             total_events: 0,
-            time: 0.,
+            time: TimeS::new(0.),
             tracker,
             tile_counts: Array1::<NumTiles>::zeros(1),
         })
@@ -489,11 +489,11 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
         self.total_events
     }
 
-    fn add_time(&mut self, time: f64) {
+    fn add_time(&mut self, time: TimeS) {
         self.time += time;
     }
 
-    fn time(&self) -> f64 {
+    fn time(&self) -> TimeS {
         self.time
     }
 
@@ -522,7 +522,7 @@ impl<C: Canvas + Canvas, T: StateTracker> QuadTreeState<C, T> {
         if level > 0 {
             for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
                 let z = source.rates.0[level][(*yy, *xx)];
-                if z > 0. {
+                if z > RatePS::new(0.) {
                     self.rates.0[level][(*yy, *xx)] = z;
                     self.copy_level_quad(source, level - 1, (*yy * 2, *xx * 2));
                 }
@@ -531,7 +531,7 @@ impl<C: Canvas + Canvas, T: StateTracker> QuadTreeState<C, T> {
             for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
                 let z = source.rates.0[level][(*yy, *xx)];
                 let t = unsafe { source.canvas.uv_p((*yy, *xx)) };
-                if z > 0. {
+                if z > RatePS::new(0.) {
                     self.rates.0[level][(*yy, *xx)] = z;
                     if t > 0 {
                         // Tile must have nonzero rate, so we only check if the rate is nonzero.
@@ -583,7 +583,7 @@ impl<C: Canvas, T: StateTracker> TrackerData for QuadTreeState<C, T> {
 pub trait StateTracker: Clone + Debug + Sync + Send {
     fn default(canvas: &dyn Canvas) -> Self;
 
-    fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self;
+    fn record_single_event(&mut self, event: &system::Event, time: TimeS) -> &mut Self;
 
     fn get_tracker_data(&self) -> RustAny;
 
@@ -602,7 +602,7 @@ impl StateTracker for NullStateTracker {
         Self
     }
 
-    fn record_single_event(&mut self, _event: &system::Event, _time: f64) -> &mut Self {
+    fn record_single_event(&mut self, _event: &system::Event, _time: TimeS) -> &mut Self {
         self
     }
 
@@ -636,7 +636,7 @@ impl StateTracker for OrderTracker {
         self.order = 1;
     }
 
-    fn record_single_event(&mut self, event: &system::Event, _time: f64) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, _time: TimeS) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -683,23 +683,23 @@ impl StateTracker for OrderTracker {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LastAttachTimeTracker {
-    pub arr: Array2<f64>,
+    pub arr: Array2<TimeS>,
 }
 
 impl StateTracker for LastAttachTimeTracker {
     fn default(canvas: &dyn Canvas) -> Self {
         LastAttachTimeTracker {
-            arr: Array2::<f64>::from_elem((canvas.nrows(), canvas.ncols()), f64::NAN),
+            arr: Array2::<TimeS>::from_elem((canvas.nrows(), canvas.ncols()), TimeS::new(f64::NAN)),
         }
     }
 
     fn reset(&mut self) {
-        self.arr.fill(f64::NAN);
+        self.arr.fill(TimeS::new(f64::NAN));
     }
 
     fn reset_assuming_empty_state(&mut self) {}
 
-    fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, time: TimeS) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -707,7 +707,7 @@ impl StateTracker for LastAttachTimeTracker {
                 self
             }
             system::Event::MonomerDetachment(p) => {
-                self.arr[p.0] = f64::NAN;
+                self.arr[p.0] = TimeS::new(f64::NAN);
                 self
             }
             system::Event::MonomerChange(p, _t) => {
@@ -728,7 +728,7 @@ impl StateTracker for LastAttachTimeTracker {
             }
             system::Event::PolymerDetachment(vec) => {
                 for p in vec {
-                    self.arr[p.0] = f64::NAN;
+                    self.arr[p.0] = TimeS::new(f64::NAN);
                 }
                 self
             }
@@ -752,7 +752,7 @@ impl StateTracker for PrintEventTracker {
         // Default is to do nothing
     }
 
-    fn record_single_event(&mut self, event: &system::Event, time: f64) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, time: TimeS) -> &mut Self {
         println!("{}: {:?}", time, event);
         self
     }

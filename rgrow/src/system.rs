@@ -16,7 +16,9 @@ use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
 use crate::state::State;
 use crate::state::StateEnum;
+use crate::units::ConcM;
 use crate::units::RateMPS;
+use crate::units::TimeS;
 use crate::units::{Rate, RatePS};
 
 use crate::{
@@ -56,9 +58,9 @@ pub enum Event {
 
 #[derive(Debug)]
 pub enum StepOutcome {
-    HadEventAt(f64),
-    NoEventIn(f64),
-    DeadEventAt(f64),
+    HadEventAt(TimeS),
+    NoEventIn(TimeS),
+    DeadEventAt(TimeS),
     ZeroRate,
 }
 
@@ -194,7 +196,7 @@ pub struct DimerInfo {
     pub t2: Tile,
     pub orientation: Orientation,
     pub formation_rate: RateMPS,
-    pub equilibrium_conc: f64,
+    pub equilibrium_conc: ConcM,
 }
 
 #[cfg(feature = "python")]
@@ -267,7 +269,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         state.calc_n_tiles()
     }
 
-    fn take_single_step<St: State>(&self, state: &mut St, max_time_step: f64) -> StepOutcome {
+    fn take_single_step<St: State>(&self, state: &mut St, max_time_step: TimeS) -> StepOutcome {
         let time_step = -f64::ln(rng().gen()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
@@ -302,11 +304,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         }
 
         let mut rtime = match bounds.for_time {
-            Some(t) => t,
-            None => f64::INFINITY,
+            Some(t) => TimeS::new(t),
+            None => TimeS::new(f64::INFINITY),
         };
         if let Some(t) = bounds.total_time {
-            rtime = rtime.min(t - state.time());
+            rtime = rtime.min(TimeS::new(t) - state.time());
         }
 
         // If we have a for_wall_time, get an instant to compare to
@@ -317,7 +319,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 return Ok(EvolveOutcome::ReachedSizeMin);
             } else if bounds.size_max.is_some_and(|ms| state.n_tiles() >= ms) {
                 return Ok(EvolveOutcome::ReachedSizeMax);
-            } else if rtime <= 0. {
+            } else if rtime <= TimeS::new(0.) {
                 return Ok(EvolveOutcome::ReachedTimeMax);
             } else if bounds
                 .for_wall_time
@@ -326,7 +328,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 return Ok(EvolveOutcome::ReachedWallTimeMax);
             } else if bounds.for_events.is_some_and(|e| events >= e) {
                 return Ok(EvolveOutcome::ReachedEventsMax);
-            } else if state.total_rate() == 0. {
+            } else if state.total_rate().is_zero() {
                 return Ok(EvolveOutcome::ReachedZeroRate);
             }
             let out = self.take_single_step(state, rtime);
