@@ -646,13 +646,21 @@ impl KCov {
         self.seed
             .clone()
             .into_iter()
-            .map(|(k, v)| (k.0, v))
+            .map(|(k, v)| (k.0, v.into()))
             .collect()
     }
 
     #[setter]
     fn set_seed(&mut self, seed: HashMap<(usize, usize), u32>) {
-        self.seed = seed.into_iter().map(|(k, v)| (PointSafe2(k), v)).collect();
+        self.seed = seed
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    PointSafe2(k),
+                    crate::models::kcov::TileType(v as usize).uncovered(),
+                )
+            })
+            .collect();
     }
 
     #[getter]
@@ -666,12 +674,12 @@ impl KCov {
         self.update();
     }
 
-    fn py_get_tile_raw_glues(&self, tile: usize) -> Vec<usize> {
-        self.get_tile_raw_glues(tile as u32)
+    fn py_get_tile_raw_glues(&self, tile: u32) -> Vec<usize> {
+        self.get_tile_raw_glues(tile.into())
     }
 
-    fn py_get_tile_uncovered_glues(&self, tile: usize) -> Vec<usize> {
-        self.get_tile_uncovered_glues(tile as u32)
+    fn py_get_tile_uncovered_glues(&self, tile: u32) -> Vec<usize> {
+        self.get_tile_uncovered_glues(tile.into())
     }
 
     #[getter]
