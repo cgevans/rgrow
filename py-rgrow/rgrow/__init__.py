@@ -25,7 +25,7 @@ from .rgrow import (
     State,
     EvolveBounds,
     FFSStateRef,
-    KCov
+    KBlock
 )
 from .sdc import SDC
 import attrs
@@ -41,8 +41,8 @@ from typing import (
     TypeAlias,
 )
 
-System: TypeAlias = ATAM | KTAM | OldKTAM | KCov
-SYSTEMS = (ATAM, KTAM, OldKTAM, SDC, KCov)
+System: TypeAlias = ATAM | KTAM | OldKTAM | KBlock
+SYSTEMS = (ATAM, KTAM, OldKTAM, SDC, KBlock)
 
 if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt
@@ -79,7 +79,7 @@ def _system_color_canvas(
     else:
         cv = state
 
-    if isinstance(self, KCov):
+    if isinstance(self, KBlock):
         cv = cv >> 4 # type: ignore
 
     return self.tile_colors[cv]
@@ -104,7 +104,7 @@ def _system_plot_canvas(
     else:
         cv = state
 
-    if isinstance(sys, KCov):
+    if isinstance(sys, KBlock):
         cv = cv >> 4 # type: ignore
 
     rows, cols = cv.shape

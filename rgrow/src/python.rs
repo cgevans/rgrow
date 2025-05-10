@@ -7,7 +7,7 @@ use crate::base::{NumEvents, NumTiles, RgrowError, RustAny, Tile};
 use crate::canvas::{Canvas, PointSafe2, PointSafeHere};
 use crate::ffs::{FFSRunConfig, FFSRunResult, FFSStateRef};
 use crate::models::atam::ATAM;
-use crate::models::kcov::KCov;
+use crate::models::kblock::KBlock;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
@@ -637,10 +637,10 @@ create_py_system!(KTAM);
 create_py_system!(ATAM);
 create_py_system!(OldKTAM);
 create_py_system!(SDC);
-create_py_system!(KCov);
+create_py_system!(KBlock);
 
 #[pymethods]
-impl KCov {
+impl KBlock {
     #[getter]
     fn get_seed(&self) -> HashMap<(usize, usize), u32> {
         self.seed
@@ -657,7 +657,7 @@ impl KCov {
             .map(|(k, v)| {
                 (
                     PointSafe2(k),
-                    crate::models::kcov::TileType(v as usize).uncovered(),
+                    crate::models::kblock::TileType(v as usize).unblocked(),
                 )
             })
             .collect();
@@ -679,12 +679,12 @@ impl KCov {
     }
 
     fn py_get_tile_uncovered_glues(&self, tile: u32) -> Vec<usize> {
-        self.get_tile_uncovered_glues(tile.into())
+        self.get_tile_unblocked_glues(tile.into())
     }
 
     #[getter]
     fn get_cover_concentrations(&self) -> Vec<f64> {
-        self.cover_concentrations
+        self.blocker_concentrations
             .clone()
             .into_iter()
             .map(|x| x.into())
@@ -693,7 +693,7 @@ impl KCov {
 
     #[setter]
     fn set_cover_concentrations(&mut self, cover_concentrations: Vec<f64>) {
-        self.cover_concentrations = cover_concentrations.into_iter().map(|x| x.into()).collect();
+        self.blocker_concentrations = cover_concentrations.into_iter().map(|x| x.into()).collect();
         self.update();
     }
 }

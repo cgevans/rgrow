@@ -1164,7 +1164,7 @@ class OldKTAM:
             The name of the file to write to.
         """
 
-class KCov:
+class KBlock:
     @property
     def tile_names(self) -> list[str]: ...
     @property
@@ -1421,7 +1421,7 @@ class KCov:
     ) -> NDArray[np.str_]: ...
 
 
-System: TypeAlias = ATAM | KTAM | OldKTAM | KCov
+System: TypeAlias = ATAM | KTAM | OldKTAM | KBlock
 
 class State:
     def __init__(

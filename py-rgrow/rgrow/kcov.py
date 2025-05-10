@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Sequence
 
 @dataclass
-class KCovTile:
+class KBlockTile:
     name: str
     concentration: float
     glues: Sequence[Sequence[str]]
@@ -10,8 +10,8 @@ class KCovTile:
 
 
 @dataclass
-class KCovParams:
-    tiles: list[KCovTile]
+class KBlockParams:
+    tiles: list[KBlockTile]
     cover_conc: dict[str | int, float]
     seed: dict[tuple[int, int], int | str]
     binding_strength: dict[str, str | float]

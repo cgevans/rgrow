@@ -1,6 +1,6 @@
 # 0.19.4
 
-- kcov:
+- kblock:
   - Changes to cover+tile rates in the low-cover-concentration case.
 - Version used for DNA31 submission.
 

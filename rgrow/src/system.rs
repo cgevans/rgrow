@@ -11,7 +11,7 @@ use crate::base::StringConvError;
 use crate::ffs::FFSRunConfig;
 use crate::ffs::FFSRunResult;
 use crate::models::atam::ATAM;
-use crate::models::kcov::KCov;
+use crate::models::kblock::KBlock;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
@@ -755,7 +755,7 @@ pub enum SystemEnum {
     OldKTAM,
     ATAM,
     SDC, // StaticKTAMCover
-    KCov,
+    KBlock,
 }
 
 #[cfg(feature = "python")]
@@ -766,7 +766,7 @@ impl<'py> IntoPyObject<'py> for SystemEnum {
             SystemEnum::OldKTAM(oldktam) => oldktam.into_bound_py_any(py),
             SystemEnum::ATAM(atam) => atam.into_bound_py_any(py),
             SystemEnum::SDC(sdc) => sdc.into_bound_py_any(py),
-            SystemEnum::KCov(kcov) => kcov.into_bound_py_any(py),
+            SystemEnum::KBlock(kblock) => kblock.into_bound_py_any(py),
         }
     }
 
