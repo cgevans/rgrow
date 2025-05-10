@@ -15,8 +15,10 @@ use num_traits::Zero;
 use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 
+type Rate = f64;
+
 use crate::{
-    base::{Energy, Glue, ModelError, Point, Rate, RgrowError, Tile},
+    base::{Energy, Glue, ModelError, Point, RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{

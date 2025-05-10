@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use super::*;
 //use ndarray::prelude::*;
 //use ndarray::Zip;
-use base::{NumTiles, Rate};
+use base::NumTiles;
 
 use ndarray::{s, Array2, ArrayView2};
 #[cfg(feature = "python")]
@@ -1520,13 +1520,13 @@ impl FFSStateRef {
     /// Returns
     /// -------
     /// NDArray[np.uint]
-    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<crate::base::Rate>> {
+    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
         self.0.rate_array().mapv(f64::from).to_pyarray_bound(py)
     }
 
     /// float: the total rate of possible next events for the state.
     #[getter]
-    pub fn total_rate(&self) -> crate::base::Rate {
+    pub fn total_rate(&self) -> f64 {
         RateStore::total_rate(self.0.deref()).into()
     }
 }

@@ -8,7 +8,7 @@ use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    base::{Energy, Glue, HashSetType, Rate},
+    base::{Energy, Glue, HashSetType},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     state::State,
     system::{
@@ -172,8 +172,6 @@ fn glue_inverse(glue: Glue) -> Glue {
 }
 
 impl KCov {
-    const ZERO_RATE: Rate = 0.0;
-
     pub fn update(&mut self) {
         self.fill_energy_pairs();
         self.fill_energy_covers();
@@ -436,7 +434,7 @@ impl KCov {
         // If we are covered on the sticking side, or the other tile has a cover, then we
         // have no binding energy
         if is_covered(side, tile1) || is_covered(inverse(side), tile2) {
-            return Self::ZERO_RATE;
+            return 0.0;
         }
 
         // Ignore covers
@@ -455,7 +453,7 @@ impl KCov {
     /// Energy of neighbour bonds
     pub fn energy_at_point<S: State>(&self, state: &S, point: PointSafe2) -> Energy {
         let tile_id: TileState = state.tile_at_point(point);
-        let mut energy = Self::ZERO_RATE;
+        let mut energy = 0.0;
         for side in ALL_SIDES {
             let neighbour_tile = Self::tile_to_side(state, side, point);
             energy += self.energy_to(side, tile_id, neighbour_tile)

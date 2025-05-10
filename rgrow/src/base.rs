@@ -93,8 +93,6 @@ pub enum ModelError {
 
 pub type GrowResult<T> = Result<T, GrowError>;
 
-pub type Rate = f64;
-
 use fnv::{FnvHashMap, FnvHashSet};
 pub(crate) type HashSetType<T> = FnvHashSet<T>;
 pub(crate) type HashMapType<K, V> = FnvHashMap<K, V>;

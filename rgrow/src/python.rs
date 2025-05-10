@@ -60,13 +60,13 @@ impl PyState {
     /// Returns
     /// -------
     /// NDArray[np.uint]
-    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<crate::base::Rate>> {
+    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
         self.0.rate_array().mapv(|x| x.into()).to_pyarray_bound(py)
     }
 
     #[getter]
     /// float: the total rate of possible next events for the state.
-    pub fn total_rate(&self) -> crate::base::Rate {
+    pub fn total_rate(&self) -> f64 {
         RateStore::total_rate(&self.0).into()
     }
 
