@@ -1,15 +1,8 @@
-use crate::canvas::{Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare};
-use crate::tileset::{CanvasType, TrackingType};
-use crate::{
-    canvas::PointSafe2,
-    canvas::PointSafeHere,
-    ratestore::{CreateSizedRateStore, QuadTreeSquareArray, RateStore},
-    system,
-};
+use crate::canvas::{Canvas, CanvasCreate};
+use crate::canvas::PointSafe2;
 use ndarray::prelude::*;
 use crate::base::{GrowError, GrowResult, NumTiles, Point, Tile};
 
-use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 

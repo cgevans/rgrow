@@ -109,7 +109,7 @@ impl Canvas for CanvasTube {
         (s, s)
     }
 
-    fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
+    fn draw(&self, _frame: &mut [u8], _colors: &[[u8; 4]]) {
         // let s = self.nrows() + self.ncols();
         // let mut pi: usize;
         // let mut pj: usize;
@@ -126,10 +126,10 @@ impl Canvas for CanvasTube {
 
     fn draw_scaled(
         &self,
-        frame: &mut [u8],
-        colors: &[[u8; 4]],
-        tile_size: usize,
-        edge_size: usize,
+        _frame: &mut [u8],
+        _colors: &[[u8; 4]],
+        _tile_size: usize,
+        _edge_size: usize,
     ) {
         // let scale = tile_size + 2 * edge_size;
         // let csc = self.ncols() * scale;
@@ -171,11 +171,11 @@ impl Canvas for CanvasTube {
 
     fn draw_scaled_with_mm(
         &self,
-        frame: &mut [u8],
-        colors: &[[u8; 4]],
-        mismatches: Array2<usize>,
-        tile_size: usize,
-        edge_size: usize,
+        _frame: &mut [u8],
+        _colors: &[[u8; 4]],
+        _mismatches: Array2<usize>,
+        _tile_size: usize,
+        _edge_size: usize,
     ) {
         // let scale = tile_size + 2 * edge_size;
         // let csc = self.ncols() * scale;

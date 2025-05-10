@@ -11,7 +11,7 @@ use rand::Rng;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::base::{Point};
+use crate::base::Point;
 
 use crate::canvas::PointSafeHere;
 use crate::units::{RatePS, Rate};
@@ -58,11 +58,11 @@ impl<R: Rate> CreateSizedRateStore for QuadTreeSquareArray<R> {
 
 impl RateStore for QuadTreeSquareArray<RatePS> {
     fn rate_at_point(&self, point: PointSafeHere) -> RatePS {
-        unsafe { *self.0[0].uget(point.0) }.into()
+        unsafe { *self.0[0].uget(point.0) }
     }
 
     fn choose_point(&self) -> (Point, RatePS) {
-        let mut threshold = self.1 * rng().gen::<f64>();
+        let mut threshold = self.1 * rng().random::<f64>();
 
         let mut x: usize = 0;
         let mut y: usize = 0;

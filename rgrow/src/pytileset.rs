@@ -13,7 +13,7 @@ use crate::{
     models::{atam::ATAM, ktam::KTAM, oldktam::OldKTAM},
     python::PyState,
     system::SystemEnum,
-    tileset::{self, Bond, CoverStrand, Tile, TileSet},
+    tileset::{self, Bond, Tile, TileSet},
 };
 
 #[pymethods]
@@ -61,15 +61,12 @@ impl TileSet {
                     "hdoubletiles" => tileset.hdoubletiles = Some(v.extract()?),
                     "vdoubletiles" => tileset.vdoubletiles = Some(v.extract()?),
                     "model" => tileset.model = Some(v.extract::<&str>()?.try_into()?),
-                    "cover_strands" => {
-                        tileset.cover_strands = Some(v.extract::<Vec<CoverStrand>>()?)
-                    }
                     v => Python::with_gil(|py| {
-                        let user_warning = py.get_type_bound::<pyo3::exceptions::PyUserWarning>();
-                        PyErr::warn_bound(
+                        let user_warning = py.get_type::<pyo3::exceptions::PyUserWarning>();
+                        PyErr::warn(
                             py,
                             &user_warning,
-                            &format!("Ignoring unknown key {v}."),
+                            std::ffi::CString::new(format!("Ignoring unknown key {v}.")).unwrap().as_c_str(),
                             0,
                         )
                         .unwrap();
@@ -99,7 +96,7 @@ impl TileSet {
     #[classmethod]
     fn py_from_dict(_cls: &Bound<'_, PyType>, data: PyObject) -> PyResult<Self> {
         let json: String = Python::with_gil(|py| {
-            let json = PyModule::import_bound(py, "json")?;
+            let json = PyModule::import(py, "json")?;
             json.call_method1("dumps", (data,))?.extract::<String>()
         })?;
 
@@ -127,7 +124,7 @@ impl TileSet {
         Ok(sys)
     }
 
-    #[pyo3(name = "create_state")]
+    #[pyo3(name = "create_state", signature = (system=None))]
     fn py_create_state(&self, system: Option<&Bound<'_, PyAny>>) -> PyResult<PyState> {
         match system {
             None => Ok(PyState(

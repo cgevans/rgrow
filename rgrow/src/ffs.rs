@@ -156,6 +156,26 @@ impl FFSRunConfig {
 #[pymethods]
 impl FFSRunConfig {
     #[new]
+    #[pyo3(signature = (
+        constant_variance=None,
+        var_per_mean2=None,
+        min_configs=None,
+        max_configs=None,
+        early_cutoff=None,
+        cutoff_probability=None,
+        cutoff_number=None,
+        min_cutoff_size=None,
+        init_bound=None,
+        subseq_bound=None,
+        start_size=None,
+        size_step=None,
+        keep_configs=None,
+        min_nuc_rate=None,
+        canvas_size=None,
+        target_size=None,
+        store_ffs_config=None,
+        store_system=None,
+    ))]
     fn new(
         constant_variance: Option<bool>,
         var_per_mean2: Option<f64>,
@@ -220,7 +240,7 @@ impl FFSRunConfig {
             rc.keep_configs = x;
         }
 
-        rc.min_nuc_rate = min_nuc_rate.map(|x| RateMPS::new(x));
+        rc.min_nuc_rate = min_nuc_rate.map(RateMPS::new);
 
         if let Some(x) = canvas_size {
             rc.canvas_size = x;
@@ -621,7 +641,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
                     dimer_state_list.push(dimer_state);
 
-                    if rng.gen::<bool>() {
+                    if rng.random::<bool>() {
                         tile_list.push(dimer.t1);
                     } else {
                         tile_list.push(dimer.t2);
@@ -1172,7 +1192,7 @@ impl FFSRunResult {
     /// list[float]: Forward probability vector.
     #[getter]
     fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.forward_vec().to_pyarray_bound(py)
+        self.forward_vec().to_pyarray(py)
     }
 
     /// float: Dimerization rate, in M/s.
@@ -1281,7 +1301,7 @@ impl FFSRunResultDF {
     /// list[float]: Forward probability vector.
     #[getter]
     fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.forward_vec().to_pyarray_bound(py)
+        self.forward_vec().to_pyarray(py)
     }
 
     /// float: Dimerization rate, in M/s.
@@ -1383,7 +1403,7 @@ impl FFSLevelRef {
         self.0
             .state_list
             .iter()
-            .map(|x| x.raw_array().to_pyarray_bound(py))
+            .map(|x| x.raw_array().to_pyarray(py))
             .collect()
     }
 
@@ -1470,7 +1490,7 @@ impl FFSStateRef {
         let t = this.borrow();
         let ra = (*t.0).raw_array();
 
-        unsafe { Ok(PyArray2::borrow_from_array_bound(&ra, this.into_any())) }
+        unsafe { Ok(PyArray2::borrow_from_array(&ra, this.into_any())) }
     }
 
     /// Create a copy of the state's canvas.  This is safe, but can't be modified and is slower than
@@ -1487,7 +1507,7 @@ impl FFSStateRef {
         let t = this.borrow();
         let ra = (*t.0).raw_array();
 
-        Ok(PyArray2::from_array_bound(py, &ra))
+        Ok(PyArray2::from_array(py, &ra))
     }
 
     /// Return a copy of the tracker's tracking data.
@@ -1521,7 +1541,7 @@ impl FFSStateRef {
     /// -------
     /// NDArray[np.uint]
     pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.0.rate_array().mapv(f64::from).to_pyarray_bound(py)
+        self.0.rate_array().mapv(f64::from).to_pyarray(py)
     }
 
     /// float: the total rate of possible next events for the state.

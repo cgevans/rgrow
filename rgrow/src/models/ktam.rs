@@ -17,7 +17,7 @@ use crate::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
         System, SystemInfo, SystemWithDimers, TileBondInfo,
     },
-    tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT}, units::{ConcM2, Rate, RateMPS, RatePMS, RatePS},
+    tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT}, units::{ConcM2, Rate, RatePMS, RatePS},
 };
 
 use crate::base::{HashMapType, HashSetType};
@@ -185,22 +185,22 @@ impl KTAM {
 
     #[getter(energy_we)]
     fn py_get_energy_we<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.energy_we.clone().into_pyarray_bound(py)
+        self.energy_we.clone().into_pyarray(py)
     }
 
     #[getter(energy_ns)]
     fn py_get_energy_ns<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.energy_ns.clone().into_pyarray_bound(py)
+        self.energy_ns.clone().into_pyarray(py)
     }
 
     #[getter(tile_concs)]
     fn py_get_tile_concs<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.tile_concs.clone().into_pyarray_bound(py)
+        self.tile_concs.clone().into_pyarray(py)
     }
 
     #[getter(tile_edges)]
     fn py_get_tile_edges<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<Glue>> {
-        self.tile_edges.clone().into_pyarray_bound(py)
+        self.tile_edges.clone().into_pyarray(py)
     }
 
     #[setter(tile_edges)]
@@ -859,7 +859,7 @@ impl TileBondInfo for KTAM {
 
 impl SystemInfo for KTAM {
     fn tile_concs(&self) -> Vec<f64> {
-        self.tile_concs.clone().into_raw_vec()
+        self.tile_concs.to_vec()
     }
 
     fn tile_stoics(&self) -> Vec<f64> {

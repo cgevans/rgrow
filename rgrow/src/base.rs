@@ -32,7 +32,7 @@ impl From<StringConvError> for pyo3::PyErr {
 }
 
 #[cfg(feature = "python")]
-use pyo3::{FromPyObject, IntoPyObject, PyErr, PyObject, PyResult, Python};
+use pyo3::{FromPyObject, IntoPyObject, PyErr, PyResult, Python};
 
 #[derive(Error, Debug)]
 pub enum GrowError {

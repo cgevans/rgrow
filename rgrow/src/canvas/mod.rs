@@ -1,4 +1,4 @@
-use super::base::{GrowError, GrowResult, NumTiles, Point, Tile};
+use super::base::{GrowResult, NumTiles, Point, Tile};
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};

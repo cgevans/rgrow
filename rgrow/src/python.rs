@@ -10,7 +10,7 @@ use crate::models::atam::ATAM;
 use crate::models::kcov::KCov;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
-use crate::models::sdc1d::{SDCParams, SDC};
+use crate::models::sdc1d::SDC;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{
@@ -22,6 +22,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use pyo3::IntoPyObjectExt;
 
 /// A State object.
 #[cfg_attr(feature = "python", pyclass(name = "State", module = "rgrow"))]
@@ -50,6 +51,7 @@ impl PyState {
     }
 
     #[staticmethod]
+    #[pyo3(signature = (array, kind="Square", tracking="None", n_tile_types=None))]
     pub fn from_array(array: PyReadonlyArray2<crate::base::Tile>, kind: &str, tracking: &str, n_tile_types: Option<usize>) -> PyResult<Self> {
         Ok(PyState(StateEnum::from_array(array.as_array(), kind.try_into()?, tracking.try_into()?, n_tile_types.unwrap_or(1))?))
     }
@@ -61,7 +63,7 @@ impl PyState {
     /// -------
     /// NDArray[np.uint]
     pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.0.rate_array().mapv(|x| x.into()).to_pyarray_bound(py)
+        self.0.rate_array().mapv(|x| x.into()).to_pyarray(py)
     }
 
     #[getter]
@@ -79,7 +81,7 @@ impl PyState {
         let t = this.borrow();
         let ra = t.0.raw_array();
 
-        unsafe { Ok(PyArray2::borrow_from_array_bound(&ra, this.into_any())) }
+        unsafe { Ok(PyArray2::borrow_from_array(&ra, this.into_any())) }
     }
 
     /// Return a copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
@@ -95,7 +97,7 @@ impl PyState {
         let t = this.borrow();
         let ra = t.0.raw_array();
 
-        Ok(PyArray2::from_array_bound(py, &ra))
+        Ok(PyArray2::from_array(py, &ra))
     }
 
     /// Return the total possible next event rate at a specific canvas point.
@@ -162,7 +164,7 @@ impl PyState {
 
     #[getter]
     pub fn tile_counts<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<u32>> {
-        self.0.tile_counts().to_pyarray_bound(py)
+        self.0.tile_counts().to_pyarray(py)
     }
 
     pub fn __repr__(&self) -> String {
@@ -318,15 +320,15 @@ macro_rules! create_py_system {
                     PyStateOrStates::State(pystate) => {
                         let state = &mut pystate.borrow_mut().0;
                         if show_window {
-                            Ok(py
+                            py
                                 .allow_threads(|| {
                                     DynSystem::evolve_in_window(self, state, None, bounds)
                                 })?
-                                .into_py(py))
+                                .into_py_any(py)
                         } else {
-                            Ok(py
+                            py
                                 .allow_threads(|| DynSystem::evolve(self, state, bounds))?
-                                .into_py(py))
+                                .into_py_any(py)
                         }
                     }
                     PyStateOrStates::States(pystates) => {
@@ -361,7 +363,7 @@ macro_rules! create_py_system {
                                 })
                             })
                             .collect();
-                        o.map(|x| x.into_py(py))
+                        o.map(|x| x.into_py_any(py).unwrap())
                     }
                 }
             }
@@ -429,7 +431,7 @@ macro_rules! create_py_system {
                         DynSystem::calc_mismatch_locations(self, &s.borrow().clone_state().0)
                     }
                 };
-                Ok(PyArray2::from_array_bound(py, &ra))
+                Ok(PyArray2::from_array(py, &ra))
             }
 
             /// Set a system parameter.
@@ -510,7 +512,7 @@ macro_rules! create_py_system {
                     arr[[i, 2]] = c[2];
                     arr[[i, 3]] = c[3];
                 }
-                arr.into_pyarray_bound(py)
+                arr.into_pyarray(py)
             }
 
             fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
@@ -641,11 +643,11 @@ impl KCov {
 
     #[getter]
     fn get_glue_links<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.glue_links.to_pyarray_bound(py)
+        self.glue_links.to_pyarray(py)
     }
 
     #[setter]
-    fn set_glue_links<'py>(&mut self, glue_links: &Bound<'py, PyArray2<f64>>) {
+    fn set_glue_links(&mut self, glue_links: &Bound<PyArray2<f64>>) {
         self.glue_links = glue_links.to_owned_array();
         self.update();
     }

@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    usize,
-};
+use std::collections::{HashMap, HashSet};
 
 use ndarray::{Array1, Array2};
 use num_traits::Zero;
@@ -21,8 +18,6 @@ use crate::{
 
 #[cfg(feature = "python")]
 use crate::python::PyState;
-#[cfg(feature = "python")]
-use numpy::ToPyArray;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
@@ -178,51 +173,7 @@ impl KCov {
         self.fill_free_cover_concentrations();
     }
 
-    pub fn new(
-        tile_names: Vec<String>,
-        tile_concentration: Vec<impl Into<ConcM> + Copy>,
-        tile_colors: Vec<[u8; 4]>,
-        glue_names: Vec<String>,
-        cover_concentrations: Vec<impl Into<ConcM> + Copy>,
-        tile_glues: Array1<[Glue; 4]>,
-        glue_links: Array2<Strength>,
-        seed: HashMap<PointSafe2, TileState>,
-        temperature: f64,
-        kf: RatePMS,
-        alpha: f64,
-        fission_handling: FissionHandling,
-        no_partially_blocked_attachments: bool,
-        blocker_energy_adj: Energy
-    ) -> Self {
-        let tilecount = tile_names.len();
-        let mut s = Self {
-            tile_names,
-            tile_concentration: tile_concentration.iter().map(|c| (*c).into()).collect(),
-            tile_colors,
-            glue_names,
-            cover_concentrations: cover_concentrations.iter().map(|c| (*c).into()).collect(),
-            tile_glues,
-            glue_links,
-            temperature,
-            seed,
-            north_friends: Vec::default(),
-            south_friends: Vec::default(),
-            east_friends: Vec::default(),
-            west_friends: Vec::default(),
-            energy_ns: Array2::zeros((tilecount, tilecount)),
-            energy_we: Array2::zeros((tilecount, tilecount)),
-            energy_cover: Array1::default(tilecount),
-            alpha,
-            kf,
-            fission_handling,
-            no_partially_blocked_attachments,
-            free_cover_concentrations: Array1::from_vec(cover_concentrations.into_iter().map(|c| c.into()).collect()),
-            blocker_energy_adj,
-        };
-        s.fill_friends();
-        s.update();
-        s
-    }
+    
 
     /// Get the uncovered friends to one side of some given tile
     pub fn get_uncovered_friends_to_side(
@@ -263,7 +214,7 @@ impl KCov {
     /// Get the glues. If there are covers, this wil look past them, and return the
     /// glue that is under it
     pub fn get_tile_raw_glues(&self, tile_id: TileState) -> Vec<Glue> {
-        let index = tile_index(tile_id) as usize;
+        let index = tile_index(tile_id);
         self.tile_glues[index].to_vec()
     }
 
@@ -442,10 +393,10 @@ impl KCov {
 
         // Now we know that neither the tile, nor the one were attaching to is covered
         match side {
-            NORTH => self.energy_ns[(tile2 as usize, tile1 as usize)],
-            EAST => self.energy_we[(tile1 as usize, tile2 as usize)],
-            SOUTH => self.energy_ns[(tile1 as usize, tile2 as usize)],
-            WEST => self.energy_we[(tile2 as usize, tile1 as usize)],
+            NORTH => self.energy_ns[(tile2, tile1)],
+            EAST => self.energy_we[(tile1, tile2)],
+            SOUTH => self.energy_ns[(tile1, tile2)],
+            WEST => self.energy_we[(tile2, tile1)],
             _ => panic!("Must enter NESW"),
         }
     }
@@ -780,7 +731,7 @@ impl KCov {
                 rate += self.kf * self.free_cover_concentrations[self.glue_on_side(s, tile)];
             }
         }
-        return rate;
+        rate
     }
 
     fn can_bond(&self, tile1: TileState, side: Sides, tile2: TileState) -> bool {
@@ -798,8 +749,8 @@ impl KCov {
     ) -> HashSet<PointSafe2> {
         let mut visited = HashSet::new();
         let mut stack = vec![point];
-        while !stack.is_empty() {
-            let head = stack.pop().unwrap();
+        while let Some(head) = stack.pop() {
+            
             let head_tile = state.tile_at_point(head);
 
             // We have already processed this node, or we dont have to at all
@@ -832,8 +783,7 @@ impl KCov {
 
     fn unseeded<S: State>(&self, state: &S, point: PointSafe2) -> Vec<PointSafe2> {
         let seed = self
-            .seed_locs()
-            .get(0)
+            .seed_locs().first()
             .expect("Must have a seed to use KeepSeed")
             .0;
 
@@ -872,14 +822,14 @@ impl SystemWithDimers for KCov {
             if let Some(friends) = self.get_uncovered_friends_to_side(EAST, t1 as u32) {
                 for t2 in friends.iter() {
                     let biconc =
-                        self.tile_concentration(t1 as u32) * self.tile_concentration(*t2 as u32);
+                        self.tile_concentration(t1 as u32) * self.tile_concentration(*t2);
                     dvec.push(DimerInfo {
                         t1: t1 as u32,
                         t2: *t2,
                         orientation: Orientation::WE,
                         formation_rate: self.kf * biconc,
                         equilibrium_conc: biconc.over_u0()
-                            * (self.energy_we[(tile_index(t1 as u32), tile_index(*t2 as u32))]
+                            * (self.energy_we[(tile_index(t1 as u32), tile_index(*t2))]
                                 / self.rtval()
                                 - self.alpha)
                                 .exp(),
@@ -890,14 +840,14 @@ impl SystemWithDimers for KCov {
             if let Some(friends) = self.get_uncovered_friends_to_side(SOUTH, t1 as u32) {
                 for t2 in friends.iter() {
                     let biconc =
-                        self.tile_concentration(t1 as u32) * self.tile_concentration(*t2 as u32);
+                        self.tile_concentration(t1 as u32) * self.tile_concentration(*t2);
                     dvec.push(DimerInfo {
                         t1: t1 as u32,
                         t2: *t2,
                         orientation: Orientation::NS,
                         formation_rate: self.kf * biconc,
                         equilibrium_conc: biconc.over_u0()
-                            * (self.energy_ns[(tile_index(t1 as u32), tile_index(*t2 as u32))]
+                            * (self.energy_ns[(tile_index(t1 as u32), tile_index(*t2))]
                                 / self.rtval()
                                 - self.alpha)
                                 .exp(),
@@ -970,7 +920,6 @@ impl System for KCov {
                     state.set_sa(point, &0);
                 }
             }
-            _ => panic!("Polymer not yet implemented"),
         };
         self
     }
@@ -1151,8 +1100,8 @@ mod test_covtile {
     #[test]
     fn is_covered_side() {
         assert!(is_covered(NORTH, NORTH));
-        assert!(is_covered(NORTH, 123 << 4 | NORTH));
-        assert!(!is_covered(EAST, 123 << 4 | NORTH));
+        assert!(is_covered(NORTH, (123 << 4) | NORTH));
+        assert!(!is_covered(EAST, (123 << 4) | NORTH));
     }
 
     #[test]
@@ -1195,34 +1144,55 @@ mod test_kcov {
             [0., 0., 0., 1., 0.], // 4
         ];
 
-        KCov::new(
-            vec![
-                "null".to_string(),
-                "f".to_string(),
-                "s".to_string(),
-                "t".to_string(),
-            ],
-            vec![1.0, 1.0, 1.0, 1.0],
-            vec![DEFAULT_COLOR; 4],
-            // Glues
-            vec![
-                "null".to_string(),
-                "1".to_string(),
-                "2".to_string(),
-                "3".to_string(),
-                "4".to_string(),
-            ],
-            vec![0., 1., 1., 1., 1.],
-            tile_glues,
-            glue_linkns,
-            HashMap::default(),
-            60.0,
-            RatePMS::new(1e6),
-            0.0,
-            FissionHandling::JustDetach,
-            false,
-            0.0,
-        )
+        {
+            let tile_names = vec![
+                    "null".to_string(),
+                    "f".to_string(),
+                    "s".to_string(),
+                    "t".to_string(),
+                ];
+            let tile_concentration = &[1.0, 1.0, 1.0, 1.0];
+            let tile_colors = vec![DEFAULT_COLOR; 4];
+            let glue_names = vec![
+                    "null".to_string(),
+                    "1".to_string(),
+                    "2".to_string(),
+                    "3".to_string(),
+                    "4".to_string(),
+                ];
+            let cover_concentrations = vec![0., 1., 1., 1., 1.];
+            let seed = HashMap::default();
+            let kf = RatePMS::new(1e6);
+            let fission_handling = FissionHandling::JustDetach;
+            let tilecount = tile_names.len();
+            let mut s = KCov {
+                tile_names,
+                tile_concentration: tile_concentration.iter().map(|c| (*c).into()).collect(),
+                tile_colors,
+                glue_names,
+                cover_concentrations: cover_concentrations.iter().map(|c| (*c).into()).collect(),
+                tile_glues,
+                glue_links: glue_linkns,
+                temperature: 60.0,
+                seed,
+                north_friends: Vec::default(),
+                south_friends: Vec::default(),
+                east_friends: Vec::default(),
+                west_friends: Vec::default(),
+                energy_ns: Array2::zeros((tilecount, tilecount)),
+                energy_we: Array2::zeros((tilecount, tilecount)),
+                energy_cover: Array1::default(tilecount),
+                alpha: 0.0,
+                kf,
+                fission_handling,
+                no_partially_blocked_attachments: false,
+                free_cover_concentrations: Array1::from_vec(cover_concentrations.into_iter().map(|c| c.into()).collect()),
+                blocker_energy_adj: 0.0,
+            };
+            s.fill_friends();
+            s.update();
+            s
+        }
     }
 
     #[test]
@@ -1436,8 +1406,8 @@ impl From<KCovParams> for KCov {
         let mut tiles = Vec::with_capacity(value.tiles.len() + 1);
         tiles.push(KCovTile::empty());
         tiles.append(&mut value.tiles);
-        let tile_names = tiles.iter().map(|tile| tile.name.clone()).collect();
-        let tile_concentration = tiles.iter().map(|tile| tile.concentration).collect();
+        let tile_names: Vec<String> = tiles.iter().map(|tile| tile.name.clone()).collect();
+        let tile_concentration: Vec<f64> = tiles.iter().map(|tile| tile.concentration).collect();
         let tile_colors = tiles.iter().map(|tile| tile.color).collect();
         
         let mut glues = tiles
@@ -1488,7 +1458,7 @@ impl From<KCovParams> for KCov {
                 TileIdentifier::Name(name) => {
                     // Find position in tile_names and convert to TileId
                     let pos = tiles.iter().position(|t| t.name == *name)
-                        .expect(&format!("Tile name '{}' not found", name));
+                        .unwrap_or_else(|| panic!("Tile name '{}' not found", name));
                     (pos as TileState) << 4
                 }
             };
@@ -1532,22 +1502,42 @@ impl From<KCovParams> for KCov {
             glue_names[id] = name;
         }
 
-        Self::new(
-            tile_names,
-            tile_concentration,
-            tile_colors,
-            glue_names,
-            cover_concentrations,
-            tile_glues,
-            glue_links,
-            seed,
-            value.temp,
-            value.kf.into(),
-            value.alpha,
-            FissionHandling::JustDetach,
-            value.no_partially_blocked_attachments,
-            value.blocker_energy_adj,
-        )
+        {
+            let temperature = value.temp;
+            let kf = value.kf.into();
+            let alpha = value.alpha;
+            let fission_handling = FissionHandling::JustDetach;
+            let no_partially_blocked_attachments = value.no_partially_blocked_attachments;
+            let blocker_energy_adj = value.blocker_energy_adj;
+            let tilecount = tile_names.len();
+            let mut s = KCov {
+                tile_names,
+                tile_concentration: tile_concentration.iter().map(|c| (*c).into()).collect(),
+                tile_colors,
+                glue_names,
+                cover_concentrations: cover_concentrations.iter().map(|c| (*c).into()).collect(),
+                tile_glues,
+                glue_links,
+                temperature,
+                seed,
+                north_friends: Vec::default(),
+                south_friends: Vec::default(),
+                east_friends: Vec::default(),
+                west_friends: Vec::default(),
+                energy_ns: Array2::zeros((tilecount, tilecount)),
+                energy_we: Array2::zeros((tilecount, tilecount)),
+                energy_cover: Array1::default(tilecount),
+                alpha,
+                kf,
+                fission_handling,
+                no_partially_blocked_attachments,
+                free_cover_concentrations: Array1::from_vec(cover_concentrations.into_iter().map(|c| c.into()).collect()),
+                blocker_energy_adj,
+            };
+            s.fill_friends();
+            s.update();
+            s
+        }
     }
 }
 

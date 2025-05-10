@@ -1,14 +1,12 @@
 use crate::base::{GlueIdent, RgrowError, StringConvError, TileIdent};
-use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube};
 use crate::colors::get_color_or_random;
 
 use crate::models::atam::ATAM;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
-use crate::state::{NullStateTracker, QuadTreeState, StateWithCreate};
 use crate::system::{DynSystem, EvolveBounds};
 
-use self::state::{OrderTracker, StateEnum};
+use self::state::StateEnum;
 use self::system::{NeededUpdate, SystemEnum};
 
 use super::base::{CanvasLength, Glue};
@@ -21,7 +19,6 @@ use core::fmt;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use state::{LastAttachTimeTracker, PrintEventTracker};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::io::{self, Read};
@@ -193,90 +190,12 @@ impl Display for Tile {
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 pub enum Direction {
     N,
     E,
     S,
     W,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python", derive(FromPyObject))]
-pub struct CoverStrand {
-    pub name: Option<String>,
-    pub glue: GlueIdent,
-    pub dir: Direction,
-    pub stoic: f64,
-}
-
-impl CoverStrand {
-    pub(crate) fn to_tile(&self) -> Tile {
-        let edges = match self.dir {
-            Direction::N => {
-                vec![
-                    self.glue.clone(),
-                    GlueIdent::Num(0),
-                    GlueIdent::Num(0),
-                    GlueIdent::Num(0),
-                ]
-            }
-            Direction::E => {
-                vec![
-                    GlueIdent::Num(0),
-                    self.glue.clone(),
-                    GlueIdent::Num(0),
-                    GlueIdent::Num(0),
-                ]
-            }
-            Direction::S => {
-                vec![
-                    GlueIdent::Num(0),
-                    GlueIdent::Num(0),
-                    self.glue.clone(),
-                    GlueIdent::Num(0),
-                ]
-            }
-            Direction::W => {
-                vec![
-                    GlueIdent::Num(0),
-                    GlueIdent::Num(0),
-                    GlueIdent::Num(0),
-                    self.glue.clone(),
-                ]
-            }
-        };
-
-        Tile {
-            name: None,
-            edges,
-            stoic: Some(self.stoic),
-            color: None,
-            shape: None,
-        }
-    }
-
-    pub(crate) fn make_composite(&self, other: &CoverStrand) -> Tile {
-        let es1 = self.to_tile().edges;
-        let es2 = other.to_tile().edges;
-
-        let mut edges = Vec::new();
-        for (e1, e2) in es1.iter().zip(&es2) {
-            if *e1 == GlueIdent::Num(0) {
-                edges.push(e2.clone())
-            } else {
-                edges.push(e1.clone())
-            }
-        }
-
-        Tile {
-            name: None,
-            edges,
-            stoic: Some(0.),
-            color: None,
-            shape: None,
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -296,7 +215,6 @@ struct SerdeTileSet {
     pub(self) bonds: Vec<Bond>,
     #[serde(default = "Vec::new")]
     pub(self) glues: Vec<(GlueIdent, GlueIdent, f64)>,
-    pub(self) cover_strands: Option<Vec<CoverStrand>>,
     #[serde(alias = "Gse")]
     pub(self) gse: Option<f64>,
     #[serde(alias = "Gmc")]
@@ -335,7 +253,6 @@ pub struct TileSet {
     pub bonds: Vec<Bond>,
     #[serde(default = "Vec::new")]
     pub glues: Vec<(GlueIdent, GlueIdent, f64)>,
-    pub cover_strands: Option<Vec<CoverStrand>>,
     pub gse: Option<f64>,
     pub gmc: Option<f64>,
     pub alpha: Option<f64>,
@@ -363,7 +280,6 @@ impl From<SerdeTileSet> for TileSet {
             tiles,
             bonds,
             glues,
-            cover_strands,
             gse,
             gmc,
             alpha,
@@ -390,7 +306,6 @@ impl From<SerdeTileSet> for TileSet {
             tiles,
             bonds,
             glues,
-            cover_strands,
             gse,
             gmc,
             alpha,
@@ -416,7 +331,6 @@ impl From<SerdeTileSet> for TileSet {
             tile_set.tiles.extend(options.tiles);
             tile_set.bonds.extend(options.bonds);
             tile_set.glues.extend(options.glues);
-            tile_set.cover_strands = options.cover_strands.or(tile_set.cover_strands);
             tile_set.gse = options.gse.or(tile_set.gse);
             tile_set.gmc = options.gmc.or(tile_set.gmc);
             tile_set.alpha = options.alpha.or(tile_set.alpha);

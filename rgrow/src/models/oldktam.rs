@@ -138,17 +138,17 @@ impl OldKTAM {
 
     #[getter(energy_we)]
     fn py_get_energy_we<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
-        numpy::IntoPyArray::into_pyarray_bound(self.energy_we.clone(), py)
+        numpy::IntoPyArray::into_pyarray(self.energy_we.clone(), py)
     }
 
     #[getter(energy_ns)]
     fn py_get_energy_ns<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
-        numpy::IntoPyArray::into_pyarray_bound(self.energy_ns.clone(), py)
+        numpy::IntoPyArray::into_pyarray(self.energy_ns.clone(), py)
     }
 
     #[getter(tile_adj_concs)]
     fn py_get_tile_concs<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
-        numpy::IntoPyArray::into_pyarray_bound(self.tile_adj_concs.clone(), py)
+        numpy::IntoPyArray::into_pyarray(self.tile_adj_concs.clone(), py)
     }
 
     #[staticmethod]

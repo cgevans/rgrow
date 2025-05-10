@@ -1,6 +1,7 @@
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
 use num_traits::Zero;
+use pyo3::IntoPyObjectExt;
 use rand::rng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -64,8 +65,8 @@ pub enum StepOutcome {
     ZeroRate,
 }
 
-#[derive(Debug)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 pub enum NeededUpdate {
     None,
     NonZero,
@@ -100,6 +101,7 @@ pub struct EvolveBounds {
 #[pymethods]
 impl EvolveBounds {
     #[new]
+    #[pyo3(signature = (for_events=None, for_time=None, size_min=None, size_max=None, for_wall_time=None))]
     pub fn new(
         for_events: Option<NumEvents>,
         for_time: Option<f64>,
@@ -169,8 +171,8 @@ impl EvolveBounds {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(C)]
 pub enum EvolveOutcome {
     ReachedEventsMax,
@@ -181,8 +183,8 @@ pub enum EvolveOutcome {
     ReachedZeroRate,
 }
 
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 
 pub enum Orientation {
     NS,
@@ -207,8 +209,8 @@ impl DimerInfo {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 pub enum ChunkHandling {
     #[serde(alias = "none")]
     None,
@@ -231,8 +233,8 @@ impl TryFrom<&str> for ChunkHandling {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 pub enum ChunkSize {
     #[serde(alias = "single")]
     Single,
@@ -270,7 +272,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 
     fn take_single_step<St: State>(&self, state: &mut St, max_time_step: TimeS) -> StepOutcome {
-        let time_step = -f64::ln(rng().gen()) / state.total_rate();
+        let time_step = -f64::ln(rng().random()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
             return StepOutcome::NoEventIn(max_time_step);
@@ -754,16 +756,20 @@ pub enum SystemEnum {
 }
 
 #[cfg(feature = "python")]
-impl IntoPy<PyObject> for SystemEnum {
-    fn into_py(self, py: Python) -> PyObject {
+impl<'py> IntoPyObject<'py> for SystemEnum {
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match self {
-            SystemEnum::KTAM(ktam) => ktam.into_py(py),
-            SystemEnum::OldKTAM(oldktam) => oldktam.into_py(py),
-            SystemEnum::ATAM(atam) => atam.into_py(py),
-            SystemEnum::SDC(sdc) => sdc.into_py(py),
-            SystemEnum::KCov(kcov) => kcov.into_py(py),
+            SystemEnum::KTAM(ktam) => ktam.into_bound_py_any(py),
+            SystemEnum::OldKTAM(oldktam) => oldktam.into_bound_py_any(py),
+            SystemEnum::ATAM(atam) => atam.into_bound_py_any(py),
+            SystemEnum::SDC(sdc) => sdc.into_bound_py_any(py),
+            SystemEnum::KCov(kcov) => kcov.into_bound_py_any(py),
         }
     }
+
+    type Target = pyo3::PyAny; // the Python type
+    type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = pyo3::PyErr;
 }
 
 #[enum_dispatch]
@@ -794,8 +800,8 @@ pub trait SystemInfo {
     fn tile_stoics(&self) -> Vec<f64>;
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 pub enum FissionHandling {
     #[serde(alias = "off", alias = "no-fission")]
     NoFission,

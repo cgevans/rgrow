@@ -137,10 +137,6 @@ impl DnaNucleotideBase {
             Self::C => Self::G,
         }
     }
-
-    pub fn ideal_sequence(v: &Vec<Self>) -> Vec<Self> {
-        v.iter().map(|s| s.connects_to()).collect()
-    }
 }
 
 impl From<char> for DnaNucleotideBase {
@@ -461,7 +457,10 @@ mod test_utils {
     #[test]
     fn test_no_mismatches() {
         let dna_a = "GGACTGAC".chars().map(DnaNucleotideBase::from).collect();
-        let dna_b = DnaNucleotideBase::ideal_sequence(&dna_a);
+        let dna_b = {
+            let v: &Vec<DnaNucleotideBase> = &dna_a;
+            v.iter().map(|s| s.connects_to()).collect()
+        };
         let (g, s) = sequence_pair_dg_ds(dna_a, dna_b);
         let (pg, ps) = string_dna_dg_ds("GGACTGAC");
         assert_eq!(g, pg - 1.96);

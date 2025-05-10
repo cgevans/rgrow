@@ -2,13 +2,13 @@ use std::{fmt::Display, iter::Sum, ops::{Add, AddAssign, Div, Mul, Neg, Sub, Sub
 use serde::{Deserialize, Serialize};
 use num_traits::identities::Zero;
 
-trait Temperature {
-    fn to_kelvin(self) -> f64;
-}
+// trait Temperature {
+//     fn to_kelvin(self) -> f64;
+// }
 
-trait Energy {
-    fn times_beta(self, temperature: impl Temperature) -> f64;
-}
+// trait Energy {
+//     fn times_beta(self, temperature: impl Temperature) -> f64;
+// }
 
 /// Energy in kcal/mol.
 pub struct EnergyKCM(f64);
@@ -53,7 +53,7 @@ impl From<f64> for RatePS {
 }
 
 /// Entropy in kcal/mol/K.
-pub struct EntropyKCMK(f64);
+// pub struct EntropyKCMK(f64);
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
