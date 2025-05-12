@@ -1,4 +1,4 @@
-use num_traits::identities::Zero;
+use num_traits::{identities::Zero, Num};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
@@ -6,16 +6,45 @@ use std::{
     ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign},
 };
 
-// trait Temperature {
-//     fn to_kelvin(self) -> f64;
-// }
+const R_VAL: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 
-// trait Energy {
-//     fn times_beta(self, temperature: impl Temperature) -> f64;
-// }
+pub trait Temperature {
+    fn to_kelvin(self) -> f64;
+}
+
+pub trait Energy {
+    fn times_beta(self, temperature: impl Temperature) -> f64;
+}
+
+impl Energy for EnergyKCM {
+    fn times_beta(self, temperature: impl Temperature) -> f64 {
+        self.0 / (temperature.to_kelvin() * R_VAL)
+    }
+}
+
+impl Default for EnergyKCM {
+    fn default() -> Self {
+        EnergyKCM(0.0)
+    }
+}
+
+impl Sub for EnergyKCM {
+    type Output = EnergyKCM;
+    fn sub(self, other: EnergyKCM) -> EnergyKCM {
+        EnergyKCM(self.0 - other.0)
+    }
+}
+
+impl From<f64> for EnergyKCM {
+    fn from(value: f64) -> Self {
+        EnergyKCM(value)
+    }
+}
 
 /// Energy in kcal/mol.
-pub struct EnergyKCM(f64);
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
+pub struct EnergyKCM(pub(crate) f64);
 
 impl Add for EnergyKCM {
     type Output = EnergyKCM;
@@ -23,6 +52,55 @@ impl Add for EnergyKCM {
         EnergyKCM(self.0 + other.0)
     }
 }
+
+impl AddAssign for EnergyKCM {
+    fn add_assign(&mut self, other: EnergyKCM) {
+        self.0 += other.0;
+    }
+}
+
+impl Zero for EnergyKCM {
+    fn zero() -> Self {
+        EnergyKCM(0.0)
+    }
+
+    fn is_zero(&self) -> bool {
+        self.0 == 0.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct TemperatureK(pub f64);
+
+impl Temperature for TemperatureK {
+    fn to_kelvin(self) -> f64 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
+pub struct TemperatureC(pub f64);
+
+impl Temperature for TemperatureC {
+    fn to_kelvin(self) -> f64 {
+        self.0 + 273.15
+    }
+}
+
+impl From<TemperatureC> for f64 {
+    fn from(value: TemperatureC) -> Self {
+        value.0
+    }
+}
+
+impl From<f64> for TemperatureC {
+    fn from(value: f64) -> Self {
+        TemperatureC(value)
+    }
+}
+
+
 
 pub trait Rate: Clone + Copy + num_traits::Zero + std::fmt::Debug {
     fn to_per_second(self) -> RatePS;
@@ -56,8 +134,80 @@ impl From<f64> for RatePS {
     }
 }
 
+impl From<f64> for TemperatureK {
+    fn from(value: f64) -> Self {
+        TemperatureK(value)
+    }
+}
+
+impl From<TemperatureK> for f64 {
+    fn from(value: TemperatureK) -> Self {
+        value.0
+    }
+}
+
+impl From<EntropyKCMK> for f64 {
+    fn from(value: EntropyKCMK) -> Self {
+        value.0
+    }
+}
+
+pub trait Entropy {
+    fn to_kcal_mol_k(self) -> EntropyKCMK;
+}
+
+impl Default for EntropyKCMK {
+    fn default() -> Self {
+        EntropyKCMK(0.0)
+    }
+}
+
+impl From<f64> for EntropyKCMK {
+    fn from(value: f64) -> Self {
+        EntropyKCMK(value)
+    }
+}
+
+impl<T: Temperature> Mul<T> for EntropyKCMK {
+    type Output = EnergyKCM;
+    fn mul(self, other: T) -> EnergyKCM {
+        EnergyKCM(self.0 * other.to_kelvin())
+    }
+}
+
+impl Mul<f64> for EnergyKCM {
+    type Output = EnergyKCM;
+    fn mul(self, other: f64) -> EnergyKCM {
+        EnergyKCM(self.0 * other)
+    }
+}
+
+impl Mul<i32> for EnergyKCM {
+    type Output = EnergyKCM;
+    fn mul(self, other: i32) -> EnergyKCM {
+        EnergyKCM(self.0 * other as f64)
+    }
+}
+
+
+impl From<EnergyKCM> for f64 {
+    fn from(value: EnergyKCM) -> Self {
+        value.0
+    }
+}
+
 /// Entropy in kcal/mol/K.
-// pub struct EntropyKCMK(f64);
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
+pub struct EntropyKCMK(f64);
+
+impl Entropy for EntropyKCMK {
+    fn to_kcal_mol_k(self) -> EntropyKCMK {
+        self
+    }
+}
+
+
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]

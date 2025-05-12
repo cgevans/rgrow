@@ -1,14 +1,19 @@
+# 0.20.0
+
+- Changed names from 'covers' to 'blockers' to fit papers.
+- Initial implementation of unitful calculations, which should reduce likelihood of bugs, while hopefully being zero-cost for performance.
+
 # 0.19.4
 
-- kblock:
+- kcov:
   - Changes to cover+tile rates in the low-cover-concentration case.
 - Version used for DNA31 submission.
 
 # 0.19.3
 
-- Numerous blockers/covers model improvements and fixes:
-  - tile attachment + blockers fixes.
-  - full concentration calculations for tile-blocker complexes (still one tile per blocker)
+- Numerous covers/covers model improvements and fixes:
+  - tile attachment + covers fixes.
+  - full concentration calculations for tile-cover complexes (still one tile per cover)
   - add option to allow/disallow partially-blocked attachments
   - rearrange tubes more
 

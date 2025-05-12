@@ -5,14 +5,14 @@ use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    base::{Energy, Glue, HashSetType},
+    base::{Glue, HashSetType},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     state::State,
     system::{
         DimerInfo, Event, FissionHandling, Orientation, System, SystemWithDimers, TileBondInfo,
     },
     type_alias,
-    units::{ConcM, RatePMS, RatePS},
+    units::{ConcM, Energy, EnergyKCM, EntropyKCMK, RatePMS, RatePS, TemperatureC, TemperatureK},
 };
 
 // Imports for python bindings
@@ -22,7 +22,6 @@ use crate::python::PyState;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-type_alias!( f64 => Strength );
 type_alias!( u32 => Sides );
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
@@ -100,8 +99,6 @@ const NO_BLOCKERS: Sides = !0b1111;
 
 const ALL_SIDES: [Sides; 4] = [NORTH, EAST, SOUTH, WEST];
 
-const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
-
 pub fn attachments(id: TileState) -> TileState {
     TileState(id.0 & ALL_BLOCKERS)
 }
@@ -155,7 +152,7 @@ pub struct KBlock {
 
     pub glue_names: Vec<String>,
     pub blocker_concentrations: Vec<ConcM>,
-    pub temperature: f64,
+    pub temperature: TemperatureC,
     pub seed: HashMap<PointSafe2, TileState>,
     /// Glues of a tile with a given ID
     ///
@@ -170,7 +167,7 @@ pub struct KBlock {
     /// ]
     tile_glues: Array1<[Glue; 4]>,
     /// Binding strength between two glues
-    pub(crate) glue_links: Array2<Strength>,
+    pub(crate) glue_links: Array2<EnergyKCM>,
 
     /// What can attach to the north of some *glue*
     ///
@@ -188,22 +185,22 @@ pub struct KBlock {
     west_friends: Vec<HashSetType<TileState>>,
 
     /// Energy of tile and blocker, blocker i contains [N, E, S, W]
-    energy_blocker: Array2<Energy>,
+    energy_blocker: Array2<EnergyKCM>,
 
     /// Energy between two tiles, if tile a is to the north of tile b, then
     /// this shoudl be indexed as [(a,b)]
-    energy_ns: Array2<Energy>,
-    energy_we: Array2<Energy>,
+    energy_ns: Array2<EnergyKCM>,
+    energy_we: Array2<EnergyKCM>,
 
     free_blocker_concentrations: Array1<ConcM>,
 
-    pub alpha: Energy,
+    pub ds_lat: EntropyKCMK,
     pub kf: RatePMS,
     fission_handling: FissionHandling,
 
     pub no_partially_blocked_attachments: bool,
 
-    pub blocker_energy_adj: Energy,
+    pub blocker_energy_adj: EnergyKCM,
 }
 
 #[inline(always)]
@@ -335,11 +332,11 @@ impl KBlock {
         self.west_friends = wf;
     }
 
-    fn energy_blocker_mut(&mut self, tile: TileType, side: usize) -> &mut Energy {
+    fn energy_blocker_mut(&mut self, tile: TileType, side: usize) -> &mut EnergyKCM {
         &mut self.energy_blocker[(tile.0, side)]
     }
 
-    fn get_glue_link(&self, glue1: Glue, glue2: Glue) -> Energy {
+    fn get_glue_link(&self, glue1: Glue, glue2: Glue) -> EnergyKCM {
         self.glue_links[(glue1, glue2)]
     }
 
@@ -410,7 +407,6 @@ impl KBlock {
     }
 
     pub fn fill_free_blocker_concentrations(&mut self) {
-        let rtval = self.rtval();
         self.free_blocker_concentrations
             .indexed_iter_mut()
             .for_each(|(gi, free_blocker_conc)| {
@@ -428,7 +424,7 @@ impl KBlock {
                 let total_blocker_conc = self.blocker_concentrations[gi];
 
                 let cov_dg = self.glue_links[(gi, glue_inverse(gi))];
-                let cov_bdg = cov_dg / rtval + self.alpha;
+                let cov_bdg = cov_dg.times_beta(self.temperature);
                 let ebdg = ConcM::new(cov_bdg.exp());
 
                 *free_blocker_conc = 0.5
@@ -452,11 +448,11 @@ impl KBlock {
     }
 
     /// SIDE here must be NESW
-    fn energy_to(&self, side: Sides, tile1: TileState, tile2: TileState) -> Energy {
+    fn energy_to(&self, side: Sides, tile1: TileState, tile2: TileState) -> EnergyKCM {
         // If we are blocked on the sticking side, or the other tile has a blocker, then we
         // have no binding energy
         if tile1.is_blocked(side) || tile2.is_blocked(inverse(side)) {
-            return 0.0;
+            return EnergyKCM::zero();
         }
 
         // Ignore blockers
@@ -473,19 +469,19 @@ impl KBlock {
     }
 
     /// Energy of neighbour bonds
-    fn energy_at_point<S: State>(&self, state: &S, point: PointSafe2) -> Energy {
+    fn energy_at_point<S: State>(&self, state: &S, point: PointSafe2) -> EnergyKCM {
         let tile_id: TileState = state.tile_at_point(point).into();
-        let mut energy = 0.0;
+        let mut energy = EnergyKCM::zero();
+        let mut n_bonds = 0;
         for side in ALL_SIDES {
             let neighbour_tile = Self::tile_to_side(state, side, point);
-            energy += self.energy_to(side, tile_id, neighbour_tile)
+            let se = self.energy_to(side, tile_id, neighbour_tile);
+            if !se.is_zero() {
+                energy += se;
+                n_bonds += 1;
+            }
         }
-        energy + self.alpha * self.rtval()
-    }
-
-    #[inline(always)]
-    fn rtval(&self) -> Energy {
-        R * (self.temperature + 273.15)
+        energy - (self.ds_lat * self.temperature) * (n_bonds - 1).max(0)
     }
 
     fn tile_detachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> RatePS {
@@ -499,7 +495,7 @@ impl KBlock {
             return RatePS::zero();
         }
         let energy_with_neighbours = self.energy_at_point(state, p);
-        self.kf * ConcM::u0_times((energy_with_neighbours * (1.0 / self.rtval())).exp())
+        self.kf * ConcM::u0_times((energy_with_neighbours.times_beta(self.temperature)).exp())
     }
 
     /// The rate at which a tile will attach somewhere
@@ -521,12 +517,10 @@ impl KBlock {
         let tile = tile.unblock_all();
         self.kf
             * ConcM::u0_times(
-                ((self.energy_blocker[(
+                (self.energy_blocker[(
                     tile_index(tile).0,
                     side_index(side).expect("Side must be NESW"),
-                )] + self.blocker_energy_adj)
-                    * (1.0 / self.rtval())
-                    + self.alpha)
+                )] + self.blocker_energy_adj).times_beta(self.temperature)
                     .exp(),
             )
     }
@@ -783,7 +777,7 @@ impl KBlock {
             return 0.0;
         }
         let cov_dg = self.glue_links[(blocker_glue, glue_inverse(blocker_glue))];
-        let cov_bdg = cov_dg / self.rtval() + self.alpha;
+        let cov_bdg = cov_dg.times_beta(self.temperature);
         let embdg = (-cov_bdg).exp();
         let b = self.free_blocker_concentrations[blocker_glue];
         1.0 - (1.0 + b.over_u0() * embdg).recip()
@@ -914,8 +908,7 @@ impl SystemWithDimers for KBlock {
                         formation_rate: self.kf * biconc,
                         equilibrium_conc: biconc.over_u0()
                             * (self.energy_we[(tile_index(t1).into(), tile_index(*t2).into())]
-                                / self.rtval()
-                                - self.alpha)
+                                .times_beta(self.temperature))
                                 .exp(),
                     });
                 }
@@ -931,8 +924,7 @@ impl SystemWithDimers for KBlock {
                         formation_rate: self.kf * biconc,
                         equilibrium_conc: biconc.over_u0()
                             * (self.energy_ns[(tile_index(t1).into(), tile_index(*t2).into())]
-                                / self.rtval()
-                                - self.alpha)
+                                .times_beta(self.temperature))
                                 .exp(),
                     });
                 }
@@ -1122,7 +1114,7 @@ impl System for KBlock {
         // cge: Roughly copied from kTAM, because I need this for playing with
         // some algorithmic self-assembly stuff.
 
-        let threshold = -0.05; // Todo: fix this (note for kCov, energies are negative)
+        let threshold = EnergyKCM(-0.05); // Todo: fix this (note for kCov, energies are negative)
         let mut mismatch_locations = Array2::<usize>::zeros((state.nrows(), state.ncols()));
 
         // TODO: this should use an iterator from the canvas, which we should implement.
@@ -1262,8 +1254,8 @@ mod test_kblock {
                 glue_names,
                 blocker_concentrations: blocker_concentrations.iter().map(|c| (*c).into()).collect(),
                 tile_glues,
-                glue_links: glue_linkns,
-                temperature: 60.0,
+                glue_links: glue_linkns.mapv(|x| x.into()),
+                temperature: TemperatureC(60.0),
                 seed,
                 north_friends: Vec::default(),
                 south_friends: Vec::default(),
@@ -1272,14 +1264,14 @@ mod test_kblock {
                 energy_ns: Array2::zeros((tilecount, tilecount)),
                 energy_we: Array2::zeros((tilecount, tilecount)),
                 energy_blocker: Array2::default((tilecount, 4)),
-                alpha: 0.0,
+                ds_lat: 0.0.into(),
                 kf,
                 fission_handling,
                 no_partially_blocked_attachments: false,
                 free_blocker_concentrations: Array1::from_vec(
                     blocker_concentrations.into_iter().map(|c| c.into()).collect(),
                 ),
-                blocker_energy_adj: 0.0,
+                blocker_energy_adj: 0.0.into(),
             };
             s.fill_friends();
             s.update();
@@ -1346,7 +1338,7 @@ mod test_kblock {
                 (GlueIdentifier::Index(0), 1e6.into()),
                 (GlueIdentifier::Index(1), 1e6.into()),
             ]),
-            alpha: 1.0,
+            ds_lat: 1.0.into(),
             kf: 1.0,
             temp: 40.0,
             ..Default::default()
@@ -1443,7 +1435,7 @@ impl KBlockTile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 enum StrenOrSeq {
-    DG(Strength),
+    DG(EnergyKCM),
     Sequence(String),
 }
 
@@ -1468,11 +1460,11 @@ struct KBlockParams {
     pub blocker_conc: HashMap<GlueIdentifier, ConcM>,
     pub seed: HashMap<(usize, usize), TileIdentifier>,
     pub binding_strength: HashMap<String, StrenOrSeq>,
-    pub alpha: f64,
+    pub ds_lat: EntropyKCMK,
     pub kf: f64,
     pub temp: f64,
     pub no_partially_blocked_attachments: bool,
-    pub blocker_energy_adj: Energy,
+    pub blocker_energy_adj: EnergyKCM,
 }
 
 impl Default for KBlockParams {
@@ -1482,11 +1474,11 @@ impl Default for KBlockParams {
             blocker_conc: HashMap::default(),
             seed: HashMap::default(),
             binding_strength: HashMap::default(),
-            alpha: -7.1,
+            ds_lat: todo!(),
             kf: 1.0e6,
             temp: 40.0,
             no_partially_blocked_attachments: false,
-            blocker_energy_adj: 0.0,
+            blocker_energy_adj: 0.0.into(),
         }
     }
 }
@@ -1593,8 +1585,7 @@ impl From<KBlockParams> for KBlock {
                     // instead of dg
                     // cge: it turns out I made some mistakes with alpha.  We need to use RT*alpha here, which messes
                     // up temperature dependence.  But that doesn't matter right now I suppose.
-                    crate::utils::string_dna_delta_g(&seq, value.temp)
-                        - R * (273.15 + value.temp) * value.alpha
+                    crate::utils::string_dna_delta_g(&seq, value.temp).into()
                 }
             };
 
@@ -1610,7 +1601,7 @@ impl From<KBlockParams> for KBlock {
         {
             let temperature = value.temp;
             let kf = value.kf.into();
-            let alpha = value.alpha;
+            let ds_lat = value.ds_lat;
             let fission_handling = FissionHandling::JustDetach;
             let no_partially_blocked_attachments = value.no_partially_blocked_attachments;
             let blocker_energy_adj = value.blocker_energy_adj;
@@ -1623,7 +1614,7 @@ impl From<KBlockParams> for KBlock {
                 blocker_concentrations: blocker_concentrations.iter().map(|c| (*c).into()).collect(),
                 tile_glues,
                 glue_links,
-                temperature,
+                temperature: TemperatureC(temperature),
                 seed,
                 north_friends: Vec::default(),
                 south_friends: Vec::default(),
@@ -1632,7 +1623,7 @@ impl From<KBlockParams> for KBlock {
                 energy_ns: Array2::zeros((tilecount, tilecount)),
                 energy_we: Array2::zeros((tilecount, tilecount)),
                 energy_blocker: Array2::default((tilecount, 4)),
-                alpha,
+                ds_lat,
                 kf,
                 fission_handling,
                 no_partially_blocked_attachments,
@@ -1681,7 +1672,7 @@ macro_rules! getset {
 
 getset!(KBlock,
     // f64 getters and setters
-    (f64 => kf, alpha, temperature),
+    (f64 => kf, temperature, ds_lat),
     // bool getters and setters
     (bool => no_partially_blocked_attachments)
 );

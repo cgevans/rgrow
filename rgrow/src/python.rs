@@ -665,12 +665,12 @@ impl KBlock {
 
     #[getter]
     fn get_glue_links<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.glue_links.to_pyarray(py)
+        self.glue_links.mapv(|x| x.into()).to_pyarray(py)
     }
 
     #[setter]
     fn set_glue_links(&mut self, glue_links: &Bound<PyArray2<f64>>) {
-        self.glue_links = glue_links.to_owned_array();
+        self.glue_links = glue_links.to_owned_array().mapv(|x| x.into());
         self.update();
     }
 
