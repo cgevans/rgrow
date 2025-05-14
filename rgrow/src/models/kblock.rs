@@ -12,7 +12,7 @@ use crate::{
         DimerInfo, Event, FissionHandling, Orientation, System, SystemWithDimers, TileBondInfo,
     },
     type_alias,
-    units::{ConcM, Energy, EnergyKCM, EntropyKCMK, RatePMS, RatePS, TemperatureC, TemperatureK},
+    units::{Molar, Energy, KcalPerMol, KcalPerMolKelvin, PerMolarSecond, PerSecond, Celsius, Kelvin},
 };
 
 // Imports for python bindings
@@ -147,12 +147,12 @@ pub fn side_as_str(side: Sides) -> &'static str {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KBlock {
     pub tile_names: Vec<String>,
-    pub tile_concentration: Vec<ConcM>,
+    pub tile_concentration: Vec<Molar>,
     pub tile_colors: Vec<[u8; 4]>,
 
     pub glue_names: Vec<String>,
-    pub blocker_concentrations: Vec<ConcM>,
-    pub temperature: TemperatureC,
+    pub blocker_concentrations: Vec<Molar>,
+    pub temperature: Celsius,
     pub seed: HashMap<PointSafe2, TileState>,
     /// Glues of a tile with a given ID
     ///
@@ -167,7 +167,7 @@ pub struct KBlock {
     /// ]
     tile_glues: Array1<[Glue; 4]>,
     /// Binding strength between two glues
-    pub(crate) glue_links: Array2<EnergyKCM>,
+    pub(crate) glue_links: Array2<KcalPerMol>,
 
     /// What can attach to the north of some *glue*
     ///
@@ -185,22 +185,22 @@ pub struct KBlock {
     west_friends: Vec<HashSetType<TileState>>,
 
     /// Energy of tile and blocker, blocker i contains [N, E, S, W]
-    energy_blocker: Array2<EnergyKCM>,
+    energy_blocker: Array2<KcalPerMol>,
 
     /// Energy between two tiles, if tile a is to the north of tile b, then
     /// this shoudl be indexed as [(a,b)]
-    energy_ns: Array2<EnergyKCM>,
-    energy_we: Array2<EnergyKCM>,
+    energy_ns: Array2<KcalPerMol>,
+    energy_we: Array2<KcalPerMol>,
 
-    free_blocker_concentrations: Array1<ConcM>,
+    free_blocker_concentrations: Array1<Molar>,
 
-    pub ds_lat: EntropyKCMK,
-    pub kf: RatePMS,
+    pub ds_lat: KcalPerMolKelvin,
+    pub kf: PerMolarSecond,
     fission_handling: FissionHandling,
 
     pub no_partially_blocked_attachments: bool,
 
-    pub blocker_energy_adj: EnergyKCM,
+    pub blocker_energy_adj: KcalPerMol,
 }
 
 #[inline(always)]
@@ -332,11 +332,11 @@ impl KBlock {
         self.west_friends = wf;
     }
 
-    fn energy_blocker_mut(&mut self, tile: TileType, side: usize) -> &mut EnergyKCM {
+    fn energy_blocker_mut(&mut self, tile: TileType, side: usize) -> &mut KcalPerMol {
         &mut self.energy_blocker[(tile.0, side)]
     }
 
-    fn get_glue_link(&self, glue1: Glue, glue2: Glue) -> EnergyKCM {
+    fn get_glue_link(&self, glue1: Glue, glue2: Glue) -> KcalPerMol {
         self.glue_links[(glue1, glue2)]
     }
 
@@ -417,15 +417,15 @@ impl KBlock {
                     .map(|(ti, &c)| {
                         self.tile_glues[ti]
                             .iter()
-                            .map(|&g| if g == gi { c } else { ConcM::zero() })
-                            .sum::<ConcM>()
+                            .map(|&g| if g == gi { c } else { Molar::zero() })
+                            .sum::<Molar>()
                     })
-                    .sum::<ConcM>();
+                    .sum::<Molar>();
                 let total_blocker_conc = self.blocker_concentrations[gi];
 
                 let cov_dg = self.glue_links[(gi, glue_inverse(gi))];
                 let cov_bdg = cov_dg.times_beta(self.temperature);
-                let ebdg = ConcM::new(cov_bdg.exp());
+                let ebdg = Molar::new(cov_bdg.exp());
 
                 *free_blocker_conc = 0.5
                     * (total_blocker_conc - total_conc_of_tile_glue_usage - ebdg
@@ -448,11 +448,11 @@ impl KBlock {
     }
 
     /// SIDE here must be NESW
-    fn energy_to(&self, side: Sides, tile1: TileState, tile2: TileState) -> EnergyKCM {
+    fn energy_to(&self, side: Sides, tile1: TileState, tile2: TileState) -> KcalPerMol {
         // If we are blocked on the sticking side, or the other tile has a blocker, then we
         // have no binding energy
         if tile1.is_blocked(side) || tile2.is_blocked(inverse(side)) {
-            return EnergyKCM::zero();
+            return KcalPerMol::zero();
         }
 
         // Ignore blockers
@@ -469,9 +469,9 @@ impl KBlock {
     }
 
     /// Energy of neighbour bonds
-    fn energy_at_point<S: State>(&self, state: &S, point: PointSafe2) -> EnergyKCM {
+    fn energy_at_point<S: State>(&self, state: &S, point: PointSafe2) -> KcalPerMol {
         let tile_id: TileState = state.tile_at_point(point).into();
-        let mut energy = EnergyKCM::zero();
+        let mut energy = KcalPerMol::zero();
         let mut n_bonds = 0;
         for side in ALL_SIDES {
             let neighbour_tile = Self::tile_to_side(state, side, point);
@@ -484,39 +484,39 @@ impl KBlock {
         energy - (self.ds_lat * self.temperature) * (n_bonds - 1).max(0)
     }
 
-    fn tile_detachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> RatePS {
+    fn tile_detachment_rate<S: State>(&self, state: &S, p: PointSafe2) -> PerSecond {
         if self.is_seed(&p) {
-            return RatePS::zero();
+            return PerSecond::zero();
         }
 
         let tile = state.tile_at_point(p);
         // If there is no tile, then nothing to attach
         if tile == 0 {
-            return RatePS::zero();
+            return PerSecond::zero();
         }
         let energy_with_neighbours = self.energy_at_point(state, p);
-        self.kf * ConcM::u0_times((energy_with_neighbours.times_beta(self.temperature)).exp())
+        self.kf * Molar::u0_times((energy_with_neighbours.times_beta(self.temperature)).exp())
     }
 
     /// The rate at which a tile will attach somewhere
-    fn tile_attachment_rate(&self, tile: TileState) -> RatePS {
+    fn tile_attachment_rate(&self, tile: TileState) -> PerSecond {
         self.kf * self.tile_concentration(tile)
     }
 
-    fn blocker_attachment_rate_at_side(&self, side: Sides, tile: TileState) -> RatePS {
+    fn blocker_attachment_rate_at_side(&self, side: Sides, tile: TileState) -> PerSecond {
         self.kf * self.free_blocker_concentrations[self.glue_on_side(side, tile)]
     }
 
     /// Get the energy between a tile and a blocker to some side
-    fn blocker_detachment_rate_at_side(&self, side: Sides, tile: TileState) -> RatePS {
+    fn blocker_detachment_rate_at_side(&self, side: Sides, tile: TileState) -> PerSecond {
         // If there is no blocker in that side, then the detachment rate will be 0
         if !tile.is_blocked(side) {
-            return RatePS::zero();
+            return PerSecond::zero();
         };
 
         let tile = tile.unblock_all();
         self.kf
-            * ConcM::u0_times(
+            * Molar::u0_times(
                 (self.energy_blocker[(
                     tile_index(tile).0,
                     side_index(side).expect("Side must be NESW"),
@@ -525,7 +525,7 @@ impl KBlock {
             )
     }
 
-    fn blocker_detachment_total_rate(&self, tile: TileState) -> RatePS {
+    fn blocker_detachment_total_rate(&self, tile: TileState) -> PerSecond {
         self.blocker_detachment_rate_at_side(NORTH, tile)
             + self.blocker_detachment_rate_at_side(EAST, tile)
             + self.blocker_detachment_rate_at_side(SOUTH, tile)
@@ -537,14 +537,14 @@ impl KBlock {
         tile_state: TileState,
         point: PointSafe2,
         side: Sides,
-        acc: &mut RatePS,
-    ) -> Option<(bool, RatePS, Event)> {
+        acc: &mut PerSecond,
+    ) -> Option<(bool, PerSecond, Event)> {
         // Something cannot detach if there is no blocker
         if !tile_state.is_blocked(side) {
             return None;
         }
         *acc -= self.blocker_detachment_rate_at_side(side, tile_state);
-        if *acc <= RatePS::zero() {
+        if *acc <= PerSecond::zero() {
             // ^ SIDE will change the bit from 1 to 0, so no longer have a blocker here
             Some((
                 true,
@@ -561,8 +561,8 @@ impl KBlock {
         &self,
         state: &S,
         point: PointSafe2,
-        acc: &mut RatePS,
-    ) -> (bool, RatePS, Event) {
+        acc: &mut PerSecond,
+    ) -> (bool, PerSecond, Event) {
         // Check what blockers the tile has
         let tile = TileState(state.tile_at_point(point));
         if tile.is_null() {
@@ -594,8 +594,8 @@ impl KBlock {
         side: Sides,
         point: PointSafe2,
         state: &S,
-        acc: &mut RatePS,
-    ) -> Option<(bool, RatePS, Event)> {
+        acc: &mut PerSecond,
+    ) -> Option<(bool, PerSecond, Event)> {
         // A blocker cannot attach to a side with a blocker already attached
         if tileid.is_blocked(side)
         // If a tile is already attached to that side, then nothing can attach
@@ -605,7 +605,7 @@ impl KBlock {
         }
 
         *acc -= self.kf * self.free_blocker_concentrations[self.glue_on_side(side, tileid)];
-        if *acc <= RatePS::zero() {
+        if *acc <= PerSecond::zero() {
             // | SIDE will change the bit from 0 to 1
             Some((
                 true,
@@ -622,11 +622,11 @@ impl KBlock {
         &self,
         state: &S,
         point: PointSafe2,
-        acc: &mut RatePS,
-    ) -> (bool, RatePS, Event) {
+        acc: &mut PerSecond,
+    ) -> (bool, PerSecond, Event) {
         let tile = TileState(state.tile_at_point(point));
         if tile.is_null() {
-            return (false, RatePS::zero(), Event::None);
+            return (false, PerSecond::zero(), Event::None);
         }
         self.maybe_attach_blocker_on_side_event(tile, NORTH, point, state, acc)
             .or(self.maybe_attach_blocker_on_side_event(tile, EAST, point, state, acc))
@@ -640,10 +640,10 @@ impl KBlock {
         &self,
         state: &S,
         point: PointSafe2,
-        acc: &mut RatePS,
-    ) -> (bool, RatePS, Event) {
+        acc: &mut PerSecond,
+    ) -> (bool, PerSecond, Event) {
         *acc -= self.tile_detachment_rate(state, point);
-        if *acc > RatePS::zero() {
+        if *acc > PerSecond::zero() {
             return (false, *acc, Event::None);
         }
 
@@ -731,10 +731,10 @@ impl KBlock {
         friends
     }
 
-    fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> RatePS {
+    fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> PerSecond {
         self.possible_tiles_at_point(state, point)
             .iter()
-            .fold(RatePS::zero(), |acc, &tile| {
+            .fold(PerSecond::zero(), |acc, &tile| {
                 acc + self.kf * self.tile_concentration(tile)
             })
     }
@@ -744,8 +744,8 @@ impl KBlock {
         &self,
         state: &S,
         point: PointSafe2,
-        acc: &mut RatePS,
-    ) -> (bool, RatePS, Event) {
+        acc: &mut PerSecond,
+    ) -> (bool, PerSecond, Event) {
         let tile = state.tile_at_point(point);
         // tile aready attached here
         if tile != 0 {
@@ -758,7 +758,7 @@ impl KBlock {
         // account twice)
         for tile in friends {
             *acc -= self.kf * self.tile_concentration(tile);
-            if *acc <= RatePS::zero() {
+            if *acc <= PerSecond::zero() {
                 return (true, *acc, Event::MonomerAttachment(point, tile.into()));
             }
         }
@@ -784,7 +784,7 @@ impl KBlock {
     }
 
     /// Get the concentration of a specific tile, with blocker as given in the TileId
-    pub fn tile_concentration(&self, tile: TileState) -> ConcM {
+    pub fn tile_concentration(&self, tile: TileState) -> Molar {
         let mut acc = 1.0;
         for side in ALL_SIDES {
             let blocker_perc = self.blocker_percentage(side, tile);
@@ -797,14 +797,14 @@ impl KBlock {
         self.tile_concentration[tile_index(tile).0] * acc
     }
 
-    fn total_blocker_attachment_rate<S: State>(&self, state: &S, point: PointSafe2) -> RatePS {
+    fn total_blocker_attachment_rate<S: State>(&self, state: &S, point: PointSafe2) -> PerSecond {
         // Check that there is a tile at this point
         let tile: TileState = state.tile_at_point(point).into();
         if tile.is_null() {
-            return RatePS::zero();
+            return PerSecond::zero();
         }
 
-        let mut rate = RatePS::zero();
+        let mut rate = PerSecond::zero();
         for s in ALL_SIDES {
             if !tile.is_blocked(s) && Self::tile_to_side(state, s, point).is_null() {
                 rate += self.kf * self.free_blocker_concentrations[self.glue_on_side(s, tile)];
@@ -1056,11 +1056,11 @@ impl System for KBlock {
         &self,
         state: &S,
         p: crate::canvas::PointSafeHere,
-    ) -> RatePS {
+    ) -> PerSecond {
         let p = if state.inbounds(p.0) {
             PointSafe2(p.0)
         } else {
-            return RatePS::zero();
+            return PerSecond::zero();
         };
         let tile = { state.tile_at_point(p) };
         if tile != 0 {
@@ -1076,7 +1076,7 @@ impl System for KBlock {
         &self,
         state: &St,
         point: crate::canvas::PointSafe2,
-        acc: RatePS,
+        acc: PerSecond,
     ) -> crate::system::Event {
         let mut acc = acc;
 
@@ -1114,7 +1114,7 @@ impl System for KBlock {
         // cge: Roughly copied from kTAM, because I need this for playing with
         // some algorithmic self-assembly stuff.
 
-        let threshold = EnergyKCM(-0.05); // Todo: fix this (note for kCov, energies are negative)
+        let threshold = KcalPerMol(-0.05); // Todo: fix this (note for kCov, energies are negative)
         let mut mismatch_locations = Array2::<usize>::zeros((state.nrows(), state.ncols()));
 
         // TODO: this should use an iterator from the canvas, which we should implement.
@@ -1244,7 +1244,7 @@ mod test_kblock {
             ];
             let blocker_concentrations = vec![0., 1., 1., 1., 1.];
             let seed = HashMap::default();
-            let kf = RatePMS::new(1e6);
+            let kf = PerMolarSecond::new(1e6);
             let fission_handling = FissionHandling::JustDetach;
             let tilecount = tile_names.len();
             let mut s = KBlock {
@@ -1255,7 +1255,7 @@ mod test_kblock {
                 blocker_concentrations: blocker_concentrations.iter().map(|c| (*c).into()).collect(),
                 tile_glues,
                 glue_links: glue_linkns.mapv(|x| x.into()),
-                temperature: TemperatureC(60.0),
+                temperature: Celsius(60.0),
                 seed,
                 north_friends: Vec::default(),
                 south_friends: Vec::default(),
@@ -1435,7 +1435,7 @@ impl KBlockTile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 enum StrenOrSeq {
-    DG(EnergyKCM),
+    DG(KcalPerMol),
     Sequence(String),
 }
 
@@ -1457,14 +1457,14 @@ pub enum GlueIdentifier {
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 struct KBlockParams {
     pub tiles: Vec<KBlockTile>,
-    pub blocker_conc: HashMap<GlueIdentifier, ConcM>,
+    pub blocker_conc: HashMap<GlueIdentifier, Molar>,
     pub seed: HashMap<(usize, usize), TileIdentifier>,
     pub binding_strength: HashMap<String, StrenOrSeq>,
-    pub ds_lat: EntropyKCMK,
+    pub ds_lat: KcalPerMolKelvin,
     pub kf: f64,
     pub temp: f64,
     pub no_partially_blocked_attachments: bool,
-    pub blocker_energy_adj: EnergyKCM,
+    pub blocker_energy_adj: KcalPerMol,
 }
 
 impl Default for KBlockParams {
@@ -1614,7 +1614,7 @@ impl From<KBlockParams> for KBlock {
                 blocker_concentrations: blocker_concentrations.iter().map(|c| (*c).into()).collect(),
                 tile_glues,
                 glue_links,
-                temperature: TemperatureC(temperature),
+                temperature: Celsius(temperature),
                 seed,
                 north_friends: Vec::default(),
                 south_friends: Vec::default(),
@@ -1713,7 +1713,7 @@ impl KBlock {
             }
 
             println!("Possible tile attachments:");
-            let mut total_rate = RatePS::zero();
+            let mut total_rate = PerSecond::zero();
 
             for &tile in possible_tiles.iter() {
                 let rate = self.kf * self.tile_concentration(tile);
@@ -1758,7 +1758,7 @@ impl KBlock {
                 let mut rate = self.blocker_attachment_rate_at_side(side, tile);
                 // If there is a tile already attached on that side, then the attachment rate is 0
                 if !Self::tile_to_side(&state.0, side, point).is_null() {
-                    rate = RatePS::zero();
+                    rate = PerSecond::zero();
                 };
                 ("attachment", rate)
             };

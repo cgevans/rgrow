@@ -11,7 +11,7 @@ use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
 use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, Model, TileSet, SIZE_DEFAULT};
-use crate::units::{RateMPS, RatePS};
+use crate::units::{MolarPerSecond, PerSecond};
 
 use canvas::Canvas;
 use num_traits::{Float, Num, Zero};
@@ -82,7 +82,7 @@ pub struct FFSRunConfig {
     pub start_size: NumTiles,
     pub size_step: NumTiles,
     pub keep_configs: bool,
-    pub min_nuc_rate: Option<RateMPS>,
+    pub min_nuc_rate: Option<MolarPerSecond>,
     pub canvas_size: (usize, usize),
     pub canvas_type: CanvasType,
     pub tracking: TrackingType,
@@ -240,7 +240,7 @@ impl FFSRunConfig {
             rc.keep_configs = x;
         }
 
-        rc.min_nuc_rate = min_nuc_rate.map(RateMPS::new);
+        rc.min_nuc_rate = min_nuc_rate.map(MolarPerSecond::new);
 
         if let Some(x) = canvas_size {
             rc.canvas_size = x;
@@ -357,7 +357,7 @@ fn max_prob(num_success: usize, num_trials: usize) -> f64 {
 
 pub struct FFSRun<St: ClonableState> {
     pub level_list: Vec<FFSLevel<St>>,
-    pub dimerization_rate: RateMPS,
+    pub dimerization_rate: MolarPerSecond,
     pub forward_prob: Vec<f64>,
 }
 
@@ -368,10 +368,10 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
     ) -> Result<Self, GrowError> {
         let level_list = Vec::new();
 
-        let dimerization_rate: RateMPS = system
+        let dimerization_rate: MolarPerSecond = system
             .calc_dimers()
             .iter()
-            .fold(RateMPS::zero(), |acc, d| acc + d.formation_rate);
+            .fold(MolarPerSecond::zero(), |acc, d| acc + d.formation_rate);
 
         let mut ret = Self {
             level_list,
@@ -511,7 +511,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             let mut i_old_state: usize = 0;
 
             while state.n_tiles() == 0 {
-                if state.total_rate() != RatePS::zero() {
+                if state.total_rate() != PerSecond::zero() {
                     panic!("Total rate is not zero! {state:?}");
                 };
                 i_old_state = chooser.sample(&mut rng);
@@ -599,7 +599,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         let min_prob = if let Some(min_nuc_rate) = config.min_nuc_rate {
             let dimerization_rate = dimers
                 .iter()
-                .fold(RateMPS::zero(), |acc, d| acc + d.formation_rate);
+                .fold(MolarPerSecond::zero(), |acc, d| acc + d.formation_rate);
             min_nuc_rate / dimerization_rate
         } else {
             0.
@@ -660,7 +660,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     if state.n_tiles() != 0 {
                         panic!("{}", state.panicinfo())
                     }
-                    if state.total_rate() != RatePS::zero() {
+                    if state.total_rate() != PerSecond::zero() {
                         panic!("{}", state.panicinfo())
                     };
                 }
@@ -705,7 +705,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 pub struct FFSRunResult {
     #[serde(skip)]
     pub level_list: Vec<Arc<FFSLevelResult>>,
-    pub dimerization_rate: RateMPS,
+    pub dimerization_rate: MolarPerSecond,
     pub forward_prob: Vec<f64>,
     pub ffs_config: Option<FFSRunConfig>,
     #[serde(skip)]
@@ -721,7 +721,7 @@ pub struct FFSRunResultDF {
     pub configs_df: DataFrame,
     pub ffs_config: Option<FFSRunConfig>,
     pub system: Option<SystemEnum>,
-    pub dimerization_rate: RateMPS,
+    pub dimerization_rate: MolarPerSecond,
 }
 
 impl From<FFSRunResult> for FFSRunResultDF {
@@ -780,7 +780,7 @@ impl FFSRunResultDF {
         it.map(|x| x.unwrap()).collect()
     }
 
-    pub fn nucleation_rate(&self) -> RateMPS {
+    pub fn nucleation_rate(&self) -> MolarPerSecond {
         let ptot: f64 = self
             .surfaces_df
             .column("p_r")
@@ -867,13 +867,13 @@ pub trait FFSSurface: Send + Sync {
 }
 
 impl<St: ClonableState> FFSRun<St> {
-    fn nucleation_rate(&self) -> RateMPS {
+    fn nucleation_rate(&self) -> MolarPerSecond {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
 }
 
 impl FFSRunResult {
-    pub fn nucleation_rate(&self) -> RateMPS {
+    pub fn nucleation_rate(&self) -> MolarPerSecond {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
 
@@ -889,7 +889,7 @@ impl FFSRunResult {
         self.level_list.get(i).map(|x| (*x).clone())
     }
 
-    pub fn dimerization_rate(&self) -> RateMPS {
+    pub fn dimerization_rate(&self) -> MolarPerSecond {
         self.dimerization_rate
     }
 

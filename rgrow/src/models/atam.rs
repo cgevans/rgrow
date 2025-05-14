@@ -4,7 +4,7 @@ use crate::{
     state::State,
     system::{Event, System, SystemInfo, SystemWithDimers, TileBondInfo},
     tileset::{ProcessedTileSet, TileSet},
-    units::{Rate, RatePS},
+    units::{Rate, PerSecond},
 };
 
 use num_traits::Zero;
@@ -141,20 +141,20 @@ impl System for ATAM {
         }
     }
 
-    fn event_rate_at_point<S: State>(&self, state: &S, p: crate::canvas::PointSafeHere) -> RatePS {
+    fn event_rate_at_point<S: State>(&self, state: &S, p: crate::canvas::PointSafeHere) -> PerSecond {
         if !state.inbounds(p.0) {
-            return RatePS::zero();
+            return PerSecond::zero();
         }
         let p = PointSafe2(p.0);
         let t = state.tile_at_point(p);
         if t.nonzero() {
-            RatePS::zero()
+            PerSecond::zero()
         } else {
-            RatePS::new(self.total_monomer_attachment_rate_at_point(state, p))
+            PerSecond::new(self.total_monomer_attachment_rate_at_point(state, p))
         }
     }
 
-    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: RatePS) -> Event {
+    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: PerSecond) -> Event {
         match self.choose_attachment_at_point(state, p, f64::from_per_second(acc)) {
             (true, _, event) => {
                 // println!("{:?} {:?}", acc, event);

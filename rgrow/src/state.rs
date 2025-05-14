@@ -3,7 +3,7 @@ use crate::canvas::{
     Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals,
 };
 use crate::tileset::{CanvasType, TrackingType};
-use crate::units::{RatePS, TimeS};
+use crate::units::{PerSecond, Second};
 use crate::{
     canvas::PointSafe2,
     canvas::PointSafeHere,
@@ -141,8 +141,8 @@ pub trait StateStatus {
     fn total_events(&self) -> NumEvents;
     fn add_events(&mut self, n: NumEvents);
     fn reset_events(&mut self);
-    fn add_time(&mut self, time: TimeS);
-    fn time(&self) -> TimeS;
+    fn add_time(&mut self, time: Second);
+    fn time(&self) -> Second;
     fn record_event(&mut self, event: &system::Event);
     fn reset_tracking_assuming_empty_state(&mut self);
 }
@@ -171,11 +171,11 @@ pub trait StateWithCreate: State + Sized {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuadTreeState<C: Canvas, T: StateTracker> {
     // #[serde(skip_serializing)]
-    pub rates: QuadTreeSquareArray<RatePS>,
+    pub rates: QuadTreeSquareArray<PerSecond>,
     pub canvas: C,
     ntiles: NumTiles,
     total_events: NumEvents,
-    time: TimeS,
+    time: Second,
     pub tracker: T,
     tile_counts: Array1<NumTiles>,
 }
@@ -229,28 +229,28 @@ impl<C: Canvas + CanvasCreate, T: StateTracker> State for QuadTreeState<C, T> {
 }
 
 impl<C: Canvas, T: StateTracker> RateStore for QuadTreeState<C, T> {
-    fn choose_point(&self) -> (Point, RatePS) {
+    fn choose_point(&self) -> (Point, PerSecond) {
         self.rates.choose_point()
     }
 
-    fn rate_at_point(&self, point: PointSafeHere) -> RatePS {
+    fn rate_at_point(&self, point: PointSafeHere) -> PerSecond {
         self.rates.rate_at_point(point)
     }
 
-    fn update_point(&mut self, point: PointSafeHere, new_rate: RatePS) {
+    fn update_point(&mut self, point: PointSafeHere, new_rate: PerSecond) {
         self.rates.update_point(point, new_rate)
     }
 
     #[inline]
-    fn update_multiple(&mut self, points: &[(PointSafeHere, RatePS)]) {
+    fn update_multiple(&mut self, points: &[(PointSafeHere, PerSecond)]) {
         self.rates.update_multiple(points);
     }
 
-    fn total_rate(&self) -> RatePS {
+    fn total_rate(&self) -> PerSecond {
         self.rates.total_rate()
     }
 
-    fn rate_array(&self) -> ArrayView2<RatePS> {
+    fn rate_array(&self) -> ArrayView2<PerSecond> {
         self.rates
             .0
             .first()
@@ -394,7 +394,7 @@ where
     type Params = (usize, usize);
 
     fn empty(params: Self::Params) -> Result<Self, GrowError> {
-        let rates: QuadTreeSquareArray<RatePS> =
+        let rates: QuadTreeSquareArray<PerSecond> =
             QuadTreeSquareArray::new_with_size(params.0, params.1);
         let canvas = C::new_sized(params)?;
         let tracker = T::default(&canvas);
@@ -403,14 +403,14 @@ where
             canvas,
             ntiles: 0,
             total_events: 0,
-            time: TimeS::new(0.),
+            time: Second::new(0.),
             tracker,
             tile_counts: Array1::<NumTiles>::zeros(1),
         })
     }
 
     fn empty_with_types(params: Self::Params, n_tile_types: usize) -> Result<Self, GrowError> {
-        let rates: QuadTreeSquareArray<RatePS> =
+        let rates: QuadTreeSquareArray<PerSecond> =
             QuadTreeSquareArray::new_with_size(params.0, params.1);
         let canvas = C::new_sized(params)?;
         let tracker = T::default(&canvas);
@@ -419,7 +419,7 @@ where
             canvas,
             ntiles: 0,
             total_events: 0,
-            time: TimeS::new(0.),
+            time: Second::new(0.),
             tracker,
             tile_counts: Array1::<NumTiles>::zeros(n_tile_types),
         })
@@ -427,7 +427,7 @@ where
 
     fn from_array(arr: Array2<Tile>) -> Result<Self, GrowError> {
         let shape = arr.shape();
-        let rates: QuadTreeSquareArray<RatePS> =
+        let rates: QuadTreeSquareArray<PerSecond> =
             QuadTreeSquareArray::new_with_size(shape[0], shape[1]);
         let canvas = C::from_array(arr)?;
         let tracker = T::default(&canvas);
@@ -436,7 +436,7 @@ where
             canvas,
             ntiles: 0,
             total_events: 0,
-            time: TimeS::new(0.),
+            time: Second::new(0.),
             tracker,
             tile_counts: Array1::<NumTiles>::zeros(1),
         })
@@ -484,11 +484,11 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
         self.total_events
     }
 
-    fn add_time(&mut self, time: TimeS) {
+    fn add_time(&mut self, time: Second) {
         self.time += time;
     }
 
-    fn time(&self) -> TimeS {
+    fn time(&self) -> Second {
         self.time
     }
 
@@ -517,7 +517,7 @@ impl<C: Canvas + Canvas, T: StateTracker> QuadTreeState<C, T> {
         if level > 0 {
             for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
                 let z = source.rates.0[level][(*yy, *xx)];
-                if z > RatePS::new(0.) {
+                if z > PerSecond::new(0.) {
                     self.rates.0[level][(*yy, *xx)] = z;
                     self.copy_level_quad(source, level - 1, (*yy * 2, *xx * 2));
                 }
@@ -526,7 +526,7 @@ impl<C: Canvas + Canvas, T: StateTracker> QuadTreeState<C, T> {
             for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
                 let z = source.rates.0[level][(*yy, *xx)];
                 let t = unsafe { source.canvas.uv_p((*yy, *xx)) };
-                if z > RatePS::new(0.) {
+                if z > PerSecond::new(0.) {
                     self.rates.0[level][(*yy, *xx)] = z;
                     if t > 0 {
                         // Tile must have nonzero rate, so we only check if the rate is nonzero.
@@ -578,7 +578,7 @@ impl<C: Canvas, T: StateTracker> TrackerData for QuadTreeState<C, T> {
 pub trait StateTracker: Clone + Debug + Sync + Send {
     fn default(canvas: &dyn Canvas) -> Self;
 
-    fn record_single_event(&mut self, event: &system::Event, time: TimeS) -> &mut Self;
+    fn record_single_event(&mut self, event: &system::Event, time: Second) -> &mut Self;
 
     fn get_tracker_data(&self) -> RustAny;
 
@@ -597,7 +597,7 @@ impl StateTracker for NullStateTracker {
         Self
     }
 
-    fn record_single_event(&mut self, _event: &system::Event, _time: TimeS) -> &mut Self {
+    fn record_single_event(&mut self, _event: &system::Event, _time: Second) -> &mut Self {
         self
     }
 
@@ -631,7 +631,7 @@ impl StateTracker for OrderTracker {
         self.order = 1;
     }
 
-    fn record_single_event(&mut self, event: &system::Event, _time: TimeS) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, _time: Second) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -678,23 +678,23 @@ impl StateTracker for OrderTracker {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LastAttachTimeTracker {
-    pub arr: Array2<TimeS>,
+    pub arr: Array2<Second>,
 }
 
 impl StateTracker for LastAttachTimeTracker {
     fn default(canvas: &dyn Canvas) -> Self {
         LastAttachTimeTracker {
-            arr: Array2::<TimeS>::from_elem((canvas.nrows(), canvas.ncols()), TimeS::new(f64::NAN)),
+            arr: Array2::<Second>::from_elem((canvas.nrows(), canvas.ncols()), Second::new(f64::NAN)),
         }
     }
 
     fn reset(&mut self) {
-        self.arr.fill(TimeS::new(f64::NAN));
+        self.arr.fill(Second::new(f64::NAN));
     }
 
     fn reset_assuming_empty_state(&mut self) {}
 
-    fn record_single_event(&mut self, event: &system::Event, time: TimeS) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, time: Second) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -702,7 +702,7 @@ impl StateTracker for LastAttachTimeTracker {
                 self
             }
             system::Event::MonomerDetachment(p) => {
-                self.arr[p.0] = TimeS::new(f64::NAN);
+                self.arr[p.0] = Second::new(f64::NAN);
                 self
             }
             system::Event::MonomerChange(p, _t) => {
@@ -723,7 +723,7 @@ impl StateTracker for LastAttachTimeTracker {
             }
             system::Event::PolymerDetachment(vec) => {
                 for p in vec {
-                    self.arr[p.0] = TimeS::new(f64::NAN);
+                    self.arr[p.0] = Second::new(f64::NAN);
                 }
                 self
             }
@@ -747,7 +747,7 @@ impl StateTracker for PrintEventTracker {
         // Default is to do nothing
     }
 
-    fn record_single_event(&mut self, event: &system::Event, time: TimeS) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, time: Second) -> &mut Self {
         println!("{}: {:?}", time, event);
         self
     }

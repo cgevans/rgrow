@@ -18,7 +18,7 @@ use crate::{
         System, SystemInfo, SystemWithDimers, TileBondInfo,
     },
     tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
-    units::{ConcM2, Rate, RatePMS, RatePS},
+    units::{MolarSq, Rate, PerMolarSecond, PerSecond},
 };
 
 use crate::base::{HashMapType, HashSetType};
@@ -252,9 +252,9 @@ impl System for KTAM {
         state.calc_n_tiles_with_tilearray(&self.should_be_counted)
     }
 
-    fn event_rate_at_point<S: State>(&self, state: &S, p: crate::canvas::PointSafeHere) -> RatePS {
+    fn event_rate_at_point<S: State>(&self, state: &S, p: crate::canvas::PointSafeHere) -> PerSecond {
         if !state.inbounds(p.0) {
-            return RatePS::zero();
+            return PerSecond::zero();
         }
         let p = PointSafe2(p.0);
         let t = state.tile_at_point(p);
@@ -294,7 +294,7 @@ impl System for KTAM {
         }
     }
 
-    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: RatePS) -> Event {
+    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: PerSecond) -> Event {
         match self.choose_detachment_at_point(state, p, Rate64::from_per_second(acc)) {
             (true, _, event) => event,
             (false, acc, _) => match self.choose_attachment_at_point(state, p, acc) {
@@ -801,12 +801,12 @@ impl SystemWithDimers for KTAM {
 
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
             if *e > 0. {
-                let biconc: ConcM2 = (self.tile_concs[t1] * self.tile_concs[t2]).into();
+                let biconc: MolarSq = (self.tile_concs[t1] * self.tile_concs[t2]).into();
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::NS,
-                    formation_rate: std::convert::Into::<RatePMS>::into(self.kf) * biconc,
+                    formation_rate: std::convert::Into::<PerMolarSecond>::into(self.kf) * biconc,
                     equilibrium_conc: biconc.over_u0() * f64::exp(*e - self.alpha),
                 });
             }
@@ -814,12 +814,12 @@ impl SystemWithDimers for KTAM {
 
         for ((t1, t2), e) in self.energy_we.indexed_iter() {
             if *e > 0. {
-                let biconc: ConcM2 = (self.tile_concs[t1] * self.tile_concs[t2]).into();
+                let biconc: MolarSq = (self.tile_concs[t1] * self.tile_concs[t2]).into();
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::WE,
-                    formation_rate: std::convert::Into::<RatePMS>::into(self.kf) * biconc,
+                    formation_rate: std::convert::Into::<PerMolarSecond>::into(self.kf) * biconc,
                     equilibrium_conc: biconc.over_u0() * f64::exp(*e - self.alpha),
                 });
             }
@@ -1510,7 +1510,7 @@ impl KTAM {
             sys: &KTAM,
             state: &S,
             p: PointSafeHere,
-        ) -> (PointSafeHere, RatePS) {
+        ) -> (PointSafeHere, PerSecond) {
             (p, sys.event_rate_at_point(state, p))
         }
 

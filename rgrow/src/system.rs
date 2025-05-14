@@ -17,10 +17,10 @@ use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
 use crate::state::State;
 use crate::state::StateEnum;
-use crate::units::ConcM;
-use crate::units::RateMPS;
-use crate::units::TimeS;
-use crate::units::{Rate, RatePS};
+use crate::units::Molar;
+use crate::units::MolarPerSecond;
+use crate::units::Second;
+use crate::units::{Rate, PerSecond};
 
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateWithCreate,
@@ -59,9 +59,9 @@ pub enum Event {
 
 #[derive(Debug)]
 pub enum StepOutcome {
-    HadEventAt(TimeS),
-    NoEventIn(TimeS),
-    DeadEventAt(TimeS),
+    HadEventAt(Second),
+    NoEventIn(Second),
+    DeadEventAt(Second),
     ZeroRate,
 }
 
@@ -197,8 +197,8 @@ pub struct DimerInfo {
     pub t1: Tile,
     pub t2: Tile,
     pub orientation: Orientation,
-    pub formation_rate: RateMPS,
-    pub equilibrium_conc: ConcM,
+    pub formation_rate: MolarPerSecond,
+    pub equilibrium_conc: Molar,
 }
 
 #[cfg(feature = "python")]
@@ -270,7 +270,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         state.calc_n_tiles()
     }
 
-    fn take_single_step<St: State>(&self, state: &mut St, max_time_step: TimeS) -> StepOutcome {
+    fn take_single_step<St: State>(&self, state: &mut St, max_time_step: Second) -> StepOutcome {
         let time_step = -f64::ln(rng().random()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
@@ -280,7 +280,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         let event = self.choose_event_at_point(
             state,
             PointSafe2(point),
-            RatePS::from_per_second(remainder),
+            PerSecond::from_per_second(remainder),
         ); // FIXME
         if let Event::None = event {
             state.add_time(time_step);
@@ -309,11 +309,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         }
 
         let mut rtime = match bounds.for_time {
-            Some(t) => TimeS::new(t),
-            None => TimeS::new(f64::INFINITY),
+            Some(t) => Second::new(t),
+            None => Second::new(f64::INFINITY),
         };
         if let Some(t) = bounds.total_time {
-            rtime = rtime.min(TimeS::new(t) - state.time());
+            rtime = rtime.min(Second::new(t) - state.time());
         }
 
         // If we have a for_wall_time, get an instant to compare to
@@ -324,7 +324,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 return Ok(EvolveOutcome::ReachedSizeMin);
             } else if bounds.size_max.is_some_and(|ms| state.n_tiles() >= ms) {
                 return Ok(EvolveOutcome::ReachedSizeMax);
-            } else if rtime <= TimeS::new(0.) {
+            } else if rtime <= Second::new(0.) {
                 return Ok(EvolveOutcome::ReachedTimeMax);
             } else if bounds
                 .for_wall_time
@@ -451,11 +451,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn update_after_event<St: State>(&self, state: &mut St, event: &Event);
 
     /// Returns the total event rate at a given point.  These should correspond with the events chosen by `choose_event_at_point`.
-    fn event_rate_at_point<St: State>(&self, state: &St, p: PointSafeHere) -> RatePS;
+    fn event_rate_at_point<St: State>(&self, state: &St, p: PointSafeHere) -> PerSecond;
 
     /// Given a point, and an accumulated random rate choice `acc` (which should be less than the total rate at the point),
     /// return the event that should take place.
-    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: RatePS) -> Event;
+    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: PerSecond) -> Event;
 
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;
@@ -486,7 +486,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             NeededUpdate::None => todo!(),
             NeededUpdate::NonZero => (0..nrows)
                 .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))))
-                .filter(|p| state.rate_at_point(*p) > RatePS::zero())
+                .filter(|p| state.rate_at_point(*p) > PerSecond::zero())
                 .collect::<Vec<_>>(),
             NeededUpdate::All => (0..nrows)
                 .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))))

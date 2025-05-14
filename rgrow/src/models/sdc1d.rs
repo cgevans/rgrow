@@ -34,7 +34,7 @@ use crate::{
     colors::get_color_or_random,
     state::{State, StateEnum},
     system::{Event, EvolveBounds, NeededUpdate, System, TileBondInfo},
-    units::{ConcM, RatePMS, RatePS},
+    units::{Molar, PerMolarSecond, PerSecond},
 };
 
 use ndarray::prelude::{Array1, Array2};
@@ -49,7 +49,7 @@ const WEST_GLUE_INDEX: usize = 0;
 const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
-const U0: ConcM = ConcM(1.0);
+const U0: Molar = Molar(1.0);
 
 fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     let mut big_float = big_float.clone();
@@ -110,9 +110,9 @@ pub struct SDC {
     /// All strands in the system, they are represented by tiles
     /// with only glue on the south, west, and east (nothing can stuck to the top of a strand)
     // pub strands: Array1<Tile>,
-    pub strand_concentration: Array1<ConcM>,
+    pub strand_concentration: Array1<Molar>,
     /// The concentration of the scaffold
-    pub scaffold_concentration: ConcM,
+    pub scaffold_concentration: Molar,
     /// Glues of a given strand by id
     ///
     /// Note that the glues will be sorted in the following manner:
@@ -126,7 +126,7 @@ pub struct SDC {
     /// when illustrated
     pub colors: Vec<[u8; 4]>,
     /// The (de)attachment rates will depend on this constant(for the system) value
-    pub kf: RatePMS,
+    pub kf: PerMolarSecond,
     /// FIXME: Change this to a vector to avoid hashing time
     ///
     /// Set of tiles that can stick to scaffold gap with a given glue
@@ -307,7 +307,7 @@ impl SDC {
         &self,
         state: &S,
         scaffold_point: PointSafe2,
-    ) -> RatePS {
+    ) -> PerSecond {
         let strand = state.tile_at_point(scaffold_point);
 
         // let anchor_tile = self.anchor_tiles[(scaffold_point.0).0]; // FIXME: disabled anchor tiles for now
@@ -318,19 +318,19 @@ impl SDC {
         /*|| anchor_tile.0 == scaffold_point */
         {
             // FIXME: disabled anchor tiles for now
-            return RatePS::zero();
+            return PerSecond::zero();
         }
 
         let bond_energy = self.bond_energy_of_strand(state, scaffold_point, strand);
-        self.kf * ConcM::u0_times(bond_energy.exp())
+        self.kf * Molar::u0_times(bond_energy.exp())
     }
 
     pub fn choose_monomer_attachment_at_point<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
-        acc: RatePS,
-    ) -> (bool, RatePS, Event) {
+        acc: PerSecond,
+    ) -> (bool, PerSecond, Event) {
         self.find_monomer_attachment_possibilities_at_point(state, acc, point, false)
     }
 
@@ -338,11 +338,11 @@ impl SDC {
         &self,
         state: &S,
         point: PointSafe2,
-        mut acc: RatePS,
-    ) -> (bool, RatePS, Event) {
+        mut acc: PerSecond,
+    ) -> (bool, PerSecond, Event) {
         acc -= self.monomer_detachment_rate_at_point(state, point);
 
-        if acc > RatePS::zero() {
+        if acc > PerSecond::zero() {
             return (false, acc, Event::None);
         }
 
@@ -356,10 +356,10 @@ impl SDC {
     fn find_monomer_attachment_possibilities_at_point<S: State>(
         &self,
         state: &S,
-        mut acc: RatePS,
+        mut acc: PerSecond,
         scaffold_coord: PointSafe2,
         just_calc: bool,
-    ) -> (bool, RatePS, Event) {
+    ) -> (bool, PerSecond, Event) {
         let point = scaffold_coord;
         let tile = state.tile_at_point(point);
 
@@ -379,7 +379,7 @@ impl SDC {
 
         for &strand in friends {
             acc -= self.kf * self.strand_concentration[strand as usize];
-            if acc <= RatePS::zero() && (!just_calc) {
+            if acc <= PerSecond::zero() && (!just_calc) {
                 let rand: f64 = rand_thread.random();
                 let total = self.total_tile_count(state, strand) as f64;
                 let attached = state.count_of_tile(strand) as f64;
@@ -398,12 +398,12 @@ impl SDC {
         &self,
         state: &S,
         scaffold_coord: PointSafe2,
-    ) -> RatePS {
+    ) -> PerSecond {
         // If we set acc = 0, would it not be the case that we just attach to the first tile we can
         // ?
         match self.find_monomer_attachment_possibilities_at_point(
             state,
-            RatePS::zero(),
+            PerSecond::zero(),
             scaffold_coord,
             true,
         ) {
@@ -880,9 +880,9 @@ impl System for SDC {
         &self,
         state: &St,
         p: crate::canvas::PointSafeHere,
-    ) -> RatePS {
+    ) -> PerSecond {
         if !state.inbounds(p.0) {
-            return RatePS::zero();
+            return PerSecond::zero();
         }
 
         let scaffold_coord = PointSafe2(p.0);
@@ -898,7 +898,7 @@ impl System for SDC {
         &self,
         state: &St,
         point: crate::canvas::PointSafe2,
-        acc: RatePS,
+        acc: PerSecond,
     ) -> crate::system::Event {
         match self.choose_monomer_detachment_at_point(state, point, acc) {
             (true, _, event) => event,
@@ -963,7 +963,7 @@ impl System for SDC {
         match name {
             "kf" => {
                 let kf = value
-                    .downcast_ref::<RatePMS>()
+                    .downcast_ref::<PerMolarSecond>()
                     .ok_or(GrowError::WrongParameterType(name.to_string()))?;
                 self.kf = *kf;
                 self.update_system();
@@ -971,7 +971,7 @@ impl System for SDC {
             }
             "strand_concentrations" => {
                 let tile_concs = value
-                    .downcast_ref::<Array1<ConcM>>()
+                    .downcast_ref::<Array1<Molar>>()
                     .ok_or(GrowError::WrongParameterType(name.to_string()))?;
                 self.strand_concentration.clone_from(tile_concs);
                 self.update_system();
@@ -1351,9 +1351,9 @@ impl SDC {
 
         {
             let anchor_tiles = vec![];
-            let strand_concentration = strand_concentration.mapv(ConcM::new);
-            let scaffold_concentration = ConcM::new(params.scaffold_concentration);
-            let kf = RatePMS::new(params.k_f);
+            let strand_concentration = strand_concentration.mapv(Molar::new);
+            let scaffold_concentration = Molar::new(params.scaffold_concentration);
+            let kf = PerMolarSecond::new(params.k_f);
             let temperature = params.temperature;
             let strand_count = strand_names.len();
             let mut s = SDC {
@@ -1633,12 +1633,12 @@ impl SDC {
 
     #[getter]
     fn get_tile_concs<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
-        self.strand_concentration.mapv(ConcM::into).to_pyarray(py)
+        self.strand_concentration.mapv(Molar::into).to_pyarray(py)
     }
 
     #[setter]
     fn set_tile_concs(&mut self, concs: Vec<f64>) {
-        self.strand_concentration = Array1::from(concs).mapv(ConcM::new);
+        self.strand_concentration = Array1::from(concs).mapv(Molar::new);
         self.update_system();
     }
 
@@ -1892,8 +1892,8 @@ mod test_sdc_model {
             strand_names: Vec::new(),
             glue_names: Vec::new(),
             scaffold: Array2::<usize>::zeros((5, 5)),
-            strand_concentration: Array1::<ConcM>::zeros(5),
-            scaffold_concentration: ConcM::zero(),
+            strand_concentration: Array1::<Molar>::zeros(5),
+            scaffold_concentration: Molar::zero(),
             glues: array![
                 [0, 0, 0],
                 [1, 3, 12],
@@ -1904,7 +1904,7 @@ mod test_sdc_model {
                 [4, 4, 1],
             ],
             colors: Vec::new(),
-            kf: RatePMS::zero(),
+            kf: PerMolarSecond::zero(),
             friends_btm: HashMap::new(),
             entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]],
             delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]],
@@ -1969,7 +1969,7 @@ mod test_sdc_model {
             strand_names: Vec::new(),
             glue_names: Vec::new(),
             scaffold,
-            strand_concentration: Array1::<ConcM>::zeros(5),
+            strand_concentration: Array1::<Molar>::zeros(5),
             glues: array![
                 [0, 0, 0],
                 [1, 3, 12],
@@ -1979,9 +1979,9 @@ mod test_sdc_model {
                 [11, 1, 30],
                 [4, 4, 1],
             ],
-            scaffold_concentration: ConcM::zero(),
+            scaffold_concentration: Molar::zero(),
             colors: Vec::new(),
-            kf: RatePMS::zero(),
+            kf: PerMolarSecond::zero(),
             friends_btm: HashMap::new(),
             entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]],
             delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]],

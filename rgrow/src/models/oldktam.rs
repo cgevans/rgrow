@@ -7,7 +7,7 @@ use super::fission_base::*;
 use crate::{
     base::{HashMapType, HashSetType},
     tileset::{GMC_DEFAULT, GSE_DEFAULT},
-    units::{RateMPS, RatePS},
+    units::{MolarPerSecond, PerSecond},
 };
 use cached::{Cached, SizedCache};
 use fnv::FnvHashMap;
@@ -450,7 +450,7 @@ impl OldKTAM {
         canvas: &C,
         p: PointSafe2,
         tile: Tile,
-        acc: &mut RatePS,
+        acc: &mut PerSecond,
         now_empty: &mut Vec<PointSafe2>,
         possible_starts: &mut Vec<PointSafe2>,
     ) {
@@ -459,7 +459,7 @@ impl OldKTAM {
             ChunkSize::Dimer => {
                 let ts = { self.bond_strength_of_tile_at_point(canvas, p, tile) };
                 *acc -= self.dimer_s_detach_rate(canvas, p.0, tile, ts).into();
-                if *acc <= RatePS::zero() {
+                if *acc <= PerSecond::zero() {
                     let p2 = PointSafe2(canvas.move_sa_s(p).0);
                     let t2 = { canvas.tile_at_point(p2) };
                     now_empty.push(p);
@@ -487,7 +487,7 @@ impl OldKTAM {
                     return;
                 }
                 *acc -= self.dimer_e_detach_rate(canvas, p.0, tile, ts).into();
-                if *acc <= RatePS::zero() {
+                if *acc <= PerSecond::zero() {
                     let p2 = PointSafe2(canvas.move_sa_e(p).0);
                     let t2 = { canvas.tile_at_point(p2) };
                     now_empty.push(p);
@@ -648,11 +648,11 @@ impl OldKTAM {
 }
 
 impl System for OldKTAM {
-    fn event_rate_at_point<S: State>(&self, canvas: &S, point: PointSafeHere) -> RatePS {
+    fn event_rate_at_point<S: State>(&self, canvas: &S, point: PointSafeHere) -> PerSecond {
         let p = if canvas.inbounds(point.0) {
             PointSafe2(point.0)
         } else {
-            return RatePS::zero();
+            return PerSecond::zero();
         };
 
         // Bound is previously checked.
@@ -664,7 +664,7 @@ impl System for OldKTAM {
             // Check seed
             if self.is_seed(p.0) {
                 // FIXME
-                return RatePS::zero();
+                return PerSecond::zero();
             }
 
             // Bound is previously checked
@@ -686,7 +686,7 @@ impl System for OldKTAM {
 
             // Short circuit if no adjacent tiles.
             if (tn == 0) & (tw == 0) & (te == 0) & (ts == 0) {
-                return RatePS::zero();
+                return PerSecond::zero();
             }
 
             // Insertion
@@ -743,7 +743,7 @@ impl System for OldKTAM {
         }
     }
 
-    fn choose_event_at_point<S: State>(&self, canvas: &S, p: PointSafe2, mut acc: RatePS) -> Event {
+    fn choose_event_at_point<S: State>(&self, canvas: &S, p: PointSafe2, mut acc: PerSecond) -> Event {
         let tile = { canvas.tile_at_point(p) };
 
         let tn = { canvas.tile_to_n(p) };
@@ -760,7 +760,7 @@ impl System for OldKTAM {
             let mut possible_starts = Vec::new();
             let mut now_empty = Vec::new();
 
-            if acc <= RatePS::zero() {
+            if acc <= PerSecond::zero() {
                 // FIXME
                 if self.get_energy_ns(tn, tile) > 0. {
                     possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
@@ -847,7 +847,7 @@ impl System for OldKTAM {
 
             for t in friends.drain() {
                 acc -= (self.k_f_hat() * self.tile_adj_concs[t as usize]).into();
-                if acc <= RatePS::zero() {
+                if acc <= PerSecond::zero() {
                     return Event::MonomerAttachment(p, t);
                 };
             }
@@ -1017,7 +1017,7 @@ impl SystemWithDimers for OldKTAM {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::NS,
-                    formation_rate: RateMPS::new(self.k_f * biconc),
+                    formation_rate: MolarPerSecond::new(self.k_f * biconc),
                     equilibrium_conc: (biconc * f64::exp(*e - self.alpha)).into(),
                 });
             }
@@ -1031,7 +1031,7 @@ impl SystemWithDimers for OldKTAM {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::WE,
-                    formation_rate: RateMPS::new(self.k_f * biconc),
+                    formation_rate: MolarPerSecond::new(self.k_f * biconc),
                     equilibrium_conc: (biconc * f64::exp(*e - self.alpha)).into(),
                 });
             }

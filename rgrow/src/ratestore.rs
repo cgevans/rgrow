@@ -14,7 +14,7 @@ use serde::Serialize;
 use crate::base::Point;
 
 use crate::canvas::PointSafeHere;
-use crate::units::{Rate, RatePS};
+use crate::units::{Rate, PerSecond};
 
 // A RateStore stores event rates for points on a canvas, and allows a continuous-time Markov chain
 // choice of a point based on those rates.  It makes no assumptions about relationships between the
@@ -22,12 +22,12 @@ use crate::units::{Rate, RatePS};
 // rectilinear grid.
 #[enum_dispatch]
 pub trait RateStore {
-    fn choose_point(&self) -> (Point, RatePS);
-    fn rate_at_point(&self, point: PointSafeHere) -> RatePS;
-    fn update_point(&mut self, point: PointSafeHere, new_rate: RatePS);
-    fn update_multiple(&mut self, to_update: &[(PointSafeHere, RatePS)]);
-    fn total_rate(&self) -> RatePS;
-    fn rate_array(&self) -> ArrayView2<RatePS>;
+    fn choose_point(&self) -> (Point, PerSecond);
+    fn rate_at_point(&self, point: PointSafeHere) -> PerSecond;
+    fn update_point(&mut self, point: PointSafeHere, new_rate: PerSecond);
+    fn update_multiple(&mut self, to_update: &[(PointSafeHere, PerSecond)]);
+    fn total_rate(&self) -> PerSecond;
+    fn rate_array(&self) -> ArrayView2<PerSecond>;
 }
 
 pub trait CreateSizedRateStore {
@@ -56,12 +56,12 @@ impl<R: Rate> CreateSizedRateStore for QuadTreeSquareArray<R> {
     }
 }
 
-impl RateStore for QuadTreeSquareArray<RatePS> {
-    fn rate_at_point(&self, point: PointSafeHere) -> RatePS {
+impl RateStore for QuadTreeSquareArray<PerSecond> {
+    fn rate_at_point(&self, point: PointSafeHere) -> PerSecond {
         unsafe { *self.0[0].uget(point.0) }
     }
 
-    fn choose_point(&self) -> (Point, RatePS) {
+    fn choose_point(&self) -> (Point, PerSecond) {
         let mut threshold = self.1 * rng().random::<f64>();
 
         let mut x: usize = 0;
@@ -71,14 +71,14 @@ impl RateStore for QuadTreeSquareArray<RatePS> {
             y *= 2;
             x *= 2;
             let mut v = unsafe { *r.uget((y, x)) };
-            if threshold - v <= RatePS::zero() {
+            if threshold - v <= PerSecond::zero() {
                 continue;
             } else {
                 threshold -= v;
                 x += 1;
                 v = unsafe { *r.uget((y, x)) };
             }
-            if threshold - v <= RatePS::zero() {
+            if threshold - v <= PerSecond::zero() {
                 continue;
             } else {
                 threshold -= v;
@@ -86,14 +86,14 @@ impl RateStore for QuadTreeSquareArray<RatePS> {
                 y += 1;
                 v = unsafe { *r.uget((y, x)) };
             }
-            if threshold - v <= RatePS::zero() {
+            if threshold - v <= PerSecond::zero() {
                 continue;
             } else {
                 threshold -= v;
                 x += 1;
                 v = unsafe { *r.uget((y, x)) };
             }
-            if threshold - v <= RatePS::zero() {
+            if threshold - v <= PerSecond::zero() {
                 continue;
             } else {
                 panic!("Failure in quadtree position finding: remaining threshold {threshold:?}, ratetree array {r:?}.");
@@ -104,7 +104,7 @@ impl RateStore for QuadTreeSquareArray<RatePS> {
     }
 
     #[inline(always)]
-    fn update_point(&mut self, point: PointSafeHere, new_rate: RatePS) {
+    fn update_point(&mut self, point: PointSafeHere, new_rate: PerSecond) {
         let mut rtiter = self.0.iter_mut();
         let mut r_prev = rtiter.next().unwrap();
 
@@ -123,7 +123,7 @@ impl RateStore for QuadTreeSquareArray<RatePS> {
     }
 
     #[inline(always)]
-    fn update_multiple(&mut self, to_update: &[(PointSafeHere, RatePS)]) {
+    fn update_multiple(&mut self, to_update: &[(PointSafeHere, PerSecond)]) {
         // Two code paths here: one for small N, using a sorted Vec,
         // and one for large N, using an FnvHashSet.
 
@@ -136,11 +136,11 @@ impl RateStore for QuadTreeSquareArray<RatePS> {
         }
     }
 
-    fn total_rate(&self) -> RatePS {
+    fn total_rate(&self) -> PerSecond {
         self.1
     }
 
-    fn rate_array(&self) -> ArrayView2<RatePS> {
+    fn rate_array(&self) -> ArrayView2<PerSecond> {
         self.0.first().unwrap().view()
     }
 }
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn test_ratestore_qsta_update() -> anyhow::Result<()> {
         // Create a new RateStore
-        let mut rs: QuadTreeSquareArray<RatePS> = QuadTreeSquareArray::new_with_size(128, 128);
+        let mut rs: QuadTreeSquareArray<PerSecond> = QuadTreeSquareArray::new_with_size(128, 128);
         let mut rs_large = rs.clone();
         let mut rs_single = rs.clone();
         let mut rs_all = rs.clone();
@@ -252,7 +252,7 @@ mod tests {
         let rng = rand::rng();
         let it = rng
             .sample_iter(rand::distr::Uniform::new(0.0, 1.0).unwrap())
-            .map(RatePS::new);
+            .map(PerSecond::new);
 
         let allchanges = (0..128usize)
             .flat_map(|x| (0..128usize).map(move |y| (x, y)))

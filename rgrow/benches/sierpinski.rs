@@ -6,7 +6,7 @@ use rgrow::{
     state::{NullStateTracker, QuadTreeState},
     system::{EvolveBounds, System},
     tileset::{Seed, TileSet},
-    units::TimeS,
+    units::Second,
 };
 
 const BOUNDS10K: EvolveBounds = EvolveBounds {
@@ -37,7 +37,7 @@ fn raw_sim_run(c: &mut Criterion) {
     });
 
     c.bench_function("evolve unistep", |b| {
-        b.iter(|| sys.take_single_step(&mut st, TimeS::new(1000000.)))
+        b.iter(|| sys.take_single_step(&mut st, Second::new(1000000.)))
     });
 }
 //
