@@ -32,7 +32,7 @@ impl From<StringConvError> for pyo3::PyErr {
 }
 
 #[cfg(feature = "python")]
-use pyo3::{FromPyObject, IntoPyObject, PyErr, PyObject, PyResult, Python};
+use pyo3::{FromPyObject, IntoPyObject, PyErr, PyResult, Python};
 
 #[derive(Error, Debug)]
 pub enum GrowError {
@@ -93,8 +93,6 @@ pub enum ModelError {
 
 pub type GrowResult<T> = Result<T, GrowError>;
 
-pub type Rate = f64;
-
 use fnv::{FnvHashMap, FnvHashSet};
 pub(crate) type HashSetType<T> = FnvHashSet<T>;
 pub(crate) type HashMapType<K, V> = FnvHashMap<K, V>;
@@ -115,7 +113,7 @@ impl<'py> IntoPyObject<'py> for Ident {
             Ident::Name(name) => name.into_bound_py_any(py),
         }
     }
-    
+
     type Target = pyo3::PyAny; // the Python type
     type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
     type Error = pyo3::PyErr;

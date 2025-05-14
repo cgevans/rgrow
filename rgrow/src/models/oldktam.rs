@@ -7,15 +7,19 @@ use super::fission_base::*;
 use crate::{
     base::{HashMapType, HashSetType},
     tileset::{GMC_DEFAULT, GSE_DEFAULT},
+    units::{MolarPerSecond, PerSecond},
 };
 use cached::{Cached, SizedCache};
 use fnv::FnvHashMap;
 use ndarray::{Array1, Array2};
+use num_traits::Zero;
 use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 
+type Rate = f64;
+
 use crate::{
-    base::{Energy, Glue, ModelError, Point, Rate, RgrowError, Tile},
+    base::{Energy, Glue, ModelError, Point, RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{
@@ -135,17 +139,17 @@ impl OldKTAM {
 
     #[getter(energy_we)]
     fn py_get_energy_we<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
-        numpy::IntoPyArray::into_pyarray_bound(self.energy_we.clone(), py)
+        numpy::IntoPyArray::into_pyarray(self.energy_we.clone(), py)
     }
 
     #[getter(energy_ns)]
     fn py_get_energy_ns<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
-        numpy::IntoPyArray::into_pyarray_bound(self.energy_ns.clone(), py)
+        numpy::IntoPyArray::into_pyarray(self.energy_ns.clone(), py)
     }
 
     #[getter(tile_adj_concs)]
     fn py_get_tile_concs<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
-        numpy::IntoPyArray::into_pyarray_bound(self.tile_adj_concs.clone(), py)
+        numpy::IntoPyArray::into_pyarray(self.tile_adj_concs.clone(), py)
     }
 
     #[staticmethod]
@@ -446,7 +450,7 @@ impl OldKTAM {
         canvas: &C,
         p: PointSafe2,
         tile: Tile,
-        acc: &mut Rate,
+        acc: &mut PerSecond,
         now_empty: &mut Vec<PointSafe2>,
         possible_starts: &mut Vec<PointSafe2>,
     ) {
@@ -454,8 +458,8 @@ impl OldKTAM {
             ChunkSize::Single => panic!(),
             ChunkSize::Dimer => {
                 let ts = { self.bond_strength_of_tile_at_point(canvas, p, tile) };
-                *acc -= self.dimer_s_detach_rate(canvas, p.0, tile, ts);
-                if *acc <= 0. {
+                *acc -= self.dimer_s_detach_rate(canvas, p.0, tile, ts).into();
+                if *acc <= PerSecond::zero() {
                     let p2 = PointSafe2(canvas.move_sa_s(p).0);
                     let t2 = { canvas.tile_at_point(p2) };
                     now_empty.push(p);
@@ -482,8 +486,8 @@ impl OldKTAM {
                     };
                     return;
                 }
-                *acc -= self.dimer_e_detach_rate(canvas, p.0, tile, ts);
-                if *acc <= 0. {
+                *acc -= self.dimer_e_detach_rate(canvas, p.0, tile, ts).into();
+                if *acc <= PerSecond::zero() {
                     let p2 = PointSafe2(canvas.move_sa_e(p).0);
                     let t2 = { canvas.tile_at_point(p2) };
                     now_empty.push(p);
@@ -644,11 +648,11 @@ impl OldKTAM {
 }
 
 impl System for OldKTAM {
-    fn event_rate_at_point<S: State>(&self, canvas: &S, point: PointSafeHere) -> Rate {
+    fn event_rate_at_point<S: State>(&self, canvas: &S, point: PointSafeHere) -> PerSecond {
         let p = if canvas.inbounds(point.0) {
             PointSafe2(point.0)
         } else {
-            return 0.;
+            return PerSecond::zero();
         };
 
         // Bound is previously checked.
@@ -660,17 +664,18 @@ impl System for OldKTAM {
             // Check seed
             if self.is_seed(p.0) {
                 // FIXME
-                return 0.0;
+                return PerSecond::zero();
             }
 
             // Bound is previously checked
             let bound_energy = { self.bond_strength_of_tile_at_point(canvas, p, tile) };
 
             match self.chunk_handling {
-                ChunkHandling::None => self.k_f_hat() * Rate::exp(-bound_energy),
+                ChunkHandling::None => (self.k_f_hat() * Rate::exp(-bound_energy)).into(),
                 ChunkHandling::Detach | ChunkHandling::Equilibrium => {
-                    self.k_f_hat() * Rate::exp(-bound_energy)
-                        + self.chunk_detach_rate(canvas, p.0, tile) // FIXME
+                    (self.k_f_hat() * Rate::exp(-bound_energy)
+                        + self.chunk_detach_rate(canvas, p.0, tile))
+                    .into() // FIXME
                 }
             }
         } else {
@@ -681,14 +686,14 @@ impl System for OldKTAM {
 
             // Short circuit if no adjacent tiles.
             if (tn == 0) & (tw == 0) & (te == 0) & (ts == 0) {
-                return 0.0;
+                return PerSecond::zero();
             }
 
             // Insertion
             let mut ic = self.insertcache.0.write().unwrap();
 
             match ic.cache_get(&(tn, te, ts, tw)) {
-                Some(acc) => self.k_f_hat() * *acc,
+                Some(acc) => (self.k_f_hat() * *acc).into(),
 
                 None => {
                     drop(ic);
@@ -719,7 +724,7 @@ impl System for OldKTAM {
                         .unwrap()
                         .cache_set((tn, te, ts, tw), acc);
 
-                    self.k_f_hat() * acc
+                    (self.k_f_hat() * acc).into()
                 }
             }
 
@@ -738,7 +743,12 @@ impl System for OldKTAM {
         }
     }
 
-    fn choose_event_at_point<S: State>(&self, canvas: &S, p: PointSafe2, mut acc: Rate) -> Event {
+    fn choose_event_at_point<S: State>(
+        &self,
+        canvas: &S,
+        p: PointSafe2,
+        mut acc: PerSecond,
+    ) -> Event {
         let tile = { canvas.tile_at_point(p) };
 
         let tn = { canvas.tile_to_n(p) };
@@ -748,13 +758,14 @@ impl System for OldKTAM {
 
         if tile != 0 {
             acc -= {
-                self.k_f_hat() * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile))
+                (self.k_f_hat() * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile)))
+                    .into()
             };
 
             let mut possible_starts = Vec::new();
             let mut now_empty = Vec::new();
 
-            if acc <= 0. {
+            if acc <= PerSecond::zero() {
                 // FIXME
                 if self.get_energy_ns(tn, tile) > 0. {
                     possible_starts.push(PointSafe2(canvas.move_sa_n(p).0))
@@ -840,8 +851,8 @@ impl System for OldKTAM {
             friends.extend(&self.friends_n[ts as usize]);
 
             for t in friends.drain() {
-                acc -= self.k_f_hat() * self.tile_adj_concs[t as usize];
-                if acc <= 0. {
+                acc -= (self.k_f_hat() * self.tile_adj_concs[t as usize]).into();
+                if acc <= PerSecond::zero() {
                     return Event::MonomerAttachment(p, t);
                 };
             }
@@ -1011,8 +1022,8 @@ impl SystemWithDimers for OldKTAM {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::NS,
-                    formation_rate: self.k_f * biconc,
-                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
+                    formation_rate: MolarPerSecond::new(self.k_f * biconc),
+                    equilibrium_conc: (biconc * f64::exp(*e - self.alpha)).into(),
                 });
             }
         }
@@ -1025,8 +1036,8 @@ impl SystemWithDimers for OldKTAM {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
                     orientation: Orientation::WE,
-                    formation_rate: self.k_f * biconc,
-                    equilibrium_conc: biconc * f64::exp(*e - self.alpha),
+                    formation_rate: MolarPerSecond::new(self.k_f * biconc),
+                    equilibrium_conc: (biconc * f64::exp(*e - self.alpha)).into(),
                 });
             }
         }

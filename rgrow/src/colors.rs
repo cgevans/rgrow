@@ -1,6 +1,6 @@
 use phf::phf_map;
 #[cfg(feature = "python")]
-use pyo3::exceptions::{PyValueError};
+use pyo3::exceptions::PyValueError;
 use thiserror::Error;
 
 #[cfg(feature = "python")]
@@ -53,6 +53,7 @@ pub fn get_color(cs: &str) -> Result<[u8; 4], ColorError> {
 }
 
 #[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "python", pyo3(signature = (cs=None)))]
 pub fn get_color_or_random(cs: Option<&str>) -> Result<[u8; 4], ColorError> {
     match cs {
         Some(c) => get_color(c),

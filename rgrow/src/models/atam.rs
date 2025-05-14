@@ -4,15 +4,16 @@ use crate::{
     state::State,
     system::{Event, System, SystemInfo, SystemWithDimers, TileBondInfo},
     tileset::{ProcessedTileSet, TileSet},
+    units::{PerSecond, Rate},
 };
 
+use num_traits::Zero;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
 use crate::base::{HashMapType, HashSetType};
 use ndarray::prelude::*;
 use rand::prelude::Distribution;
-use rand::distr::Uniform;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -20,7 +21,7 @@ type Conc = f64;
 type Glue = usize;
 type Strength = f64;
 type Energy = f64;
-type Rate = f64;
+type Rate64 = f64;
 
 const THRESHOLD_DEFAULT: f64 = 2.0;
 
@@ -144,26 +145,21 @@ impl System for ATAM {
         &self,
         state: &S,
         p: crate::canvas::PointSafeHere,
-    ) -> crate::base::Rate {
+    ) -> PerSecond {
         if !state.inbounds(p.0) {
-            return 0.;
+            return PerSecond::zero();
         }
         let p = PointSafe2(p.0);
         let t = state.tile_at_point(p);
         if t.nonzero() {
-            0.
+            PerSecond::zero()
         } else {
-            self.total_monomer_attachment_rate_at_point(state, p)
+            PerSecond::new(self.total_monomer_attachment_rate_at_point(state, p))
         }
     }
 
-    fn choose_event_at_point<S: State>(
-        &self,
-        state: &S,
-        p: PointSafe2,
-        acc: crate::base::Rate,
-    ) -> Event {
-        match self.choose_attachment_at_point(state, p, acc) {
+    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: PerSecond) -> Event {
+        match self.choose_attachment_at_point(state, p, f64::from_per_second(acc)) {
             (true, _, event) => {
                 // println!("{:?} {:?}", acc, event);
                 event
@@ -425,7 +421,7 @@ impl ATAM {
         &self,
         state: &S,
         p: PointSafe2,
-    ) -> Rate {
+    ) -> Rate64 {
         match self._find_monomer_attachment_possibilities_at_point(state, p, 0., true) {
             (false, acc, _) => -acc,
             _ => panic!(),
@@ -436,8 +432,8 @@ impl ATAM {
         &self,
         state: &S,
         p: PointSafe2,
-        acc: Rate,
-    ) -> (bool, Rate, Event) {
+        acc: Rate64,
+    ) -> (bool, Rate64, Event) {
         self.choose_monomer_attachment_at_point(state, p, acc)
     }
 
@@ -445,8 +441,8 @@ impl ATAM {
         &self,
         state: &S,
         p: PointSafe2,
-        acc: Rate,
-    ) -> (bool, Rate, Event) {
+        acc: Rate64,
+    ) -> (bool, Rate64, Event) {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
@@ -454,9 +450,9 @@ impl ATAM {
         &self,
         state: &S,
         p: PointSafe2,
-        mut acc: Rate,
+        mut acc: Rate64,
         just_calc: bool,
-    ) -> (bool, Rate, Event) {
+    ) -> (bool, Rate64, Event) {
         let tn = state.tile_to_n(p);
         let tw = state.tile_to_w(p);
         let te = state.tile_to_e(p);
@@ -928,7 +924,7 @@ impl SystemInfo for ATAM {
     }
 
     fn tile_stoics(&self) -> Vec<f64> {
-        self.tile_stoics.clone().into_raw_vec()
+        self.tile_stoics.to_vec()
     }
 }
 

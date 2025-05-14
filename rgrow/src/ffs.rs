@@ -11,9 +11,10 @@ use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
 use crate::system::{EvolveBounds, SystemWithDimers};
 use crate::tileset::{CanvasType, Model, TileSet, SIZE_DEFAULT};
+use crate::units::{MolarPerSecond, PerSecond};
 
 use canvas::Canvas;
-use num_traits::{Float, Num};
+use num_traits::{Float, Num, Zero};
 use polars::prelude::*;
 #[cfg(feature = "python")]
 use pyo3_polars::error::PyPolarsErr;
@@ -26,12 +27,12 @@ use serde::{Deserialize, Serialize};
 use super::*;
 //use ndarray::prelude::*;
 //use ndarray::Zip;
-use base::{NumTiles, Rate};
+use base::NumTiles;
 
 use ndarray::{s, Array2, ArrayView2};
 #[cfg(feature = "python")]
 use numpy::{PyArray2, ToPyArray};
-use rand::{distr::Uniform, distr::weighted::WeightedIndex, prelude::Distribution};
+use rand::{distr::weighted::WeightedIndex, distr::Uniform, prelude::Distribution};
 use rand::{prelude::SmallRng, SeedableRng};
 use rand::{rng, Rng};
 
@@ -81,7 +82,7 @@ pub struct FFSRunConfig {
     pub start_size: NumTiles,
     pub size_step: NumTiles,
     pub keep_configs: bool,
-    pub min_nuc_rate: Option<Rate>,
+    pub min_nuc_rate: Option<MolarPerSecond>,
     pub canvas_size: (usize, usize),
     pub canvas_type: CanvasType,
     pub tracking: TrackingType,
@@ -155,6 +156,26 @@ impl FFSRunConfig {
 #[pymethods]
 impl FFSRunConfig {
     #[new]
+    #[pyo3(signature = (
+        constant_variance=None,
+        var_per_mean2=None,
+        min_configs=None,
+        max_configs=None,
+        early_cutoff=None,
+        cutoff_probability=None,
+        cutoff_number=None,
+        min_cutoff_size=None,
+        init_bound=None,
+        subseq_bound=None,
+        start_size=None,
+        size_step=None,
+        keep_configs=None,
+        min_nuc_rate=None,
+        canvas_size=None,
+        target_size=None,
+        store_ffs_config=None,
+        store_system=None,
+    ))]
     fn new(
         constant_variance: Option<bool>,
         var_per_mean2: Option<f64>,
@@ -169,7 +190,7 @@ impl FFSRunConfig {
         start_size: Option<NumTiles>,
         size_step: Option<NumTiles>,
         keep_configs: Option<bool>,
-        min_nuc_rate: Option<Rate>,
+        min_nuc_rate: Option<f64>,
         canvas_size: Option<(usize, usize)>,
         target_size: Option<NumTiles>,
         store_ffs_config: Option<bool>,
@@ -219,7 +240,7 @@ impl FFSRunConfig {
             rc.keep_configs = x;
         }
 
-        rc.min_nuc_rate = min_nuc_rate;
+        rc.min_nuc_rate = min_nuc_rate.map(MolarPerSecond::new);
 
         if let Some(x) = canvas_size {
             rc.canvas_size = x;
@@ -336,7 +357,7 @@ fn max_prob(num_success: usize, num_trials: usize) -> f64 {
 
 pub struct FFSRun<St: ClonableState> {
     pub level_list: Vec<FFSLevel<St>>,
-    pub dimerization_rate: f64,
+    pub dimerization_rate: MolarPerSecond,
     pub forward_prob: Vec<f64>,
 }
 
@@ -347,10 +368,10 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
     ) -> Result<Self, GrowError> {
         let level_list = Vec::new();
 
-        let dimerization_rate = system
+        let dimerization_rate: MolarPerSecond = system
             .calc_dimers()
             .iter()
-            .fold(0., |acc, d| acc + d.formation_rate);
+            .fold(MolarPerSecond::zero(), |acc, d| acc + d.formation_rate);
 
         let mut ret = Self {
             level_list,
@@ -374,10 +395,9 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
         let mut above_cutoff: usize = 0;
 
         while current_size < config.target_size {
-            let min_prob = config.min_nuc_rate.map(
-                |min_nuc_rate|
-                min_nuc_rate / ret.nucleation_rate()
-            );
+            let min_prob = config
+                .min_nuc_rate
+                .map(|min_nuc_rate| min_nuc_rate / ret.nucleation_rate());
 
             let last = ret.level_list.last_mut().unwrap();
             let next = last.next_level(system, config, min_prob)?;
@@ -418,7 +438,10 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
-    pub fn create_from_tileset<'a, Sy: SystemWithDimers + System + TryFrom<&'a TileSet, Error = RgrowError>>(
+    pub fn create_from_tileset<
+        'a,
+        Sy: SystemWithDimers + System + TryFrom<&'a TileSet, Error = RgrowError>,
+    >(
         tileset: &'a TileSet,
         config: &FFSRunConfig,
     ) -> Result<Self, RgrowError> {
@@ -488,7 +511,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             let mut i_old_state: usize = 0;
 
             while state.n_tiles() == 0 {
-                if state.total_rate() != 0. {
+                if state.total_rate() != PerSecond::zero() {
                     panic!("Total rate is not zero! {state:?}");
                 };
                 i_old_state = chooser.sample(&mut rng);
@@ -553,7 +576,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
         let mut dimer_state_list = Vec::with_capacity(config.min_configs);
 
-        let weights: Vec<_> = dimers.iter().map(|d| d.formation_rate).collect();
+        let weights: Vec<_> = dimers.iter().map(|d| f64::from(d.formation_rate)).collect();
         let chooser = WeightedIndex::new(weights).unwrap();
 
         if config.canvas_size.0 < 4 || config.canvas_size.1 < 4 {
@@ -574,7 +597,9 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         };
 
         let min_prob = if let Some(min_nuc_rate) = config.min_nuc_rate {
-            let dimerization_rate = dimers.iter().fold(0.0, |acc, d| acc + d.formation_rate);
+            let dimerization_rate = dimers
+                .iter()
+                .fold(MolarPerSecond::zero(), |acc, d| acc + d.formation_rate);
             min_nuc_rate / dimerization_rate
         } else {
             0.
@@ -620,7 +645,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
                     dimer_state_list.push(dimer_state);
 
-                    if rng.gen::<bool>() {
+                    if rng.random::<bool>() {
                         tile_list.push(dimer.t1);
                     } else {
                         tile_list.push(dimer.t2);
@@ -635,7 +660,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     if state.n_tiles() != 0 {
                         panic!("{}", state.panicinfo())
                     }
-                    if state.total_rate() != 0. {
+                    if state.total_rate() != PerSecond::zero() {
                         panic!("{}", state.panicinfo())
                     };
                 }
@@ -680,7 +705,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 pub struct FFSRunResult {
     #[serde(skip)]
     pub level_list: Vec<Arc<FFSLevelResult>>,
-    pub dimerization_rate: f64,
+    pub dimerization_rate: MolarPerSecond,
     pub forward_prob: Vec<f64>,
     pub ffs_config: Option<FFSRunConfig>,
     #[serde(skip)]
@@ -696,7 +721,7 @@ pub struct FFSRunResultDF {
     pub configs_df: DataFrame,
     pub ffs_config: Option<FFSRunConfig>,
     pub system: Option<SystemEnum>,
-    pub dimerization_rate: f64,
+    pub dimerization_rate: MolarPerSecond,
 }
 
 impl From<FFSRunResult> for FFSRunResultDF {
@@ -755,7 +780,7 @@ impl FFSRunResultDF {
         it.map(|x| x.unwrap()).collect()
     }
 
-    pub fn nucleation_rate(&self) -> Rate {
+    pub fn nucleation_rate(&self) -> MolarPerSecond {
         let ptot: f64 = self
             .surfaces_df
             .column("p_r")
@@ -842,13 +867,13 @@ pub trait FFSSurface: Send + Sync {
 }
 
 impl<St: ClonableState> FFSRun<St> {
-    fn nucleation_rate(&self) -> Rate {
+    fn nucleation_rate(&self) -> MolarPerSecond {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
 }
 
 impl FFSRunResult {
-    pub fn nucleation_rate(&self) -> Rate {
+    pub fn nucleation_rate(&self) -> MolarPerSecond {
         self.dimerization_rate * self.forward_prob.iter().fold(1., |acc, level| acc * *level)
     }
 
@@ -864,7 +889,7 @@ impl FFSRunResult {
         self.level_list.get(i).map(|x| (*x).clone())
     }
 
-    pub fn dimerization_rate(&self) -> f64 {
+    pub fn dimerization_rate(&self) -> MolarPerSecond {
         self.dimerization_rate
     }
 
@@ -885,7 +910,7 @@ impl FFSRunResult {
 
     fn configs_dataframe(&self) -> Result<DataFrame, PolarsError> {
         let mut sizes = Vec::new();
-        let mut times = Vec::new();
+        let mut times: Vec<f64> = Vec::new();
         let mut previndices = Vec::new();
         let mut canvases = Vec::new();
         let mut arr_mini = Vec::new();
@@ -898,7 +923,7 @@ impl FFSRunResult {
         for (i, surface) in self.surfaces().iter().enumerate() {
             for (j, state) in surface.upgrade().unwrap().state_list.iter().enumerate() {
                 sizes.push(state.n_tiles());
-                times.push(state.time());
+                times.push(state.time().into());
                 let ss = &state.raw_array();
                 let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(ss);
                 canvases.push(m.iter().collect::<Series>());
@@ -1103,14 +1128,15 @@ impl FFSRunResult {
                     .map(|x| x.into())
             }
             (CanvasType::TubeDiagonals, TrackingType::LastAttachTime) => {
-                FFSRun::<QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>>::create(sys, config)
-                    .map(|x| x.into())
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>>::create(
+                    sys, config,
+                )
+                .map(|x| x.into())
             }
             (CanvasType::TubeDiagonals, TrackingType::PrintEvent) => {
                 FFSRun::<QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
-            
         })?;
 
         if config.store_ffs_config {
@@ -1165,19 +1191,19 @@ impl FFSRunResult {
     /// and dimerization rate.
     #[getter]
     fn get_nucleation_rate(&self) -> f64 {
-        self.nucleation_rate()
+        self.nucleation_rate().into()
     }
 
     /// list[float]: Forward probability vector.
     #[getter]
     fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.forward_vec().to_pyarray_bound(py)
+        self.forward_vec().to_pyarray(py)
     }
 
     /// float: Dimerization rate, in M/s.
     #[getter]
     fn get_dimerization_rate(&self) -> f64 {
-        self.dimerization_rate()
+        self.dimerization_rate().into()
     }
 
     /// list[FFSLevelRef]: list of surfaces.
@@ -1232,7 +1258,7 @@ impl FFSRunResult {
     fn __str__(&self) -> String {
         format!(
             "FFSResult({:1.4e} M/s, {:?})",
-            self.nucleation_rate(),
+            f64::from(self.nucleation_rate()),
             self.forward_vec()
         )
     }
@@ -1274,19 +1300,19 @@ impl FFSRunResultDF {
     /// and dimerization rate.
     #[getter]
     fn get_nucleation_rate(&self) -> f64 {
-        self.nucleation_rate()
+        self.nucleation_rate().into()
     }
 
     /// list[float]: Forward probability vector.
     #[getter]
     fn get_forward_vec<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.forward_vec().to_pyarray_bound(py)
+        self.forward_vec().to_pyarray(py)
     }
 
     /// float: Dimerization rate, in M/s.
     #[getter]
     fn get_dimerization_rate(&self) -> f64 {
-        self.dimerization_rate
+        self.dimerization_rate.into()
     }
 
     // #[getter]
@@ -1320,7 +1346,7 @@ impl FFSRunResultDF {
     fn __str__(&self) -> String {
         format!(
             "FFSResultDF({:1.4e} M/s, {:?})",
-            self.nucleation_rate(),
+            f64::from(self.nucleation_rate()),
             self.forward_vec()
         )
     }
@@ -1382,7 +1408,7 @@ impl FFSLevelRef {
         self.0
             .state_list
             .iter()
-            .map(|x| x.raw_array().to_pyarray_bound(py))
+            .map(|x| x.raw_array().to_pyarray(py))
             .collect()
     }
 
@@ -1436,7 +1462,7 @@ impl FFSStateRef {
     /// float: the total time the state has simulated, in seconds.
     #[getter]
     pub fn time(&self) -> f64 {
-        (*self.0).time()
+        (*self.0).time().into()
     }
 
     /// int: the total number of events that have occurred in the state.
@@ -1469,7 +1495,7 @@ impl FFSStateRef {
         let t = this.borrow();
         let ra = (*t.0).raw_array();
 
-        unsafe { Ok(PyArray2::borrow_from_array_bound(&ra, this.into_any())) }
+        unsafe { Ok(PyArray2::borrow_from_array(&ra, this.into_any())) }
     }
 
     /// Create a copy of the state's canvas.  This is safe, but can't be modified and is slower than
@@ -1486,7 +1512,7 @@ impl FFSStateRef {
         let t = this.borrow();
         let ra = (*t.0).raw_array();
 
-        Ok(PyArray2::from_array_bound(py, &ra))
+        Ok(PyArray2::from_array(py, &ra))
     }
 
     /// Return a copy of the tracker's tracking data.
@@ -1519,13 +1545,13 @@ impl FFSStateRef {
     /// Returns
     /// -------
     /// NDArray[np.uint]
-    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<crate::base::Rate>> {
-        self.0.rate_array().to_pyarray_bound(py)
+    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+        self.0.rate_array().mapv(f64::from).to_pyarray(py)
     }
 
     /// float: the total rate of possible next events for the state.
     #[getter]
-    pub fn total_rate(&self) -> crate::base::Rate {
-        RateStore::total_rate(self.0.deref())
+    pub fn total_rate(&self) -> f64 {
+        RateStore::total_rate(self.0.deref()).into()
     }
 }

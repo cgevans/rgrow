@@ -20,21 +20,21 @@ use core::f64;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
-    iter,
-    ops::Deref,
     sync::OnceLock,
 };
 
 use astro_float::{BigFloat, RoundingMode, Sign};
+use num_traits::Zero;
 use rand::Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    base::{Energy, Glue, GrowError, Rate, Tile},
+    base::{Glue, GrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     colors::get_color_or_random,
     state::{State, StateEnum},
     system::{Event, EvolveBounds, NeededUpdate, System, TileBondInfo},
+    units::*,
 };
 
 use ndarray::prelude::{Array1, Array2};
@@ -45,13 +45,11 @@ use numpy::ToPyArray;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-type_alias!( f64 => Strength, RatePerConc, Conc );
-
 const WEST_GLUE_INDEX: usize = 0;
 const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
-const U0: f64 = 1.0;
+const U0: Molar = Molar(1.0);
 
 fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     let mut big_float = big_float.clone();
@@ -112,9 +110,9 @@ pub struct SDC {
     /// All strands in the system, they are represented by tiles
     /// with only glue on the south, west, and east (nothing can stuck to the top of a strand)
     // pub strands: Array1<Tile>,
-    pub strand_concentration: Array1<Conc>,
+    pub strand_concentration: Array1<Molar>,
     /// The concentration of the scaffold
-    pub scaffold_concentration: Conc,
+    pub scaffold_concentration: Molar,
     /// Glues of a given strand by id
     ///
     /// Note that the glues will be sorted in the following manner:
@@ -128,20 +126,20 @@ pub struct SDC {
     /// when illustrated
     pub colors: Vec<[u8; 4]>,
     /// The (de)attachment rates will depend on this constant(for the system) value
-    pub kf: RatePerConc,
+    pub kf: PerMolarSecond,
     /// FIXME: Change this to a vector to avoid hashing time
     ///
     /// Set of tiles that can stick to scaffold gap with a given glue
     pub friends_btm: HashMap<Glue, HashSet<Tile>>,
     /// Delta G at 37 degrees C in the formula to genereate the glue strengths
-    pub delta_g_matrix: Array2<f64>,
+    pub delta_g_matrix: Array2<KcalPerMol>,
     /// S in the formula to geenrate the glue strengths
-    pub entropy_matrix: Array2<f64>,
+    pub entropy_matrix: Array2<KcalPerMolKelvin>,
     /// Temperature of the system
     ///
     /// Not pub so that it cant accidentally be changed other than with the setter function
     /// that will also recalculate energy arrays
-    temperature: f64,
+    temperature: Kelvin,
     /// The energy with which two strands will bond
     ///
     /// This array is indexed as follows. Given strands x and y, where x is to the west of y
@@ -159,9 +157,10 @@ impl SDC {
         *self.strand_energy_bonds[(x as usize, y as usize)].get_or_init(|| {
             let x_east_glue = self.glues[(x as usize, EAST_GLUE_INDEX)];
             let y_west_glue = self.glues[(y as usize, WEST_GLUE_INDEX)];
-            let glue_value = &self.delta_g_matrix[(x_east_glue, y_west_glue)]
-                - (self.temperature - 37.0) * &self.entropy_matrix[(x_east_glue, y_west_glue)];
-            glue_value / self.rtval()
+            let glue_value = self.delta_g_matrix[(x_east_glue, y_west_glue)]
+                - (self.temperature - Celsius(37.0))
+                    * self.entropy_matrix[(x_east_glue, y_west_glue)];
+            glue_value.times_beta(self.temperature)
         })
     }
 
@@ -173,48 +172,10 @@ impl SDC {
             }
 
             let x_inv = if x_bmt % 2 == 1 { x_bmt + 1 } else { x_bmt - 1 };
-            let glue_value = &self.delta_g_matrix[(x_bmt, x_inv)]
-                - (self.temperature - 37.0) * &self.entropy_matrix[(x_bmt, x_inv)];
-            glue_value / self.rtval()
+            let glue_value = self.delta_g_matrix[(x_bmt, x_inv)]
+                - (self.temperature - Celsius(37.0)) * self.entropy_matrix[(x_bmt, x_inv)];
+            glue_value.times_beta(self.temperature)
         })
-    }
-
-    fn new(
-        anchor_tiles: Vec<(PointSafe2, Tile)>,
-        strand_names: Vec<String>,
-        glue_names: Vec<String>,
-        scaffold: Array2<Glue>,
-        strand_concentration: Array1<Conc>,
-        scaffold_concentration: Conc,
-        glues: Array2<Glue>,
-        colors: Vec<[u8; 4]>,
-        kf: RatePerConc,
-        delta_g_matrix: Array2<f64>,
-        entropy_matrix: Array2<f64>,
-        temperature: f64,
-    ) -> SDC {
-        let strand_count = strand_names.len();
-        let mut s = SDC {
-            anchor_tiles,
-            strand_concentration,
-            strand_names,
-            colors,
-            glues,
-            scaffold,
-            glue_names,
-            kf,
-            delta_g_matrix,
-            entropy_matrix,
-            temperature,
-            scaffold_concentration,
-            // These will be generated by the update_system function next, so just leave them
-            // empty for now
-            friends_btm: HashMap::new(),
-            strand_energy_bonds: Array2::default((strand_count, strand_count)),
-            scaffold_energy_bonds: Array1::default(strand_count),
-        };
-        s.update_system();
-        s
     }
 
     fn update_system(&mut self) {
@@ -253,8 +214,8 @@ impl SDC {
         self.friends_btm = friends_btm;
     }
 
-    pub fn change_temperature_to(&mut self, celsius: f64) {
-        self.temperature = celsius;
+    pub fn change_temperature_to(&mut self, temperature: impl Into<Kelvin>) {
+        self.temperature = temperature.into();
         self.update_system();
     }
 
@@ -277,7 +238,7 @@ impl SDC {
 
     #[inline(always)]
     fn rtval(&self) -> f64 {
-        R * (self.temperature + 273.15)
+        R * self.temperature.to_kelvin_m()
     }
 
     fn update_monomer_point<S: State>(&self, state: &mut S, scaffold_point: &PointSafe2) {
@@ -294,9 +255,10 @@ impl SDC {
     /// Fill the energy_bonds array
     fn fill_energy_array(&mut self) {
         let num_of_strands = self.strand_names.len();
-        let glue_links = &self.delta_g_matrix - (self.temperature - 37.0) * &self.entropy_matrix;
-        // For each *possible* pair of strands, calculate the energy bond
-        for strand_f in 1..(num_of_strands as usize) {
+        let glue_links = ndarray::Zip::from(&self.delta_g_matrix)
+            .and(&self.entropy_matrix)
+            .map_collect(|dg, ds| *dg - (self.temperature - Celsius(37.0)) * *ds); // For each *possible* pair of strands, calculate the energy bond
+        for strand_f in 1..num_of_strands {
             // 1: no point in calculating for 0
             let (f_west_glue, f_btm_glue, f_east_glue) = {
                 let glues = self.glues.row(strand_f);
@@ -307,7 +269,7 @@ impl SDC {
                 )
             };
 
-            for strand_s in 0..(num_of_strands as usize) {
+            for strand_s in 0..num_of_strands {
                 let (s_west_glue, s_east_glue) = {
                     let glues = self.glues.row(strand_s);
                     (glues[WEST_GLUE_INDEX], glues[EAST_GLUE_INDEX])
@@ -318,12 +280,12 @@ impl SDC {
                 // Case 1: First strands is to the west of second
                 // strand_f    strand_s
                 let _ = self.strand_energy_bonds[(strand_f, strand_s)]
-                    .set(glue_links[(f_east_glue, s_west_glue)] / self.rtval());
+                    .set(glue_links[(f_east_glue, s_west_glue)].times_beta(self.temperature));
 
                 // Case 2: First strands is to the east of second
                 // strand_s    strand_f
                 let _ = self.strand_energy_bonds[(strand_s, strand_f)]
-                    .set(glue_links[(f_west_glue, s_east_glue)] / self.rtval());
+                    .set(glue_links[(f_west_glue, s_east_glue)].times_beta(self.temperature));
             }
 
             // I suppose maybe we'd have weird strands with no position domain?
@@ -339,7 +301,7 @@ impl SDC {
 
             // Calculate the binding strength of the strand with the scaffold
             let _ = self.scaffold_energy_bonds[strand_f]
-                .set(glue_links[(f_btm_glue, b_inverse)] / self.rtval());
+                .set(glue_links[(f_btm_glue, b_inverse)].times_beta(self.temperature));
         }
     }
 
@@ -347,7 +309,7 @@ impl SDC {
         &self,
         state: &S,
         scaffold_point: PointSafe2,
-    ) -> Rate {
+    ) -> PerSecond {
         let strand = state.tile_at_point(scaffold_point);
 
         // let anchor_tile = self.anchor_tiles[(scaffold_point.0).0]; // FIXME: disabled anchor tiles for now
@@ -358,19 +320,19 @@ impl SDC {
         /*|| anchor_tile.0 == scaffold_point */
         {
             // FIXME: disabled anchor tiles for now
-            return 0.0;
+            return PerSecond::zero();
         }
 
         let bond_energy = self.bond_energy_of_strand(state, scaffold_point, strand);
-        self.kf * bond_energy.exp()
+        self.kf * Molar::u0_times(bond_energy.exp())
     }
 
     pub fn choose_monomer_attachment_at_point<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
-        acc: Rate,
-    ) -> (bool, Rate, Event) {
+        acc: PerSecond,
+    ) -> (bool, PerSecond, Event) {
         self.find_monomer_attachment_possibilities_at_point(state, acc, point, false)
     }
 
@@ -378,11 +340,11 @@ impl SDC {
         &self,
         state: &S,
         point: PointSafe2,
-        mut acc: Rate,
-    ) -> (bool, Rate, Event) {
+        mut acc: PerSecond,
+    ) -> (bool, PerSecond, Event) {
         acc -= self.monomer_detachment_rate_at_point(state, point);
 
-        if acc > 0.0 {
+        if acc > PerSecond::zero() {
             return (false, acc, Event::None);
         }
 
@@ -396,11 +358,11 @@ impl SDC {
     fn find_monomer_attachment_possibilities_at_point<S: State>(
         &self,
         state: &S,
-        mut acc: Rate,
+        mut acc: PerSecond,
         scaffold_coord: PointSafe2,
         just_calc: bool,
-    ) -> (bool, Rate, Event) {
-        let point = scaffold_coord.into();
+    ) -> (bool, PerSecond, Event) {
+        let point = scaffold_coord;
         let tile = state.tile_at_point(point);
 
         // If the scaffold already has a strand binded, then nothing can attach to it
@@ -419,8 +381,8 @@ impl SDC {
 
         for &strand in friends {
             acc -= self.kf * self.strand_concentration[strand as usize];
-            if acc <= 0.0 && (!just_calc) {
-                let rand: f64 = rand_thread.gen();
+            if acc <= PerSecond::zero() && (!just_calc) {
+                let rand: f64 = rand_thread.random();
                 let total = self.total_tile_count(state, strand) as f64;
                 let attached = state.count_of_tile(strand) as f64;
                 if rand <= attached / total {
@@ -434,15 +396,19 @@ impl SDC {
         (false, acc, Event::None)
     }
 
-    fn total_monomer_attachment_rate_at_poin<S: State>(
+    fn total_monomer_attachment_rate_at_point<S: State>(
         &self,
         state: &S,
         scaffold_coord: PointSafe2,
-    ) -> f64 {
+    ) -> PerSecond {
         // If we set acc = 0, would it not be the case that we just attach to the first tile we can
         // ?
-        match self.find_monomer_attachment_possibilities_at_point(state, 0.0, scaffold_coord, true)
-        {
+        match self.find_monomer_attachment_possibilities_at_point(
+            state,
+            PerSecond::zero(),
+            scaffold_coord,
+            true,
+        ) {
             (false, acc, _) => -acc,
             _ => panic!(),
         }
@@ -472,7 +438,7 @@ impl SDC {
     /// Given an SDC system, and some scaffold attachments
     ///
     /// 0 := nothing attached to the saccffold
-    fn g_system(&self, attachments: &Vec<u32>) -> f64 {
+    fn g_system(&self, attachments: &[u32]) -> f64 {
         let mut sumg = 0.0;
 
         for (id, strand) in attachments.iter().enumerate() {
@@ -504,7 +470,7 @@ impl SDC {
         // since we wont need realloc )
         let mut acc = 1;
         for b in &scaffold {
-            if let Some(x) = self.friends_btm.get(&b) {
+            if let Some(x) = self.friends_btm.get(b) {
                 // number of possible times + none
                 acc *= x.len() + 1;
             }
@@ -541,7 +507,7 @@ impl SDC {
         possible_scaffolds
     }
 
-    pub fn boltzman_function(&self, attachments: &Vec<u32>) -> f64 {
+    pub fn boltzman_function(&self, attachments: &[u32]) -> f64 {
         let g_a = self.g_system(attachments);
         (-g_a / self.rtval()).exp()
     }
@@ -603,14 +569,11 @@ impl SDC {
                     // t2 will hold the different cases where side i-1 has tile g in it.
                     let mut t2 = 0.;
 
-                    match self.friends_btm.get(&scaffold[i - 1]) {
-                        Some(ff) => {
-                            for (k, &g) in ff.iter().enumerate() {
-                                let left_beta_dg = self.bond_between_strands(g, f);
-                                t2 += z_prev[k] * (-left_beta_dg).exp();
-                            }
+                    if let Some(ff) = self.friends_btm.get(&scaffold[i - 1]) {
+                        for (k, &g) in ff.iter().enumerate() {
+                            let left_beta_dg = self.bond_between_strands(g, f);
+                            t2 += z_prev[k] * (-left_beta_dg).exp();
                         }
-                        None => {}
                     }
 
                     // 1.0 -> *only* tile f is attached at position i.
@@ -683,20 +646,17 @@ impl SDC {
                     // t2 will hold the different cases where side i-1 has tile g in it.
                     let mut t2 = BigFloat::from_f64(0., prec);
 
-                    match self.friends_btm.get(&scaffold[i - 1]) {
-                        Some(ff) => {
-                            for (k, &g) in ff.iter().enumerate() {
-                                let left_beta_dg = self.bond_between_strands(g, f);
-                                t2 = t2.add(
-                                    &BigFloat::from_f64(-left_beta_dg, prec)
-                                        .exp(prec, rm, &mut cc)
-                                        .mul(&z_prev[k], prec, rm),
-                                    prec,
-                                    rm,
-                                );
-                            }
+                    if let Some(ff) = self.friends_btm.get(&scaffold[i - 1]) {
+                        for (k, &g) in ff.iter().enumerate() {
+                            let left_beta_dg = self.bond_between_strands(g, f);
+                            t2 = t2.add(
+                                &BigFloat::from_f64(-left_beta_dg, prec)
+                                    .exp(prec, rm, &mut cc)
+                                    .mul(&z_prev[k], prec, rm),
+                                prec,
+                                rm,
+                            );
                         }
-                        None => {}
                     }
 
                     // 1.0 -> *only* tile f is attached at position i.
@@ -730,13 +690,13 @@ impl SDC {
         self.partition_function_fast()
     }
 
-    pub fn probability_of_state_full(&self, system: &Vec<u32>) -> f64 {
+    pub fn probability_of_state_full(&self, system: &[u32]) -> f64 {
         let sum_z = self.partition_function_fast();
         let this_system = self.boltzman_function(system);
         this_system / sum_z
     }
 
-    pub fn probability_of_state(&self, system: &Vec<u32>) -> f64 {
+    pub fn probability_of_state(&self, system: &[u32]) -> f64 {
         (-self.g_system(system) / self.rtval() - self.log_big_partition_function_fast()).exp()
     }
 }
@@ -747,14 +707,16 @@ impl SDC {
 /// minimum energy said system can have.
 ///
 /// When running the MFE algorithm, we will return a matrix of these values.
-type MfeValues = Vec<(Tile, Energy, Tile)>;
+///
+/// Note that this uses *unitless* energy, eg, βΔG.
+type MfeValues = Vec<(Tile, f64, Tile)>;
 
 // MFE of system
 // FIXME: Hashset needs some sort of ordering (by tile id? Will that be consistent between runs?)
 impl SDC {
     // Concentration penalty
     #[inline(always)]
-    fn penalty(&self, strand: &Tile) -> f64 {
+    fn chemical_potential(&self, strand: &Tile) -> f64 {
         (self.strand_concentration[*strand as usize] / U0).ln()
     }
 
@@ -791,7 +753,7 @@ impl SDC {
         // Always have a scaffold domain
         (
             att,
-            energy + self.bond_with_scaffold(*right) - self.penalty(right),
+            energy + self.bond_with_scaffold(*right) - self.chemical_potential(right),
         )
     }
 
@@ -854,7 +816,7 @@ impl SDC {
     }
 
     /// Get the mfe configuration, as well as its energy
-    fn mfe_configuration(&self) -> (Vec<Tile>, Energy) {
+    fn mfe_configuration(&self) -> (Vec<Tile>, f64) {
         let mfe_mat = self.mfe_matrix();
         let l = mfe_mat.len();
         let mut iterator = mfe_mat.into_iter().rev();
@@ -922,15 +884,15 @@ impl System for SDC {
         &self,
         state: &St,
         p: crate::canvas::PointSafeHere,
-    ) -> crate::base::Rate {
+    ) -> PerSecond {
         if !state.inbounds(p.0) {
-            return 0.0;
+            return PerSecond::zero();
         }
 
         let scaffold_coord = PointSafe2(p.0);
-        match state.tile_at_point(scaffold_coord) as u32 {
+        match state.tile_at_point(scaffold_coord) {
             // If the tile is empty, we will return the rate at which attachment can occur
-            0 => self.total_monomer_attachment_rate_at_poin(state, scaffold_coord),
+            0 => self.total_monomer_attachment_rate_at_point(state, scaffold_coord),
             // If the tile is full, we will return the rate at which detachment can occur
             _ => self.monomer_detachment_rate_at_point(state, scaffold_coord),
         }
@@ -940,7 +902,7 @@ impl System for SDC {
         &self,
         state: &St,
         point: crate::canvas::PointSafe2,
-        acc: crate::base::Rate,
+        acc: PerSecond,
     ) -> crate::system::Event {
         match self.choose_monomer_detachment_at_point(state, point, acc) {
             (true, _, event) => event,
@@ -1005,7 +967,7 @@ impl System for SDC {
         match name {
             "kf" => {
                 let kf = value
-                    .downcast_ref::<f64>()
+                    .downcast_ref::<PerMolarSecond>()
                     .ok_or(GrowError::WrongParameterType(name.to_string()))?;
                 self.kf = *kf;
                 self.update_system();
@@ -1013,7 +975,7 @@ impl System for SDC {
             }
             "strand_concentrations" => {
                 let tile_concs = value
-                    .downcast_ref::<Array1<f64>>()
+                    .downcast_ref::<Array1<Molar>>()
                     .ok_or(GrowError::WrongParameterType(name.to_string()))?;
                 self.strand_concentration.clone_from(tile_concs);
                 self.update_system();
@@ -1081,15 +1043,15 @@ impl TileBondInfo for SDC {
 //         // that each tile has four edges), but it will do for now.
 //         let pc = ProcessedTileSet::from_tileset(tileset)?;
 
-        // // Combine glue strengths (between like numbers) and glue links (between two numbers)
-        // let n_glues = pc.glue_strengths.len();
-        // let mut glue_links = Array2::zeros((n_glues, n_glues));
-        // for (i, strength) in pc.glue_strengths.indexed_iter() {
-        //     glue_links[(i, i)] = *strength;
-        // }
-        // for (i, j, strength) in pc.glue_links.iter() {
-        //     glue_links[(*i, *j)] = *strength;
-        // }
+// // Combine glue strengths (between like numbers) and glue links (between two numbers)
+// let n_glues = pc.glue_strengths.len();
+// let mut glue_links = Array2::zeros((n_glues, n_glues));
+// for (i, strength) in pc.glue_strengths.indexed_iter() {
+//     glue_links[(i, i)] = *strength;
+// }
+// for (i, j, strength) in pc.glue_links.iter() {
+//     glue_links[(*i, *j)] = *strength;
+// }
 
 //         // Just generate the stuff that will be filled by the model.
 //         let energy_bonds = Array2::default((pc.tile_names.len(), pc.tile_names.len()));
@@ -1206,9 +1168,9 @@ pub enum GsOrSeq {
     Seq(String),
 }
 
-fn gsorseq_to_gs(gsorseq: &GsOrSeq) -> (f64, f64) {
+fn gsorseq_to_gs(gsorseq: &GsOrSeq) -> (KcalPerMol, KcalPerMolKelvin) {
     match gsorseq {
-        GsOrSeq::GS(x) => *x,
+        GsOrSeq::GS(x) => (KcalPerMol(x.0), KcalPerMolKelvin(x.1)),
         GsOrSeq::Seq(s) => crate::utils::string_dna_dg_ds(s.as_str()),
     }
 }
@@ -1228,8 +1190,8 @@ pub struct SDCParams {
     // Optinal (additive) junction penalty
     //
     // Meaning that negative penalty, will make binding more likely
-    pub junction_penalty_dg: Option<f64>,
-    pub junction_penalty_ds: Option<f64>,
+    pub junction_penalty_dg: Option<KcalPerMol>,
+    pub junction_penalty_ds: Option<KcalPerMolKelvin>,
 }
 
 /// Triple (x, y, z)
@@ -1237,17 +1199,13 @@ pub struct SDCParams {
 /// x: Original input but parsed so that there can be no errors in it (eg. No h**)
 /// y: From (eg. h)
 /// z: Inverse (eg. h*)
-fn self_and_inverse(value: &String) -> (bool, String, String) {
+fn self_and_inverse(value: &str) -> (bool, String, String) {
     // Remove all the stars at the end
     let filtered = value.trim_end_matches("*");
     let star_count = value.len() - filtered.len();
     let is_from = star_count % 2 == 0;
 
-    (
-        is_from,
-        filtered.to_string(),
-        format!("{}*", filtered.to_string()),
-    )
+    (is_from, filtered.to_string(), format!("{}*", filtered))
 }
 
 fn get_or_generate(
@@ -1329,8 +1287,8 @@ impl SDC {
         }
 
         // Delta G at 37 degrees C
-        let mut glue_delta_g = Array2::<f64>::zeros((gluenum, gluenum));
-        let mut glue_s = Array2::<f64>::zeros((gluenum, gluenum));
+        let mut glue_delta_g = Array2::<KcalPerMol>::zeros((gluenum, gluenum));
+        let mut glue_s = Array2::<KcalPerMolKelvin>::zeros((gluenum, gluenum));
 
         for (k, gs_or_dna_sequence) in params.glue_dg_s.iter() {
             // here we handle the fact that the user may have input (g, s) or TCGTA...
@@ -1365,10 +1323,10 @@ impl SDC {
                 _ => continue,
             };
 
-            glue_delta_g[[i, j]] = gs.0 + params.junction_penalty_dg.unwrap_or(0.0);
-            glue_delta_g[[j, i]] = gs.0 + params.junction_penalty_dg.unwrap_or(0.0);
-            glue_s[[i, j]] = gs.1 + params.junction_penalty_ds.unwrap_or(0.0);
-            glue_s[[j, i]] = gs.1 + params.junction_penalty_ds.unwrap_or(0.0);
+            glue_delta_g[[i, j]] = gs.0 + params.junction_penalty_dg.unwrap_or(KcalPerMol(0.0));
+            glue_delta_g[[j, i]] = gs.0 + params.junction_penalty_dg.unwrap_or(KcalPerMol(0.0));
+            glue_s[[i, j]] = gs.1 + params.junction_penalty_ds.unwrap_or(KcalPerMolKelvin(0.0));
+            glue_s[[j, i]] = gs.1 + params.junction_penalty_ds.unwrap_or(KcalPerMolKelvin(0.0));
         }
 
         let scaffold = match params.scaffold {
@@ -1378,7 +1336,7 @@ impl SDC {
                     if let Some(g) = maybe_g {
                         let x = *glue_name_map
                             .get(g)
-                            .expect(format!("ERROR: Glue {} in scaffold not found!", g).as_str());
+                            .unwrap_or_else(|| panic!("ERROR: Glue {} in scaffold not found!", g));
 
                         scaffold.index_axis_mut(ndarray::Axis(1), i).fill(x);
                     } else {
@@ -1395,21 +1353,35 @@ impl SDC {
             glue_names[*i] = s.clone();
         }
 
-        SDC::new(
-            // TODO: anchor tiles
-            vec![],
-            strand_names,
-            glue_names,
-            scaffold,
-            strand_concentration,
-            params.scaffold_concentration,
-            glues,
-            strand_colors,
-            params.k_f,
-            glue_delta_g,
-            glue_s,
-            params.temperature,
-        )
+        {
+            let anchor_tiles = vec![];
+            let strand_concentration = strand_concentration.mapv(Molar::new);
+            let scaffold_concentration = Molar::new(params.scaffold_concentration);
+            let kf = PerMolarSecond::new(params.k_f);
+            let temperature = params.temperature;
+            let strand_count = strand_names.len();
+            let mut s = SDC {
+                anchor_tiles,
+                strand_concentration,
+                strand_names,
+                colors: strand_colors,
+                glues,
+                scaffold,
+                glue_names,
+                kf,
+                delta_g_matrix: glue_delta_g,
+                entropy_matrix: glue_s,
+                temperature: temperature.into(),
+                scaffold_concentration,
+                // These will be generated by the update_system function next, so just leave them
+                // empty for now
+                friends_btm: HashMap::new(),
+                strand_energy_bonds: Array2::default((strand_count, strand_count)),
+                scaffold_energy_bonds: Array1::default(strand_count),
+            };
+            s.update_system();
+            s
+        }
     }
 }
 
@@ -1534,7 +1506,7 @@ impl AnnealProtocol {
 
         for tmp in &tmps {
             // Change the temperature
-            sdc.temperature = *tmp;
+            sdc.temperature = (*tmp).into();
             sdc.update_system();
 
             crate::system::System::update_state(&sdc, &mut state, &needed);
@@ -1637,7 +1609,7 @@ impl SDC {
 
     /// Change temperature of the system (degrees C) and update system with that new temperature
     fn set_tmp_c(&mut self, tmp: f64) {
-        self.temperature = tmp;
+        self.temperature = tmp.into();
         self.update_system();
     }
 
@@ -1649,7 +1621,7 @@ impl SDC {
         self.fill_energy_array();
         self.scaffold_energy_bonds
             .map(|x| *x.get().unwrap())
-            .to_pyarray_bound(py)
+            .to_pyarray(py)
     }
 
     #[getter]
@@ -1660,17 +1632,17 @@ impl SDC {
         self.fill_energy_array();
         self.strand_energy_bonds
             .map(|x| *x.get().unwrap())
-            .to_pyarray_bound(py)
+            .to_pyarray(py)
     }
 
     #[getter]
     fn get_tile_concs<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
-        self.strand_concentration.to_pyarray_bound(py)
+        self.strand_concentration.mapv(Molar::into).to_pyarray(py)
     }
 
     #[setter]
     fn set_tile_concs(&mut self, concs: Vec<f64>) {
-        self.strand_concentration = Array1::from(concs);
+        self.strand_concentration = Array1::from(concs).mapv(Molar::new);
         self.update_system();
     }
 
@@ -1731,13 +1703,13 @@ impl SDC {
 
     #[setter]
     fn set_temperature(&mut self, tmp: f64) {
-        self.temperature = tmp;
+        self.temperature = tmp.into();
         self.update_system();
     }
 
     #[getter]
     fn get_temperature(&self) -> f64 {
-        self.temperature
+        self.temperature.to_celsius().0
     }
 
     #[pyo3(name = "all_scaffolds_slow")]
@@ -1924,8 +1896,8 @@ mod test_sdc_model {
             strand_names: Vec::new(),
             glue_names: Vec::new(),
             scaffold: Array2::<usize>::zeros((5, 5)),
-            strand_concentration: Array1::<f64>::zeros(5),
-            scaffold_concentration: 0.0,
+            strand_concentration: Array1::<Molar>::zeros(5),
+            scaffold_concentration: Molar::zero(),
             glues: array![
                 [0, 0, 0],
                 [1, 3, 12],
@@ -1936,11 +1908,13 @@ mod test_sdc_model {
                 [4, 4, 1],
             ],
             colors: Vec::new(),
-            kf: 0.0,
+            kf: PerMolarSecond::zero(),
             friends_btm: HashMap::new(),
-            entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]],
-            delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]],
-            temperature: 5.,
+            entropy_matrix: (array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]])
+                .mapv(KcalPerMolKelvin),
+            delta_g_matrix: (array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]])
+                .mapv(KcalPerMol),
+            temperature: Celsius(5.0).into(),
             strand_energy_bonds: Array2::default((5, 5)),
             scaffold_energy_bonds: Array1::default(5),
         };
@@ -1973,10 +1947,10 @@ mod test_sdc_model {
 
         let acc = input
             .into_iter()
-            .map(|str| self_and_inverse(&str.to_string()))
+            .map(self_and_inverse)
             .collect::<Vec<(bool, String, String)>>();
 
-        let expected = vec![
+        let expected = [
             (true, "some*str", "some*str*"),
             (false, "some*str", "some*str*"),
             (true, "some*str", "some*str*"),
@@ -2001,7 +1975,7 @@ mod test_sdc_model {
             strand_names: Vec::new(),
             glue_names: Vec::new(),
             scaffold,
-            strand_concentration: Array1::<f64>::zeros(5),
+            strand_concentration: Array1::<Molar>::zeros(5),
             glues: array![
                 [0, 0, 0],
                 [1, 3, 12],
@@ -2011,13 +1985,15 @@ mod test_sdc_model {
                 [11, 1, 30],
                 [4, 4, 1],
             ],
-            scaffold_concentration: 0.0,
+            scaffold_concentration: Molar::zero(),
             colors: Vec::new(),
-            kf: 0.0,
+            kf: PerMolarSecond::zero(),
             friends_btm: HashMap::new(),
-            entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]],
-            delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]],
-            temperature: 50.0,
+            entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]]
+                .mapv(KcalPerMolKelvin),
+            delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]]
+                .mapv(KcalPerMol),
+            temperature: Celsius(50.0).into(),
             strand_energy_bonds: Array2::default((5, 5)),
             scaffold_energy_bonds: Array1::default(5),
         };
@@ -2181,7 +2157,7 @@ mod test_sdc_model {
 
         probs.sort_by(|(_, p1), (_, p2)| {
             p2.partial_cmp(p1)
-                .expect(format!("{} -- {}", p1, p2).as_str())
+                .unwrap_or_else(|| panic!("{} -- {}", p1, p2))
         });
 
         // The perfect combination would be all 0's
