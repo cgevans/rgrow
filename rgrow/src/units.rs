@@ -5,68 +5,16 @@ use std::{
     iter::Sum,
     ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign},
 };
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
 
 const R_VAL: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 
+// ===================
+// Temperature
+// ===================
 pub trait Temperature {
     fn to_kelvin(self) -> f64;
-}
-
-pub trait Energy {
-    fn times_beta(self, temperature: impl Temperature) -> f64;
-}
-
-impl Energy for EnergyKCM {
-    fn times_beta(self, temperature: impl Temperature) -> f64 {
-        self.0 / (temperature.to_kelvin() * R_VAL)
-    }
-}
-
-impl Default for EnergyKCM {
-    fn default() -> Self {
-        EnergyKCM(0.0)
-    }
-}
-
-impl Sub for EnergyKCM {
-    type Output = EnergyKCM;
-    fn sub(self, other: EnergyKCM) -> EnergyKCM {
-        EnergyKCM(self.0 - other.0)
-    }
-}
-
-impl From<f64> for EnergyKCM {
-    fn from(value: f64) -> Self {
-        EnergyKCM(value)
-    }
-}
-
-/// Energy in kcal/mol.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
-pub struct EnergyKCM(pub(crate) f64);
-
-impl Add for EnergyKCM {
-    type Output = EnergyKCM;
-    fn add(self, other: EnergyKCM) -> EnergyKCM {
-        EnergyKCM(self.0 + other.0)
-    }
-}
-
-impl AddAssign for EnergyKCM {
-    fn add_assign(&mut self, other: EnergyKCM) {
-        self.0 += other.0;
-    }
-}
-
-impl Zero for EnergyKCM {
-    fn zero() -> Self {
-        EnergyKCM(0.0)
-    }
-
-    fn is_zero(&self) -> bool {
-        self.0 == 0.0
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -100,40 +48,6 @@ impl From<f64> for TemperatureC {
     }
 }
 
-
-
-pub trait Rate: Clone + Copy + num_traits::Zero + std::fmt::Debug {
-    fn to_per_second(self) -> RatePS;
-
-    fn from_per_second(r: RatePS) -> Self;
-}
-
-impl Rate for f64 {
-    fn to_per_second(self) -> RatePS {
-        RatePS(self)
-    }
-
-    fn from_per_second(r: RatePS) -> Self {
-        r.0
-    }
-}
-
-impl Rate for RatePS {
-    fn to_per_second(self) -> RatePS {
-        self
-    }
-
-    fn from_per_second(r: RatePS) -> Self {
-        r
-    }
-}
-
-impl From<f64> for RatePS {
-    fn from(value: f64) -> Self {
-        RatePS(value)
-    }
-}
-
 impl From<f64> for TemperatureK {
     fn from(value: f64) -> Self {
         TemperatureK(value)
@@ -146,14 +60,99 @@ impl From<TemperatureK> for f64 {
     }
 }
 
-impl From<EntropyKCMK> for f64 {
-    fn from(value: EntropyKCMK) -> Self {
+// ===================
+// Energy
+// ===================
+pub trait Energy {
+    fn times_beta(self, temperature: impl Temperature) -> f64;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
+pub struct EnergyKCM(pub(crate) f64);
+
+impl Energy for EnergyKCM {
+    fn times_beta(self, temperature: impl Temperature) -> f64 {
+        self.0 / (temperature.to_kelvin() * R_VAL)
+    }
+}
+
+impl Default for EnergyKCM {
+    fn default() -> Self {
+        EnergyKCM(0.0)
+    }
+}
+
+impl Add for EnergyKCM {
+    type Output = EnergyKCM;
+    fn add(self, other: EnergyKCM) -> EnergyKCM {
+        EnergyKCM(self.0 + other.0)
+    }
+}
+
+impl AddAssign for EnergyKCM {
+    fn add_assign(&mut self, other: EnergyKCM) {
+        self.0 += other.0;
+    }
+}
+
+impl Sub for EnergyKCM {
+    type Output = EnergyKCM;
+    fn sub(self, other: EnergyKCM) -> EnergyKCM {
+        EnergyKCM(self.0 - other.0)
+    }
+}
+
+impl From<f64> for EnergyKCM {
+    fn from(value: f64) -> Self {
+        EnergyKCM(value)
+    }
+}
+
+impl Zero for EnergyKCM {
+    fn zero() -> Self {
+        EnergyKCM(0.0)
+    }
+    fn is_zero(&self) -> bool {
+        self.0 == 0.0
+    }
+}
+
+impl Mul<f64> for EnergyKCM {
+    type Output = EnergyKCM;
+    fn mul(self, other: f64) -> EnergyKCM {
+        EnergyKCM(self.0 * other)
+    }
+}
+
+impl Mul<i32> for EnergyKCM {
+    type Output = EnergyKCM;
+    fn mul(self, other: i32) -> EnergyKCM {
+        EnergyKCM(self.0 * other as f64)
+    }
+}
+
+impl From<EnergyKCM> for f64 {
+    fn from(value: EnergyKCM) -> Self {
         value.0
     }
 }
 
+// ===================
+// Entropy
+// ===================
 pub trait Entropy {
     fn to_kcal_mol_k(self) -> EntropyKCMK;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
+pub struct EntropyKCMK(f64);
+
+impl Entropy for EntropyKCMK {
+    fn to_kcal_mol_k(self) -> EntropyKCMK {
+        self
+    }
 }
 
 impl Default for EntropyKCMK {
@@ -175,44 +174,17 @@ impl<T: Temperature> Mul<T> for EntropyKCMK {
     }
 }
 
-impl Mul<f64> for EnergyKCM {
-    type Output = EnergyKCM;
-    fn mul(self, other: f64) -> EnergyKCM {
-        EnergyKCM(self.0 * other)
-    }
-}
-
-impl Mul<i32> for EnergyKCM {
-    type Output = EnergyKCM;
-    fn mul(self, other: i32) -> EnergyKCM {
-        EnergyKCM(self.0 * other as f64)
-    }
-}
-
-
-impl From<EnergyKCM> for f64 {
-    fn from(value: EnergyKCM) -> Self {
+impl From<EntropyKCMK> for f64 {
+    fn from(value: EntropyKCMK) -> Self {
         value.0
     }
 }
 
-/// Entropy in kcal/mol/K.
+// ===================
+// Concentration
+// ===================
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
-pub struct EntropyKCMK(f64);
-
-impl Entropy for EntropyKCMK {
-    fn to_kcal_mol_k(self) -> EntropyKCMK {
-        self
-    }
-}
-
-
-
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
-
-/// Concentration in M
 pub struct ConcM(pub(crate) f64);
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -222,13 +194,21 @@ impl ConcM {
     pub fn new(value: f64) -> ConcM {
         ConcM(value)
     }
+    pub fn squared(self) -> ConcM2 {
+        ConcM2(self.0 * self.0)
+    }
+    pub fn u0_times(unitless: f64) -> ConcM {
+        ConcM(unitless)
+    }
+    pub fn over_u0(self) -> f64 {
+        self.0
+    }
 }
 
 impl Zero for ConcM {
     fn zero() -> Self {
         ConcM(0.0)
     }
-
     fn is_zero(&self) -> bool {
         self.0 == 0.0
     }
@@ -282,20 +262,6 @@ impl Sum for ConcM {
     }
 }
 
-impl ConcM {
-    pub fn squared(self) -> ConcM2 {
-        ConcM2(self.0 * self.0)
-    }
-
-    pub fn u0_times(unitless: f64) -> ConcM {
-        ConcM(unitless)
-    }
-
-    pub fn over_u0(self) -> f64 {
-        self.0
-    }
-}
-
 impl From<ConcM> for f64 {
     fn from(value: ConcM) -> Self {
         value.0
@@ -312,7 +278,6 @@ impl ConcM2 {
     pub fn sqrt(self) -> ConcM {
         ConcM(self.0.sqrt())
     }
-
     pub fn over_u0(self) -> ConcM {
         ConcM(self.0)
     }
@@ -325,38 +290,55 @@ impl Add for ConcM2 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub struct RatePMS(f64);
-
-impl Zero for RatePMS {
-    fn zero() -> Self {
-        RatePMS(0.0)
-    }
-
-    fn is_zero(&self) -> bool {
-        self.0 == 0.0
-    }
-}
-
-impl Add for RatePMS {
-    type Output = RatePMS;
-    fn add(self, other: RatePMS) -> RatePMS {
-        RatePMS(self.0 + other.0)
-    }
-}
-
 impl Zero for ConcM2 {
     fn zero() -> Self {
         ConcM2(0.0)
     }
-
     fn is_zero(&self) -> bool {
         self.0 == 0.0
+    }
+}
+
+impl From<f64> for ConcM2 {
+    fn from(value: f64) -> Self {
+        ConcM2(value)
+    }
+}
+
+// ===================
+// Rate
+// ===================
+pub trait Rate: Clone + Copy + num_traits::Zero + std::fmt::Debug {
+    fn to_per_second(self) -> RatePS;
+    fn from_per_second(r: RatePS) -> Self;
+}
+
+impl Rate for f64 {
+    fn to_per_second(self) -> RatePS {
+        RatePS(self)
+    }
+    fn from_per_second(r: RatePS) -> Self {
+        r.0
+    }
+}
+
+impl Rate for RatePS {
+    fn to_per_second(self) -> RatePS {
+        self
+    }
+    fn from_per_second(r: RatePS) -> Self {
+        r
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct RatePS(f64);
+
+impl RatePS {
+    pub fn new(value: f64) -> RatePS {
+        RatePS(value)
+    }
+}
 
 impl Add for RatePS {
     type Output = RatePS;
@@ -388,16 +370,15 @@ impl Zero for RatePS {
     fn zero() -> Self {
         RatePS(0.0)
     }
-
     fn is_zero(&self) -> bool {
         self.0 == 0.0
     }
 }
 
-impl Mul<ConcM> for RatePMS {
-    type Output = RatePS;
-    fn mul(self, other: ConcM) -> RatePS {
-        RatePS(self.0 * other.0)
+impl Mul<ConcM> for RatePS {
+    type Output = RatePMS;
+    fn mul(self, other: ConcM) -> RatePMS {
+        RatePMS(self.0 * other.0)
     }
 }
 
@@ -415,18 +396,21 @@ impl Sub for RatePS {
     }
 }
 
-impl Mul<ConcM> for RatePS {
-    type Output = RatePMS;
-    fn mul(self, other: ConcM) -> RatePMS {
-        RatePMS(self.0 * other.0)
-    }
-}
-
-impl RatePS {
-    pub fn new(value: f64) -> RatePS {
+impl From<f64> for RatePS {
+    fn from(value: f64) -> Self {
         RatePS(value)
     }
 }
+
+impl From<RatePS> for f64 {
+    fn from(value: RatePS) -> Self {
+        value.0
+    }
+}
+
+// RatePMS
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct RatePMS(f64);
 
 impl RatePMS {
     pub fn new(value: f64) -> RatePMS {
@@ -434,24 +418,63 @@ impl RatePMS {
     }
 }
 
-impl From<f64> for ConcM2 {
-    fn from(value: f64) -> Self {
-        ConcM2(value)
+impl Zero for RatePMS {
+    fn zero() -> Self {
+        RatePMS(0.0)
+    }
+    fn is_zero(&self) -> bool {
+        self.0 == 0.0
     }
 }
 
-#[cfg(feature = "python")]
-use pyo3::prelude::*;
+impl Add for RatePMS {
+    type Output = RatePMS;
+    fn add(self, other: RatePMS) -> RatePMS {
+        RatePMS(self.0 + other.0)
+    }
+}
 
+impl Mul<ConcM> for RatePMS {
+    type Output = RatePS;
+    fn mul(self, other: ConcM) -> RatePS {
+        RatePS(self.0 * other.0)
+    }
+}
+
+impl Mul<ConcM2> for RatePMS {
+    type Output = RateMPS;
+    fn mul(self, other: ConcM2) -> RateMPS {
+        RateMPS(self.0 * other.0)
+    }
+}
+
+impl From<f64> for RatePMS {
+    fn from(value: f64) -> Self {
+        RatePMS(value)
+    }
+}
+
+impl From<RatePMS> for f64 {
+    fn from(value: RatePMS) -> Self {
+        value.0
+    }
+}
+
+// RateMPS
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
 pub struct RateMPS(f64);
+
+impl RateMPS {
+    pub fn new(value: f64) -> RateMPS {
+        RateMPS(value)
+    }
+}
 
 impl Zero for RateMPS {
     fn zero() -> Self {
         RateMPS(0.0)
     }
-
     fn is_zero(&self) -> bool {
         self.0 == 0.0
     }
@@ -478,22 +501,8 @@ impl SubAssign for RateMPS {
 
 impl rand::distr::weighted::Weight for RateMPS {
     const ZERO: Self = RateMPS(0.0);
-
     fn checked_add_assign(&mut self, v: &Self) -> Result<(), ()> {
         self.0.checked_add_assign(&v.0)
-    }
-}
-
-impl From<RateMPS> for f64 {
-    fn from(value: RateMPS) -> Self {
-        value.0
-    }
-}
-
-impl Mul<ConcM2> for RatePMS {
-    type Output = RateMPS;
-    fn mul(self, other: ConcM2) -> RateMPS {
-        RateMPS(self.0 * other.0)
     }
 }
 
@@ -511,30 +520,15 @@ impl Div<RateMPS> for RateMPS {
     }
 }
 
-impl From<f64> for RatePMS {
-    fn from(value: f64) -> Self {
-        RatePMS(value)
-    }
-}
-
-impl From<RatePMS> for f64 {
-    fn from(value: RatePMS) -> Self {
+impl From<RateMPS> for f64 {
+    fn from(value: RateMPS) -> Self {
         value.0
     }
 }
 
-impl From<RatePS> for f64 {
-    fn from(value: RatePS) -> Self {
-        value.0
-    }
-}
-
-impl RateMPS {
-    pub fn new(value: f64) -> RateMPS {
-        RateMPS(value)
-    }
-}
-
+// ===================
+// Time
+// ===================
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
 pub struct TimeS(f64);
@@ -542,6 +536,12 @@ pub struct TimeS(f64);
 impl TimeS {
     pub fn new(value: f64) -> TimeS {
         TimeS(value)
+    }
+    pub fn min(self, other: TimeS) -> TimeS {
+        TimeS(self.0.min(other.0))
+    }
+    pub fn max(self, other: TimeS) -> TimeS {
+        TimeS(self.0.max(other.0))
     }
 }
 
@@ -555,6 +555,19 @@ impl Add for TimeS {
 impl AddAssign for TimeS {
     fn add_assign(&mut self, other: TimeS) {
         self.0 += other.0;
+    }
+}
+
+impl Sub for TimeS {
+    type Output = TimeS;
+    fn sub(self, other: TimeS) -> TimeS {
+        TimeS(self.0 - other.0)
+    }
+}
+
+impl SubAssign for TimeS {
+    fn sub_assign(&mut self, other: TimeS) {
+        self.0 -= other.0;
     }
 }
 
@@ -583,29 +596,6 @@ impl Display for RatePS {
     }
 }
 
-impl TimeS {
-    pub fn min(self, other: TimeS) -> TimeS {
-        TimeS(self.0.min(other.0))
-    }
-
-    pub fn max(self, other: TimeS) -> TimeS {
-        TimeS(self.0.max(other.0))
-    }
-}
-
-impl Sub for TimeS {
-    type Output = TimeS;
-    fn sub(self, other: TimeS) -> TimeS {
-        TimeS(self.0 - other.0)
-    }
-}
-
-impl SubAssign for TimeS {
-    fn sub_assign(&mut self, other: TimeS) {
-        self.0 -= other.0;
-    }
-}
-
 impl std::fmt::LowerExp for TimeS {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::LowerExp::fmt(&self.0, f)
@@ -629,3 +619,4 @@ impl std::fmt::UpperExp for RatePS {
         std::fmt::UpperExp::fmt(&self.0, f)
     }
 }
+
