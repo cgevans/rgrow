@@ -3,6 +3,8 @@ use std::f64;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
+use crate::units::*;
+
 // For testing
 #[macro_export]
 macro_rules! assert_all {
@@ -11,13 +13,15 @@ macro_rules! assert_all {
     };
 }
 
-const PENALTY_G: f64 = 1.96;
-const PENALTY_S: f64 = 0.0057;
+const INITIATION_DG: KcalPerMol = KcalPerMol(1.96);
+const INITIATION_DS: KcalPerMolKelvin = KcalPerMolKelvin(0.0057);
+
+const T37C: Kelvin = Kelvin(310.15);
 
 // Gas constant in kcal / mol / K
 //
 // (same unit as delta G needed)
-const R: f64 = 1.98720425864083 / 1000.0;
+const R: KcalPerMolKelvin = KcalPerMolKelvin(1.98720425864083 / 1000.0);
 
 /// Index this as follows:
 ///
@@ -156,10 +160,10 @@ impl From<char> for DnaNucleotideBase {
 /// By default the values found in santalucia_thermodynamics_2004 are used
 #[inline(always)]
 #[allow(non_snake_case)]
-fn dG_dS(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> (f64, f64) {
+fn dG_dS(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> (KcalPerMol, KcalPerMolKelvin) {
     // Full name made the match statment horrible
     use DnaNucleotideBase::*;
-    match (a, b) {
+    let (dg, ds) = match (a, b) {
         (T, T) | (A, A) => (-1.0, -0.0213),
         (C, C) | (G, G) => (-1.84, -0.0199),
         (G, T) | (A, C) => (-1.44, -0.0224),
@@ -170,7 +174,8 @@ fn dG_dS(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> (f64, f64) {
         (A, T) => (-0.88, -0.0204),
         (C, G) => (-2.17, -0.0272),
         (G, C) => (-2.24, -0.0244),
-    }
+    };
+    (KcalPerMol(dg), KcalPerMolKelvin(ds))
 }
 
 /// Get the binding strength of two sequences
@@ -192,21 +197,24 @@ fn dG_dS(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> (f64, f64) {
 fn sequences_strength(
     dna: Vec<DnaNucleotideBase>,
     other_dna: Option<Vec<DnaNucleotideBase>>,
-    temperature: f64,
-) -> f64 {
+    temperature: impl Temperature,
+) -> KcalPerMol {
     let (total_dg, total_ds) = match other_dna {
         None => single_sequence_dg_ds(dna.into_iter()),
         Some(other) => sequence_pair_dg_ds(dna, other),
     };
-    (total_dg + PENALTY_G) - (temperature - 37.0) * (total_ds + PENALTY_S)
+    (total_dg + INITIATION_DG) - ((temperature.to_kelvin() - T37C) * (total_ds + INITIATION_DS))
 }
 
-fn single_sequence_dg_ds(dna: impl Iterator<Item = DnaNucleotideBase>) -> (f64, f64) {
-    two_window_fold(dna, |(acc_dg, acc_ds), (a, b)| {
+
+/// Calculate ΔG37 and ΔS for a single sequence and its reverse complement, provided as an iterator.
+fn single_sequence_dg_ds(dna: impl Iterator<Item = DnaNucleotideBase>) -> (KcalPerMol, KcalPerMolKelvin) {
+    let (dg, ds) = two_window_fold(dna, |(acc_dg, acc_ds), (a, b)| {
         let (dg, ds) = dG_dS(a, b);
         (dg + acc_dg, ds + acc_ds)
     })
-    .expect("DNA must have length of at least 2")
+    .expect("DNA must have length of at least 2");
+    (dg, ds)
 }
 
 fn good_match(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> bool {
@@ -215,14 +223,14 @@ fn good_match(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> bool {
 
 /// Calculate the penalty introduced by a single mismatch
 #[inline(always)]
-fn calc_penalty(prior: &DnaNucleotideBase, x: &DnaNucleotideBase, y: &DnaNucleotideBase) -> f64 {
-    PENALTY_TABLE[*prior as usize][*x as usize][*y as usize]
+fn calc_penalty(prior: &DnaNucleotideBase, x: &DnaNucleotideBase, y: &DnaNucleotideBase) -> KcalPerMol {
+    KcalPerMol(PENALTY_TABLE[*prior as usize][*x as usize][*y as usize])
 }
 
 fn calculate_single_mismatch_penalty(
     (a1, a2): (&DnaNucleotideBase, &DnaNucleotideBase),
     (b1, b2): (&DnaNucleotideBase, &DnaNucleotideBase),
-) -> f64 {
+) -> KcalPerMol {
     if good_match(a1, b1) {
         // Case 1: PX/(P*)Y
         calc_penalty(a1, a2, b2)
@@ -230,17 +238,18 @@ fn calculate_single_mismatch_penalty(
         // Case 2: XP/Y(P*)
         calc_penalty(b2, b1, a1)
     } else {
-        0.0
+        KcalPerMol(0.0)
     }
 }
 
-fn sequence_pair_dg_ds(dna_a: Vec<DnaNucleotideBase>, dna_b: Vec<DnaNucleotideBase>) -> (f64, f64) {
+/// Calculate ΔG37 and ΔS for a pair of sequences.
+fn sequence_pair_dg_ds(dna_a: Vec<DnaNucleotideBase>, dna_b: Vec<DnaNucleotideBase>) -> (KcalPerMol, KcalPerMolKelvin) {
     if dna_a.len() != dna_b.len() {
         panic!("Dnas must be same length to compare");
     }
 
     let mut current_loop_length = 0;
-    let (mut dg, mut ds) = (0.0, 0.0);
+    let (mut dg, mut ds) = (KcalPerMol(0.0), KcalPerMolKelvin(0.0));
     let a_windows = dna_a.windows(2);
     let b_windows = dna_b.windows(2);
 
@@ -266,9 +275,9 @@ fn sequence_pair_dg_ds(dna_a: Vec<DnaNucleotideBase>, dna_b: Vec<DnaNucleotideBa
 }
 
 #[cfg_attr(feature = "python", pyfunction)]
-pub fn string_dna_dg_ds(dna_sequence: &str) -> (f64, f64) {
+pub fn string_dna_dg_ds(dna_sequence: &str) -> (KcalPerMol, KcalPerMolKelvin) {
     let (g37, s) = single_sequence_dg_ds(dna_sequence.chars().map(DnaNucleotideBase::from));
-    (g37 + PENALTY_G, s + PENALTY_S)
+    (g37 + INITIATION_DG, s + INITIATION_DS)
 }
 
 /// Get delta g for some string dna sequence and its "perfect match".  For example:
@@ -279,7 +288,7 @@ pub fn string_dna_dg_ds(dna_sequence: &str) -> (f64, f64) {
 /// assert_eq!(string_dna_delta_g(seq, 37.0), -5.8+1.96);
 /// ```
 ///
-pub fn string_dna_delta_g(dna_sequence: &str, temperature: f64) -> f64 {
+pub fn string_dna_delta_g(dna_sequence: &str, temperature: impl Temperature) -> KcalPerMol {
     sequences_strength(
         // Convert dna_sequence string into an iterator of nucleotide bases
         dna_sequence.chars().map(DnaNucleotideBase::from).collect(),
@@ -288,7 +297,7 @@ pub fn string_dna_delta_g(dna_sequence: &str, temperature: f64) -> f64 {
     )
 }
 
-fn _loop_penalty(length: usize, kind: LoopKind) -> f64 {
+fn _loop_penalty(length: usize, kind: LoopKind) -> KcalPerMol {
     let (g_diff, len) = LOOP_TABLE[kind as usize]
         .iter()
         .zip(LENGTHS)
@@ -296,11 +305,11 @@ fn _loop_penalty(length: usize, kind: LoopKind) -> f64 {
         .find(|(_, len)| len <= &length)
         .expect("Please enter a valid length");
 
-    g_diff + R * (length as f64 / (len as f64)).ln() * 2.44 * 310.15
+    KcalPerMol(*g_diff) + R * T37C * (length as f64 / (len as f64)).ln() * 2.44
 }
 
 #[cfg_attr(feature = "python", pyfunction)]
-pub fn loop_penalty(length: usize, kind: &str) -> f64 {
+pub fn loop_penalty(length: usize, kind: &str) -> KcalPerMol {
     match kind {
         "bulge" => _loop_penalty(length, LoopKind::Bulge),
         "internal" => _loop_penalty(length, LoopKind::Internal),
@@ -311,8 +320,13 @@ pub fn loop_penalty(length: usize, kind: &str) -> f64 {
 #[cfg(test)]
 mod test_utils {
 
+    use crate::units::Celsius;
+    use crate::units::KcalPerMol;
     use crate::utils::sequence_pair_dg_ds;
+    use crate::utils::INITIATION_DG;
+    use crate::utils::INITIATION_DS;
     use crate::utils::LOOP_TABLE;
+    use crate::utils::T37C;
 
     use super::string_dna_dg_ds;
     use super::DnaNucleotideBase;
@@ -426,24 +440,24 @@ mod test_utils {
         ];
 
         for (&seq, &dG) in seqs.iter().zip(dG_at_37.iter()) {
-            let result = string_dna_delta_g(seq, 37.0);
+            let result = string_dna_delta_g(seq, Celsius(37.0));
             println!("{}", seq);
             // TODO: Undo dG properly
-            assert_ulps_eq!(dG + 1.96, result, max_ulps = 10);
+            assert_ulps_eq!(KcalPerMol(dG) + INITIATION_DG, result, max_ulps = 10);
         }
 
         for (&seq, &dG) in seqs.iter().zip(dG_at_50.iter()) {
-            let result = string_dna_delta_g(seq, 50.0);
+            let result = string_dna_delta_g(seq, Celsius(50.0));
             println!("{}", seq);
-            assert_ulps_eq!(dG + 1.96 - (50.0 - 37.0) * 0.0057, result, max_ulps = 10);
+            assert_ulps_eq!(KcalPerMol(dG + 1.96) - (Celsius(50.0) - T37C) * INITIATION_DS, result, max_ulps = 10);
         }
     }
 
     #[test]
     fn test_loops() {
         let val29 = _loop_penalty(29, super::LoopKind::Internal);
-        assert!(val29 > LOOP_TABLE[0][13]);
-        assert!(val29 < LOOP_TABLE[0][14]);
+        assert!(val29 > KcalPerMol(LOOP_TABLE[0][13]));
+        assert!(val29 < KcalPerMol(LOOP_TABLE[0][14]));
     }
 
     #[test]
@@ -451,7 +465,7 @@ mod test_utils {
         let dna_a = "GGACTGACG".chars().map(DnaNucleotideBase::from).collect();
         let dna_b = "CCTGGCTGC".chars().map(DnaNucleotideBase::from).collect();
         let (total, _) = sequence_pair_dg_ds(dna_a, dna_b);
-        assert_eq!(total + 1.96, -8.32);
+        assert_eq!(total + INITIATION_DG, KcalPerMol(-8.32));
     }
 
     #[test]
@@ -463,8 +477,8 @@ mod test_utils {
         };
         let (g, s) = sequence_pair_dg_ds(dna_a, dna_b);
         let (pg, ps) = string_dna_dg_ds("GGACTGAC");
-        assert_eq!(g, pg - 1.96);
-        assert_eq!(s, ps - 0.0057);
+        assert_eq!(g, pg - INITIATION_DG);
+        assert_eq!(s, ps - INITIATION_DS);
     }
 
     #[test]
@@ -490,6 +504,6 @@ mod test_utils {
             "attagctggtc".chars().map(DnaNucleotideBase::from).collect(),
             "taagatgacag".chars().map(DnaNucleotideBase::from).collect(),
         );
-        approx::assert_relative_eq!(g, -0.17);
+        approx::assert_relative_eq!(g, KcalPerMol(-0.17));
     }
 }

@@ -12,7 +12,7 @@ use crate::{
         DimerInfo, Event, FissionHandling, Orientation, System, SystemWithDimers, TileBondInfo,
     },
     type_alias,
-    units::{Molar, Energy, KcalPerMol, KcalPerMolKelvin, PerMolarSecond, PerSecond, Celsius, Kelvin},
+    units::*,
 };
 
 // Imports for python bindings
@@ -499,7 +499,7 @@ impl KBlock {
     }
 
     /// The rate at which a tile will attach somewhere
-    fn tile_attachment_rate(&self, tile: TileState) -> PerSecond {
+    pub fn tile_attachment_rate(&self, tile: TileState) -> PerSecond {
         self.kf * self.tile_concentration(tile)
     }
 
@@ -1338,9 +1338,9 @@ mod test_kblock {
                 (GlueIdentifier::Index(0), 1e6.into()),
                 (GlueIdentifier::Index(1), 1e6.into()),
             ]),
-            ds_lat: 1.0.into(),
-            kf: 1.0,
-            temp: 40.0,
+            ds_lat: KcalPerMolKelvin::new(1.0),
+            kf: PerMolarSecond::new(1.0),
+            temp: Celsius::new(40.0),
             ..Default::default()
         }
         .into();
@@ -1461,8 +1461,8 @@ struct KBlockParams {
     pub seed: HashMap<(usize, usize), TileIdentifier>,
     pub binding_strength: HashMap<String, StrenOrSeq>,
     pub ds_lat: KcalPerMolKelvin,
-    pub kf: f64,
-    pub temp: f64,
+    pub kf: PerMolarSecond,
+    pub temp: Celsius,
     pub no_partially_blocked_attachments: bool,
     pub blocker_energy_adj: KcalPerMol,
 }
@@ -1474,9 +1474,9 @@ impl Default for KBlockParams {
             blocker_conc: HashMap::default(),
             seed: HashMap::default(),
             binding_strength: HashMap::default(),
-            ds_lat: todo!(),
-            kf: 1.0e6,
-            temp: 40.0,
+            ds_lat: KcalPerMolKelvin::new(-14.12),
+            kf: PerMolarSecond::new(1.0e6),
+            temp: Celsius::new(40.0),
             no_partially_blocked_attachments: false,
             blocker_energy_adj: 0.0.into(),
         }
@@ -1600,7 +1600,7 @@ impl From<KBlockParams> for KBlock {
 
         {
             let temperature = value.temp;
-            let kf = value.kf.into();
+            let kf = value.kf;
             let ds_lat = value.ds_lat;
             let fission_handling = FissionHandling::JustDetach;
             let no_partially_blocked_attachments = value.no_partially_blocked_attachments;
@@ -1614,7 +1614,7 @@ impl From<KBlockParams> for KBlock {
                 blocker_concentrations: blocker_concentrations.iter().map(|c| (*c).into()).collect(),
                 tile_glues,
                 glue_links,
-                temperature: Celsius(temperature),
+                temperature,
                 seed,
                 north_friends: Vec::default(),
                 south_friends: Vec::default(),

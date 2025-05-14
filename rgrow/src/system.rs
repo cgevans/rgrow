@@ -1,7 +1,6 @@
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
 use num_traits::Zero;
-use pyo3::IntoPyObjectExt;
 use rand::rng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -45,6 +44,10 @@ use rayon::prelude::*;
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+use pyo3::IntoPyObjectExt;
+
 
 #[derive(Clone, Debug)]
 pub enum Event {

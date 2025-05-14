@@ -1,4 +1,4 @@
-use num_traits::{identities::Zero, Num};
+use num_traits::identities::Zero;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
@@ -13,15 +13,31 @@ const R_VAL: KcalPerMolKelvin = KcalPerMolKelvin(1.98720425864083 / 1000.0); // 
 // ===================
 // Temperature
 // ===================
-pub trait Temperature {
-    fn to_kelvin(self) -> f64;
+pub trait Temperature: Sized {
+    fn to_kelvin_m(self) -> f64;
+
+    fn to_kelvin(self) -> Kelvin {
+        Kelvin(self.to_kelvin_m())
+    }
+
+    fn to_celsius(self) -> Celsius {
+        Celsius(self.to_kelvin_m() - 273.15)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
+
 pub struct Kelvin(pub f64);
 
+impl Kelvin {
+    pub fn new(value: f64) -> Self {
+        Kelvin(value)
+    }
+}
+
 impl Temperature for Kelvin {
-    fn to_kelvin(self) -> f64 {
+    fn to_kelvin_m(self) -> f64 {
         self.0
     }
 }
@@ -52,15 +68,29 @@ impl SubAssign for Kelvin {
     }
 }
 
-
+impl From<Celsius> for Kelvin {
+    fn from(value: Celsius) -> Self {
+        Kelvin(value.to_kelvin_m())
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
 pub struct Celsius(pub f64);
 
+impl Celsius {
+    pub fn new(value: f64) -> Self {
+        Celsius(value)
+    }
+}
+
 impl Temperature for Celsius {
-    fn to_kelvin(self) -> f64 {
+    fn to_kelvin_m(self) -> f64 {
         self.0 + 273.15
+    }
+
+    fn to_celsius(self) -> Celsius {
+        self
     }
 }
 
@@ -88,6 +118,19 @@ impl From<Kelvin> for f64 {
     }
 }
 
+impl Sub<Kelvin> for Celsius {
+    type Output = Celsius;
+    fn sub(self, other: Kelvin) -> Celsius {
+        Celsius(self.0 - other.0)
+    }
+}
+
+impl Sub<Celsius> for Kelvin {
+    type Output = Kelvin;
+    fn sub(self, other: Celsius) -> Kelvin {
+        Kelvin(self.0 - other.to_kelvin_m())
+    }
+}
 
 // ===================
 // Energy
@@ -174,6 +217,34 @@ impl From<KcalPerMol> for f64 {
     }
 }
 
+impl approx::AbsDiffEq for KcalPerMol {
+    type Epsilon = f64;
+    fn default_epsilon() -> f64 {
+        f64::default_epsilon()
+    }
+    fn abs_diff_eq(&self, other: &Self, epsilon: f64) -> bool {
+        f64::abs_diff_eq(&self.0, &other.0, epsilon)
+    }
+}
+
+impl approx::RelativeEq for KcalPerMol {
+    fn default_max_relative() -> f64 {
+        f64::default_max_relative()
+    }
+    fn relative_eq(&self, other: &Self, epsilon: f64, max_relative: f64) -> bool {
+        f64::relative_eq(&self.0, &other.0, epsilon, max_relative)
+    }
+}
+
+impl approx::UlpsEq for KcalPerMol {
+    fn default_max_ulps() -> u32 {
+        f64::default_max_ulps()
+    }
+    fn ulps_eq(&self, other: &Self, epsilon: f64, max_ulps: u32) -> bool {
+        f64::ulps_eq(&self.0, &other.0, epsilon, max_ulps)
+    }
+}
+
 // ===================
 // Entropy
 // ===================
@@ -183,7 +254,13 @@ pub trait Entropy {
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
-pub struct KcalPerMolKelvin(f64);
+pub struct KcalPerMolKelvin(pub(crate) f64);
+
+impl KcalPerMolKelvin {
+    pub fn new(value: f64) -> Self {
+        KcalPerMolKelvin(value)
+    }
+}
 
 impl Entropy for KcalPerMolKelvin {
     fn to_kcal_mol_k(self) -> KcalPerMolKelvin {
@@ -206,7 +283,21 @@ impl From<f64> for KcalPerMolKelvin {
 impl<T: Temperature> Mul<T> for KcalPerMolKelvin {
     type Output = KcalPerMol;
     fn mul(self, other: T) -> KcalPerMol {
-        KcalPerMol(self.0 * other.to_kelvin())
+        KcalPerMol(self.0 * other.to_kelvin_m())
+    }
+}
+
+impl Mul<KcalPerMolKelvin> for Kelvin {
+    type Output = KcalPerMol;
+    fn mul(self, other: KcalPerMolKelvin) -> KcalPerMol {
+        KcalPerMol(self.0 * other.0)
+    }
+}
+
+impl Mul<KcalPerMolKelvin> for Celsius {
+    type Output = KcalPerMol;
+    fn mul(self, other: KcalPerMolKelvin) -> KcalPerMol {
+        KcalPerMol(self.to_kelvin_m() * other.0)
     }
 }
 
@@ -215,6 +306,68 @@ impl From<KcalPerMolKelvin> for f64 {
         value.0
     }
 }
+
+impl Add<KcalPerMolKelvin> for KcalPerMolKelvin {
+    type Output = KcalPerMolKelvin;
+    fn add(self, other: KcalPerMolKelvin) -> KcalPerMolKelvin {
+        KcalPerMolKelvin(self.0 + other.0)
+    }
+}
+
+impl AddAssign<KcalPerMolKelvin> for KcalPerMolKelvin {
+    fn add_assign(&mut self, other: KcalPerMolKelvin) {
+        self.0 += other.0;
+    }
+}
+
+impl Sub<KcalPerMolKelvin> for KcalPerMolKelvin {
+    type Output = KcalPerMolKelvin;
+    fn sub(self, other: KcalPerMolKelvin) -> KcalPerMolKelvin {
+        KcalPerMolKelvin(self.0 - other.0)
+    }
+}
+
+impl approx::AbsDiffEq for KcalPerMolKelvin {
+    type Epsilon = f64;
+    fn default_epsilon() -> f64 {
+        f64::default_epsilon()
+    }
+    fn abs_diff_eq(&self, other: &Self, epsilon: f64) -> bool {
+        f64::abs_diff_eq(&self.0, &other.0, epsilon)
+    }
+}
+
+impl approx::RelativeEq for KcalPerMolKelvin {
+    fn default_max_relative() -> f64 {
+        f64::default_max_relative()
+    }
+    fn relative_eq(&self, other: &Self, epsilon: f64, max_relative: f64) -> bool {
+        f64::relative_eq(&self.0, &other.0, epsilon, max_relative)
+    }
+}
+
+impl approx::UlpsEq for KcalPerMolKelvin {
+    fn default_max_ulps() -> u32 {
+        f64::default_max_ulps()
+    }
+    fn ulps_eq(&self, other: &Self, epsilon: f64, max_ulps: u32) -> bool {
+        f64::ulps_eq(&self.0, &other.0, epsilon, max_ulps)
+    }
+}
+
+impl num_traits::Zero for KcalPerMolKelvin {
+    fn zero() -> Self {
+        KcalPerMolKelvin(0.0)
+    }
+    fn is_zero(&self) -> bool {
+        self.0 == 0.0
+    }
+}
+
+
+
+
+
 
 // ===================
 // Concentration
@@ -368,6 +521,7 @@ impl Rate for PerSecond {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
 pub struct PerSecond(f64);
 
 impl PerSecond {
@@ -446,6 +600,7 @@ impl From<PerSecond> for f64 {
 
 // RatePMS
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
 pub struct PerMolarSecond(f64);
 
 impl PerMolarSecond {
