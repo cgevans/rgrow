@@ -684,7 +684,10 @@ pub struct LastAttachTimeTracker {
 impl StateTracker for LastAttachTimeTracker {
     fn default(canvas: &dyn Canvas) -> Self {
         LastAttachTimeTracker {
-            arr: Array2::<Second>::from_elem((canvas.nrows(), canvas.ncols()), Second::new(f64::NAN)),
+            arr: Array2::<Second>::from_elem(
+                (canvas.nrows(), canvas.ncols()),
+                Second::new(f64::NAN),
+            ),
         }
     }
 

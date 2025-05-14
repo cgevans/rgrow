@@ -1,12 +1,12 @@
 use num_traits::identities::Zero;
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
     iter::Sum,
     ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign},
 };
-#[cfg(feature = "python")]
-use pyo3::prelude::*;
 
 const R_VAL: KcalPerMolKelvin = KcalPerMolKelvin(1.98720425864083 / 1000.0); // in kcal/mol/K
 
@@ -363,11 +363,6 @@ impl num_traits::Zero for KcalPerMolKelvin {
         self.0 == 0.0
     }
 }
-
-
-
-
-
 
 // ===================
 // Concentration
@@ -810,4 +805,3 @@ impl std::fmt::UpperExp for PerSecond {
         std::fmt::UpperExp::fmt(&self.0, f)
     }
 }
-

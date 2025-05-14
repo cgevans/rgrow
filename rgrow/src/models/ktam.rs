@@ -18,7 +18,7 @@ use crate::{
         System, SystemInfo, SystemWithDimers, TileBondInfo,
     },
     tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
-    units::{MolarSq, Rate, PerMolarSecond, PerSecond},
+    units::{MolarSq, PerMolarSecond, PerSecond, Rate},
 };
 
 use crate::base::{HashMapType, HashSetType};
@@ -252,7 +252,11 @@ impl System for KTAM {
         state.calc_n_tiles_with_tilearray(&self.should_be_counted)
     }
 
-    fn event_rate_at_point<S: State>(&self, state: &S, p: crate::canvas::PointSafeHere) -> PerSecond {
+    fn event_rate_at_point<S: State>(
+        &self,
+        state: &S,
+        p: crate::canvas::PointSafeHere,
+    ) -> PerSecond {
         if !state.inbounds(p.0) {
             return PerSecond::zero();
         }

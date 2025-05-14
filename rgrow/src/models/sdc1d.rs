@@ -158,7 +158,8 @@ impl SDC {
             let x_east_glue = self.glues[(x as usize, EAST_GLUE_INDEX)];
             let y_west_glue = self.glues[(y as usize, WEST_GLUE_INDEX)];
             let glue_value = self.delta_g_matrix[(x_east_glue, y_west_glue)]
-                - (self.temperature - Celsius(37.0)) * self.entropy_matrix[(x_east_glue, y_west_glue)];
+                - (self.temperature - Celsius(37.0))
+                    * self.entropy_matrix[(x_east_glue, y_west_glue)];
             glue_value.times_beta(self.temperature)
         })
     }
@@ -254,10 +255,9 @@ impl SDC {
     /// Fill the energy_bonds array
     fn fill_energy_array(&mut self) {
         let num_of_strands = self.strand_names.len();
-        let glue_links = ndarray::Zip::from(&self.delta_g_matrix).and(&self.entropy_matrix)
-            .map_collect(|dg, ds| {
-                *dg - (self.temperature - Celsius(37.0)) * *ds
-            });        // For each *possible* pair of strands, calculate the energy bond
+        let glue_links = ndarray::Zip::from(&self.delta_g_matrix)
+            .and(&self.entropy_matrix)
+            .map_collect(|dg, ds| *dg - (self.temperature - Celsius(37.0)) * *ds); // For each *possible* pair of strands, calculate the energy bond
         for strand_f in 1..num_of_strands {
             // 1: no point in calculating for 0
             let (f_west_glue, f_btm_glue, f_east_glue) = {
@@ -272,7 +272,7 @@ impl SDC {
             for strand_s in 0..num_of_strands {
                 let (s_west_glue, s_east_glue) = {
                     let glues = self.glues.row(strand_s);
-                    (glues[WEST_GLUE_INDEX], glues[EAST_GLUE_INDEX])    
+                    (glues[WEST_GLUE_INDEX], glues[EAST_GLUE_INDEX])
                 };
 
                 // Calculate the energy between the two strands
@@ -707,7 +707,7 @@ impl SDC {
 /// minimum energy said system can have.
 ///
 /// When running the MFE algorithm, we will return a matrix of these values.
-/// 
+///
 /// Note that this uses *unitless* energy, eg, βΔG.
 type MfeValues = Vec<(Tile, f64, Tile)>;
 
@@ -1910,8 +1910,10 @@ mod test_sdc_model {
             colors: Vec::new(),
             kf: PerMolarSecond::zero(),
             friends_btm: HashMap::new(),
-            entropy_matrix: (array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]]).mapv(KcalPerMolKelvin),
-            delta_g_matrix: (array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]]).mapv(KcalPerMol),
+            entropy_matrix: (array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]])
+                .mapv(KcalPerMolKelvin),
+            delta_g_matrix: (array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]])
+                .mapv(KcalPerMol),
             temperature: Celsius(5.0).into(),
             strand_energy_bonds: Array2::default((5, 5)),
             scaffold_energy_bonds: Array1::default(5),
@@ -1987,8 +1989,10 @@ mod test_sdc_model {
             colors: Vec::new(),
             kf: PerMolarSecond::zero(),
             friends_btm: HashMap::new(),
-            entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]].mapv(KcalPerMolKelvin),
-            delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]].mapv(KcalPerMol),
+            entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]]
+                .mapv(KcalPerMolKelvin),
+            delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]]
+                .mapv(KcalPerMol),
             temperature: Celsius(50.0).into(),
             strand_energy_bonds: Array2::default((5, 5)),
             scaffold_energy_bonds: Array1::default(5),

@@ -206,9 +206,10 @@ fn sequences_strength(
     (total_dg + INITIATION_DG) - ((temperature.to_kelvin() - T37C) * (total_ds + INITIATION_DS))
 }
 
-
 /// Calculate ΔG37 and ΔS for a single sequence and its reverse complement, provided as an iterator.
-fn single_sequence_dg_ds(dna: impl Iterator<Item = DnaNucleotideBase>) -> (KcalPerMol, KcalPerMolKelvin) {
+fn single_sequence_dg_ds(
+    dna: impl Iterator<Item = DnaNucleotideBase>,
+) -> (KcalPerMol, KcalPerMolKelvin) {
     let (dg, ds) = two_window_fold(dna, |(acc_dg, acc_ds), (a, b)| {
         let (dg, ds) = dG_dS(a, b);
         (dg + acc_dg, ds + acc_ds)
@@ -223,7 +224,11 @@ fn good_match(a: &DnaNucleotideBase, b: &DnaNucleotideBase) -> bool {
 
 /// Calculate the penalty introduced by a single mismatch
 #[inline(always)]
-fn calc_penalty(prior: &DnaNucleotideBase, x: &DnaNucleotideBase, y: &DnaNucleotideBase) -> KcalPerMol {
+fn calc_penalty(
+    prior: &DnaNucleotideBase,
+    x: &DnaNucleotideBase,
+    y: &DnaNucleotideBase,
+) -> KcalPerMol {
     KcalPerMol(PENALTY_TABLE[*prior as usize][*x as usize][*y as usize])
 }
 
@@ -243,7 +248,10 @@ fn calculate_single_mismatch_penalty(
 }
 
 /// Calculate ΔG37 and ΔS for a pair of sequences.
-fn sequence_pair_dg_ds(dna_a: Vec<DnaNucleotideBase>, dna_b: Vec<DnaNucleotideBase>) -> (KcalPerMol, KcalPerMolKelvin) {
+fn sequence_pair_dg_ds(
+    dna_a: Vec<DnaNucleotideBase>,
+    dna_b: Vec<DnaNucleotideBase>,
+) -> (KcalPerMol, KcalPerMolKelvin) {
     if dna_a.len() != dna_b.len() {
         panic!("Dnas must be same length to compare");
     }
@@ -449,7 +457,11 @@ mod test_utils {
         for (&seq, &dG) in seqs.iter().zip(dG_at_50.iter()) {
             let result = string_dna_delta_g(seq, Celsius(50.0));
             println!("{}", seq);
-            assert_ulps_eq!(KcalPerMol(dG + 1.96) - (Celsius(50.0) - T37C) * INITIATION_DS, result, max_ulps = 10);
+            assert_ulps_eq!(
+                KcalPerMol(dG + 1.96) - (Celsius(50.0) - T37C) * INITIATION_DS,
+                result,
+                max_ulps = 10
+            );
         }
     }
 

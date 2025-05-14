@@ -520,7 +520,8 @@ impl KBlock {
                 (self.energy_blocker[(
                     tile_index(tile).0,
                     side_index(side).expect("Side must be NESW"),
-                )] + self.blocker_energy_adj).times_beta(self.temperature)
+                )] + self.blocker_energy_adj)
+                    .times_beta(self.temperature)
                     .exp(),
             )
     }
@@ -718,8 +719,7 @@ impl KBlock {
             friends.retain(|tile| {
                 let mut blocked = false;
                 for side in ALL_SIDES {
-                    if tile.is_blocked(side) && !Self::tile_to_side(state, side, point).is_null()
-                    {
+                    if tile.is_blocked(side) && !Self::tile_to_side(state, side, point).is_null() {
                         blocked = true;
                         break;
                     }
@@ -909,7 +909,7 @@ impl SystemWithDimers for KBlock {
                         equilibrium_conc: biconc.over_u0()
                             * (self.energy_we[(tile_index(t1).into(), tile_index(*t2).into())]
                                 .times_beta(self.temperature))
-                                .exp(),
+                            .exp(),
                     });
                 }
             }
@@ -925,7 +925,7 @@ impl SystemWithDimers for KBlock {
                         equilibrium_conc: biconc.over_u0()
                             * (self.energy_ns[(tile_index(t1).into(), tile_index(*t2).into())]
                                 .times_beta(self.temperature))
-                                .exp(),
+                            .exp(),
                     });
                 }
             }
@@ -1151,9 +1151,7 @@ impl System for KBlock {
 
 #[cfg(test)]
 mod test_covtile {
-    use crate::models::kblock::{
-        tile_index, TileState, EAST, NORTH, WEST,
-    };
+    use crate::models::kblock::{tile_index, TileState, EAST, NORTH, WEST};
 
     #[test]
     fn get_ids() {
@@ -1252,7 +1250,10 @@ mod test_kblock {
                 tile_concentration: tile_concentration.iter().map(|c| (*c).into()).collect(),
                 tile_colors,
                 glue_names,
-                blocker_concentrations: blocker_concentrations.iter().map(|c| (*c).into()).collect(),
+                blocker_concentrations: blocker_concentrations
+                    .iter()
+                    .map(|c| (*c).into())
+                    .collect(),
                 tile_glues,
                 glue_links: glue_linkns.mapv(|x| x.into()),
                 temperature: Celsius(60.0),
@@ -1269,7 +1270,10 @@ mod test_kblock {
                 fission_handling,
                 no_partially_blocked_attachments: false,
                 free_blocker_concentrations: Array1::from_vec(
-                    blocker_concentrations.into_iter().map(|c| c.into()).collect(),
+                    blocker_concentrations
+                        .into_iter()
+                        .map(|c| c.into())
+                        .collect(),
                 ),
                 blocker_energy_adj: 0.0.into(),
             };
@@ -1585,7 +1589,7 @@ impl From<KBlockParams> for KBlock {
                     // instead of dg
                     // cge: it turns out I made some mistakes with alpha.  We need to use RT*alpha here, which messes
                     // up temperature dependence.  But that doesn't matter right now I suppose.
-                    crate::utils::string_dna_delta_g(&seq, value.temp).into()
+                    crate::utils::string_dna_delta_g(&seq, value.temp)
                 }
             };
 
@@ -1611,7 +1615,10 @@ impl From<KBlockParams> for KBlock {
                 tile_concentration: tile_concentration.iter().map(|c| (*c).into()).collect(),
                 tile_colors,
                 glue_names,
-                blocker_concentrations: blocker_concentrations.iter().map(|c| (*c).into()).collect(),
+                blocker_concentrations: blocker_concentrations
+                    .iter()
+                    .map(|c| (*c).into())
+                    .collect(),
                 tile_glues,
                 glue_links,
                 temperature,
@@ -1628,7 +1635,10 @@ impl From<KBlockParams> for KBlock {
                 fission_handling,
                 no_partially_blocked_attachments,
                 free_blocker_concentrations: Array1::from_vec(
-                    blocker_concentrations.into_iter().map(|c| c.into()).collect(),
+                    blocker_concentrations
+                        .into_iter()
+                        .map(|c| c.into())
+                        .collect(),
                 ),
                 blocker_energy_adj,
             };

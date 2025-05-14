@@ -743,7 +743,12 @@ impl System for OldKTAM {
         }
     }
 
-    fn choose_event_at_point<S: State>(&self, canvas: &S, p: PointSafe2, mut acc: PerSecond) -> Event {
+    fn choose_event_at_point<S: State>(
+        &self,
+        canvas: &S,
+        p: PointSafe2,
+        mut acc: PerSecond,
+    ) -> Event {
         let tile = { canvas.tile_at_point(p) };
 
         let tn = { canvas.tile_to_n(p) };

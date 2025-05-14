@@ -4,7 +4,7 @@ use crate::{
     state::State,
     system::{Event, System, SystemInfo, SystemWithDimers, TileBondInfo},
     tileset::{ProcessedTileSet, TileSet},
-    units::{Rate, PerSecond},
+    units::{PerSecond, Rate},
 };
 
 use num_traits::Zero;
@@ -141,7 +141,11 @@ impl System for ATAM {
         }
     }
 
-    fn event_rate_at_point<S: State>(&self, state: &S, p: crate::canvas::PointSafeHere) -> PerSecond {
+    fn event_rate_at_point<S: State>(
+        &self,
+        state: &S,
+        p: crate::canvas::PointSafeHere,
+    ) -> PerSecond {
         if !state.inbounds(p.0) {
             return PerSecond::zero();
         }

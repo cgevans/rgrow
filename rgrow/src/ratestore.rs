@@ -14,7 +14,7 @@ use serde::Serialize;
 use crate::base::Point;
 
 use crate::canvas::PointSafeHere;
-use crate::units::{Rate, PerSecond};
+use crate::units::{PerSecond, Rate};
 
 // A RateStore stores event rates for points on a canvas, and allows a continuous-time Markov chain
 // choice of a point based on those rates.  It makes no assumptions about relationships between the

@@ -19,7 +19,7 @@ use crate::state::StateEnum;
 use crate::units::Molar;
 use crate::units::MolarPerSecond;
 use crate::units::Second;
-use crate::units::{Rate, PerSecond};
+use crate::units::{PerSecond, Rate};
 
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateWithCreate,
@@ -47,7 +47,6 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
 use pyo3::IntoPyObjectExt;
-
 
 #[derive(Clone, Debug)]
 pub enum Event {
