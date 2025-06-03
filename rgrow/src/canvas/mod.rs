@@ -1,14 +1,15 @@
 use super::base::{GrowError, GrowResult, NumTiles, Point, Tile};
 use enum_dispatch::enum_dispatch;
+use itertools::Itertools;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
 
 // pub mod tube_diagonal;
-pub mod tube_zz;
 pub mod tube_diagonals;
+pub mod tube_zz;
 // pub use tube_diagonal::CanvasTube;
-pub use tube_zz::CanvasTube;
 pub use tube_diagonals::CanvasTubeDiagonals;
+pub use tube_zz::CanvasTube;
 
 pub trait CanvasCreate: Sized + Canvas {
     type Params;
@@ -396,6 +397,31 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
 
     fn center(&self) -> PointSafe2 {
         PointSafe2((self.nrows() / 2, self.ncols() / 2))
+    }
+
+    fn canvas_iterator(&self) -> CanvasIterator where Self: Sized {
+        CanvasIterator { canvas: self }
+    }
+}
+
+/// A set of iterators for the canvas
+/// 
+/// These functions cannot be directly implemented for Canvas, as that would introduct generics -- Which messes with object safety
+pub struct CanvasIterator<'a> {
+    canvas: &'a dyn Canvas,
+}
+
+impl<'a> CanvasIterator<'a> {
+    pub fn iterate_coords(&self) -> itertools::Product<std::ops::Range<usize>, std::ops::Range<usize>> {
+        (0..self.canvas.nrows()).cartesian_product(0..self.canvas.ncols())
+    }
+
+    pub fn iterate_inbounds(&self) -> impl Iterator<Item = (usize, usize)> + use<'a> {
+        self.iterate_coords().filter(|&coord| self.canvas.inbounds(coord))
+    }
+
+    pub fn iterate_points(&self) -> impl Iterator<Item = ((usize, usize),PointSafe2)> + use<'a> {
+        self.iterate_inbounds().map(|coord| (coord, PointSafe2(coord)))
     }
 }
 

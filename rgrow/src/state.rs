@@ -8,7 +8,7 @@ use crate::{
     system,
 };
 use ndarray::prelude::*;
-
+use crate::canvas::CanvasIterator;
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
