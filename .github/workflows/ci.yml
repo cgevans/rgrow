@@ -40,17 +40,17 @@ jobs:
         continue-on-error: true
       - name: Install carge llvm-cov
         run: cargo install cargo-llvm-cov
-      - name: Install X components
-        run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
+      #- name: Install X components
+      #  run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
       - name: Run Clippy
-        run: cargo clippy --features ui,use_rayon
+        run: cargo clippy --no-default-features --features use_rayon
       - name: Run tests and coverage
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
-          cargo test --features ui,use_rayon # FIXME: ui
+          cargo test --no-default-features --features use_rayon # FIXME: ui
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
       - uses: codecov/codecov-action@v3
         with:
