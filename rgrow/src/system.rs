@@ -496,6 +496,10 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         };
 
         self.update_points(state, &all_points);
+
+        if *needed == NeededUpdate::All {
+            state.set_n_tiles(state.calc_n_tiles());
+        };
     }
 
     fn set_param(&mut self, _name: &str, _value: Box<dyn Any>) -> Result<NeededUpdate, GrowError> {

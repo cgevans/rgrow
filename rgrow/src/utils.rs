@@ -292,8 +292,9 @@ pub fn string_dna_dg_ds(dna_sequence: &str) -> (KcalPerMol, KcalPerMolKelvin) {
 ///
 /// ```rust
 /// use rgrow::utils::string_dna_delta_g;
+/// use rgrow::units::*;
 /// let seq = "cgatg";
-/// assert_eq!(string_dna_delta_g(seq, 37.0), -5.8+1.96);
+/// assert_eq!(string_dna_delta_g(seq, Celsius::new(37.0)), KcalPerMol::new(-5.8+1.96));
 /// ```
 ///
 pub fn string_dna_delta_g(dna_sequence: &str, temperature: impl Temperature) -> KcalPerMol {

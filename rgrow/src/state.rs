@@ -142,6 +142,7 @@ pub trait StateStatus {
     fn add_events(&mut self, n: NumEvents);
     fn reset_events(&mut self);
     fn add_time(&mut self, time: Second);
+    fn set_n_tiles(&mut self, n: NumTiles);
     fn time(&self) -> Second;
     fn record_event(&mut self, event: &system::Event);
     fn reset_tracking_assuming_empty_state(&mut self);
@@ -479,6 +480,8 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
         self.ntiles
     }
 
+    
+
     #[inline(always)]
     fn total_events(&self) -> NumEvents {
         self.total_events
@@ -506,6 +509,11 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
 
     fn reset_tracking_assuming_empty_state(&mut self) {
         self.tracker.reset_assuming_empty_state()
+    }
+    
+    #[inline(always)]
+    fn set_n_tiles(&mut self,n:NumTiles) {
+        self.ntiles = n;
     }
 }
 

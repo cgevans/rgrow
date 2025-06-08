@@ -143,6 +143,12 @@ pub trait Energy {
 #[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
 pub struct KcalPerMol(pub(crate) f64);
 
+impl KcalPerMol {
+    pub fn new(value: f64) -> Self {
+        KcalPerMol(value)
+    }
+}
+
 impl Energy for KcalPerMol {
     fn times_beta(self, temperature: impl Temperature) -> f64 {
         self / (R_VAL * temperature)
