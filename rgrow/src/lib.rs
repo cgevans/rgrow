@@ -8,6 +8,8 @@ extern crate phf;
 
 pub mod utils;
 
+pub mod units;
+
 pub mod tileset;
 
 pub mod parser_xgrow;

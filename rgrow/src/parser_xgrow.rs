@@ -37,7 +37,7 @@ where
     delimited(rsc, parser, rsc)
 }
 
-fn comment<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&str, &str, E> {
+fn comment<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     let (input, comment) = preceded(tag("%"), not_line_ending)(input)?;
     Ok((input, comment))
 }
@@ -168,7 +168,6 @@ fn parse(input: &str) -> IResult<&str, tileset::TileSet> {
     options.tiles = tiles;
     options.bonds = bonds;
     options.glues = glues;
-    options.cover_strands = None;
 
     Ok((input, options))
 }
@@ -208,7 +207,7 @@ fn arg_gluelink(input: &str) -> IResult<&str, XgrowArgs> {
 
     let (input, v) = preceded(tag("="), string_f64)(input)?;
 
-    return Ok((input, XgrowArgs::GlueLink(g1, g2, v)));
+    Ok((input, XgrowArgs::GlueLink(g1, g2, v)))
 }
 
 fn arg_gse(input: &str) -> IResult<&str, XgrowArgs> {

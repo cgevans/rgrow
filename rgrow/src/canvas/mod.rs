@@ -1,14 +1,14 @@
-use super::base::{GrowError, GrowResult, NumTiles, Point, Tile};
+use super::base::{GrowResult, NumTiles, Point, Tile};
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
 
 // pub mod tube_diagonal;
-pub mod tube_zz;
 pub mod tube_diagonals;
+pub mod tube_zz;
 // pub use tube_diagonal::CanvasTube;
-pub use tube_zz::CanvasTube;
 pub use tube_diagonals::CanvasTubeDiagonals;
+pub use tube_zz::CanvasTube;
 
 pub trait CanvasCreate: Sized + Canvas {
     type Params;

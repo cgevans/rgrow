@@ -1,5 +1,6 @@
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
+use num_traits::Zero;
 use rand::rng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -9,18 +10,22 @@ use crate::base::StringConvError;
 use crate::ffs::FFSRunConfig;
 use crate::ffs::FFSRunResult;
 use crate::models::atam::ATAM;
-use crate::models::kcov::KCov;
+use crate::models::kblock::KBlock;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
 use crate::state::State;
 use crate::state::StateEnum;
+use crate::units::Molar;
+use crate::units::MolarPerSecond;
+use crate::units::Second;
+use crate::units::{PerSecond, Rate};
 
 use crate::{
     base::GrowError, base::NumEvents, base::NumTiles, canvas::PointSafeHere, state::StateWithCreate,
 };
 
-use super::base::{Point, Rate, Tile};
+use super::base::{Point, Tile};
 use crate::canvas::PointSafe2;
 
 use std::any::Any;
@@ -40,6 +45,9 @@ use rayon::prelude::*;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
+#[cfg(feature = "python")]
+use pyo3::IntoPyObjectExt;
+
 #[derive(Clone, Debug)]
 pub enum Event {
     None,
@@ -53,14 +61,14 @@ pub enum Event {
 
 #[derive(Debug)]
 pub enum StepOutcome {
-    HadEventAt(f64),
-    NoEventIn(f64),
-    DeadEventAt(f64),
+    HadEventAt(Second),
+    NoEventIn(Second),
+    DeadEventAt(Second),
     ZeroRate,
 }
 
-#[derive(Debug)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 pub enum NeededUpdate {
     None,
     NonZero,
@@ -95,6 +103,7 @@ pub struct EvolveBounds {
 #[pymethods]
 impl EvolveBounds {
     #[new]
+    #[pyo3(signature = (for_events=None, for_time=None, size_min=None, size_max=None, for_wall_time=None))]
     pub fn new(
         for_events: Option<NumEvents>,
         for_time: Option<f64>,
@@ -164,8 +173,8 @@ impl EvolveBounds {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(C)]
 pub enum EvolveOutcome {
     ReachedEventsMax,
@@ -176,8 +185,8 @@ pub enum EvolveOutcome {
     ReachedZeroRate,
 }
 
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 
 pub enum Orientation {
     NS,
@@ -190,8 +199,8 @@ pub struct DimerInfo {
     pub t1: Tile,
     pub t2: Tile,
     pub orientation: Orientation,
-    pub formation_rate: Rate,
-    pub equilibrium_conc: f64,
+    pub formation_rate: MolarPerSecond,
+    pub equilibrium_conc: Molar,
 }
 
 #[cfg(feature = "python")]
@@ -202,8 +211,8 @@ impl DimerInfo {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 pub enum ChunkHandling {
     #[serde(alias = "none")]
     None,
@@ -226,8 +235,8 @@ impl TryFrom<&str> for ChunkHandling {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 pub enum ChunkSize {
     #[serde(alias = "single")]
     Single,
@@ -263,14 +272,18 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         state.calc_n_tiles()
     }
 
-    fn take_single_step<St: State>(&self, state: &mut St, max_time_step: f64) -> StepOutcome {
-        let time_step = -f64::ln(rng().gen()) / state.total_rate();
+    fn take_single_step<St: State>(&self, state: &mut St, max_time_step: Second) -> StepOutcome {
+        let time_step = -f64::ln(rng().random()) / state.total_rate();
         if time_step > max_time_step {
             state.add_time(max_time_step);
             return StepOutcome::NoEventIn(max_time_step);
         }
         let (point, remainder) = state.choose_point(); // todo: resultify
-        let event = self.choose_event_at_point(state, PointSafe2(point), remainder); // FIXME
+        let event = self.choose_event_at_point(
+            state,
+            PointSafe2(point),
+            PerSecond::from_per_second(remainder),
+        ); // FIXME
         if let Event::None = event {
             state.add_time(time_step);
             return StepOutcome::DeadEventAt(time_step);
@@ -298,11 +311,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         }
 
         let mut rtime = match bounds.for_time {
-            Some(t) => t,
-            None => f64::INFINITY,
+            Some(t) => Second::new(t),
+            None => Second::new(f64::INFINITY),
         };
         if let Some(t) = bounds.total_time {
-            rtime = rtime.min(t - state.time());
+            rtime = rtime.min(Second::new(t) - state.time());
         }
 
         // If we have a for_wall_time, get an instant to compare to
@@ -313,7 +326,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 return Ok(EvolveOutcome::ReachedSizeMin);
             } else if bounds.size_max.is_some_and(|ms| state.n_tiles() >= ms) {
                 return Ok(EvolveOutcome::ReachedSizeMax);
-            } else if rtime <= 0. {
+            } else if rtime <= Second::new(0.) {
                 return Ok(EvolveOutcome::ReachedTimeMax);
             } else if bounds
                 .for_wall_time
@@ -322,7 +335,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 return Ok(EvolveOutcome::ReachedWallTimeMax);
             } else if bounds.for_events.is_some_and(|e| events >= e) {
                 return Ok(EvolveOutcome::ReachedEventsMax);
-            } else if state.total_rate() == 0. {
+            } else if state.total_rate().is_zero() {
                 return Ok(EvolveOutcome::ReachedZeroRate);
             }
             let out = self.take_single_step(state, rtime);
@@ -440,11 +453,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn update_after_event<St: State>(&self, state: &mut St, event: &Event);
 
     /// Returns the total event rate at a given point.  These should correspond with the events chosen by `choose_event_at_point`.
-    fn event_rate_at_point<St: State>(&self, state: &St, p: PointSafeHere) -> Rate;
+    fn event_rate_at_point<St: State>(&self, state: &St, p: PointSafeHere) -> PerSecond;
 
     /// Given a point, and an accumulated random rate choice `acc` (which should be less than the total rate at the point),
     /// return the event that should take place.
-    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: Rate) -> Event;
+    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: PerSecond) -> Event;
 
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;
@@ -475,7 +488,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             NeededUpdate::None => todo!(),
             NeededUpdate::NonZero => (0..nrows)
                 .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))))
-                .filter(|p| state.rate_at_point(*p) > 0.)
+                .filter(|p| state.rate_at_point(*p) > PerSecond::zero())
                 .collect::<Vec<_>>(),
             NeededUpdate::All => (0..nrows)
                 .flat_map(|r| (0..ncols).map(move |c| PointSafeHere((r, c))))
@@ -483,6 +496,10 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         };
 
         self.update_points(state, &all_points);
+
+        if *needed == NeededUpdate::All {
+            state.set_n_tiles(state.calc_n_tiles());
+        };
     }
 
     fn set_param(&mut self, _name: &str, _value: Box<dyn Any>) -> Result<NeededUpdate, GrowError> {
@@ -744,20 +761,24 @@ pub enum SystemEnum {
     OldKTAM,
     ATAM,
     SDC, // StaticKTAMCover
-    KCov,
+    KBlock,
 }
 
 #[cfg(feature = "python")]
-impl IntoPy<PyObject> for SystemEnum {
-    fn into_py(self, py: Python) -> PyObject {
+impl<'py> IntoPyObject<'py> for SystemEnum {
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match self {
-            SystemEnum::KTAM(ktam) => ktam.into_py(py),
-            SystemEnum::OldKTAM(oldktam) => oldktam.into_py(py),
-            SystemEnum::ATAM(atam) => atam.into_py(py),
-            SystemEnum::SDC(sdc) => sdc.into_py(py),
-            SystemEnum::KCov(kcov) => kcov.into_py(py),
+            SystemEnum::KTAM(ktam) => ktam.into_bound_py_any(py),
+            SystemEnum::OldKTAM(oldktam) => oldktam.into_bound_py_any(py),
+            SystemEnum::ATAM(atam) => atam.into_bound_py_any(py),
+            SystemEnum::SDC(sdc) => sdc.into_bound_py_any(py),
+            SystemEnum::KBlock(kblock) => kblock.into_bound_py_any(py),
         }
     }
+
+    type Target = pyo3::PyAny; // the Python type
+    type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = pyo3::PyErr;
 }
 
 #[enum_dispatch]
@@ -788,8 +809,8 @@ pub trait SystemInfo {
     fn tile_stoics(&self) -> Vec<f64>;
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
 pub enum FissionHandling {
     #[serde(alias = "off", alias = "no-fission")]
     NoFission,

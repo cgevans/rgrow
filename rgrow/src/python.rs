@@ -7,20 +7,21 @@ use crate::base::{NumEvents, NumTiles, RgrowError, RustAny, Tile};
 use crate::canvas::{Canvas, PointSafe2, PointSafeHere};
 use crate::ffs::{FFSRunConfig, FFSRunResult, FFSStateRef};
 use crate::models::atam::ATAM;
-use crate::models::kcov::KCov;
+use crate::models::kblock::KBlock;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
-use crate::models::sdc1d::{SDCParams, SDC};
+use crate::models::sdc1d::SDC;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo,
 };
 use ndarray::Array2;
-use numpy::{IntoPyArray, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray, PyArray1};
+use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use pyo3::IntoPyObjectExt;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 /// A State object.
@@ -50,8 +51,19 @@ impl PyState {
     }
 
     #[staticmethod]
-    pub fn from_array(array: PyReadonlyArray2<crate::base::Tile>, kind: &str, tracking: &str, n_tile_types: Option<usize>) -> PyResult<Self> {
-        Ok(PyState(StateEnum::from_array(array.as_array(), kind.try_into()?, tracking.try_into()?, n_tile_types.unwrap_or(1))?))
+    #[pyo3(signature = (array, kind="Square", tracking="None", n_tile_types=None))]
+    pub fn from_array(
+        array: PyReadonlyArray2<crate::base::Tile>,
+        kind: &str,
+        tracking: &str,
+        n_tile_types: Option<usize>,
+    ) -> PyResult<Self> {
+        Ok(PyState(StateEnum::from_array(
+            array.as_array(),
+            kind.try_into()?,
+            tracking.try_into()?,
+            n_tile_types.unwrap_or(1),
+        )?))
     }
 
     /// Return a cloned copy of an array with the total possible next event rate for each point in the canvas.
@@ -60,14 +72,14 @@ impl PyState {
     /// Returns
     /// -------
     /// NDArray[np.uint]
-    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<crate::base::Rate>> {
-        self.0.rate_array().to_pyarray_bound(py)
+    pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+        self.0.rate_array().mapv(|x| x.into()).to_pyarray(py)
     }
 
     #[getter]
     /// float: the total rate of possible next events for the state.
-    pub fn total_rate(&self) -> crate::base::Rate {
-        RateStore::total_rate(&self.0)
+    pub fn total_rate(&self) -> f64 {
+        RateStore::total_rate(&self.0).into()
     }
 
     #[getter]
@@ -79,7 +91,7 @@ impl PyState {
         let t = this.borrow();
         let ra = t.0.raw_array();
 
-        unsafe { Ok(PyArray2::borrow_from_array_bound(&ra, this.into_any())) }
+        unsafe { Ok(PyArray2::borrow_from_array(&ra, this.into_any())) }
     }
 
     /// Return a copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`.
@@ -95,7 +107,7 @@ impl PyState {
         let t = this.borrow();
         let ra = t.0.raw_array();
 
-        Ok(PyArray2::from_array_bound(py, &ra))
+        Ok(PyArray2::from_array(py, &ra))
     }
 
     /// Return the total possible next event rate at a specific canvas point.
@@ -115,7 +127,7 @@ impl PyState {
     ///     if `point` is out of bounds for the canvas.
     pub fn rate_at_point(&self, point: (usize, usize)) -> PyResult<f64> {
         if self.0.inbounds(point) {
-            Ok(self.0.rate_at_point(PointSafeHere(point)))
+            Ok(self.0.rate_at_point(PointSafeHere(point)).into())
         } else {
             Err(PyValueError::new_err(format!(
                 "Point {:?} is out of bounds.",
@@ -157,12 +169,12 @@ impl PyState {
     /// float: the total time the state has simulated, in seconds.
     #[getter]
     pub fn time(&self) -> f64 {
-        self.0.time()
+        self.0.time().into()
     }
 
     #[getter]
     pub fn tile_counts<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<u32>> {
-        self.0.tile_counts().to_pyarray_bound(py)
+        self.0.tile_counts().to_pyarray(py)
     }
 
     pub fn __repr__(&self) -> String {
@@ -318,15 +330,15 @@ macro_rules! create_py_system {
                     PyStateOrStates::State(pystate) => {
                         let state = &mut pystate.borrow_mut().0;
                         if show_window {
-                            Ok(py
+                            py
                                 .allow_threads(|| {
                                     DynSystem::evolve_in_window(self, state, None, bounds)
                                 })?
-                                .into_py(py))
+                                .into_py_any(py)
                         } else {
-                            Ok(py
+                            py
                                 .allow_threads(|| DynSystem::evolve(self, state, bounds))?
-                                .into_py(py))
+                                .into_py_any(py)
                         }
                     }
                     PyStateOrStates::States(pystates) => {
@@ -361,7 +373,7 @@ macro_rules! create_py_system {
                                 })
                             })
                             .collect();
-                        o.map(|x| x.into_py(py))
+                        o.map(|x| x.into_py_any(py).unwrap())
                     }
                 }
             }
@@ -429,7 +441,7 @@ macro_rules! create_py_system {
                         DynSystem::calc_mismatch_locations(self, &s.borrow().clone_state().0)
                     }
                 };
-                Ok(PyArray2::from_array_bound(py, &ra))
+                Ok(PyArray2::from_array(py, &ra))
             }
 
             /// Set a system parameter.
@@ -510,7 +522,7 @@ macro_rules! create_py_system {
                     arr[[i, 2]] = c[2];
                     arr[[i, 3]] = c[3];
                 }
-                arr.into_pyarray_bound(py)
+                arr.into_pyarray(py)
             }
 
             fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
@@ -625,48 +637,63 @@ create_py_system!(KTAM);
 create_py_system!(ATAM);
 create_py_system!(OldKTAM);
 create_py_system!(SDC);
-create_py_system!(KCov);
+create_py_system!(KBlock);
 
 #[pymethods]
-impl KCov {
+impl KBlock {
     #[getter]
     fn get_seed(&self) -> HashMap<(usize, usize), u32> {
-        self.seed.clone().into_iter().map(|(k, v)| (k.0, v)).collect()
+        self.seed
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k.0, v.into()))
+            .collect()
     }
 
     #[setter]
     fn set_seed(&mut self, seed: HashMap<(usize, usize), u32>) {
-        self.seed = seed.into_iter().map(|(k, v)| (PointSafe2(k), v)).collect();
+        self.seed = seed
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    PointSafe2(k),
+                    crate::models::kblock::TileType(v as usize).unblocked(),
+                )
+            })
+            .collect();
     }
 
     #[getter]
     fn get_glue_links<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.glue_links.to_pyarray_bound(py)
+        self.glue_links.mapv(|x| x.into()).to_pyarray(py)
     }
 
     #[setter]
-    fn set_glue_links<'py>(&mut self, glue_links: &Bound<'py, PyArray2<f64>>) {
-        self.glue_links = glue_links.to_owned_array();
+    fn set_glue_links(&mut self, glue_links: &Bound<PyArray2<f64>>) {
+        self.glue_links = glue_links.to_owned_array().mapv(|x| x.into());
         self.update();
     }
 
-    fn py_get_tile_raw_glues(&self, tile: usize) -> Vec<usize> {
-        self.get_tile_raw_glues(tile as u32)
+    fn py_get_tile_raw_glues(&self, tile: u32) -> Vec<usize> {
+        self.get_tile_raw_glues(tile.into())
     }
 
-    fn py_get_tile_uncovered_glues(&self, tile: usize) -> Vec<usize> {
-        self.get_tile_uncovered_glues(tile as u32)
+    fn py_get_tile_uncovered_glues(&self, tile: u32) -> Vec<usize> {
+        self.get_tile_unblocked_glues(tile.into())
     }
-    
+
     #[getter]
     fn get_cover_concentrations(&self) -> Vec<f64> {
-        self.cover_concentrations.clone()
+        self.blocker_concentrations
+            .clone()
+            .into_iter()
+            .map(|x| x.into())
+            .collect()
     }
 
     #[setter]
     fn set_cover_concentrations(&mut self, cover_concentrations: Vec<f64>) {
-        self.cover_concentrations = cover_concentrations;
+        self.blocker_concentrations = cover_concentrations.into_iter().map(|x| x.into()).collect();
         self.update();
     }
-    
 }
