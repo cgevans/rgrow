@@ -158,7 +158,7 @@ impl SDC {
             let x_east_glue = self.glues[(x as usize, EAST_GLUE_INDEX)];
             let y_west_glue = self.glues[(y as usize, WEST_GLUE_INDEX)];
             let glue_value = self.delta_g_matrix[(x_east_glue, y_west_glue)]
-                - (self.temperature - Celsius(37.0))
+                - (self.temperature - Celsius(37.0)).to_celsius()
                     * self.entropy_matrix[(x_east_glue, y_west_glue)];
             glue_value.times_beta(self.temperature)
         })
@@ -173,7 +173,7 @@ impl SDC {
 
             let x_inv = if x_bmt % 2 == 1 { x_bmt + 1 } else { x_bmt - 1 };
             let glue_value = self.delta_g_matrix[(x_bmt, x_inv)]
-                - (self.temperature - Celsius(37.0)) * self.entropy_matrix[(x_bmt, x_inv)];
+                - (self.temperature - Celsius(37.0)).to_celsius() * self.entropy_matrix[(x_bmt, x_inv)];
             glue_value.times_beta(self.temperature)
         })
     }
@@ -214,6 +214,7 @@ impl SDC {
         self.friends_btm = friends_btm;
     }
 
+    /// Update the systems temperature. Accepts either Celsius or Kelvin as input.
     pub fn change_temperature_to(&mut self, temperature: impl Into<Kelvin>) {
         self.temperature = temperature.into();
         self.update_system();
@@ -257,7 +258,9 @@ impl SDC {
         let num_of_strands = self.strand_names.len();
         let glue_links = ndarray::Zip::from(&self.delta_g_matrix)
             .and(&self.entropy_matrix)
-            .map_collect(|dg, ds| *dg - (self.temperature - Celsius(37.0)) * *ds); // For each *possible* pair of strands, calculate the energy bond
+            .map_collect(|dg, ds|
+                *dg - (self.temperature - Celsius(37.0)).to_celsius() * *ds
+            ); // For each *possible* pair of strands, calculate the energy bond
         for strand_f in 1..num_of_strands {
             // 1: no point in calculating for 0
             let (f_west_glue, f_btm_glue, f_east_glue) = {
@@ -985,7 +988,7 @@ impl System for SDC {
                 let temperature = value
                     .downcast_ref::<f64>()
                     .ok_or(GrowError::WrongParameterType(name.to_string()))?;
-                self.change_temperature_to(*temperature);
+                self.change_temperature_to(Celsius(*temperature));
                 Ok(NeededUpdate::NonZero)
             }
             _ => Err(GrowError::NoParameter(name.to_string())),
@@ -1358,7 +1361,7 @@ impl SDC {
             let strand_concentration = strand_concentration.mapv(Molar::new);
             let scaffold_concentration = Molar::new(params.scaffold_concentration);
             let kf = PerMolarSecond::new(params.k_f);
-            let temperature = params.temperature;
+            let temperature = Celsius(params.temperature);
             let strand_count = strand_names.len();
             let mut s = SDC {
                 anchor_tiles,
@@ -1609,7 +1612,7 @@ impl SDC {
 
     /// Change temperature of the system (degrees C) and update system with that new temperature
     fn set_tmp_c(&mut self, tmp: f64) {
-        self.temperature = tmp.into();
+        self.temperature = Celsius(tmp).into();
         self.update_system();
     }
 
@@ -1703,7 +1706,7 @@ impl SDC {
 
     #[setter]
     fn set_temperature(&mut self, tmp: f64) {
-        self.temperature = tmp.into();
+        self.temperature = Celsius(tmp).into();
         self.update_system();
     }
 
