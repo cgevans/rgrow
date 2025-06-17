@@ -3,6 +3,25 @@ from dataclasses import dataclass
 
 @dataclass
 class SDCStrand:
+    """
+        Represents a strand that can bind to the scaffold in the SDC model.
+
+        Parameters
+        ----------
+        concentration : float
+            Concentration of the strand (default is 1 μM = 1e-6 M).
+        left_glue : str or None
+            Glue name (or `None`) for the left attachment point.
+        btm_glue : str or None
+            Identifier for the central domain of the strand (typically a base like 'A', 'B', etc.).
+        right_glue : str or None
+            Glue name (or `None`) for the right attachment point.
+        name : str or None
+            Human-readable identifier (e.g., compact code like "0A1").
+        color : str or None
+            Optional color for visualization or grouping.
+    """
+
     concentration: float = 1e-6
     left_glue: str | None = None
     btm_glue: str | None = None
@@ -10,7 +29,7 @@ class SDCStrand:
     name: str | None = None
     color: str | None = None
 
-    @staticmethod
+    @classmethod
     def basic_from_string(string_representation: str):
         """
         Given some simple string, generate a strand.
@@ -27,7 +46,7 @@ class SDCStrand:
             name=string_representation,
         )
 
-    @staticmethod
+    @classmethod
     def pair_glue_from_string(string_representation: str):
         """
         Given some string, generate a strand.

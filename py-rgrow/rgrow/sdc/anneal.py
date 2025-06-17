@@ -16,26 +16,25 @@ class Anneal:
     An anneal protocol.
 
     Attributes:
-        initial_hold (float): How long to hold the system for before changing
-            temperature (in seconds)
-        final_hold (float): How long to hold the system for once the
-            temperature is finished changing (in seconds)
-        delta_time (float): The duration of time during which the temperature
-            will be changing (in seconds)
-
-        initial_temperature (float): Temperature of the system before anneal
-            starts (in degrees C)
-        final_temperature (float): Target temperature, it will be reached at
-            the end of the anneal (in degrees C)
-
-        scaffold_count (int): Number of scaffolds to simulate, the higher,
-            the more statistically significant, but the longer the anneal will
-            take to finish running
-        timestep (float): Simulated time cannot be continuous. How big do you
-            want each time jump to be ? The smaller, the more accurete the
-            system will be, but it will take longer.
-        temperature_adjustment (float): How much to adjust the temperature
-            to correct for a model temperature offset.
+    ----------
+    initial_hold : float
+        How long to hold the system for before changing temperature (in seconds)
+    final_hold : float
+        How long to hold the system for once the temperature is finished changing (in seconds)
+    delta_time : float
+        The duration of time during which the temperature will be changing (in seconds)
+    initial_temperature : float
+        Temperature of the system before anneal starts (in degrees C)
+    final_temperature : float
+        Target temperature, it will be reached at the end of the anneal (in degrees C)
+    scaffold_count : int
+        Number of scaffolds to simulate, the higher, the more statistically significant, but the longer the anneal will
+        take to finish running
+    timestep : float
+        Simulated time cannot be continuous. How big do you want each time jump to be ? The smaller, the more accurete
+        the system will be, but it will take longer.
+    temperature_adjustment : float
+        How much to adjust the temperature to correct for a model temperature offset.
     """
 
     initial_hold: float
@@ -73,8 +72,11 @@ class Anneal:
         Generate the time and the temperature arrays
 
         Returns:
-            An array of times,
-            an array of temperatures
+        -------
+        times : np.ndarray
+            An array of times
+        temperatures : np.ndarray
+            An array of temperatures
         """
         steps_per_sec = 1 / self.timestep
         number_of_steps = int(self.delta_time * steps_per_sec)
@@ -103,33 +105,25 @@ class Anneal:
 @dataclass
 class AnnealOutputs:
     """
-    The output generated when a system runs an anneal
+    Stores the result of an anneal simulation on an SDC system.
 
     Attributes:
-        system (SDC): The sdc system that was executed
-        canvas_arr list[list[list[int]]:
-            This is an array of snapshots, each snapshot contains information
-            about the state of the scaffolds at each point in time.
-            Take a snapshot with 4 compute domains, total length of 5. It would
-            look something like this:
-            [
-                 -  -  A  B  C  D  E  -  -
-                [0, 0, 1, 1, 2, 3, 6, 0, 0],
-                [0, 0, 1, 2, 8, 3, 6, 0, 0],
-                ...
-                [0, 0, 1, 3, 1, 3, 6, 0, 0],
-                [0, 0, 1, 1, 3, 3, 6, 0, 0],
-            ]
-            Each one of the inner-arrays represents one scaffold. The first two
-            elements will always be 0, as well as the last two elements (for
-            performance reasons), the third element would be the id of whatever
-            strand is attached to that scaffolds A domain. The fourth is the id
-            of whatever is attached to the B domain, ... If nothing is attached
-            then the number will be 0.
-        anneal (Anneal): The anneal that was executed (stored in the output
-            since some of its data is relevant when measuring error / graphing)
-    """
+    ----------
+    system : SDC
+        The SDC system instance that was simulated.
+    canvas_arr : np.ndarray
+        3D array capturing scaffold states at each time point.
 
+        Each `canvas_arr[t][n][i]` contains the ID of the strand (or 0 if none)
+        bound at scaffold position `i` at time step `t`, for scaffold `n`.
+        Note that the first two, and the last two indices of each scaffold will
+        always be empty. That is, the position A in the scaffold has index 2, not
+        0.
+    anneal : Anneal
+        The annealing protocol that was executed.
+    state : State
+        Final simulation state (e.g., to resume or analyze thermodynamic properties).
+    """
     system: "SDC"
     canvas_arr: "np.ndarray"
     anneal: "Anneal"
