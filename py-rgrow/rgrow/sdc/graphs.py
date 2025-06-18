@@ -27,9 +27,7 @@ class Graphing:
         measurement = method.reporter_method(anneal_output)
         times, temps = anneal_output.anneal.gen_arrays()
         times_hours = times / HOUR
-
-        print("Hurs", len(times_hours))
-
+        
         if self._times is None:
             self._times = times_hours
             self._temps = temps
