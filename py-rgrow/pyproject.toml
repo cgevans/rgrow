@@ -1,6 +1,6 @@
 [project]
 name = "rgrow"
-dependencies = ["numpy ~= 2.0", "attrs ~= 23.2", "matplotlib ~= 3.9", "typing_extensions", "tqdm", "pyyaml"]
+dependencies = ["numpy ~= 2.0", "attrs ~= 23.2", "matplotlib ~= 3.9", "typing_extensions", "tqdm", "pyyaml", "platformdirs"]
 requires-python = ">=3.9"
 dynamic = ["version"]
 
