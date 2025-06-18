@@ -1,6 +1,10 @@
 import numpy as np
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+import pickle
+from platformdirs import user_data_dir
+from pathlib import Path
+import sys
 
 if TYPE_CHECKING:
     from .sdc import SDC
@@ -31,7 +35,7 @@ class Anneal:
         Number of scaffolds to simulate, the higher, the more statistically significant, but the longer the anneal will
         take to finish running
     timestep : float
-        Simulated time cannot be continuous. How big do you want each time jump to be ? The smaller, the more accurete
+        Simulated time cannot be continuous. How big do you want each time jump to be ? The smaller, the more accurate
         the system will be, but it will take longer.
     temperature_adjustment : float
         How much to adjust the temperature to correct for a model temperature offset.
@@ -128,3 +132,41 @@ class AnnealOutputs:
     canvas_arr: "np.ndarray"
     anneal: "Anneal"
     state: "State"
+
+    def save_data(self, file_name: str):
+        try:
+            app_dir = Path(user_data_dir("rgrow")) / "sdc"
+            app_dir.mkdir(parents=True, exist_ok=True)
+            file_path = app_dir / file_name
+            data = {
+                "canvas_arr": self.canvas_arr,
+                "anneal": self.anneal,
+                "sdc_params": self.system.params,
+                "sdc_name": self.system.name,
+            }
+            with file_path.open("wb") as f:
+                pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
+        except Exception as e:
+            print(f"[ERROR] Failed to write file: {e}", file=sys.stderr)
+
+    @staticmethod
+    def load_data(file_name: str) -> "AnnealOutputs":
+        """
+        Loads a previously saved simulation result, and reconstructs the system and state.
+        """
+        from .sdc import SDC
+
+        try:
+            file_path = Path(user_data_dir("rgrow")) / "sdc" / file_name
+            with file_path.open("rb") as f:
+                data = pickle.load(f)
+
+            sdc = SDC(data["sdc_params"], data["sdc_name"])
+            return AnnealOutputs(
+                system=sdc,
+                canvas_arr=data["canvas_arr"],
+                anneal=data["anneal"],
+                state=None
+            )
+        except Exception as e:
+            print(f"[ERROR] Failed to load file '{file_name}': {e}", file=sys.stderr)
