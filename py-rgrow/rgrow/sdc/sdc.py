@@ -1,6 +1,7 @@
 from typing import Mapping
 import rgrow as rg
 import numpy as np
+import yaml
 
 from .anneal import Anneal, AnnealOutputs
 import tqdm
@@ -68,8 +69,12 @@ class SDCParams:
         return dataclasses.asdict(self)
 
     def write_json(self, filename: str) -> None:
-        with open(filename, "w") as f:
-            json.dump(self.to_dict(), f)
+        with open(filename, "w+") as f:
+                json.dump(self.to_dict(), f)
+
+    def write_yaml(self, filename: str) -> None:
+        with open(filename, "w+") as f:
+            yaml.dump(self, f)
 
     @classmethod
     def from_dict(cls, d: dict) -> "SDCParams":
@@ -90,6 +95,13 @@ class SDCParams:
         with open(filename, "r") as f:
             d = json.load(f)
         return cls.from_dict(d)
+
+    @classmethod
+    def read_yaml(cls, filename: str) -> "SDCParams":
+        with open(filename, "r") as f:
+            d: SDCParams = yaml.load(f, Loader=yaml.Loader)
+        return d
+
 
 
 class SDC(rg.rgrow.SDC):
