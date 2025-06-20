@@ -39,7 +39,7 @@ bases = [char for char in string.ascii_uppercase]
 
 
 def input_strand(inp: int = 0) -> SDCStrand:
-    b = bases[inp]
+    b = bases[0]
     return SDCStrand(
         left_glue=None,
         right_glue=f"{inp}'*",
@@ -60,6 +60,7 @@ def reporter(base):
 def make_bitcopy_system(
         input_strand: SDCStrand,
         length: int = 5,
+        inputs: list[int] = [0, 1]
 ):
     """
     Make a system with the *exact* same parameters as the paper.
@@ -76,7 +77,7 @@ def make_bitcopy_system(
                 right_glue=f"{inp}{prime_r}*",
                 btm_glue=f"{bases[i]}",
                 name=f"{bases[i]}{inp}"
-            ) for inp in [0, 2]
+            ) for inp in inputs
         ])
     strands.append(reporter(bases[length - 1]))
     return SDCParams(
@@ -95,7 +96,7 @@ def superfast_anneal():
         final_hold=10 * SEC)
 
 
-def run_system_and_save_output(input_bit: int = 0, file_name: str | None = None,
+def run_system_and_save_output(input_bit: int = 0, other_bit: int = 1, file_name: str | None = None,
                                overwrite: bool = False,
                                anneal=Anneal.standard_long_anneal(scaffold_count=1000)) -> AnnealOutputs:
     r"""
@@ -116,6 +117,7 @@ def run_system_and_save_output(input_bit: int = 0, file_name: str | None = None,
 
     system_params = make_bitcopy_system(
         input_strand=input_strand(input_bit),
+        inputs=[input_bit, other_bit],
         length=5)
     system = SDC(system_params, name=f"Bit Copy on input {input_bit}")
     anneal_outputs = system.run_anneal(anneal)
@@ -151,10 +153,11 @@ def fluo_graph(std0: AnnealOutputs, std1: AnnealOutputs, x: str = ""):
 
 if __name__ == "__main__":
     # Run the simulations if they have not already been saved
-    std0 = run_system_and_save_output(file_name="sdc_short_std_anneal_0.pkl", input_bit=0, overwrite=True)
-    std1 = run_system_and_save_output(file_name="sdc_short_std_anneal_1.pkl", input_bit=2, overwrite=True)
-    fluo_graph(std0, std1)
-    positional_graph(std0, std1)
+    std0 = run_system_and_save_output(file_name="sdc_short_std_anneal_0.pkl", input_bit=0, other_bit=1, overwrite=True)
+    std1 = run_system_and_save_output(file_name="sdc_short_std_anneal_1.pkl", input_bit=1, other_bit=0, overwrite=True)
+    std2 = run_system_and_save_output(file_name="sdc_short_std_anneal_2.pkl", input_bit=2, other_bit=0, overwrite=True)
+    fluo_graph(std0, std2)
+    positional_graph(std0, std2)
 
     std0_fast = run_system_and_save_output(file_name="sdc_short_fast_anneal_0.pkl", input_bit=0, overwrite=True,
                                            anneal=superfast_anneal())
