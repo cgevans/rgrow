@@ -1,14 +1,18 @@
+import string
 from pathlib import Path
 
 from platformdirs import user_data_dir
 
 from rgrow.sdc import SDCStrand
 from rgrow.sdc.graphs import Graphing
+from rgrow.sdc.reporter_methods.fluorescence import Fluorescence
 from rgrow.sdc.reporter_methods.strand_at import StrandIsAtPosition
 from rgrow.sdc.sdc import SDCParams, SDC
 from rgrow.sdc.anneal import Anneal, AnnealOutputs
 
-MIN, HOUR = 60, 60
+SEC = 1
+MIN = 60 * SEC
+HOUR = 60 * MIN
 
 # Page 47
 
@@ -31,28 +35,31 @@ sequences = {
     "7": "TCACTTTCGTCC", "7'": "TCACACTTCGTC",
 }
 
-bases = ["A", "B", "C", "D", "E"]
+bases = [char for char in string.ascii_uppercase]
 
-input_tiles = {
-    0: SDCStrand(
+
+def input_strand(inp: int = 0) -> SDCStrand:
+    b = bases[inp]
+    return SDCStrand(
         left_glue=None,
-        right_glue="0'*",
-        btm_glue=f"A",
-        name=f"A0"
-    ),
-    1: SDCStrand(
-        left_glue=None,
-        right_glue="1'*",
-        btm_glue=f"A",
-        name=f"A1"
+        right_glue=f"{inp}'*",
+        btm_glue=f"{b}",
+        name=f"{b}{inp}"
     )
-}
+
+
+def reporter(base):
+    return SDCStrand(
+        left_glue=None,
+        right_glue=None,
+        btm_glue=base,
+        name=f"Rep"
+    )
 
 
 def make_bitcopy_system(
         input_strand: SDCStrand,
         length: int = 5,
-        complexity: int = 2,
 ):
     """
     Make a system with the *exact* same parameters as the paper.
@@ -60,7 +67,7 @@ def make_bitcopy_system(
     scaffold = [f"{b}*" for b in bases][:length]
 
     strands = [input_strand]
-    for i in range(1, length):
+    for i in range(1, length - 1):
         prime_l = "" if i % 2 == 0 else "'"
         prime_r = "" if i % 2 == 1 else "'"
         strands.extend([
@@ -69,23 +76,28 @@ def make_bitcopy_system(
                 right_glue=f"{inp}{prime_r}*",
                 btm_glue=f"{bases[i]}",
                 name=f"{bases[i]}{inp}"
-            ) for inp in range(0, complexity)
+            ) for inp in [0, 2]
         ])
-
+    strands.append(reporter(bases[length - 1]))
     return SDCParams(
         1e6, 80.0, sequences, scaffold, strands)
-    # glue_dg_s=sequences, strands=strands, scaffold=scaffold)
 
 
 def superfast_anneal():
     """
         Superfast anneal as defined in page 41 of the paper SI.
     """
-    pass
+    return Anneal(
+        initial_hold=10 * SEC,
+        initial_tmp=80.0,
+        delta_time=40 * SEC,
+        final_tmp=45.0,
+        final_hold=10 * SEC)
 
 
 def run_system_and_save_output(input_bit: int = 0, file_name: str | None = None,
-                               overwrite: bool = False) -> AnnealOutputs:
+                               overwrite: bool = False,
+                               anneal=Anneal.standard_long_anneal(scaffold_count=1000)) -> AnnealOutputs:
     r"""
     Set file_name to None if you don't want the data to be saved, file name is the name of the file, without extension.
     The file will be saved in:
@@ -103,10 +115,9 @@ def run_system_and_save_output(input_bit: int = 0, file_name: str | None = None,
             return AnnealOutputs.load_data(file_name)
 
     system_params = make_bitcopy_system(
-        input_strand=input_tiles[input_bit],
-        length=5, complexity=2)
+        input_strand=input_strand(input_bit),
+        length=5)
     system = SDC(system_params, name=f"Bit Copy on input {input_bit}")
-    anneal = Anneal.standard_long_anneal(scaffold_count=1000)
     anneal_outputs = system.run_anneal(anneal)
 
     # No need to save the data
@@ -118,15 +129,36 @@ def run_system_and_save_output(input_bit: int = 0, file_name: str | None = None,
     return anneal_outputs
 
 
-if __name__ == "__main__":
-    # Run the simulations if they have not already been saved
-    std0 = run_system_and_save_output(file_name="sdc_short_std_anneal_0.pkl", input_bit=0)
-    std1 = run_system_and_save_output(file_name="sdc_short_std_anneal_1.pkl", input_bit=1)
-
+def positional_graph(std0: AnnealOutputs, std1: AnnealOutputs, x: str = ""):
     # Plot the simulations
     # Here we will plot what percentage of the tiles contained 0 at each spot
     g = Graphing("Bit Copy Experimental System")
-    for n, p in [("A0", 0), ("B0", 1), ("C0", 2), ("D0", 3)]:
-        g.add_line(std0, StrandIsAtPosition(n, p), label=f"% of {n} at {p}")
-        g.add_line(std1, StrandIsAtPosition(n, p), label=f"% of {n} at {p}")
-    g.end("/home/angelcr/work/rgrow/py-rgrow/examples/sdc_bitcopy/acc.svg")
+    for n, p in [("A0", 0), ("B0", 1), ("C0", 2), ("D0", 3), ("Rep", 4)]:
+        g.add_line(std0, StrandIsAtPosition(n, p), label=f"% of {n} on 0")
+        g.add_line(std1, StrandIsAtPosition(n, p), label=f"% of {n} on 2")
+    g.end(f"/home/angelcr/work/rgrow/py-rgrow/examples/sdc_bitcopy/{x}acc.svg")
+
+
+def fluo_graph(std0: AnnealOutputs, std1: AnnealOutputs, x: str = ""):
+    # Plot the simulations
+    # Here we will plot what percentage of the tiles contained 0 at each spot
+    g = Graphing("Bit Copy Experimental System")
+    fluo = Fluorescence(quencher_strand_name="D1", reporter_strand_name="Rep")
+    g.add_line(std0, fluo, label=f"Fluo input 0", linestyle='dashed')
+    g.add_line(std1, fluo, label=f"Fluo input 2", linestyle='dashed')
+    g.end(f"/home/angelcr/work/rgrow/py-rgrow/examples/sdc_bitcopy/{x}fluo.svg")
+
+
+if __name__ == "__main__":
+    # Run the simulations if they have not already been saved
+    std0 = run_system_and_save_output(file_name="sdc_short_std_anneal_0.pkl", input_bit=0, overwrite=True)
+    std1 = run_system_and_save_output(file_name="sdc_short_std_anneal_1.pkl", input_bit=2, overwrite=True)
+    fluo_graph(std0, std1)
+    positional_graph(std0, std1)
+
+    std0_fast = run_system_and_save_output(file_name="sdc_short_fast_anneal_0.pkl", input_bit=0, overwrite=True,
+                                           anneal=superfast_anneal())
+    std1_fast = run_system_and_save_output(file_name="sdc_short_fast_anneal_1.pkl", input_bit=2, overwrite=True,
+                                           anneal=superfast_anneal())
+    fluo_graph(std0_fast, std1_fast, x="fast")
+    positional_graph(std0_fast, std1_fast, x="fast")
