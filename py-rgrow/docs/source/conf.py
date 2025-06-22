@@ -12,7 +12,7 @@
 
 try:
     import rgrow as rg
-    print("Rgrow was imported:" rg.__file__)
+    print("rgrow was imported:" rg.__file__)
 except ImportError as e:
     print("Could not import rgrow:", e)
 
