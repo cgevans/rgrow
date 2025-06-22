@@ -5,7 +5,7 @@ __all__ = [
     "TileSet",
     "Simulation",
     "EvolveOutcome",
-    # "FFSLevel",
+    "FFSLevelRef",
     "EvolveBounds",
     "FFSRunResult",
     "FFSRunConfig",
