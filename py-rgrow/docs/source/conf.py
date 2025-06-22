@@ -10,6 +10,12 @@
 
 # sys.path.insert(0, os.path.abspath("../.."))
 
+try:
+    import rgrow as rg
+    print("Rgrow was imported:" rg.__file__)
+except ImportError as e:
+    print("Could not import rgrow:", e)
+
 project = "Rgrow"
 copyright = "2023, Constantine Evans"
 author = "Constantine Evans"
