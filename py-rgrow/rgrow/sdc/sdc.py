@@ -118,9 +118,9 @@ class SDC(rg.rgrow.SDC):
 
     params: SDCParams
     # Name of the system -- Used for plotting
-    name: str
+    name: str | None = None
 
-    def __new__(cls, params, name):
+    def __new__(cls, params, name: str | None = None):
         self = super().__new__(cls, params)
         self.params = params
         self.name = name

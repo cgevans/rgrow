@@ -13,7 +13,7 @@ Constructing tilesets
 
     Tile
     TileSet
-    TileSet.from_file    
+..     TileSet.from_file
 
 --------------
 Using tilesets

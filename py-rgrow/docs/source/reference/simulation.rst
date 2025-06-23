@@ -29,18 +29,19 @@ Modifying simulations and getting information
     Simulation.get_system_param
     Simulation.canvas_copy
     Simulation.canvas_view
-    Simulation.names_canvas
     Simulation.state_events
     Simulation.state_time
     Simulation.state_ntiles
     Simulation.states_events
     Simulation.states_time
     Simulation.states_ntiles
-    Simulation.tile_concs
-    Simulation.tile_stoics
     Simulation.tile_names
     Simulation.tile_colors
     Simulation.n_mismatches
     Simulation.mismatch_array
     Simulation.plot_state
     Simulation.tile_cmap
+..     Simulation.tile_concs
+..     Simulation.tile_stoics
+..     Simulation.names_canvas
+

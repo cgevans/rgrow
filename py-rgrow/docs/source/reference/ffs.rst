@@ -8,5 +8,5 @@ FFS
 
     TileSet.run_ffs
     FFSRunConfig
-    FFSResult
-    FFSLevel
+    FFSRunResult
+    FFSLevelRef
