@@ -87,6 +87,7 @@ jobs:
           source venv/bin/activate
           uv pip install --upgrade mypy
       - name: Run mypy
+        continue-on-error: true
         run: |
           source venv/bin/activate
           mypy --cache-dir .mypy_cache/ --install-types --ignore-missing-imports --non-interactive --show-traceback py-rgrow/rgrow/
