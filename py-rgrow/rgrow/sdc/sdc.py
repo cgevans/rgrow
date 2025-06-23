@@ -76,7 +76,7 @@ class SDC(rg.rgrow.SDC):
     # Name of the system -- Used for plotting
     name: str | None = None
 
-    def __new__(cls, params, system_name: str | None = None):
+    def __new__(cls, params, system_name: str | None = None): # type: ignore
         self = super().__new__(cls, params)
         self.params = params
         self.name = system_name
