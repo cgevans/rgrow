@@ -74,9 +74,9 @@ class SDCParams:
 class SDC(rg.rgrow.SDC):
     params: SDCParams
     # Name of the system -- Used for plotting
-    name: str
+    name: str | None = None
 
-    def __new__(cls, params, system_name):
+    def __new__(cls, params, system_name: str | None = None):
         self = super().__new__(cls, params)
         self.params = params
         self.name = system_name
