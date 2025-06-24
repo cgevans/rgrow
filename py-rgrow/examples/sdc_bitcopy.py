@@ -53,7 +53,7 @@ def reporter(base):
         left_glue=None,
         right_glue=None,
         btm_glue=base,
-        name=f"Rep"
+        name="Rep"
     )
 
 
@@ -146,8 +146,8 @@ def fluo_graph(std0: AnnealOutputs, std1: AnnealOutputs, x: str = ""):
     # Here we will plot what percentage of the tiles contained 0 at each spot
     g = Graphing("Bit Copy Experimental System")
     fluo = Fluorescence(quencher_strand_name="D1", reporter_strand_name="Rep")
-    g.add_line(std0, fluo, label=f"Fluo input 0", linestyle='dashed')
-    g.add_line(std1, fluo, label=f"Fluo input 2", linestyle='dashed')
+    g.add_line(std0, fluo, label="Fluo input 0", linestyle='dashed')
+    g.add_line(std1, fluo, label="Fluo input 2", linestyle='dashed')
     g.end(f"/home/angelcr/work/rgrow/py-rgrow/examples/sdc_bitcopy/{x}fluo.svg")
 
 
