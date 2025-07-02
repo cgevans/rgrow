@@ -8,7 +8,7 @@ macro_rules! type_alias {
 /*
 * Important Notes
 *
-* Given some PointSafe2, in this model, it will represnt two things
+* Given some PointSafe2, in this model, it will represent two things
 * 1. Which of the scaffolds has an event happening
 * 2. In which position of the scaffold said event will take place
 *
