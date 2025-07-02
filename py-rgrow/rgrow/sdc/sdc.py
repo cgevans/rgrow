@@ -1,6 +1,7 @@
 from typing import Mapping
 import rgrow as rg
 import numpy as np
+import yaml
 
 from .anneal import Anneal, AnnealOutputs
 import tqdm
@@ -14,7 +15,28 @@ from .reporter_methods import ReportingMethod  # noqa: F401
 @dataclasses.dataclass
 class SDCParams:
     """
-    Parameters used to create an SDC system
+    Holds all input parameters required to define an SDC system.
+
+    Attributes
+    ----------
+    k_f : float
+        Forward reaction rate constant.
+    temperature : float
+        Initial simulation temperature in Celsius.
+    glue_dg_s : Mapping[str | tuple[str, str], tuple[float, float] | str]
+        Dictionary of glue strengths (ΔG, ΔS), indexed by name or tuple of names.
+    scaffold : list[str | None]
+        Ordered list of glue names representing the scaffold.
+    strands : list[SDCStrand]
+        List of all strands in solution.
+    scaffold_concentration : float
+        Effective molar concentration of the scaffold.
+    k_n : float
+    k_c : float
+    junction_penalty_dg : float | None
+        Optional ΔG penalty for forming junctions (in kcal/mol).
+    junction_penalty_ds : float | None
+        Optional ΔS penalty for forming junctions (in kcal/mol/K).
     """
 
     k_f: float = 1.0e6
@@ -47,8 +69,12 @@ class SDCParams:
         return dataclasses.asdict(self)
 
     def write_json(self, filename: str) -> None:
-        with open(filename, "w") as f:
-            json.dump(self.to_dict(), f)
+        with open(filename, "w+") as f:
+                json.dump(self.to_dict(), f)
+
+    def write_yaml(self, filename: str) -> None:
+        with open(filename, "w+") as f:
+            yaml.dump(self, f)
 
     @classmethod
     def from_dict(cls, d: dict) -> "SDCParams":
@@ -70,16 +96,34 @@ class SDCParams:
             d = json.load(f)
         return cls.from_dict(d)
 
+    @classmethod
+    def read_yaml(cls, filename: str) -> "SDCParams":
+        with open(filename, "r") as f:
+            d: SDCParams = yaml.load(f, Loader=yaml.Loader)
+        return d
+
+
 
 class SDC(rg.rgrow.SDC):
+    """
+    The actual SDC model
+
+    Attributes
+    ----------
+    params : SDCParams
+        Parameters object used for initialization.
+    name : str
+        User-provided name of the system.
+    """
+
     params: SDCParams
     # Name of the system -- Used for plotting
     name: str | None = None
 
-    def __new__(cls, params, system_name: str | None = None): # type: ignore
+    def __new__(cls, params, name: str | None = None):
         self = super().__new__(cls, params)
         self.params = params
-        self.name = system_name
+        self.name = name
         return self
 
     @property
@@ -92,6 +136,19 @@ class SDC(rg.rgrow.SDC):
         return f"{header_line}\n{strand_info}\n\n"
 
     def run_anneal(self, anneal: Anneal):
+        """"
+        Given some Anneal, this will run the system on that anneal.
+
+        This will run the system on a standard square state, with no tracking.
+
+        Parameters
+        ----------
+        anneal : Anneal
+
+        Returns
+        -------
+        AnnealOutputs
+        """
         times, temperatures = anneal.gen_arrays()
         scaffold_len = len(self.params.scaffold)
 
