@@ -16,7 +16,7 @@ macro_rules! type_alias {
 * - There are quite a few expects that need to be handled better
 * */
 
-use core::f64;
+
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
