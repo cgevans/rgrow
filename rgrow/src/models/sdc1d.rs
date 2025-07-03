@@ -103,11 +103,11 @@ pub struct SDC {
     /// Identifies the strand that serves as a binding site for the quencher
     pub quencher_id: Option<Tile>,
     /// Concentration of the quencher
-    pub quencher_concentration: f64,
+    pub quencher_concentration: Molar,
     /// Name of the reporter tile
     pub reporter_id: Option<Tile>,
     /// Concentration of the fluorophore,
-    pub fluorophore_concentration: f64,
+    pub fluorophore_concentration: Molar,
     /// Colors of the scaffolds, strands can only stick if the
     /// colors are a perfect match
     ///
@@ -335,6 +335,107 @@ impl SDC {
         self.kf * Molar::u0_times(bond_energy.exp())
     }
 
+    fn inverse_glue_id(g: Glue) -> Glue {
+        match g {
+            0 => 0,
+            x if x % 2 == 0 => x - 1,
+            x => x + 1
+        }
+    }
+
+    /// The fluorophore attaches to the left of the reporter
+    fn fluorophore_det_rate(&self) -> PerSecond {
+        if self.reporter_id.is_none() { return PerSecond::zero(); }
+        let fluo_glue = self.glues[(self.reporter_id.unwrap() as usize, WEST_GLUE_INDEX)];
+        let inv_glue = Self::inverse_glue_id(fluo_glue);
+        let glue_value = self.delta_g_matrix[(inv_glue, fluo_glue)]
+            - (self.temperature - Celsius(37.0)).to_celsius()
+            * self.entropy_matrix[(inv_glue, fluo_glue)];
+        let det_rate = glue_value.times_beta(self.temperature);
+        // TODO: Is there a minus missing here ?
+        self.kf * Molar::u0_times(det_rate.exp())
+    }
+
+    fn fluorophore_att_rate(&self) -> PerSecond {
+        self.kf * self.fluorophore_concentration
+    }
+
+    fn quencher_det_rate(&self) -> PerSecond {
+        if self.quencher_id.is_none() { return PerSecond::zero(); }
+        let quench_glue = self.glues[(self.quencher_id.unwrap() as usize, EAST_GLUE_INDEX)];
+        let inv_glue = Self::inverse_glue_id(quench_glue);
+        let glue_value = self.delta_g_matrix[(quench_glue, inv_glue)]
+            - (self.temperature - Celsius(37.0)).to_celsius()
+            * self.entropy_matrix[(quench_glue, inv_glue)];
+        let det_rate = glue_value.times_beta(self.temperature);
+        // TODO: Is there a minus missing here?
+        self.kf * Molar::u0_times(det_rate.exp())
+    }
+
+    fn quencher_att_rate(&self) -> PerSecond {
+        self.kf * self.quencher_concentration
+    }
+
+    pub fn monomer_change_rate_at_point<S: State>(&self, state: &S, scaffold_point: PointSafe2) -> PerSecond {
+        let strand = state.tile_at_point(scaffold_point);
+        match Some(strand) {
+            // The quencher can attach to the strand
+            q if q == self.quencher_id => self.kf * self.quencher_concentration,
+            // The fluorophore can attach to the strand
+            r if r == self.reporter_id => self.kf * self.fluorophore_concentration,
+            // The quencher can detach from the strand
+            Some(1) => self.quencher_det_rate(),
+            // The fluorophore can detach from the strand
+            Some(2) => self.fluorophore_det_rate(),
+            _ => PerSecond::zero(),
+        }
+    }
+
+    pub fn choose_monomer_change_at_point<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        mut acc: PerSecond,
+    ) -> (bool, PerSecond, Event) {
+        let strand = state.tile_at_point(point);
+        match Some(strand) {
+            q if q == self.quencher_id => {
+                acc -= self.quencher_att_rate();
+                if acc > PerSecond::zero() {
+                    (true, acc, Event::None)
+                } else {
+                    (true, acc, Event::MonomerAttachment(point, 1))
+                }
+            },
+            r if r == self.reporter_id => {
+                acc -= self.fluorophore_att_rate();
+                if acc > PerSecond::zero() {
+                    (true, acc, Event::None)
+                } else {
+                    (true, acc, Event::MonomerAttachment(point, 2))
+                }
+            },
+            // The quencher is currently attached
+            Some(1) => {
+                acc -= self.quencher_det_rate();
+                if acc > PerSecond::zero() {
+                    (true, acc, Event::None)
+                } else {
+                    (true, acc, Event::MonomerChange(point, self.quencher_id.unwrap()))
+                }
+            },
+            Some(2) => {
+                acc -= self.fluorophore_det_rate();
+                if acc > PerSecond::zero() {
+                    (true, acc, Event::None)
+                } else {
+                    (true, acc, Event::MonomerChange(point, self.reporter_id.unwrap()))
+                }
+            },
+            _ => (false, acc, Event::None),
+        }
+    }
+
     pub fn choose_monomer_attachment_at_point<S: State>(
         &self,
         state: &S,
@@ -409,8 +510,6 @@ impl SDC {
         state: &S,
         scaffold_coord: PointSafe2,
     ) -> PerSecond {
-        // If we set acc = 0, would it not be the case that we just attach to the first tile we can
-        // ?
         match self.find_monomer_attachment_possibilities_at_point(
             state,
             PerSecond::zero(),
@@ -862,7 +961,8 @@ impl System for SDC {
         match event {
             Event::None => todo!(),
             Event::MonomerAttachment(scaffold_point, _)
-            | Event::MonomerDetachment(scaffold_point) => {
+            | Event::MonomerDetachment(scaffold_point)
+            | Event::MonomerChange(scaffold_point, _) => {
                 self.update_monomer_point(state, scaffold_point)
             }
             _ => panic!("This event is not supported in SDC"),
@@ -880,6 +980,9 @@ impl System for SDC {
                 let strand = state.tile_at_point(*point);
                 state.update_detachment(strand);
                 state.set_sa(point, &0);
+            }
+            Event::MonomerChange(point, strand) => {
+                state.set_sa(point, strand)
             }
             _ => panic!("This event is not supported in SDC"),
         };
@@ -900,7 +1003,7 @@ impl System for SDC {
             // If the tile is empty, we will return the rate at which attachment can occur
             0 => self.total_monomer_attachment_rate_at_point(state, scaffold_coord),
             // If the tile is full, we will return the rate at which detachment can occur
-            _ => self.monomer_detachment_rate_at_point(state, scaffold_coord),
+            _ => self.monomer_detachment_rate_at_point(state, scaffold_coord) + self.monomer_change_rate_at_point(state, scaffold_coord),
         }
     }
 
@@ -910,19 +1013,19 @@ impl System for SDC {
         point: crate::canvas::PointSafe2,
         acc: PerSecond,
     ) -> crate::system::Event {
-        match self.choose_monomer_detachment_at_point(state, point, acc) {
-            (true, _, event) => event,
-            (false, acc, _) => match self.choose_monomer_attachment_at_point(state, point, acc) {
-                (true, _, event) => event,
-                (false, acc, _) => panic!(
-                    "Rate: {:?}, {:?}, {:?}, {:?}",
-                    acc,
-                    point,
-                    state,
-                    state.raw_array()
-                ),
-            },
-        }
+        let (occur, acc, event) =
+            self.choose_monomer_detachment_at_point(state, point, acc);
+        if occur { return event; }
+
+        let (occur, acc, event) =
+            self.choose_monomer_attachment_at_point(state, point, acc);
+        if occur { return event; }
+
+        let (occur, acc, event) =
+            self.choose_monomer_attachment_at_point(state, point, acc);
+        if occur { return event; }
+
+        panic!("Rate: {:?}, {:?}, {:?}, {:?}", acc, point, state, state.raw_array());
     }
 
     fn seed_locs(&self) -> Vec<(crate::canvas::PointSafe2, Tile)> {
@@ -1422,9 +1525,9 @@ impl SDC {
                 scaffold,
                 glue_names,
                 quencher_id,
-                quencher_concentration: params.quencher_concentration,
+                quencher_concentration: Molar(params.quencher_concentration),
                 reporter_id,
-                fluorophore_concentration: params.fluorophore_concentration,
+                fluorophore_concentration: Molar(params.fluorophore_concentration),
                 kf,
                 delta_g_matrix: glue_delta_g,
                 entropy_matrix: glue_s,
@@ -1957,9 +2060,9 @@ mod test_sdc_model {
             strand_names: Vec::new(),
             glue_names: Vec::new(),
             quencher_id: None,
-            quencher_concentration: 0.0,
+            quencher_concentration: Molar::zero(),
             reporter_id: None,
-            fluorophore_concentration: 0.0,
+            fluorophore_concentration: Molar::zero(),
             scaffold: Array2::<usize>::zeros((5, 5)),
             strand_concentration: Array1::<Molar>::zeros(5),
             scaffold_concentration: Molar::zero(),
@@ -2040,9 +2143,9 @@ mod test_sdc_model {
             strand_names: Vec::new(),
             glue_names: Vec::new(),
             quencher_id: None,
-            quencher_concentration: 0.0,
+            quencher_concentration: Molar::zero(),
             reporter_id: None,
-            fluorophore_concentration: 0.0,
+            fluorophore_concentration: Molar::zero(),
             scaffold,
             strand_concentration: Array1::<Molar>::zeros(5),
             glues: array![
