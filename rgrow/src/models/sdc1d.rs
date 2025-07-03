@@ -474,7 +474,7 @@ impl SDC {
         let point = scaffold_coord;
         let tile = state.tile_at_point(point);
 
-        // If the scaffold already has a strand binded, then nothing can attach to it
+        // If the scaffold already has a strand bound, then nothing can attach to it
         if tile != 0 {
             return (false, acc, Event::None);
         }
