@@ -16,7 +16,6 @@ macro_rules! type_alias {
 * - There are quite a few expects that need to be handled better
 * */
 
-
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
@@ -1370,6 +1369,18 @@ impl SDC {
             glue_names[*i] = s.clone();
         }
 
+        let quencher_id: Option<Tile> = params
+            .quencher_name
+            .map(|name| strand_names.iter().position(|x| x == &name))
+            .flatten()
+            .map(|index| index as Tile);
+
+        let reporter_id = params
+            .reporter_name
+            .map(|name| strand_names.iter().position(|x| x == &name))
+            .flatten()
+            .map(|index| index as Tile);
+
         {
             let anchor_tiles = vec![];
             let strand_concentration = strand_concentration.mapv(Molar::new);
@@ -1385,6 +1396,10 @@ impl SDC {
                 glues,
                 scaffold,
                 glue_names,
+                quencher_id,
+                quencher_concentration: params.quencher_concentration,
+                reporter_id,
+                fluorophore_concentration: params.fluorophore_concentration,
                 kf,
                 delta_g_matrix: glue_delta_g,
                 entropy_matrix: glue_s,
