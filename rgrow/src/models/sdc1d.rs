@@ -104,7 +104,7 @@ pub struct SDC {
     /// Colors of the scaffolds, strands can only stick if the
     /// colors are a perfect match
     ///
-    /// Note that this system will accept many scaffolds, thus this is a  2d array and not a 1d
+    /// Note that this system will accept many scaffolds; thus this is a 2d array and not a 1d
     /// array
     pub scaffold: Array2<Glue>,
     /// All strands in the system, they are represented by tiles
