@@ -108,7 +108,7 @@ pub struct SDC {
     /// array
     pub scaffold: Array2<Glue>,
     /// All strands in the system, they are represented by tiles
-    /// with only glue on the south, west, and east (nothing can stuck to the top of a strand)
+    /// with only glue on the south, west, and east (nothing can stick to the top of a strand)
     // pub strands: Array1<Tile>,
     pub strand_concentration: Array1<Molar>,
     /// The concentration of the scaffold
