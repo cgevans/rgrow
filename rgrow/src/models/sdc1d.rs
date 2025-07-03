@@ -133,7 +133,7 @@ pub struct SDC {
     pub friends_btm: HashMap<Glue, HashSet<Tile>>,
     /// Delta G at 37 degrees C in the formula to generate the glue strengths
     pub delta_g_matrix: Array2<KcalPerMol>,
-    /// S in the formula to geenrate the glue strengths
+    /// S in the formula to generate the glue strengths
     pub entropy_matrix: Array2<KcalPerMolKelvin>,
     /// Temperature of the system
     ///
