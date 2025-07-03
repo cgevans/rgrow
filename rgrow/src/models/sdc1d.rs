@@ -1610,7 +1610,7 @@ impl SDC {
         probability
     }
 
-    /// Change temperature of the system (degrees C) and update system with that new temperature
+    /// Change the temperature of the system (degrees C) and update the system
     fn set_tmp_c(&mut self, tmp: f64) {
         self.temperature = Celsius(tmp).into();
         self.update_system();
