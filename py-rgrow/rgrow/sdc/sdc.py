@@ -50,6 +50,10 @@ class SDCParams:
         default_factory=list
     )  # | list[list[str | None]] # FIXME: can't deal with typing for this
     strands: list[SDCStrand] = field(default_factory=list)
+    quencher_concentration: float = 0.0
+    quencher_name: str | None = None
+    fluorophore_concentration: float = 0.0
+    reporter_name: str | None = None
     scaffold_concentration: float = 1e-100
     k_n: float = 0.0
     k_c: float = 0.0
