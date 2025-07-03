@@ -1216,7 +1216,7 @@ fn get_or_generate(
     count: &mut usize,
     val: Option<String>,
 ) -> usize {
-    // If the user didnt prove a glue, we assume nothign will ever stick
+    // If the user didn't provide a glue value, we assume nothing will ever stick
     let str = match val {
         Some(x) => x,
         None => return 0,
