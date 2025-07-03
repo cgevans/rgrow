@@ -2001,7 +2001,7 @@ mod test_sdc_model {
             glue_names: Vec::new(),
             quencher_name: None,
             quencher_concentration: 0.0,
-            reporter_name: None,
+            reporter_id: None,
             fluorophore_concentration: 0.0,
             scaffold,
             strand_concentration: Array1::<Molar>::zeros(5),
