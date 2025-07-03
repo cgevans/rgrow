@@ -2186,7 +2186,7 @@ mod test_sdc_model {
             }
         }
 
-        // Since the input is 0, we shuold see that MFE is reached when last strand is 0
+        // Since the input is 0, we should see that MFE is reached when the last strand is 0
         //
         // We know that there are exactly two elements here (since the SDC system used has
         // complexity of two)
