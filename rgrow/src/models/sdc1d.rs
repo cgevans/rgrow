@@ -2144,7 +2144,7 @@ mod test_sdc_model {
     }
 
     #[test]
-    fn probablities() {
+    fn probabilities() {
         let sdc = scaffold_for_tests();
         let scaffold = vec![0, 0, 2, 8, 16, 18, 6, 0, 0];
         assert_eq!(sdc.scaffold(), scaffold);
