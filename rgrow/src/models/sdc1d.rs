@@ -1182,6 +1182,14 @@ fn gsorseq_to_gs(gsorseq: &GsOrSeq) -> (KcalPerMol, KcalPerMolKelvin) {
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub struct SDCParams {
     pub strands: Vec<SDCStrand>,
+    /// Identifies the strand that serves as a binding site for the quencher
+    pub quencher_name: Option<String>,
+    /// Concentration of the quencher
+    pub quencher_concentration: f64,
+    /// Name of the reporter tile
+    pub reporter_name: Option<String>,
+    /// Concentration of the fluorophore,
+    pub fluorophore_concentration: f64,
     pub scaffold: SingleOrMultiScaffold,
     pub scaffold_concentration: f64,
     // Pair with delta G at 37 degrees C and delta S
@@ -1836,6 +1844,10 @@ mod test_anneal {
             k_c: 1e4,
             junction_penalty_dg: None,
             junction_penalty_ds: None,
+            quencher_name: None,
+            quencher_concentration: 0.0,
+            reporter_name: None,
+            fluorophore_concentration: 0.0,
         };
 
         let mut sdc = SDC::from_params(sdc_params);
@@ -2136,6 +2148,10 @@ mod test_sdc_model {
             k_c: 1e4,
             junction_penalty_dg: None,
             junction_penalty_ds: None,
+            quencher_name: None,
+            quencher_concentration: 0.0,
+            reporter_name: None,
+            fluorophore_concentration: 0.0,
         };
 
         let mut sdc = SDC::from_params(sdc_params);
