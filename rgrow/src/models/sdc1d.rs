@@ -469,8 +469,6 @@ impl SDC {
     pub fn system_states(&self) -> Vec<Vec<u32>> {
         let scaffold = self.scaffold();
 
-        // Calculate the number of combinations ( this will i think make it a little more optimized
-        // since we wont need realloc )
         let mut acc = 1;
         for b in &scaffold {
             if let Some(x) = self.friends_btm.get(b) {
