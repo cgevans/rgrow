@@ -208,7 +208,8 @@ impl SDC {
             // 3 <-> 4
             // ...
 
-            if b == 0 {
+            // Ignore the ones that have the wrong glue, and also the null tile, and the quencher / fluo
+            if b == 0 || t <= 2 {
                 continue;
             }
 
@@ -1026,7 +1027,32 @@ impl System for SDC {
             self.choose_monomer_attachment_at_point(state, point, acc);
         if occur { return event; }
 
-        panic!("Rate: {:?}, {:?}, {:?}, {:?}", acc, point, state, state.raw_array());
+        // Now for debugging purposes:
+
+        let mut str_builder = String::new();
+
+        let (_, rate_monomer_att, event_monomer_att) =
+            self.choose_monomer_attachment_at_point(state, point, PerSecond::zero());
+        str_builder.push_str(&format!(
+            "Attachment: rate of {:?}, event {:?}\n",
+            rate_monomer_att, event_monomer_att
+        ));
+
+        let (_, rate_monomer_det, event_monomer_det) =
+            self.choose_monomer_detachment_at_point(state, point, PerSecond::zero());
+        str_builder.push_str(&format!(
+            "Detachment: rate of {:?}, event {:?}\n",
+            rate_monomer_det, event_monomer_det
+        ));
+
+        let (_, rate_monomer_change, event_monomer_change) =
+            self.choose_monomer_change_at_point(state, point, PerSecond::zero());
+        str_builder.push_str(&format!(
+            "Change: rate of {:?}, event {:?}\n",
+            rate_monomer_change, event_monomer_change
+        ));
+
+        panic!("{:?}\nRate: {:?}, {:?}, {:?}, {:?}", str_builder, acc, point, state, state.raw_array());
     }
 
     fn seed_locs(&self) -> Vec<(crate::canvas::PointSafe2, Tile)> {
@@ -1378,7 +1404,7 @@ impl SDC {
         strand_concentration[1] = params.quencher_concentration;
         strand_concentration[2] = params.fluorophore_concentration;
 
-        let mut glues = Array2::<usize>::zeros((strand_count + 1, 3));
+        let mut glues = Array2::<usize>::zeros((strand_count + 3, 3));
         let mut gluenum = 1;
 
         for (
