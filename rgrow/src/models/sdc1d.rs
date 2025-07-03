@@ -1987,6 +1987,10 @@ mod test_sdc_model {
             anchor_tiles: Vec::new(),
             strand_names: Vec::new(),
             glue_names: Vec::new(),
+            quencher_name: None,
+            quencher_concentration: 0.0,
+            reporter_name: None,
+            fluorophore_concentration: 0.0,
             scaffold,
             strand_concentration: Array1::<Molar>::zeros(5),
             glues: array![
