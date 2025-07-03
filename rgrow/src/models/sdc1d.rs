@@ -137,7 +137,7 @@ pub struct SDC {
     pub entropy_matrix: Array2<KcalPerMolKelvin>,
     /// Temperature of the system
     ///
-    /// Not pub so that it cant accidentally be changed other than with the setter function
+    /// Not pub so that it can't accidentally be changed other than with the setter function
     /// that will also recalculate energy arrays
     temperature: Kelvin,
     /// The energy with which two strands will bond
