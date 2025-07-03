@@ -1190,7 +1190,7 @@ pub struct SDCParams {
     pub k_n: f64,
     pub k_c: f64,
     pub temperature: f64,
-    // Optinal (additive) junction penalty
+    // Optional (additive) junction penalty
     //
     // Meaning that negative penalty, will make binding more likely
     pub junction_penalty_dg: Option<KcalPerMol>,
