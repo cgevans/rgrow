@@ -1333,7 +1333,7 @@ impl SDC {
             // sure that all strings are inside the glue_name_map, and if they arent, we can add
             // them. The second time around we know that the glues will always be found in the map
             //
-            // However, since you cant mutate the strands glues, it shuold be fine to just ignore
+            // However, since you can't mutate the strand glues, it should be fine to just ignore
             // the glues that do not exist
             let (i, j) = match (glue_name_map.get(&i), glue_name_map.get(&j)) {
                 (Some(&x), Some(&y)) => (x, y),
