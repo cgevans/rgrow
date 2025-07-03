@@ -265,9 +265,7 @@ impl SDC {
         let num_of_strands = self.strand_names.len();
         let glue_links = ndarray::Zip::from(&self.delta_g_matrix)
             .and(&self.entropy_matrix)
-            .map_collect(|dg, ds|
-                *dg - (self.temperature - Celsius(37.0)).to_celsius() * *ds
-            ); // For each *possible* pair of strands, calculate the energy bond
+            .map_collect(|dg, ds| *dg - (self.temperature - Celsius(37.0)).to_celsius() * *ds); // For each *possible* pair of strands, calculate the energy bond
         for strand_f in 1..num_of_strands {
             // 1: no point in calculating for 0
             let (f_west_glue, f_btm_glue, f_east_glue) = {
@@ -1116,6 +1114,7 @@ impl TileBondInfo for SDC {
 // Here is potentially another way to process this, though not done.  Feel free to delete or modify.
 
 use std::hash::Hash;
+use crate::system::Orientation::WE;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
@@ -1259,14 +1258,21 @@ impl SDC {
         let mut glue_name_map: HashMap<String, usize> = HashMap::new();
 
         // Add one to account for the empty strand
-        let strand_count = params.strands.len() + 1;
+        let strand_count = params.strands.len() + 3;
 
         let mut strand_names: Vec<String> = Vec::with_capacity(strand_count);
         let mut strand_colors: Vec<[u8; 4]> = Vec::with_capacity(strand_count);
         let mut strand_concentration = Array1::<f64>::zeros(strand_count);
-        strand_names.push("null".to_string());
+
+        // Add the "standard" strands
+        strand_names.append(&mut vec!["null", "quencher", "fluorophore"].into_iter().map(String::from).collect());
+        strand_colors.push([0, 0, 0, 0]);
+        // FIXME: Add colors
+        strand_colors.push([0, 0, 0, 0]);
         strand_colors.push([0, 0, 0, 0]);
         strand_concentration[0] = 0.0;
+        strand_concentration[1] = params.quencher_concentration;
+        strand_concentration[2] = params.fluorophore_concentration;
 
         let mut glues = Array2::<usize>::zeros((strand_count + 1, 3));
         let mut gluenum = 1;
@@ -1290,16 +1296,47 @@ impl SDC {
             let color_or_rand = get_color_or_random(color_as_str).unwrap();
             strand_colors.push(color_or_rand);
 
-            // Add the glues, note that we want to leave index (0, _) empty (for the empty tile)
-            glues[(id + 1, WEST_GLUE_INDEX)] =
+            // Add the glues, note that we want to leave index (0, _) empty (for the empty tile),
+            // as well as (1, _) and (2, _) for the quencher and fluorophore
+            glues[(id + 3, WEST_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, left_glue);
-            glues[(id + 1, BOTTOM_GLUE_INDEX)] =
+            glues[(id + 3, BOTTOM_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, btm_glue);
-            glues[(id + 1, EAST_GLUE_INDEX)] =
+            glues[(id + 3, EAST_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, right_glue);
 
             // Add the concentrations
-            strand_concentration[id + 1] = concentration;
+            strand_concentration[id + 3] = concentration;
+        }
+
+        let quencher_id: Option<Tile> = params
+            .quencher_name
+            .map(|name| strand_names.iter().position(|x| x == &name))
+            .flatten()
+            .map(|index| index as Tile);
+
+        let reporter_id = params
+            .reporter_name
+            .map(|name| strand_names.iter().position(|x| x == &name))
+            .flatten()
+            .map(|index| index as Tile);
+
+        // NOTE:
+        // - When the quencher is on the quench tile, the east glue becomes Null
+        // - Similarly for the reporter strand
+
+        if let Some(q_id) = quencher_id {
+            let q_id = q_id as usize;
+            glues[(1, WEST_GLUE_INDEX)] = glues[(q_id, WEST_GLUE_INDEX)];
+            glues[(1, BOTTOM_GLUE_INDEX)] = glues[(q_id, BOTTOM_GLUE_INDEX)];
+            glues[(1, EAST_GLUE_INDEX)] = 0;
+        }
+
+        if let Some(r_id) = reporter_id {
+            let r_id = r_id as usize;
+            glues[(2, WEST_GLUE_INDEX)] = 0;
+            glues[(2, BOTTOM_GLUE_INDEX)] = glues[(r_id, BOTTOM_GLUE_INDEX)];
+            glues[(2, EAST_GLUE_INDEX)] = glues[(r_id, EAST_GLUE_INDEX)];
         }
 
         // Delta G at 37 degrees C
@@ -1368,18 +1405,6 @@ impl SDC {
         for (s, i) in glue_name_map.iter() {
             glue_names[*i] = s.clone();
         }
-
-        let quencher_id: Option<Tile> = params
-            .quencher_name
-            .map(|name| strand_names.iter().position(|x| x == &name))
-            .flatten()
-            .map(|index| index as Tile);
-
-        let reporter_id = params
-            .reporter_name
-            .map(|name| strand_names.iter().position(|x| x == &name))
-            .flatten()
-            .map(|index| index as Tile);
 
         {
             let anchor_tiles = vec![];
@@ -2214,7 +2239,7 @@ mod test_sdc_model {
         //     println!("Probability of {} for {:?}", p, s);
         // });
 
-        assert_eq!(probs[0].0, vec![0, 0, 1, 3, 5, 7, 2, 0, 0]);
+        assert_eq!(probs[0].0, vec![0, 0, 3, 5, 7, 9, 4, 0, 0]);
     }
 
     #[test]
@@ -2244,7 +2269,7 @@ mod test_sdc_model {
             assert!(s_energy < f_energy);
         }
 
-        let mfe_config = [0, 0, 1, 3, 5, 7, 2, 0, 0];
+        let mfe_config = [0, 0, 3, 5, 7, 9, 4, 0, 0];
         let (acc, _) = sdc.mfe_configuration();
         assert_eq!(mfe_config.to_vec(), acc);
     }
