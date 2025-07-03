@@ -1892,8 +1892,8 @@ mod test_sdc_model {
     use super::*;
     #[test]
     fn test_update_system() {
-        // a lot of the parameters here make no sense, but they wont be used in the tests so it
-        // doesnt matter
+        // a lot of the parameters here make no sense, but they won't be used in the tests, so it
+        // doesn't matter
         let mut sdc = SDC {
             anchor_tiles: Vec::new(),
             strand_names: Vec::new(),
