@@ -1290,7 +1290,7 @@ impl SDC {
             let color_or_rand = get_color_or_random(color_as_str).unwrap();
             strand_colors.push(color_or_rand);
 
-            // Add the glues, note that we want to leave idnex (0, _) empty (for the empty tile)
+            // Add the glues, note that we want to leave index (0, _) empty (for the empty tile)
             glues[(id + 1, WEST_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, left_glue);
             glues[(id + 1, BOTTOM_GLUE_INDEX)] =
