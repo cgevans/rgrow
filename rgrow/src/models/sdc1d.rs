@@ -101,6 +101,14 @@ pub struct SDC {
     pub anchor_tiles: Vec<(PointSafe2, Tile)>,
     pub strand_names: Vec<String>,
     pub glue_names: Vec<String>,
+    /// Identifies the strand that serves as a binding site for the quencher
+    pub quencher_id: Option<Tile>,
+    /// Concentration of the quencher
+    pub quencher_concentration: f64,
+    /// Name of the reporter tile
+    pub reporter_id: Option<Tile>,
+    /// Concentration of the fluorophore,
+    pub fluorophore_concentration: f64,
     /// Colors of the scaffolds, strands can only stick if the
     /// colors are a perfect match
     ///
