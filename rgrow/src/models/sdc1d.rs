@@ -1916,7 +1916,7 @@ mod test_sdc_model {
             anchor_tiles: Vec::new(),
             strand_names: Vec::new(),
             glue_names: Vec::new(),
-            quencher_name: None,
+            quencher_id: None,
             quencher_concentration: 0.0,
             reporter_id: None,
             fluorophore_concentration: 0.0,
