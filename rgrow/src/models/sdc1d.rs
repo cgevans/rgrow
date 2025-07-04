@@ -1024,7 +1024,7 @@ impl System for SDC {
         if occur { return event; }
 
         let (occur, acc, event) =
-            self.choose_monomer_attachment_at_point(state, point, acc);
+            self.choose_monomer_change_at_point(state, point, acc);
         if occur { return event; }
 
         // Now for debugging purposes:
