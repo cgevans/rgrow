@@ -1,7 +1,12 @@
+import dataclasses
+import json
+
 import numpy as np
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 import pickle
+
+import yaml
 from platformdirs import user_data_dir
 from pathlib import Path
 import sys
@@ -49,6 +54,17 @@ class Anneal:
     scaffold_count: int = 100
     timestep: float = 2.0
     temperature_adjustment: float = 8.0
+
+    def to_dict(self) -> dict:
+        return dataclasses.asdict(self)
+
+    def write_json(self, filename: str) -> None:
+        with open(filename, "w+") as f:
+            json.dump(self.to_dict(), f)
+
+    def write_yaml(self, filename: str) -> None:
+        with open(filename, "w+") as f:
+            yaml.dump(self, f)
 
     @property
     def adjusted_initial_tmp(self):

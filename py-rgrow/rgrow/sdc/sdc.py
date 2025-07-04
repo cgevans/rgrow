@@ -74,7 +74,7 @@ class SDCParams:
 
     def write_json(self, filename: str) -> None:
         with open(filename, "w+") as f:
-                json.dump(self.to_dict(), f)
+            json.dump(self.to_dict(), f)
 
     def write_yaml(self, filename: str) -> None:
         with open(filename, "w+") as f:
