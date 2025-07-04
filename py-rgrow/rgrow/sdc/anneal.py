@@ -149,7 +149,7 @@ class AnnealOutputs:
             print(f"[ERROR] Failed to write file: {e}", file=sys.stderr)
 
     @staticmethod
-    def load_data(file_name: str, , app_dir: Path = (Path(user_data_dir("rgrow")) / "sdc")) -> "AnnealOutputs":
+    def load_data(file_name: str, app_dir: Path = (Path(user_data_dir("rgrow")) / "sdc")) -> "AnnealOutputs":
         """
         Loads a previously saved simulation result, and reconstructs the system and state.
         """
