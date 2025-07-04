@@ -133,9 +133,8 @@ class AnnealOutputs:
     anneal: "Anneal"
     state: "State"
 
-    def save_data(self, file_name: str):
+    def save_data(self, file_name: str, app_dir: Path = (Path(user_data_dir("rgrow")) / "sdc")):
         try:
-            app_dir = Path(user_data_dir("rgrow")) / "sdc"
             app_dir.mkdir(parents=True, exist_ok=True)
             file_path = app_dir / file_name
             data = {
@@ -150,14 +149,14 @@ class AnnealOutputs:
             print(f"[ERROR] Failed to write file: {e}", file=sys.stderr)
 
     @staticmethod
-    def load_data(file_name: str) -> "AnnealOutputs":
+    def load_data(file_name: str, , app_dir: Path = (Path(user_data_dir("rgrow")) / "sdc")) -> "AnnealOutputs":
         """
         Loads a previously saved simulation result, and reconstructs the system and state.
         """
         from .sdc import SDC
 
         try:
-            file_path = Path(user_data_dir("rgrow")) / "sdc" / file_name
+            file_path = app_dir / file_name
             with file_path.open("rb") as f:
                 data = pickle.load(f)
 
