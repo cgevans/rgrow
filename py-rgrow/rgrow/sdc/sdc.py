@@ -166,7 +166,8 @@ class SDC(rg.rgrow.SDC):
             (anneal.scaffold_count, scaffold_len),
             "square",
             "none",
-            len(self.params.strands) + 1,
+            # The strands defined by the user + null + fluorophore + quencher
+            len(self.params.strands) + 3,
         )
 
         for i, t in tqdm.tqdm(enumerate(temperatures), total=len(temperatures)):
