@@ -1287,7 +1287,7 @@ impl From<Vec<Vec<Option<String>>>> for SingleOrMultiScaffold {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub struct SDCStrand {
     pub name: Option<String>,
@@ -1386,8 +1386,30 @@ fn get_or_generate(
     }
 }
 
+impl SDCParams {
+    fn fluo_quen_check(&self) {
+        let qn = self.quencher_name.clone().unwrap();
+        let rn = self.reporter_name.clone().unwrap();
+        self.strands.iter().for_each(|SDCStrand { name, left_glue, right_glue, .. }| {
+            if name.clone().is_some_and(|name| name == qn) && right_glue.is_none() {
+                panic!("Quenching strand must have a right glue -- No sequence provided for the quencher.");
+            }
+            if name.clone().is_some_and(|name| name == rn) && left_glue.is_none() {
+                panic!("Reporter strand must have a left glue -- No sequence provided for the fluorophore.");
+            }
+        });
+    }
+
+    /// Check for logic errors
+    fn validity_check(&self) {
+        self.fluo_quen_check();
+    }
+}
+
 impl SDC {
     pub fn from_params(params: SDCParams) -> Self {
+        params.validity_check();
+
         let mut glue_name_map: HashMap<String, usize> = HashMap::new();
 
         // Add one to account for the empty strand
