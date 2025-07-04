@@ -352,9 +352,9 @@ impl SDC {
         let glue_value = self.delta_g_matrix[(inv_glue, fluo_glue)]
             - (self.temperature - Celsius(37.0)).to_celsius()
             * self.entropy_matrix[(inv_glue, fluo_glue)];
-        let det_rate = glue_value.times_beta(self.temperature);
+        let bond_energy = glue_value.times_beta(self.temperature);
         // TODO: Is there a minus missing here ?
-        self.kf * Molar::u0_times(det_rate.exp())
+        self.kf * Molar::u0_times(bond_energy.exp())
     }
 
     fn fluorophore_att_rate(&self) -> PerSecond {
@@ -368,9 +368,9 @@ impl SDC {
         let glue_value = self.delta_g_matrix[(quench_glue, inv_glue)]
             - (self.temperature - Celsius(37.0)).to_celsius()
             * self.entropy_matrix[(quench_glue, inv_glue)];
-        let det_rate = glue_value.times_beta(self.temperature);
+        let bond_energy = glue_value.times_beta(self.temperature);
         // TODO: Is there a minus missing here?
-        self.kf * Molar::u0_times(det_rate.exp())
+        self.kf * Molar::u0_times(bond_energy.exp())
     }
 
     fn quencher_att_rate(&self) -> PerSecond {
@@ -381,9 +381,9 @@ impl SDC {
         let strand = state.tile_at_point(scaffold_point);
         match Some(strand) {
             // The quencher can attach to the strand
-            q if q == self.quencher_id => self.kf * self.quencher_concentration,
+            q if q == self.quencher_id => self.quencher_att_rate(),
             // The fluorophore can attach to the strand
-            r if r == self.reporter_id => self.kf * self.fluorophore_concentration,
+            r if r == self.reporter_id => self.fluorophore_att_rate(),
             // The quencher can detach from the strand
             Some(1) => self.quencher_det_rate(),
             // The fluorophore can detach from the strand
@@ -1005,7 +1005,10 @@ impl System for SDC {
             // If the tile is empty, we will return the rate at which attachment can occur
             0 => self.total_monomer_attachment_rate_at_point(state, scaffold_coord),
             // If the tile is full, we will return the rate at which detachment can occur
-            _ => self.monomer_detachment_rate_at_point(state, scaffold_coord) + self.monomer_change_rate_at_point(state, scaffold_coord),
+            _ =>
+                self.monomer_detachment_rate_at_point(state, scaffold_coord)
+                    + self.monomer_change_rate_at_point(state, scaffold_coord)
+
         }
     }
 
@@ -1846,6 +1849,18 @@ impl SDC {
             x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
         });
         triples
+    }
+
+    fn quencher_rates(&self) -> String {
+        let att_rate = self.quencher_att_rate();
+        let det_rate = self.quencher_det_rate();
+        format!("Attachment Rate: {}, Detachment Rate: {}", att_rate, det_rate)
+    }
+
+    fn fluorophore_rates(&self) -> String {
+        let att_rate = self.fluorophore_att_rate();
+        let det_rate = self.fluorophore_det_rate();
+        format!("Attachment Rate: {}, Detachment Rate: {}", att_rate, det_rate)
     }
 
     #[pyo3(name = "partition_function")]
