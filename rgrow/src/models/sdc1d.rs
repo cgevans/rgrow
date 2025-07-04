@@ -1388,13 +1388,13 @@ fn get_or_generate(
 
 impl SDCParams {
     fn fluo_quen_check(&self) {
-        let qn = self.quencher_name.clone().unwrap();
-        let rn = self.reporter_name.clone().unwrap();
+        let qn = self.quencher_name.clone();
+        let rn = self.reporter_name.clone();
         self.strands.iter().for_each(|SDCStrand { name, left_glue, right_glue, .. }| {
-            if name.clone().is_some_and(|name| name == qn) && right_glue.is_none() {
+            if name.clone() == qn && right_glue.is_none() {
                 panic!("Quenching strand must have a right glue -- No sequence provided for the quencher.");
             }
-            if name.clone().is_some_and(|name| name == rn) && left_glue.is_none() {
+            if name.clone() == rn && left_glue.is_none() {
                 panic!("Reporter strand must have a left glue -- No sequence provided for the fluorophore.");
             }
         });
@@ -2131,7 +2131,9 @@ mod test_sdc_model {
             strand_concentration: Array1::<Molar>::zeros(5),
             scaffold_concentration: Molar::zero(),
             glues: array![
-                [0, 0, 0],
+                [0, 0, 0],     // Null glue
+                [0, 0, 0],     // Fluorophore
+                [0, 0, 0],     // Quencher
                 [1, 3, 12],
                 [6, 2, 12],
                 [31, 3, 45],
@@ -2165,10 +2167,10 @@ mod test_sdc_model {
 
         // Check that the friends hashmap is being generated as expected
         let expected_friends = HashMap::from([
-            (1, HashSet::from([2])),
-            (2, HashSet::from([5])),
-            (3, HashSet::from([4, 6])),
-            (4, HashSet::from([1, 3])),
+            (3, HashSet::from([6, 8])),
+            (4, HashSet::from([3, 5])),
+            (1, HashSet::from([4])),
+            (2, HashSet::from([7]))
         ]);
         assert_eq!(expected_friends, sdc.friends_btm);
     }
@@ -2214,6 +2216,9 @@ mod test_sdc_model {
             strand_concentration: Array1::<Molar>::zeros(5),
             glues: array![
                 [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+
                 [1, 3, 12],
                 [11, 2, 12],
                 [29, 3, 45],
@@ -2246,16 +2251,16 @@ mod test_sdc_model {
         let x = sdc.system_states();
 
         assert_all!(
-            x.contains(&vec![0, 0, 2, 2, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 2, 2, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 0, 2, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 2, 0, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 2, 2, 0, 1, 0, 0]),
-            x.contains(&vec![0, 0, 2, 2, 5, 0, 0, 0]),
-            x.contains(&vec![0, 0, 0, 0, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 0, 0, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 0, 2, 0, 1, 0, 0]),
-            x.contains(&vec![0, 0, 0, 2, 5, 0, 0, 0])
+            x.contains(&vec![0, 0, 4, 4, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 4, 4, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 0, 4, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 4, 0, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 4, 4, 0, 3, 0, 0]),
+            x.contains(&vec![0, 0, 4, 4, 7, 0, 0, 0]),
+            x.contains(&vec![0, 0, 0, 0, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 0, 0, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 0, 4, 0, 3, 0, 0]),
+            x.contains(&vec![0, 0, 0, 4, 7, 0, 0, 0])
         );
 
         // Note: One is added to each since the 0 state is not in friends
