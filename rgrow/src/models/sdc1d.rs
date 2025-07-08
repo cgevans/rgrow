@@ -50,6 +50,9 @@ const EAST_GLUE_INDEX: usize = 2;
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 const U0: Molar = Molar(1.0);
 
+const QUENCHER_STRAND: Tile = 1;
+const REPORTER_STRAND: Tile = 2;
+
 fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     let mut big_float = big_float.clone();
     big_float.set_precision(64, rounding_mode).unwrap();
@@ -384,7 +387,42 @@ impl SDC {
         self.kf * self.quencher_concentration
     }
 
-    pub fn monomer_change_rate_at_point<S: State>(&self, state: &S, scaffold_point: PointSafe2) -> PerSecond {
+    /// Probability that the quencher is attached
+    fn quencher_probability(&self) -> f64 {
+        let a = self.quencher_att_rate().0;
+        let b = self.quencher_det_rate().0;
+        a / (a + b)
+    }
+
+    /// Choose whether the strand attaching has the quencher already attached
+    fn choose_quencher_attachment(&self) -> Tile {
+        let qid = self.quencher_id.unwrap();
+        let random = rand::random_range(0.0..1.0);
+        let prb = self.quencher_probability();
+        if random < prb {
+            QUENCHER_STRAND
+        } else {
+            qid
+        }
+    }
+
+    /// Choose whether the reporter strand has the fluorophore attached
+    fn choose_reporter_attachment(&self) -> Tile {
+        let rid = self.reporter_id.unwrap();
+        let random = rand::random_range(0.0..1.0);
+        let prb = self.fluorophore_probability();
+        if random < prb {
+            REPORTER_STRAND
+        } else {
+            rid
+        }
+    }
+
+    pub fn monomer_change_rate_at_point<S: State>(
+        &self,
+        state: &S,
+        scaffold_point: PointSafe2,
+    ) -> PerSecond {
         let strand = state.tile_at_point(scaffold_point);
         match Some(strand) {
             // The quencher can attach to the strand
@@ -414,7 +452,7 @@ impl SDC {
                 } else {
                     (true, acc, Event::MonomerAttachment(point, 1))
                 }
-            },
+            }
             r if r == self.reporter_id => {
                 acc -= self.fluorophore_att_rate();
                 if acc > PerSecond::zero() {
@@ -559,7 +597,7 @@ impl SDC {
 
     /// Given an SDC system, and some scaffold attachments
     ///
-    /// 0 := nothing attached to the saccffold
+    /// 0 := nothing attached to the scaffold
     fn g_system(&self, attachments: &[u32]) -> f64 {
         let mut sumg = 0.0;
 
@@ -996,9 +1034,7 @@ impl System for SDC {
                 state.update_detachment(strand);
                 state.set_sa(point, &0);
             }
-            Event::MonomerChange(point, strand) => {
-                state.set_sa(point, strand)
-            }
+            Event::MonomerChange(point, strand) => state.set_sa(point, strand),
             _ => panic!("This event is not supported in SDC"),
         };
         self
@@ -1018,10 +1054,10 @@ impl System for SDC {
             // If the tile is empty, we will return the rate at which attachment can occur
             0 => self.total_monomer_attachment_rate_at_point(state, scaffold_coord),
             // If the tile is full, we will return the rate at which detachment can occur
-            _ =>
+            _ => {
                 self.monomer_detachment_rate_at_point(state, scaffold_coord)
                     + self.monomer_change_rate_at_point(state, scaffold_coord)
-
+            }
         }
     }
 
@@ -1259,8 +1295,8 @@ impl TileBondInfo for SDC {
 
 // Here is potentially another way to process this, though not done.  Feel free to delete or modify.
 
-use std::hash::Hash;
 use crate::system::Orientation::WE;
+use std::hash::Hash;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
@@ -1433,7 +1469,12 @@ impl SDC {
         let mut strand_concentration = Array1::<f64>::zeros(strand_count);
 
         // Add the "standard" strands
-        strand_names.append(&mut vec!["null", "quencher", "fluorophore"].into_iter().map(String::from).collect());
+        strand_names.append(
+            &mut vec!["null", "quencher", "fluorophore"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+        );
         strand_colors.push([0, 0, 0, 0]);
         // FIXME: Add colors
         strand_colors.push([0, 0, 0, 0]);
@@ -1889,13 +1930,19 @@ impl SDC {
     fn quencher_rates(&self) -> String {
         let att_rate = self.quencher_att_rate();
         let det_rate = self.quencher_det_rate();
-        format!("Attachment Rate: {}, Detachment Rate: {}", att_rate, det_rate)
+        format!(
+            "Attachment Rate: {}, Detachment Rate: {}",
+            att_rate, det_rate
+        )
     }
 
     fn fluorophore_rates(&self) -> String {
         let att_rate = self.fluorophore_att_rate();
         let det_rate = self.fluorophore_det_rate();
-        format!("Attachment Rate: {}, Detachment Rate: {}", att_rate, det_rate)
+        format!(
+            "Attachment Rate: {}, Detachment Rate: {}",
+            att_rate, det_rate
+        )
     }
 
     #[pyo3(name = "partition_function")]
@@ -2144,9 +2191,9 @@ mod test_sdc_model {
             strand_concentration: Array1::<Molar>::zeros(5),
             scaffold_concentration: Molar::zero(),
             glues: array![
-                [0, 0, 0],     // Null glue
-                [0, 0, 0],     // Fluorophore
-                [0, 0, 0],     // Quencher
+                [0, 0, 0], // Null glue
+                [0, 0, 0], // Fluorophore
+                [0, 0, 0], // Quencher
                 [1, 3, 12],
                 [6, 2, 12],
                 [31, 3, 45],
@@ -2183,7 +2230,7 @@ mod test_sdc_model {
             (3, HashSet::from([6, 8])),
             (4, HashSet::from([3, 5])),
             (1, HashSet::from([4])),
-            (2, HashSet::from([7]))
+            (2, HashSet::from([7])),
         ]);
         assert_eq!(expected_friends, sdc.friends_btm);
     }
@@ -2231,7 +2278,6 @@ mod test_sdc_model {
                 [0, 0, 0],
                 [0, 0, 0],
                 [0, 0, 0],
-
                 [1, 3, 12],
                 [11, 2, 12],
                 [29, 3, 45],
