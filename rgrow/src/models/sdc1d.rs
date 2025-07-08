@@ -500,6 +500,12 @@ impl SDC {
                     return (true, acc, Event::None);
                 }
 
+                let strand = match strand {
+                    s if Some(s) == self.quencher_id => self.choose_quencher_attachment(),
+                    s if Some(s) == self.reporter_id => self.choose_reporter_attachment(),
+                    other => other,
+                };
+
                 return (true, acc, Event::MonomerAttachment(point, strand));
             }
         }
