@@ -361,6 +361,13 @@ impl SDC {
         self.kf * self.fluorophore_concentration
     }
 
+    /// Probability that a reporter strand has the fluorophore attached
+    fn fluorophore_probability(&self) -> f64 {
+        let a = self.fluorophore_att_rate().0;
+        let b = self.fluorophore_det_rate().0;
+        a / (a + b)
+    }
+
     fn quencher_det_rate(&self) -> PerSecond {
         if self.quencher_id.is_none() { return PerSecond::zero(); }
         let quench_glue = self.glues[(self.quencher_id.unwrap() as usize, EAST_GLUE_INDEX)];
