@@ -8,7 +8,7 @@ macro_rules! type_alias {
 /*
 * Important Notes
 *
-* Given some PointSafe2, in this model, it will represnt two things
+* Given some PointSafe2, in this model, it will represent two things
 * 1. Which of the scaffolds has an event happening
 * 2. In which position of the scaffold said event will take place
 *
@@ -16,7 +16,6 @@ macro_rules! type_alias {
 * - There are quite a few expects that need to be handled better
 * */
 
-use core::f64;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
@@ -50,6 +49,9 @@ const BOTTOM_GLUE_INDEX: usize = 1;
 const EAST_GLUE_INDEX: usize = 2;
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 const U0: Molar = Molar(1.0);
+
+const QUENCHER_STRAND: Tile = 1;
+const REPORTER_STRAND: Tile = 2;
 
 fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     let mut big_float = big_float.clone();
@@ -101,14 +103,22 @@ pub struct SDC {
     pub anchor_tiles: Vec<(PointSafe2, Tile)>,
     pub strand_names: Vec<String>,
     pub glue_names: Vec<String>,
+    /// Identifies the strand that serves as a binding site for the quencher
+    pub quencher_id: Option<Tile>,
+    /// Concentration of the quencher
+    pub quencher_concentration: Molar,
+    /// Name of the reporter tile
+    pub reporter_id: Option<Tile>,
+    /// Concentration of the fluorophore,
+    pub fluorophore_concentration: Molar,
     /// Colors of the scaffolds, strands can only stick if the
     /// colors are a perfect match
     ///
-    /// Note that this system will accept many scaffolds, thus this is a  2d array and not a 1d
+    /// Note that this system will accept many scaffolds; thus this is a 2d array and not a 1d
     /// array
     pub scaffold: Array2<Glue>,
     /// All strands in the system, they are represented by tiles
-    /// with only glue on the south, west, and east (nothing can stuck to the top of a strand)
+    /// with only glue on the south, west, and east (nothing can stick to the top of a strand)
     // pub strands: Array1<Tile>,
     pub strand_concentration: Array1<Molar>,
     /// The concentration of the scaffold
@@ -131,13 +141,13 @@ pub struct SDC {
     ///
     /// Set of tiles that can stick to scaffold gap with a given glue
     pub friends_btm: HashMap<Glue, HashSet<Tile>>,
-    /// Delta G at 37 degrees C in the formula to genereate the glue strengths
+    /// Delta G at 37 degrees C in the formula to generate the glue strengths
     pub delta_g_matrix: Array2<KcalPerMol>,
-    /// S in the formula to geenrate the glue strengths
+    /// S in the formula to generate the glue strengths
     pub entropy_matrix: Array2<KcalPerMolKelvin>,
     /// Temperature of the system
     ///
-    /// Not pub so that it cant accidentally be changed other than with the setter function
+    /// Not pub so that it can't accidentally be changed other than with the setter function
     /// that will also recalculate energy arrays
     temperature: Kelvin,
     /// The energy with which two strands will bond
@@ -201,7 +211,8 @@ impl SDC {
             // 3 <-> 4
             // ...
 
-            if b == 0 {
+            // Ignore the ones that have the wrong glue, and also the null tile, and the quencher / fluo
+            if b == 0 || t <= 2 {
                 continue;
             }
 
@@ -258,9 +269,7 @@ impl SDC {
         let num_of_strands = self.strand_names.len();
         let glue_links = ndarray::Zip::from(&self.delta_g_matrix)
             .and(&self.entropy_matrix)
-            .map_collect(|dg, ds|
-                *dg - (self.temperature - Celsius(37.0)).to_celsius() * *ds
-            ); // For each *possible* pair of strands, calculate the energy bond
+            .map_collect(|dg, ds| *dg - (self.temperature - Celsius(37.0)).to_celsius() * *ds); // For each *possible* pair of strands, calculate the energy bond
         for strand_f in 1..num_of_strands {
             // 1: no point in calculating for 0
             let (f_west_glue, f_btm_glue, f_east_glue) = {
@@ -330,6 +339,149 @@ impl SDC {
         self.kf * Molar::u0_times(bond_energy.exp())
     }
 
+    fn inverse_glue_id(g: Glue) -> Glue {
+        match g {
+            0 => 0,
+            x if x % 2 == 0 => x - 1,
+            x => x + 1
+        }
+    }
+
+    /// The fluorophore attaches to the left of the reporter
+    fn fluorophore_det_rate(&self) -> PerSecond {
+        if self.reporter_id.is_none() { return PerSecond::zero(); }
+        let fluo_glue = self.glues[(self.reporter_id.unwrap() as usize, WEST_GLUE_INDEX)];
+        let inv_glue = Self::inverse_glue_id(fluo_glue);
+        let glue_value = self.delta_g_matrix[(inv_glue, fluo_glue)]
+            - (self.temperature - Celsius(37.0)).to_celsius()
+            * self.entropy_matrix[(inv_glue, fluo_glue)];
+        let bond_energy = glue_value.times_beta(self.temperature);
+        // TODO: Is there a minus missing here ?
+        self.kf * Molar::u0_times(bond_energy.exp())
+    }
+
+    fn fluorophore_att_rate(&self) -> PerSecond {
+        self.kf * self.fluorophore_concentration
+    }
+
+    /// Probability that a reporter strand has the fluorophore attached
+    fn fluorophore_probability(&self) -> f64 {
+        let a = self.fluorophore_att_rate().0;
+        let b = self.fluorophore_det_rate().0;
+        a / (a + b)
+    }
+
+    fn quencher_det_rate(&self) -> PerSecond {
+        if self.quencher_id.is_none() { return PerSecond::zero(); }
+        let quench_glue = self.glues[(self.quencher_id.unwrap() as usize, EAST_GLUE_INDEX)];
+        let inv_glue = Self::inverse_glue_id(quench_glue);
+        let glue_value = self.delta_g_matrix[(quench_glue, inv_glue)]
+            - (self.temperature - Celsius(37.0)).to_celsius()
+            * self.entropy_matrix[(quench_glue, inv_glue)];
+        let bond_energy = glue_value.times_beta(self.temperature);
+        // TODO: Is there a minus missing here?
+        self.kf * Molar::u0_times(bond_energy.exp())
+    }
+
+    fn quencher_att_rate(&self) -> PerSecond {
+        self.kf * self.quencher_concentration
+    }
+
+    /// Probability that the quencher is attached
+    fn quencher_probability(&self) -> f64 {
+        let a = self.quencher_att_rate().0;
+        let b = self.quencher_det_rate().0;
+        a / (a + b)
+    }
+
+    /// Choose whether the strand attaching has the quencher already attached
+    fn choose_quencher_attachment(&self) -> Tile {
+        let qid = self.quencher_id.unwrap();
+        let random = rand::random_range(0.0..1.0);
+        let prb = self.quencher_probability();
+        if random < prb {
+            QUENCHER_STRAND
+        } else {
+            qid
+        }
+    }
+
+    /// Choose whether the reporter strand has the fluorophore attached
+    fn choose_reporter_attachment(&self) -> Tile {
+        let rid = self.reporter_id.unwrap();
+        let random = rand::random_range(0.0..1.0);
+        let prb = self.fluorophore_probability();
+        if random < prb {
+            REPORTER_STRAND
+        } else {
+            rid
+        }
+    }
+
+    pub fn monomer_change_rate_at_point<S: State>(
+        &self,
+        state: &S,
+        scaffold_point: PointSafe2,
+    ) -> PerSecond {
+        let strand = state.tile_at_point(scaffold_point);
+        match Some(strand) {
+            // The quencher can attach to the strand
+            q if q == self.quencher_id => self.quencher_att_rate(),
+            // The fluorophore can attach to the strand
+            r if r == self.reporter_id => self.fluorophore_att_rate(),
+            // The quencher can detach from the strand
+            Some(1) => self.quencher_det_rate(),
+            // The fluorophore can detach from the strand
+            Some(2) => self.fluorophore_det_rate(),
+            _ => PerSecond::zero(),
+        }
+    }
+
+    pub fn choose_monomer_change_at_point<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+        mut acc: PerSecond,
+    ) -> (bool, PerSecond, Event) {
+        let strand = state.tile_at_point(point);
+        match Some(strand) {
+            q if q == self.quencher_id => {
+                acc -= self.quencher_att_rate();
+                if acc > PerSecond::zero() {
+                    (true, acc, Event::None)
+                } else {
+                    (true, acc, Event::MonomerAttachment(point, 1))
+                }
+            }
+            r if r == self.reporter_id => {
+                acc -= self.fluorophore_att_rate();
+                if acc > PerSecond::zero() {
+                    (true, acc, Event::None)
+                } else {
+                    (true, acc, Event::MonomerAttachment(point, 2))
+                }
+            },
+            // The quencher is currently attached
+            Some(1) => {
+                acc -= self.quencher_det_rate();
+                if acc > PerSecond::zero() {
+                    (true, acc, Event::None)
+                } else {
+                    (true, acc, Event::MonomerChange(point, self.quencher_id.unwrap()))
+                }
+            },
+            Some(2) => {
+                acc -= self.fluorophore_det_rate();
+                if acc > PerSecond::zero() {
+                    (true, acc, Event::None)
+                } else {
+                    (true, acc, Event::MonomerChange(point, self.reporter_id.unwrap()))
+                }
+            },
+            _ => (false, acc, Event::None),
+        }
+    }
+
     pub fn choose_monomer_attachment_at_point<S: State>(
         &self,
         state: &S,
@@ -368,15 +520,16 @@ impl SDC {
         let point = scaffold_coord;
         let tile = state.tile_at_point(point);
 
-        // If the scaffold already has a strand binded, then nothing can attach to it
+        // If the scaffold already has a strand bound, then nothing can attach to it
         if tile != 0 {
             return (false, acc, Event::None);
         }
 
+        let index = (point.0.0.rem_euclid(self.scaffold.dim().0), point.0.1);
         let scaffold_glue = self
             .scaffold
-            .get((point.0 .0.rem_euclid(self.scaffold.dim().0), point.0 .1))
-            .expect("Invalid Index");
+            .get(index)
+            .expect(format!("Invalid Index: {:?}", index).as_str());
 
         let empty_map = HashSet::default();
         let friends = self.friends_btm.get(scaffold_glue).unwrap_or(&empty_map);
@@ -392,6 +545,12 @@ impl SDC {
                     return (true, acc, Event::None);
                 }
 
+                let strand = match strand {
+                    s if Some(s) == self.quencher_id => self.choose_quencher_attachment(),
+                    s if Some(s) == self.reporter_id => self.choose_reporter_attachment(),
+                    other => other,
+                };
+
                 return (true, acc, Event::MonomerAttachment(point, strand));
             }
         }
@@ -404,8 +563,6 @@ impl SDC {
         state: &S,
         scaffold_coord: PointSafe2,
     ) -> PerSecond {
-        // If we set acc = 0, would it not be the case that we just attach to the first tile we can
-        // ?
         match self.find_monomer_attachment_possibilities_at_point(
             state,
             PerSecond::zero(),
@@ -440,7 +597,7 @@ impl SDC {
 
     /// Given an SDC system, and some scaffold attachments
     ///
-    /// 0 := nothing attached to the saccffold
+    /// 0 := nothing attached to the scaffold
     fn g_system(&self, attachments: &[u32]) -> f64 {
         let mut sumg = 0.0;
 
@@ -469,8 +626,6 @@ impl SDC {
     pub fn system_states(&self) -> Vec<Vec<u32>> {
         let scaffold = self.scaffold();
 
-        // Calculate the number of combinations ( this will i think make it a little more optimized
-        // since we wont need realloc )
         let mut acc = 1;
         for b in &scaffold {
             if let Some(x) = self.friends_btm.get(b) {
@@ -859,7 +1014,8 @@ impl System for SDC {
         match event {
             Event::None => todo!(),
             Event::MonomerAttachment(scaffold_point, _)
-            | Event::MonomerDetachment(scaffold_point) => {
+            | Event::MonomerDetachment(scaffold_point)
+            | Event::MonomerChange(scaffold_point, _) => {
                 self.update_monomer_point(state, scaffold_point)
             }
             _ => panic!("This event is not supported in SDC"),
@@ -878,6 +1034,7 @@ impl System for SDC {
                 state.update_detachment(strand);
                 state.set_sa(point, &0);
             }
+            Event::MonomerChange(point, strand) => state.set_sa(point, strand),
             _ => panic!("This event is not supported in SDC"),
         };
         self
@@ -897,7 +1054,10 @@ impl System for SDC {
             // If the tile is empty, we will return the rate at which attachment can occur
             0 => self.total_monomer_attachment_rate_at_point(state, scaffold_coord),
             // If the tile is full, we will return the rate at which detachment can occur
-            _ => self.monomer_detachment_rate_at_point(state, scaffold_coord),
+            _ => {
+                self.monomer_detachment_rate_at_point(state, scaffold_coord)
+                    + self.monomer_change_rate_at_point(state, scaffold_coord)
+            }
         }
     }
 
@@ -907,19 +1067,44 @@ impl System for SDC {
         point: crate::canvas::PointSafe2,
         acc: PerSecond,
     ) -> crate::system::Event {
-        match self.choose_monomer_detachment_at_point(state, point, acc) {
-            (true, _, event) => event,
-            (false, acc, _) => match self.choose_monomer_attachment_at_point(state, point, acc) {
-                (true, _, event) => event,
-                (false, acc, _) => panic!(
-                    "Rate: {:?}, {:?}, {:?}, {:?}",
-                    acc,
-                    point,
-                    state,
-                    state.raw_array()
-                ),
-            },
-        }
+        let (occur, acc, event) =
+            self.choose_monomer_detachment_at_point(state, point, acc);
+        if occur { return event; }
+
+        let (occur, acc, event) =
+            self.choose_monomer_attachment_at_point(state, point, acc);
+        if occur { return event; }
+
+        let (occur, acc, event) =
+            self.choose_monomer_change_at_point(state, point, acc);
+        if occur { return event; }
+
+        // Now for debugging purposes:
+
+        let mut str_builder = String::new();
+
+        let (_, rate_monomer_att, event_monomer_att) =
+            self.choose_monomer_attachment_at_point(state, point, PerSecond::zero());
+        str_builder.push_str(&format!(
+            "Attachment: rate of {:?}, event {:?}\n",
+            rate_monomer_att, event_monomer_att
+        ));
+
+        let (_, rate_monomer_det, event_monomer_det) =
+            self.choose_monomer_detachment_at_point(state, point, PerSecond::zero());
+        str_builder.push_str(&format!(
+            "Detachment: rate of {:?}, event {:?}\n",
+            rate_monomer_det, event_monomer_det
+        ));
+
+        let (_, rate_monomer_change, event_monomer_change) =
+            self.choose_monomer_change_at_point(state, point, PerSecond::zero());
+        str_builder.push_str(&format!(
+            "Change: rate of {:?}, event {:?}\n",
+            rate_monomer_change, event_monomer_change
+        ));
+
+        panic!("{:?}\nRate: {:?}, {:?}, {:?}, {:?}", str_builder, acc, point, state, state.raw_array());
     }
 
     fn seed_locs(&self) -> Vec<(crate::canvas::PointSafe2, Tile)> {
@@ -1110,6 +1295,7 @@ impl TileBondInfo for SDC {
 
 // Here is potentially another way to process this, though not done.  Feel free to delete or modify.
 
+use crate::system::Orientation::WE;
 use std::hash::Hash;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1150,7 +1336,7 @@ impl From<Vec<Vec<Option<String>>>> for SingleOrMultiScaffold {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub struct SDCStrand {
     pub name: Option<String>,
@@ -1182,6 +1368,14 @@ fn gsorseq_to_gs(gsorseq: &GsOrSeq) -> (KcalPerMol, KcalPerMolKelvin) {
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub struct SDCParams {
     pub strands: Vec<SDCStrand>,
+    /// Identifies the strand that serves as a binding site for the quencher
+    pub quencher_name: Option<String>,
+    /// Concentration of the quencher
+    pub quencher_concentration: f64,
+    /// Name of the reporter tile
+    pub reporter_name: Option<String>,
+    /// Concentration of the fluorophore,
+    pub fluorophore_concentration: f64,
     pub scaffold: SingleOrMultiScaffold,
     pub scaffold_concentration: f64,
     // Pair with delta G at 37 degrees C and delta S
@@ -1190,9 +1384,9 @@ pub struct SDCParams {
     pub k_n: f64,
     pub k_c: f64,
     pub temperature: f64,
-    // Optinal (additive) junction penalty
+    // Optional (additive) junction penalty
     //
-    // Meaning that negative penalty, will make binding more likely
+    // Meaning that negative penalty will make binding more likely
     pub junction_penalty_dg: Option<KcalPerMol>,
     pub junction_penalty_ds: Option<KcalPerMolKelvin>,
 }
@@ -1216,7 +1410,7 @@ fn get_or_generate(
     count: &mut usize,
     val: Option<String>,
 ) -> usize {
-    // If the user didnt prove a glue, we assume nothign will ever stick
+    // If the user didn't provide a glue value, we assume nothing will ever stick
     let str = match val {
         Some(x) => x,
         None => return 0,
@@ -1241,21 +1435,55 @@ fn get_or_generate(
     }
 }
 
+impl SDCParams {
+    fn fluo_quen_check(&self) {
+        let qn = self.quencher_name.clone();
+        let rn = self.reporter_name.clone();
+        self.strands.iter().for_each(|SDCStrand { name, left_glue, right_glue, .. }| {
+            if name.clone() == qn && right_glue.is_none() {
+                panic!("Quenching strand must have a right glue -- No sequence provided for the quencher.");
+            }
+            if name.clone() == rn && left_glue.is_none() {
+                panic!("Reporter strand must have a left glue -- No sequence provided for the fluorophore.");
+            }
+        });
+    }
+
+    /// Check for logic errors
+    fn validity_check(&self) {
+        self.fluo_quen_check();
+    }
+}
+
 impl SDC {
     pub fn from_params(params: SDCParams) -> Self {
+        params.validity_check();
+
         let mut glue_name_map: HashMap<String, usize> = HashMap::new();
 
         // Add one to account for the empty strand
-        let strand_count = params.strands.len() + 1;
+        let strand_count = params.strands.len() + 3;
 
         let mut strand_names: Vec<String> = Vec::with_capacity(strand_count);
         let mut strand_colors: Vec<[u8; 4]> = Vec::with_capacity(strand_count);
         let mut strand_concentration = Array1::<f64>::zeros(strand_count);
-        strand_names.push("null".to_string());
+
+        // Add the "standard" strands
+        strand_names.append(
+            &mut vec!["null", "quencher", "fluorophore"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+        );
+        strand_colors.push([0, 0, 0, 0]);
+        // FIXME: Add colors
+        strand_colors.push([0, 0, 0, 0]);
         strand_colors.push([0, 0, 0, 0]);
         strand_concentration[0] = 0.0;
+        strand_concentration[1] = params.quencher_concentration;
+        strand_concentration[2] = params.fluorophore_concentration;
 
-        let mut glues = Array2::<usize>::zeros((strand_count + 1, 3));
+        let mut glues = Array2::<usize>::zeros((strand_count + 3, 3));
         let mut gluenum = 1;
 
         for (
@@ -1277,16 +1505,47 @@ impl SDC {
             let color_or_rand = get_color_or_random(color_as_str).unwrap();
             strand_colors.push(color_or_rand);
 
-            // Add the glues, note that we want to leave idnex (0, _) empty (for the empty tile)
-            glues[(id + 1, WEST_GLUE_INDEX)] =
+            // Add the glues, note that we want to leave index (0, _) empty (for the empty tile),
+            // as well as (1, _) and (2, _) for the quencher and fluorophore
+            glues[(id + 3, WEST_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, left_glue);
-            glues[(id + 1, BOTTOM_GLUE_INDEX)] =
+            glues[(id + 3, BOTTOM_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, btm_glue);
-            glues[(id + 1, EAST_GLUE_INDEX)] =
+            glues[(id + 3, EAST_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, right_glue);
 
             // Add the concentrations
-            strand_concentration[id + 1] = concentration;
+            strand_concentration[id + 3] = concentration;
+        }
+
+        let quencher_id: Option<Tile> = params
+            .quencher_name
+            .map(|name| strand_names.iter().position(|x| x == &name))
+            .flatten()
+            .map(|index| index as Tile);
+
+        let reporter_id = params
+            .reporter_name
+            .map(|name| strand_names.iter().position(|x| x == &name))
+            .flatten()
+            .map(|index| index as Tile);
+
+        // NOTE:
+        // - When the quencher is on the quench tile, the east glue becomes Null
+        // - Similarly for the reporter strand
+
+        if let Some(q_id) = quencher_id {
+            let q_id = q_id as usize;
+            glues[(1, WEST_GLUE_INDEX)] = glues[(q_id, WEST_GLUE_INDEX)];
+            glues[(1, BOTTOM_GLUE_INDEX)] = glues[(q_id, BOTTOM_GLUE_INDEX)];
+            glues[(1, EAST_GLUE_INDEX)] = 0;
+        }
+
+        if let Some(r_id) = reporter_id {
+            let r_id = r_id as usize;
+            glues[(2, WEST_GLUE_INDEX)] = 0;
+            glues[(2, BOTTOM_GLUE_INDEX)] = glues[(r_id, BOTTOM_GLUE_INDEX)];
+            glues[(2, EAST_GLUE_INDEX)] = glues[(r_id, EAST_GLUE_INDEX)];
         }
 
         // Delta G at 37 degrees C
@@ -1319,7 +1578,7 @@ impl SDC {
             // sure that all strings are inside the glue_name_map, and if they arent, we can add
             // them. The second time around we know that the glues will always be found in the map
             //
-            // However, since you cant mutate the strands glues, it shuold be fine to just ignore
+            // However, since you can't mutate the strand glues, it should be fine to just ignore
             // the glues that do not exist
             let (i, j) = match (glue_name_map.get(&i), glue_name_map.get(&j)) {
                 (Some(&x), Some(&y)) => (x, y),
@@ -1371,6 +1630,10 @@ impl SDC {
                 glues,
                 scaffold,
                 glue_names,
+                quencher_id,
+                quencher_concentration: Molar(params.quencher_concentration),
+                reporter_id,
+                fluorophore_concentration: Molar(params.fluorophore_concentration),
                 kf,
                 delta_g_matrix: glue_delta_g,
                 entropy_matrix: glue_s,
@@ -1610,7 +1873,7 @@ impl SDC {
         probability
     }
 
-    /// Change temperature of the system (degrees C) and update system with that new temperature
+    /// Change the temperature of the system (degrees C) and update the system
     fn set_tmp_c(&mut self, tmp: f64) {
         self.temperature = Celsius(tmp).into();
         self.update_system();
@@ -1662,6 +1925,24 @@ impl SDC {
             x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
         });
         triples
+    }
+
+    fn quencher_rates(&self) -> String {
+        let att_rate = self.quencher_att_rate();
+        let det_rate = self.quencher_det_rate();
+        format!(
+            "Attachment Rate: {}, Detachment Rate: {}",
+            att_rate, det_rate
+        )
+    }
+
+    fn fluorophore_rates(&self) -> String {
+        let att_rate = self.fluorophore_att_rate();
+        let det_rate = self.fluorophore_det_rate();
+        format!(
+            "Attachment Rate: {}, Detachment Rate: {}",
+            att_rate, det_rate
+        )
     }
 
     #[pyo3(name = "partition_function")]
@@ -1836,6 +2117,10 @@ mod test_anneal {
             k_c: 1e4,
             junction_penalty_dg: None,
             junction_penalty_ds: None,
+            quencher_name: None,
+            quencher_concentration: 0.0,
+            reporter_name: None,
+            fluorophore_concentration: 0.0,
         };
 
         let mut sdc = SDC::from_params(sdc_params);
@@ -1892,17 +2177,23 @@ mod test_sdc_model {
     use super::*;
     #[test]
     fn test_update_system() {
-        // a lot of the parameters here make no sense, but they wont be used in the tests so it
-        // doesnt matter
+        // a lot of the parameters here make no sense, but they won't be used in the tests, so it
+        // doesn't matter
         let mut sdc = SDC {
             anchor_tiles: Vec::new(),
             strand_names: Vec::new(),
             glue_names: Vec::new(),
+            quencher_id: None,
+            quencher_concentration: Molar::zero(),
+            reporter_id: None,
+            fluorophore_concentration: Molar::zero(),
             scaffold: Array2::<usize>::zeros((5, 5)),
             strand_concentration: Array1::<Molar>::zeros(5),
             scaffold_concentration: Molar::zero(),
             glues: array![
-                [0, 0, 0],
+                [0, 0, 0], // Null glue
+                [0, 0, 0], // Fluorophore
+                [0, 0, 0], // Quencher
                 [1, 3, 12],
                 [6, 2, 12],
                 [31, 3, 45],
@@ -1936,10 +2227,10 @@ mod test_sdc_model {
 
         // Check that the friends hashmap is being generated as expected
         let expected_friends = HashMap::from([
-            (1, HashSet::from([2])),
-            (2, HashSet::from([5])),
-            (3, HashSet::from([4, 6])),
-            (4, HashSet::from([1, 3])),
+            (3, HashSet::from([6, 8])),
+            (4, HashSet::from([3, 5])),
+            (1, HashSet::from([4])),
+            (2, HashSet::from([7])),
         ]);
         assert_eq!(expected_friends, sdc.friends_btm);
     }
@@ -1977,9 +2268,15 @@ mod test_sdc_model {
             anchor_tiles: Vec::new(),
             strand_names: Vec::new(),
             glue_names: Vec::new(),
+            quencher_id: None,
+            quencher_concentration: Molar::zero(),
+            reporter_id: None,
+            fluorophore_concentration: Molar::zero(),
             scaffold,
             strand_concentration: Array1::<Molar>::zeros(5),
             glues: array![
+                [0, 0, 0],
+                [0, 0, 0],
                 [0, 0, 0],
                 [1, 3, 12],
                 [11, 2, 12],
@@ -2013,16 +2310,16 @@ mod test_sdc_model {
         let x = sdc.system_states();
 
         assert_all!(
-            x.contains(&vec![0, 0, 2, 2, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 2, 2, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 0, 2, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 2, 0, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 2, 2, 0, 1, 0, 0]),
-            x.contains(&vec![0, 0, 2, 2, 5, 0, 0, 0]),
-            x.contains(&vec![0, 0, 0, 0, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 0, 0, 5, 1, 0, 0]),
-            x.contains(&vec![0, 0, 0, 2, 0, 1, 0, 0]),
-            x.contains(&vec![0, 0, 0, 2, 5, 0, 0, 0])
+            x.contains(&vec![0, 0, 4, 4, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 4, 4, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 0, 4, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 4, 0, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 4, 4, 0, 3, 0, 0]),
+            x.contains(&vec![0, 0, 4, 4, 7, 0, 0, 0]),
+            x.contains(&vec![0, 0, 0, 0, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 0, 0, 7, 3, 0, 0]),
+            x.contains(&vec![0, 0, 0, 4, 0, 3, 0, 0]),
+            x.contains(&vec![0, 0, 0, 4, 7, 0, 0, 0])
         );
 
         // Note: One is added to each since the 0 state is not in friends
@@ -2136,6 +2433,10 @@ mod test_sdc_model {
             k_c: 1e4,
             junction_penalty_dg: None,
             junction_penalty_ds: None,
+            quencher_name: None,
+            quencher_concentration: 0.0,
+            reporter_name: None,
+            fluorophore_concentration: 0.0,
         };
 
         let mut sdc = SDC::from_params(sdc_params);
@@ -2144,7 +2445,7 @@ mod test_sdc_model {
     }
 
     #[test]
-    fn probablities() {
+    fn probabilities() {
         let sdc = scaffold_for_tests();
         let scaffold = vec![0, 0, 2, 8, 16, 18, 6, 0, 0];
         assert_eq!(sdc.scaffold(), scaffold);
@@ -2169,7 +2470,7 @@ mod test_sdc_model {
         //     println!("Probability of {} for {:?}", p, s);
         // });
 
-        assert_eq!(probs[0].0, vec![0, 0, 1, 3, 5, 7, 2, 0, 0]);
+        assert_eq!(probs[0].0, vec![0, 0, 3, 5, 7, 9, 4, 0, 0]);
     }
 
     #[test]
@@ -2186,7 +2487,7 @@ mod test_sdc_model {
             }
         }
 
-        // Since the input is 0, we shuold see that MFE is reached when last strand is 0
+        // Since the input is 0, we should see that MFE is reached when the last strand is 0
         //
         // We know that there are exactly two elements here (since the SDC system used has
         // complexity of two)
@@ -2199,7 +2500,7 @@ mod test_sdc_model {
             assert!(s_energy < f_energy);
         }
 
-        let mfe_config = [0, 0, 1, 3, 5, 7, 2, 0, 0];
+        let mfe_config = [0, 0, 3, 5, 7, 9, 4, 0, 0];
         let (acc, _) = sdc.mfe_configuration();
         assert_eq!(mfe_config.to_vec(), acc);
     }
