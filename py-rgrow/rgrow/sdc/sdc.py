@@ -2,6 +2,7 @@ from typing import Mapping
 import rgrow as rg
 import numpy as np
 import yaml
+import logging
 
 from .anneal import Anneal, AnnealOutputs
 import tqdm
@@ -170,7 +171,10 @@ class SDC(rg.rgrow.SDC):
             len(self.params.strands) + 3,
         )
 
-        for i, t in tqdm.tqdm(enumerate(temperatures), total=len(temperatures)):
+        pbar = tqdm.tqdm(enumerate(temperatures), total=len(temperatures))
+        for i, t in pbar:
+            pbar.set_description(f"{t:7.3f}°C")
+
             self.set_param("temperature", t)
             self.update_all(state)
             self.evolve(state, for_time=anneal.timestep)
