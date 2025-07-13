@@ -523,7 +523,7 @@ impl Rate for PerSecond {
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
-pub struct PerSecond(f64);
+pub struct PerSecond(pub f64);
 
 impl PerSecond {
     pub fn new(value: f64) -> PerSecond {

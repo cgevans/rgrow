@@ -50,6 +50,10 @@ class SDCParams:
         default_factory=list
     )  # | list[list[str | None]] # FIXME: can't deal with typing for this
     strands: list[SDCStrand] = field(default_factory=list)
+    quencher_concentration: float = 0.0
+    quencher_name: str | None = None
+    fluorophore_concentration: float = 0.0
+    reporter_name: str | None = None
     scaffold_concentration: float = 1e-100
     k_n: float = 0.0
     k_c: float = 0.0
@@ -70,7 +74,7 @@ class SDCParams:
 
     def write_json(self, filename: str) -> None:
         with open(filename, "w+") as f:
-                json.dump(self.to_dict(), f)
+            json.dump(self.to_dict(), f)
 
     def write_yaml(self, filename: str) -> None:
         with open(filename, "w+") as f:
@@ -162,10 +166,14 @@ class SDC(rg.rgrow.SDC):
             (anneal.scaffold_count, scaffold_len),
             "square",
             "none",
-            len(self.params.strands) + 1,
+            # The strands defined by the user + null + fluorophore + quencher
+            len(self.params.strands) + 3,
         )
 
-        for i, t in tqdm.tqdm(enumerate(temperatures), total=len(temperatures)):
+        pbar = tqdm.tqdm(enumerate(temperatures), total=len(temperatures))
+        for i, t in pbar:
+            pbar.set_description(f"{t:7.3f}°C")
+
             self.set_param("temperature", t)
             self.update_all(state)
             self.evolve(state, for_time=anneal.timestep)

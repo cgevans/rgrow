@@ -1,7 +1,12 @@
+import dataclasses
+import json
+
 import numpy as np
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 import pickle
+
+import yaml
 from platformdirs import user_data_dir
 from pathlib import Path
 import sys
@@ -49,6 +54,17 @@ class Anneal:
     scaffold_count: int = 100
     timestep: float = 2.0
     temperature_adjustment: float = 8.0
+
+    def to_dict(self) -> dict:
+        return dataclasses.asdict(self)
+
+    def write_json(self, filename: str) -> None:
+        with open(filename, "w+") as f:
+            json.dump(self.to_dict(), f)
+
+    def write_yaml(self, filename: str) -> None:
+        with open(filename, "w+") as f:
+            yaml.dump(self, f)
 
     @property
     def adjusted_initial_tmp(self):
@@ -133,9 +149,8 @@ class AnnealOutputs:
     anneal: "Anneal"
     state: "State"
 
-    def save_data(self, file_name: str):
+    def save_data(self, file_name: str, app_dir: Path = (Path(user_data_dir("rgrow")) / "sdc")):
         try:
-            app_dir = Path(user_data_dir("rgrow")) / "sdc"
             app_dir.mkdir(parents=True, exist_ok=True)
             file_path = app_dir / file_name
             data = {
@@ -150,14 +165,14 @@ class AnnealOutputs:
             print(f"[ERROR] Failed to write file: {e}", file=sys.stderr)
 
     @staticmethod
-    def load_data(file_name: str) -> "AnnealOutputs":
+    def load_data(file_name: str, app_dir: Path = (Path(user_data_dir("rgrow")) / "sdc")) -> "AnnealOutputs":
         """
         Loads a previously saved simulation result, and reconstructs the system and state.
         """
         from .sdc import SDC
 
         try:
-            file_path = Path(user_data_dir("rgrow")) / "sdc" / file_name
+            file_path = app_dir / file_name
             with file_path.open("rb") as f:
                 data = pickle.load(f)
 
