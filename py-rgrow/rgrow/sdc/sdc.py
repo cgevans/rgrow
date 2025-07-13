@@ -2,7 +2,6 @@ from typing import Mapping
 import rgrow as rg
 import numpy as np
 import yaml
-import logging
 
 from .anneal import Anneal, AnnealOutputs
 import tqdm
