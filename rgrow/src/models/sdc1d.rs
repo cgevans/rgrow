@@ -168,6 +168,11 @@ impl SDC {
         *self.strand_energy_bonds[(x as usize, y as usize)].get_or_init(|| {
             let x_east_glue = self.glues[(x as usize, EAST_GLUE_INDEX)];
             let y_west_glue = self.glues[(y as usize, WEST_GLUE_INDEX)];
+            let x_inverse = Self::inverse_glue_id(x_east_glue);
+            if x_inverse != y_west_glue {
+                return 0.0;
+            }
+
             let glue_value = (self.delta_g_matrix[(x_east_glue, y_west_glue)]
                 + self.junction_penalty.0)
                 - (self.temperature - Celsius(37.0)).to_celsius()
