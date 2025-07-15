@@ -160,6 +160,7 @@ pub struct SDC {
     /// The energy with which a strand attached to scaffold
     #[serde(skip)]
     scaffold_energy_bonds: Array1<OnceLock<f64>>,
+    junction_penalty: (KcalPerMol, KcalPerMolKelvin),
 }
 
 impl SDC {
@@ -167,9 +168,10 @@ impl SDC {
         *self.strand_energy_bonds[(x as usize, y as usize)].get_or_init(|| {
             let x_east_glue = self.glues[(x as usize, EAST_GLUE_INDEX)];
             let y_west_glue = self.glues[(y as usize, WEST_GLUE_INDEX)];
-            let glue_value = self.delta_g_matrix[(x_east_glue, y_west_glue)]
+            let glue_value = (self.delta_g_matrix[(x_east_glue, y_west_glue)]
+                + self.junction_penalty.0)
                 - (self.temperature - Celsius(37.0)).to_celsius()
-                    * self.entropy_matrix[(x_east_glue, y_west_glue)];
+                    * (self.entropy_matrix[(x_east_glue, y_west_glue)] + self.junction_penalty.1);
             glue_value.times_beta(self.temperature)
         })
     }
@@ -1667,6 +1669,10 @@ impl SDC {
                 friends_btm: HashMap::new(),
                 strand_energy_bonds: Array2::default((strand_count, strand_count)),
                 scaffold_energy_bonds: Array1::default(strand_count),
+                junction_penalty: (
+                    params.junction_penalty_dg.unwrap_or(KcalPerMol(0.0)),
+                    params.junction_penalty_ds.unwrap_or(KcalPerMolKelvin(0.0)),
+                ),
             };
             s.update_system();
             s
@@ -2234,6 +2240,7 @@ mod test_sdc_model {
             temperature: Celsius(5.0).into(),
             strand_energy_bonds: Array2::default((5, 5)),
             scaffold_energy_bonds: Array1::default(5),
+            junction_penalty: (KcalPerMol::zero(), KcalPerMolKelvin::zero()),
         };
 
         sdc.update_system();
@@ -2319,6 +2326,7 @@ mod test_sdc_model {
             temperature: Celsius(50.0).into(),
             strand_energy_bonds: Array2::default((5, 5)),
             scaffold_energy_bonds: Array1::default(5),
+            junction_penalty: (KcalPerMol::zero(), KcalPerMolKelvin::zero()),
         };
         // We need to fill the friends map
         sdc.update_system();
