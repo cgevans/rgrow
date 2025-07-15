@@ -521,45 +521,45 @@ class SDC:
     @property
     def entropy_matrix(self) -> NDArray[np.float64]:
         """
-        Get the entropy matrix for glue interactions.
+        Get the ΔS matrix for glue interactions.
 
         Returns
         -------
         NDArray[np.float64]
-            The entropy matrix in kcal/mol/K units.
+            The ΔS matrix in kcal/mol/K units.
         """
 
     @entropy_matrix.setter
     def entropy_matrix(self, value: NDArray[np.float64]) -> None:
         """
-        Set the entropy matrix for glue interactions.
+        Set the ΔS matrix for glue interactions.
 
         Parameters
         ----------
         value : NDArray[np.float64]
-            The entropy matrix in kcal/mol/K units.
+            The ΔS matrix in kcal/mol/K units.
         """
 
     @property
     def delta_g_matrix(self) -> NDArray[np.float64]:
         """
-        Get the delta G matrix for glue interactions.
+        Get the ΔG(T=37°C) matrix for glue interactions.
 
         Returns
         -------
         NDArray[np.float64]
-            The delta G matrix in kcal/mol units.
+            The ΔG(T=37°C) matrix in kcal/mol units.
         """
 
     @delta_g_matrix.setter
     def delta_g_matrix(self, value: NDArray[np.float64]) -> None:
         """
-        Set the delta G matrix for glue interactions.
+        Set the ΔG(T=37°C) matrix for glue interactions.
 
         Parameters
         ----------
         value : NDArray[np.float64]
-            The delta G matrix in kcal/mol units.
+            The ΔG(T=37°C) matrix in kcal/mol units.
         """
 
 class EvolveBounds:
