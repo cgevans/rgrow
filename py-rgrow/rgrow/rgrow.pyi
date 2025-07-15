@@ -518,6 +518,50 @@ class SDC:
         self, state: State | FFSStateRef | NDArray[np.uint]
     ) -> NDArray[np.str_]: ...
 
+    @property
+    def entropy_matrix(self) -> NDArray[np.float64]:
+        """
+        Get the entropy matrix for glue interactions.
+
+        Returns
+        -------
+        NDArray[np.float64]
+            The entropy matrix in kcal/mol/K units.
+        """
+
+    @entropy_matrix.setter
+    def entropy_matrix(self, value: NDArray[np.float64]) -> None:
+        """
+        Set the entropy matrix for glue interactions.
+
+        Parameters
+        ----------
+        value : NDArray[np.float64]
+            The entropy matrix in kcal/mol/K units.
+        """
+
+    @property
+    def delta_g_matrix(self) -> NDArray[np.float64]:
+        """
+        Get the delta G matrix for glue interactions.
+
+        Returns
+        -------
+        NDArray[np.float64]
+            The delta G matrix in kcal/mol units.
+        """
+
+    @delta_g_matrix.setter
+    def delta_g_matrix(self, value: NDArray[np.float64]) -> None:
+        """
+        Set the delta G matrix for glue interactions.
+
+        Parameters
+        ----------
+        value : NDArray[np.float64]
+            The delta G matrix in kcal/mol units.
+        """
+
 class EvolveBounds:
     def __init__(self, for_time: float | None = None): ...
     def is_strongly_bounded(self) -> bool: ...

@@ -43,6 +43,8 @@ use serde::{Deserialize, Serialize};
 use numpy::ToPyArray;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
+#[cfg(feature = "python")]
+use numpy::PyArrayMethods;
 
 const WEST_GLUE_INDEX: usize = 0;
 const BOTTOM_GLUE_INDEX: usize = 1;
@@ -1999,6 +2001,36 @@ impl SDC {
     #[pyo3(name = "all_scaffolds_slow")]
     fn py_all_scaffolds(&self) -> Vec<Vec<Tile>> {
         self.system_states()
+    }
+
+    #[getter]
+    fn get_entropy_matrix<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> Bound<'py, numpy::PyArray2<f64>> {
+        self.entropy_matrix.mapv(|x| x.0).to_pyarray(py)
+    }
+
+    #[setter]
+    fn set_entropy_matrix(&mut self, entropy_matrix: &Bound<'_, numpy::PyArray2<f64>>) {
+        let array = entropy_matrix.to_owned_array();
+        self.entropy_matrix = array.mapv(KcalPerMolKelvin);
+        self.update_system();
+    }
+
+    #[getter]
+    fn get_delta_g_matrix<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> Bound<'py, numpy::PyArray2<f64>> {
+        self.delta_g_matrix.mapv(|x| x.0).to_pyarray(py)
+    }
+
+    #[setter]
+    fn set_delta_g_matrix(&mut self, delta_g_matrix: &Bound<'_, numpy::PyArray2<f64>>) {
+        let array = delta_g_matrix.to_owned_array();
+        self.delta_g_matrix = array.mapv(KcalPerMol);
+        self.update_system();
     }
 }
 
