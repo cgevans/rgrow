@@ -1905,6 +1905,10 @@ impl KTAM {
         let pw = state.move_sa_w(p);
         let tw = state.v_sh(pw);
 
+        if t == 0 {
+            return 0.;
+        }
+
         if self.has_duples {
             todo!()
         } else {
