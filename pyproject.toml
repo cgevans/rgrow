@@ -24,3 +24,5 @@ testpaths = ["tests"]
 
 [tool.maturin]
 bindings = "pyo3"
+python-source = "py-rgrow"
+manifest-path = "py-rgrow/Cargo.toml"
