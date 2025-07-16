@@ -92,9 +92,9 @@ jobs:
           source venv/bin/activate
           mypy --cache-dir .mypy_cache/ --install-types --ignore-missing-imports --non-interactive --show-traceback py-rgrow/rgrow/
       - name: Run Ruff on Python code
-        uses: chartboost/ruff-action@v1
+        uses: astral-sh/ruff-action@v3
         with:
-          src: "./py-rgrow"
+          src: "./py-rgrow/rgrow"
       - name: Install carge llvm-cov
         run: cargo install cargo-llvm-cov
       - name: Install maturin and pytest

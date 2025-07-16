@@ -67,7 +67,7 @@ class SDCParams:
         strands_info = ""
         for strand in self.strands:
             strands_info += "\n\t" + strand.__str__()
-        return f"Forward Rate: {self.k_f}\nStrands: {strands_info}\nScaffold: {', '.join(x if x is not None else "None" for x in self.scaffold[2:-2])}"
+        return f"Forward Rate: {self.k_f}\nStrands: {strands_info}\nScaffold: " + ", ".join(x if x is not None else "None" for x in self.scaffold[2:-2])
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
