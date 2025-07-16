@@ -57,4 +57,5 @@ class Graphing:
             self.fig.savefig(save_path)
             print(f"[INFO] Saved plot to: {save_path}")
         else:
-            plt.show()
+            self.fig.tight_layout()
+            self.fig.show()
