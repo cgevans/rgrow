@@ -11,7 +11,7 @@
 use super::fission_base::*;
 use crate::{
     base::{GrowError, RgrowError},
-    canvas::{PointSafe2, PointSafeHere},
+    canvas::{PointSafe2, PointSafeHere, Canvas},
     state::State,
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
@@ -35,6 +35,9 @@ use crate::base::{Glue, Tile};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+use crate::python::PyState;
 
 /// Concentration (M)
 type Conc = f64;
@@ -215,6 +218,26 @@ impl KTAM {
     fn py_from_tileset(tileset: &Bound<PyAny>) -> PyResult<Self> {
         let tileset: TileSet = tileset.extract()?;
         Ok(Self::try_from(&tileset)?)
+    }
+
+    #[getter(has_duples)]
+    fn py_get_has_duples(&self) -> bool {
+        self.has_duples
+    }
+
+    fn py_total_free_energy_from_point(&self, state: &PyState, p: (usize, usize)) -> PyResult<f64> {
+        let state = &state.0;
+        if !state.inbounds(p) {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Point out of bounds",
+            ));
+        }
+        Ok(self.total_free_energy_from_point(state, PointSafe2(p)))
+    }
+
+    fn py_state_energy(&self, state: &PyState) -> PyResult<f64> {
+        let state = &state.0;
+        Ok(self.state_energy(state))
     }
 }
 
@@ -1874,7 +1897,48 @@ impl KTAM {
         //println!("{:?}", groupinfo);
         FissionResult::FissionGroups(groupinfo)
     }
+
+    fn total_free_energy_from_point<S: State>(&self, state: &S, p: PointSafe2) -> Energy {
+        let t = state.tile_at_point(p);
+        let pn = state.move_sa_n(p);
+        let tn = state.v_sh(pn);
+        let pw = state.move_sa_w(p);
+        let tw = state.v_sh(pw);
+
+        if self.has_duples {
+            todo!()
+        } else {
+            let mut total_energy = 0.;
+            if tn != 0 {
+                total_energy -= self.get_energy_ns(tn, t);
+            }
+            if tw != 0 {
+                total_energy -= self.get_energy_we(tw, t);
+            }
+            total_energy -= self.tile_concs[t as usize].ln() - self.alpha;
+            total_energy
+        }
+    }
+
+    fn state_energy<St: State>(&self, state: &St) -> f64 {
+        let ncols = state.ncols();
+        let nrows = state.nrows();
+
+        let mut energy = 0.;
+
+        let all_points = (0..nrows)
+                .flat_map(|r| (0..ncols).map(move |c| PointSafe2((r, c))))
+                .collect::<Vec<_>>();
+
+        for p in all_points {
+            energy += self.total_free_energy_from_point(state, p);
+        }
+
+        energy
+    }
 }
+
+
 
 impl TryFrom<&TileSet> for KTAM {
     type Error = RgrowError;
