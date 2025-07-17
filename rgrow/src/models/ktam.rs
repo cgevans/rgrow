@@ -225,6 +225,7 @@ impl KTAM {
         self.has_duples
     }
 
+    #[pyo3(name = "total_free_energy_from_point")]
     fn py_total_free_energy_from_point(&self, state: &PyState, p: (usize, usize)) -> PyResult<f64> {
         let state = &state.0;
         if !state.inbounds(p) {
@@ -235,6 +236,7 @@ impl KTAM {
         Ok(self.total_free_energy_from_point(state, PointSafe2(p)))
     }
 
+    #[pyo3(name = "state_energy")]
     fn py_state_energy(&self, state: &PyState) -> PyResult<f64> {
         let state = &state.0;
         Ok(self.state_energy(state))

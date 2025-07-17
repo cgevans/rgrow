@@ -958,6 +958,44 @@ class KTAM:
         annotate_mismatches: bool = False,
         crop: bool = False,
     ) -> "Axes": ...
+    def total_free_energy_from_point(
+        self, state: State, p: tuple[int, int]
+    ) -> float:
+        """
+        Calculate the total free energy contribution from a specific point.  This includes
+        the energy from the N and W bonds, and the entropic cost of mixing.
+        
+        Parameters
+        ----------
+        state : State
+            The state to calculate free energy for.
+        p : tuple[int, int]
+            The (row, col) coordinates of the point.
+            
+        Returns
+        -------
+        float
+            The total free energy contribution from the point.
+            
+        Raises
+        ------
+        ValueError
+            If the point is out of bounds.
+        """
+    def state_energy(self, state: State) -> float:
+        """
+        Calculate the total free energy of the entire state.
+        
+        Parameters
+        ----------
+        state : State
+            The state to calculate energy for.
+            
+        Returns
+        -------
+        float
+            The total energy of the state.
+        """
 
 class OldKTAM:
     @property
