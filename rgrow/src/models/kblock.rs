@@ -974,7 +974,7 @@ impl TileBondInfo for KBlock {
 
 impl System for KBlock {
     fn system_info(&self) -> String {
-        format!("{:?}", self)
+        format!("{self:?}")
     }
 
     fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
@@ -1557,7 +1557,7 @@ impl From<KBlockParams> for KBlock {
                         let pos = tiles
                             .iter()
                             .position(|t| t.name == *name)
-                            .unwrap_or_else(|| panic!("Tile name '{}' not found", name));
+                            .unwrap_or_else(|| panic!("Tile name '{name}' not found"));
                         TileType(pos).unblocked()
                     }
                 };
@@ -1577,8 +1577,7 @@ impl From<KBlockParams> for KBlock {
             // Lets check that we are in bounds
             if glue_links.get((glue, inverse)).is_none() {
                 panic!(
-                    "({:?} {:?}) not in index ({:?} {:?})",
-                    glue, inverse, glue_id, glue_id
+                    "({glue:?} {inverse:?}) not in index ({glue_id:?} {glue_id:?})"
                 );
             }
 

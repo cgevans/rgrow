@@ -344,7 +344,7 @@ impl SDC {
     fn inverse_glue_id(g: Glue) -> Glue {
         match g {
             0 => 0,
-            x if x % 2 == 0 => x - 1,
+            x if x.is_multiple_of(2) => x - 1,
             x => x + 1
         }
     }
@@ -531,7 +531,7 @@ impl SDC {
         let scaffold_glue = self
             .scaffold
             .get(index)
-            .expect(format!("Invalid Index: {:?}", index).as_str());
+            .unwrap_or_else(|| panic!("Invalid Index: {index:?}"));
 
         let empty_map = HashSet::default();
         let friends = self.friends_btm.get(scaffold_glue).unwrap_or(&empty_map);
@@ -1088,22 +1088,19 @@ impl System for SDC {
         let (_, rate_monomer_att, event_monomer_att) =
             self.choose_monomer_attachment_at_point(state, point, PerSecond::zero());
         str_builder.push_str(&format!(
-            "Attachment: rate of {:?}, event {:?}\n",
-            rate_monomer_att, event_monomer_att
+            "Attachment: rate of {rate_monomer_att:?}, event {event_monomer_att:?}\n"
         ));
 
         let (_, rate_monomer_det, event_monomer_det) =
             self.choose_monomer_detachment_at_point(state, point, PerSecond::zero());
         str_builder.push_str(&format!(
-            "Detachment: rate of {:?}, event {:?}\n",
-            rate_monomer_det, event_monomer_det
+            "Detachment: rate of {rate_monomer_det:?}, event {event_monomer_det:?}\n"
         ));
 
         let (_, rate_monomer_change, event_monomer_change) =
             self.choose_monomer_change_at_point(state, point, PerSecond::zero());
         str_builder.push_str(&format!(
-            "Change: rate of {:?}, event {:?}\n",
-            rate_monomer_change, event_monomer_change
+            "Change: rate of {rate_monomer_change:?}, event {event_monomer_change:?}\n"
         ));
 
         panic!("{:?}\nRate: {:?}, {:?}, {:?}, {:?}", str_builder, acc, point, state, state.raw_array());
@@ -1297,7 +1294,6 @@ impl TileBondInfo for SDC {
 
 // Here is potentially another way to process this, though not done.  Feel free to delete or modify.
 
-use crate::system::Orientation::WE;
 use std::hash::Hash;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1402,9 +1398,9 @@ fn self_and_inverse(value: &str) -> (bool, String, String) {
     // Remove all the stars at the end
     let filtered = value.trim_end_matches("*");
     let star_count = value.len() - filtered.len();
-    let is_from = star_count % 2 == 0;
+    let is_from = star_count.is_multiple_of(2);
 
-    (is_from, filtered.to_string(), format!("{}*", filtered))
+    (is_from, filtered.to_string(), format!("{filtered}*"))
 }
 
 fn get_or_generate(
@@ -1522,14 +1518,12 @@ impl SDC {
 
         let quencher_id: Option<Tile> = params
             .quencher_name
-            .map(|name| strand_names.iter().position(|x| x == &name))
-            .flatten()
+            .and_then(|name| strand_names.iter().position(|x| x == &name))
             .map(|index| index as Tile);
 
         let reporter_id = params
             .reporter_name
-            .map(|name| strand_names.iter().position(|x| x == &name))
-            .flatten()
+            .and_then(|name| strand_names.iter().position(|x| x == &name))
             .map(|index| index as Tile);
 
         // NOTE:
@@ -1600,7 +1594,7 @@ impl SDC {
                     if let Some(g) = maybe_g {
                         let x = *glue_name_map
                             .get(g)
-                            .unwrap_or_else(|| panic!("ERROR: Glue {} in scaffold not found!", g));
+                            .unwrap_or_else(|| panic!("ERROR: Glue {g} in scaffold not found!"));
 
                         scaffold.index_axis_mut(ndarray::Axis(1), i).fill(x);
                     } else {

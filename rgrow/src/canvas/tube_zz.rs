@@ -17,7 +17,7 @@ impl CanvasCreate for CanvasTube {
 
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
         let width = shape.0;
-        if width % 2 != 0 {
+        if !width.is_multiple_of(2) {
             Err(GrowError::WrongCanvasSize(width, shape.1))
         } else {
             Ok(Self(Array2::zeros(shape)))
@@ -25,7 +25,7 @@ impl CanvasCreate for CanvasTube {
     }
 
     fn from_array(arr: Array2<Tile>) -> GrowResult<Self> {
-        if arr.shape()[0] % 2 != 0 {
+        if !arr.shape()[0].is_multiple_of(2) {
             Err(GrowError::WrongCanvasSize(arr.shape()[0], arr.shape()[1]))
         } else {
             Ok(Self(arr))
@@ -43,7 +43,7 @@ impl Canvas for CanvasTube {
     }
 
     fn u_move_point_n(&self, p: Point) -> Point {
-        if p.0 % 2 == 0 {
+        if p.0.is_multiple_of(2) {
             (
                 (p.0 as i64 - 1).rem_euclid(self.nrows() as i64) as usize,
                 p.1 - 1,
@@ -57,7 +57,7 @@ impl Canvas for CanvasTube {
     }
 
     fn u_move_point_e(&self, p: Point) -> Point {
-        if p.0 % 2 == 0 {
+        if p.0.is_multiple_of(2) {
             (
                 (p.0 as i64 - 1).rem_euclid(self.nrows() as i64) as usize,
                 p.1,
@@ -71,7 +71,7 @@ impl Canvas for CanvasTube {
     }
 
     fn u_move_point_s(&self, p: Point) -> Point {
-        if p.0 % 2 == 0 {
+        if p.0.is_multiple_of(2) {
             ((p.0 + 1).rem_euclid(self.nrows()), p.1)
         } else {
             ((p.0 + 1).rem_euclid(self.nrows()), p.1 + 1)
@@ -79,7 +79,7 @@ impl Canvas for CanvasTube {
     }
 
     fn u_move_point_w(&self, p: Point) -> Point {
-        if p.0 % 2 == 0 {
+        if p.0.is_multiple_of(2) {
             ((p.0 + 1).rem_euclid(self.nrows()), p.1 - 1)
         } else {
             ((p.0 + 1).rem_euclid(self.nrows()), p.1)

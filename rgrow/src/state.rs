@@ -759,7 +759,7 @@ impl StateTracker for PrintEventTracker {
     }
 
     fn record_single_event(&mut self, event: &system::Event, time: Second) -> &mut Self {
-        println!("{}: {:?}", time, event);
+        println!("{time}: {event:?}");
         self
     }
 

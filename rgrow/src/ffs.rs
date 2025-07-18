@@ -740,11 +740,11 @@ impl From<FFSRunResult> for FFSRunResultDF {
 
 impl FFSRunResultDF {
     pub fn read_files(prefix: &str) -> Result<Self, PolarsError> {
-        let file = std::fs::File::open(format!("{}.surfaces.parquet", prefix))?;
+        let file = std::fs::File::open(format!("{prefix}.surfaces.parquet"))?;
         let surfaces_df = ParquetReader::new(file).finish()?;
-        let file = std::fs::File::open(format!("{}.configurations.parquet", prefix))?;
+        let file = std::fs::File::open(format!("{prefix}.configurations.parquet"))?;
         let configs_df = ParquetReader::new(file).finish()?;
-        let file = std::fs::File::open(format!("{}.ffs_result.json", prefix))?;
+        let file = std::fs::File::open(format!("{prefix}.ffs_result.json"))?;
         let ffs_result: FFSRunResultDF = serde_json::from_reader(file).unwrap();
         Ok(Self {
             surfaces_df,
@@ -756,11 +756,11 @@ impl FFSRunResultDF {
     }
 
     pub fn write_files(&mut self, prefix: &str) -> Result<(), PolarsError> {
-        let file = std::fs::File::create(format!("{}.surfaces.parquet", prefix))?;
+        let file = std::fs::File::create(format!("{prefix}.surfaces.parquet"))?;
         ParquetWriter::new(file).finish(&mut self.surfaces_df)?;
-        let file = std::fs::File::create(format!("{}.configurations.parquet", prefix))?;
+        let file = std::fs::File::create(format!("{prefix}.configurations.parquet"))?;
         ParquetWriter::new(file).finish(&mut self.configs_df)?;
-        let file = std::fs::File::create(format!("{}.ffs_result.json", prefix))?;
+        let file = std::fs::File::create(format!("{prefix}.ffs_result.json"))?;
         serde_json::to_writer(file, &self).unwrap();
         Ok(())
     }
@@ -1051,13 +1051,13 @@ impl FFSRunResult {
         let mut sdf = self.surfaces_dataframe()?;
         let mut cdf = self.configs_dataframe()?;
 
-        let file = std::fs::File::create(format!("{}.surfaces.parquet", prefix))?;
+        let file = std::fs::File::create(format!("{prefix}.surfaces.parquet"))?;
         ParquetWriter::new(file).finish(&mut sdf)?;
 
-        let file = std::fs::File::create(format!("{}.configurations.parquet", prefix))?;
+        let file = std::fs::File::create(format!("{prefix}.configurations.parquet"))?;
         ParquetWriter::new(file).finish(&mut cdf)?;
 
-        let file = std::fs::File::create(format!("{}.ffs_result.json", prefix))?;
+        let file = std::fs::File::create(format!("{prefix}.ffs_result.json"))?;
         serde_json::to_writer_pretty(file, self).unwrap();
 
         Ok(())

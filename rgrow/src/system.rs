@@ -230,7 +230,7 @@ impl TryFrom<&str> for ChunkHandling {
             "none" => Ok(Self::None),
             "detach" => Ok(Self::Detach),
             "equilibrium" => Ok(Self::Equilibrium),
-            _ => Err(StringConvError(format!("Unknown chunk handling: {}. Valid values are \"none\", \"detach\", \"equilibrium\".", s))),
+            _ => Err(StringConvError(format!("Unknown chunk handling: {s}. Valid values are \"none\", \"detach\", \"equilibrium\"."))),
         }
     }
 }
@@ -252,8 +252,7 @@ impl TryFrom<&str> for ChunkSize {
             "single" => Ok(Self::Single),
             "dimer" => Ok(Self::Dimer),
             _ => Err(StringConvError(format!(
-                "Unknown chunk size: {}. Valid values are \"single\" and \"dimer\".",
-                s
+                "Unknown chunk size: {s}. Valid values are \"single\" and \"dimer\"."
             ))),
         }
     }
@@ -834,7 +833,7 @@ impl TryFrom<&str> for FissionHandling {
             "on" | "keep-seeded" => Ok(FissionHandling::KeepSeeded),
             "keep-largest" => Ok(FissionHandling::KeepLargest),
             "keep-weighted" => Ok(FissionHandling::KeepWeighted),
-            _ => Err(StringConvError(format!("Unknown fission handling mode: {}. Valid values are: no-fission, just-detach, keep-seeded, keep-largest, keep-weighted", s))),
+            _ => Err(StringConvError(format!("Unknown fission handling mode: {s}. Valid values are: no-fission, just-detach, keep-seeded, keep-largest, keep-weighted"))),
         }
     }
 }

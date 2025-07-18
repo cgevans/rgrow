@@ -82,11 +82,11 @@ pub enum Seed {
 impl Display for Seed {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Single(x, y, tile) => write!(f, "Single({},{},{})", x, y, tile),
+            Self::Single(x, y, tile) => write!(f, "Single({x},{y},{tile})"),
             Self::Multi(v) => {
                 write!(f, "Multi(")?;
                 for (x, y, tile) in v {
-                    write!(f, "({},{},{})", x, y, tile)?;
+                    write!(f, "({x},{y},{tile})")?;
                 }
                 write!(f, ")")
             }
@@ -169,21 +169,21 @@ impl Display for Tile {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Tile {{ ")?;
         if let Some(name) = &self.name {
-            write!(f, "name: \"{}\", ", name)?;
+            write!(f, "name: \"{name}\", ")?;
         }
         write!(f, "edges: [")?;
         for edge in &self.edges {
-            write!(f, "{}, ", edge)?;
+            write!(f, "{edge}, ")?;
         }
         write!(f, "]")?;
         if let Some(stoic) = self.stoic {
-            write!(f, ", stoic: {}", stoic)?;
+            write!(f, ", stoic: {stoic}")?;
         }
         if let Some(color) = &self.color {
-            write!(f, ", color: {}, ", color)?;
+            write!(f, ", color: {color}, ")?;
         }
         if let Some(shape) = &self.shape {
-            write!(f, ", shape: {}, ", shape)?;
+            write!(f, ", shape: {shape}, ")?;
         }
         write!(f, "}}")
     }
@@ -361,7 +361,7 @@ impl Display for TileSet {
         writeln!(f, "TileSet(")?;
         writeln!(f, "    tiles=[")?;
         for tile in &self.tiles {
-            writeln!(f, "        {},", tile)?;
+            writeln!(f, "        {tile},")?;
         }
         writeln!(f, "    ],")?;
         if !self.bonds.is_empty() {
@@ -374,30 +374,30 @@ impl Display for TileSet {
         if !self.glues.is_empty() {
             writeln!(f, "    glues=[")?;
             for (a, b, s) in &self.glues {
-                writeln!(f, "        ({}, {}, {}),", a, b, s)?;
+                writeln!(f, "        ({a}, {b}, {s}),")?;
             }
             writeln!(f, "    ],")?;
         };
         writeln!(f, "    options=[")?;
         if let Some(x) = self.gse {
-            writeln!(f, "        Gse: {}", x)?;
+            writeln!(f, "        Gse: {x}")?;
         }
         if let Some(x) = self.gmc {
-            writeln!(f, "        Gmc: {}", x)?;
+            writeln!(f, "        Gmc: {x}")?;
         }
         if let Some(x) = self.alpha {
-            writeln!(f, "        alpha: {}", x)?;
+            writeln!(f, "        alpha: {x}")?;
         }
         if let Some(x) = &self.seed {
-            writeln!(f, "        seed: {}", x)?;
+            writeln!(f, "        seed: {x}")?;
         }
         if let Some(x) = self.size {
-            writeln!(f, "        size: {}", x)?;
+            writeln!(f, "        size: {x}")?;
         }
         writeln!(f, "        tau: {:?}", self.tau)?;
         writeln!(f, "        smax: {:?}", self.smax)?;
         if let Some(x) = self.update_rate {
-            writeln!(f, "        update_rate: {}", x)?;
+            writeln!(f, "        update_rate: {x}")?;
         }
         writeln!(f, "        kf: {:?}", self.kf)?;
         writeln!(f, "        fission: {:?}", self.fission)?;
@@ -493,7 +493,7 @@ impl TryFrom<&str> for CanvasType {
             "periodic" => Ok(CanvasType::Periodic),
             "tube" => Ok(CanvasType::Tube),
             "tube-diagonals" => Ok(CanvasType::TubeDiagonals),
-            _ => Err(StringConvError(format!("Unknown canvas type {}.  Valid options are \"square\", \"periodic\", and \"tube\".", value))),
+            _ => Err(StringConvError(format!("Unknown canvas type {value}.  Valid options are \"square\", \"periodic\", and \"tube\"."))),
         }
     }
 }
@@ -508,8 +508,7 @@ impl TryFrom<&str> for TrackingType {
             "lastattachtime" => Ok(TrackingType::LastAttachTime),
             "printevent" => Ok(TrackingType::PrintEvent),
             _ => Err(StringConvError(format!(
-                "Unknown tracking type {}.  Valid options are \"none\", \"order\", \"lastattachtime\", \"printevent\".",
-                value
+                "Unknown tracking type {value}.  Valid options are \"none\", \"order\", \"lastattachtime\", \"printevent\"."
             ))),
         }
     }
@@ -539,8 +538,7 @@ impl TryFrom<&str> for Model {
             "oldktam" => Ok(Model::OldKTAM),
             "sdc1d" => Ok(Model::SDC),
             _ => Err(StringConvError(format!(
-                "Unknown model {}. Valid options are kTAM, aTAM, and oldkTAM.",
-                s
+                "Unknown model {s}. Valid options are kTAM, aTAM, and oldkTAM."
             ))),
         }
     }
@@ -549,8 +547,8 @@ impl TryFrom<&str> for Model {
 impl Display for Size {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Size::Single(cl) => write!(f, "{}", cl),
-            Size::Pair((cl1, cl2)) => write!(f, "({}, {})", cl1, cl2),
+            Size::Single(cl) => write!(f, "{cl}"),
+            Size::Pair((cl1, cl2)) => write!(f, "({cl1}, {cl2})"),
         }
     }
 }

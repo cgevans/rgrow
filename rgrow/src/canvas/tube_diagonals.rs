@@ -20,7 +20,7 @@ impl CanvasCreate for CanvasTubeDiagonals {
 
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
         let width = shape.0;
-        if width % 2 != 0 {
+        if !width.is_multiple_of(2) {
             Err(GrowError::WrongCanvasSize(width, shape.1))
         } else {
             Ok(Self(Array2::zeros(shape)))
@@ -28,7 +28,7 @@ impl CanvasCreate for CanvasTubeDiagonals {
     }
 
     fn from_array(arr: Array2<Tile>) -> GrowResult<Self> {
-        if arr.shape()[0] % 2 != 0 {
+        if !arr.shape()[0].is_multiple_of(2) {
             Err(GrowError::WrongCanvasSize(arr.shape()[0], arr.shape()[1]))
         } else {
             Ok(Self(arr))
