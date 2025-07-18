@@ -5,11 +5,11 @@ use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    base::{Glue, HashSetType},
+    base::{Glue, HashSetType, GrowError},
     canvas::{Canvas, PointSafe2, PointSafeHere},
     state::State,
     system::{
-        DimerInfo, Event, FissionHandling, Orientation, System, SystemWithDimers, TileBondInfo,
+        DimerInfo, Event, FissionHandling, Orientation, System, TileBondInfo,
     },
     type_alias,
     units::*,
@@ -892,48 +892,6 @@ impl KBlock {
     }
 }
 
-impl SystemWithDimers for KBlock {
-    fn calc_dimers(&self) -> Vec<DimerInfo> {
-        let mut dvec = Vec::new();
-
-        for (t1, _) in self.tile_concentration.iter().enumerate() {
-            let t1: TileState = TileType(t1).unblocked();
-            if let Some(friends) = self.get_unblocked_friends_to_side(EAST, t1) {
-                for t2 in friends.iter() {
-                    let biconc = self.tile_concentration(t1) * self.tile_concentration(*t2);
-                    dvec.push(DimerInfo {
-                        t1: t1.into(),
-                        t2: (*t2).into(),
-                        orientation: Orientation::WE,
-                        formation_rate: self.kf * biconc,
-                        equilibrium_conc: biconc.over_u0()
-                            * (self.energy_we[(tile_index(t1).into(), tile_index(*t2).into())]
-                                .times_beta(self.temperature))
-                            .exp(),
-                    });
-                }
-            }
-
-            if let Some(friends) = self.get_unblocked_friends_to_side(SOUTH, t1) {
-                for t2 in friends.iter() {
-                    let biconc = self.tile_concentration(t1) * self.tile_concentration(*t2);
-                    dvec.push(DimerInfo {
-                        t1: t1.into(),
-                        t2: (*t2).into(),
-                        orientation: Orientation::NS,
-                        formation_rate: self.kf * biconc,
-                        equilibrium_conc: biconc.over_u0()
-                            * (self.energy_ns[(tile_index(t1).into(), tile_index(*t2).into())]
-                                .times_beta(self.temperature))
-                            .exp(),
-                    });
-                }
-            }
-        }
-
-        dvec
-    }
-}
 
 /*
 * The idea right now is that:
@@ -1146,6 +1104,46 @@ impl System for KBlock {
         }
 
         mismatch_locations
+    }
+
+    fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
+        let mut dvec = Vec::new();
+
+        for (t1, _) in self.tile_concentration.iter().enumerate() {
+            let t1: TileState = TileType(t1).unblocked();
+            if let Some(friends) = self.get_unblocked_friends_to_side(EAST, t1) {
+                for t2 in friends.iter() {
+                    let biconc = self.tile_concentration(t1) * self.tile_concentration(*t2);
+                    dvec.push(DimerInfo {
+                        t1: t1.into(),
+                        t2: (*t2).into(),
+                        orientation: Orientation::WE,
+                        formation_rate: self.kf * biconc,
+                        equilibrium_conc: biconc.over_u0()
+                            * (self.energy_we[(tile_index(t1).into(), tile_index(*t2).into())]
+                                .times_beta(self.temperature))
+                            .exp(),
+                    });
+                }
+            }
+            if let Some(friends) = self.get_unblocked_friends_to_side(SOUTH, t1) {
+                for t2 in friends.iter() {
+                    let biconc = self.tile_concentration(t1) * self.tile_concentration(*t2);
+                    dvec.push(DimerInfo {
+                        t1: t1.into(),
+                        t2: (*t2).into(),
+                        orientation: Orientation::NS,
+                        formation_rate: self.kf * biconc,
+                        equilibrium_conc: biconc.over_u0()
+                            * (self.energy_ns[(tile_index(t1).into(), tile_index(*t2).into())]
+                                .times_beta(self.temperature))
+                            .exp(),
+                    });
+                }
+            }
+        }
+
+        Ok(dvec)
     }
 }
 

@@ -14,7 +14,7 @@ use crate::models::sdc1d::SDC;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{
-    DimerInfo, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo, System, DynSystem
+    DimerInfo, EvolveBounds, EvolveOutcome, NeededUpdate, TileBondInfo, System, DynSystem
 };
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
@@ -408,8 +408,13 @@ macro_rules! create_py_system {
             /// Returns
             /// -------
             /// List[DimerInfo]
-            fn calc_dimers(&self) -> Vec<DimerInfo> {
-                SystemWithDimers::calc_dimers(self)
+            ///
+            /// Raises
+            /// ------
+            /// ValueError
+            ///     If the system doesn't support dimer calculation
+            fn calc_dimers(&self) -> PyResult<Vec<DimerInfo>> {
+                System::calc_dimers(self).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }
 
             /// Calculate the locations of mismatches in the state.

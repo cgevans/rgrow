@@ -42,6 +42,8 @@ pub enum GrowError {
     OutOfBounds(usize, usize),
     #[error("{0}")]
     NotImplemented(String),
+    #[error("{0}")]
+    NotSupported(String),
     #[error(transparent)]
     PoisonError(#[from] std::sync::PoisonError<()>),
     #[error("There is no state with key {0}")]
