@@ -1526,6 +1526,26 @@ class State:
     def read_json(filename: str) -> State: ...
     def tracking_copy(self) -> ndarray: ...
     def write_json(self, filename: str) -> None: ...
+    def copy(self) -> Self:
+        """
+        Create a copy of the state.
+
+        This creates a complete clone of the state, including all canvas data,
+        tracking information, and simulation state (time, events, etc.).
+
+        Returns
+        -------
+        State
+            A new State object that is a copy of this state.
+
+        Examples
+        --------
+        >>> original_state = State((10, 10))
+        >>> copied_state = original_state.copy()
+        >>> # The copied state is independent of the original
+        >>> assert copied_state.time == original_state.time
+        >>> assert copied_state.total_events == original_state.total_events
+        """
     @property
     def ntiles(self) -> int: ...
     @property
