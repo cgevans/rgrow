@@ -7,7 +7,7 @@ use std::fs::File;
 use rgrow::{
     canvas::{Canvas, CanvasPeriodic, PointSafe2},
     state::{NullStateTracker, QuadTreeState, StateStatus},
-    system::{DynSystem, EvolveBounds, FissionHandling, System},
+    system::{EvolveBounds, FissionHandling, DynSystem, System},
     tileset::{Seed, Size, TileSet},
 };
 

@@ -122,7 +122,7 @@ impl TileSet {
 
     #[pyo3(name = "create_system")]
     fn py_create_system(&self) -> PyResult<SystemEnum> {
-        let sys = self.create_dynsystem()?;
+        let sys = self.create_system()?;
         Ok(sys)
     }
 
@@ -130,7 +130,7 @@ impl TileSet {
     fn py_create_state(&self, system: Option<&Bound<'_, PyAny>>) -> PyResult<PyState> {
         match system {
             None => Ok(PyState(
-                self.create_state_with_system(&self.create_dynsystem()?)?,
+                self.create_state_with_system(&self.create_system()?)?,
             )),
             Some(x) => {
                 if let Ok(sys) = x.downcast::<KTAM>() {

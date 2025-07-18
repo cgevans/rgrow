@@ -2,7 +2,6 @@
 Test that SDC 1D simulations actually run.
 */
 
-use rgrow::system::DynSystem;
 use std::collections::HashMap;
 use rgrow::models::sdc1d::{GsOrSeq, RefOrPair, SDCParams, SDCStrand, SingleOrMultiScaffold, SDC};
 use rgrow::state::{StateEnum, StateStatus};
@@ -110,7 +109,7 @@ fn run_sdc_system() {
     let mut state =
         StateEnum::empty((100, 9), Square, TrackingType::None, sdc_sys.tile_names().len())
             .unwrap();
-    DynSystem::update_state(&sdc_sys, &mut state, &NeededUpdate::All);
+    sdc_sys.update_state(&mut state, &NeededUpdate::All);
     let bounds = EvolveBounds::default().for_time(1.0 * 60.0 * 60.0);
     let eo = System::evolve(&sdc_sys, &mut state, bounds).unwrap();
     assert_ne!(state.total_events(), 0)

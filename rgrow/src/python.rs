@@ -14,7 +14,7 @@ use crate::models::sdc1d::SDC;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{
-    DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo,
+    DimerInfo, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo, System
 };
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
@@ -332,12 +332,12 @@ macro_rules! create_py_system {
                         if show_window {
                             py
                                 .allow_threads(|| {
-                                    DynSystem::evolve_in_window(self, state, None, bounds)
+                                    System::evolve_in_window(self, state, None, bounds)
                                 })?
                                 .into_py_any(py)
                         } else {
                             py
-                                .allow_threads(|| DynSystem::evolve(self, state, bounds))?
+                                .allow_threads(|| System::evolve(self, state, bounds))?
                                 .into_py_any(py)
                         }
                     }
@@ -356,13 +356,13 @@ macro_rules! create_py_system {
                             py.allow_threads(|| {
                                 states
                                     .par_iter_mut()
-                                    .map(|state| DynSystem::evolve(self, &mut state.0, bounds))
+                                    .map(|state| System::evolve(self, &mut state.0, bounds))
                                     .collect::<Vec<_>>()
                             })
                         } else {
                             states
                                 .iter_mut()
-                                .map(|state| DynSystem::evolve(self, &mut state.0, bounds))
+                                .map(|state| System::evolve(self, &mut state.0, bounds))
                                 .collect::<Vec<_>>()
                         };
                         let o: Result<Vec<EvolveOutcome>, PyErr> = out
@@ -396,9 +396,9 @@ macro_rules! create_py_system {
             ///   Calculate the location and direction of mismatches, not jus the number.
             fn calc_mismatches(&self, state: PyStateOrRef) -> usize {
                 match state {
-                    PyStateOrRef::State(s) => DynSystem::calc_mismatches(self, &s.borrow().0),
+                    PyStateOrRef::State(s) => System::calc_mismatches(self, &s.borrow().0),
                     PyStateOrRef::Ref(s) => {
-                        DynSystem::calc_mismatches(self, &s.borrow().clone_state().0)
+                        System::calc_mismatches(self, &s.borrow().clone_state().0)
                     }
                 }
             }
@@ -435,10 +435,10 @@ macro_rules! create_py_system {
             ) -> PyResult<Bound<'py, PyArray2<usize>>> {
                 let ra = match state {
                     PyStateOrRef::State(s) => {
-                        DynSystem::calc_mismatch_locations(self, &s.borrow().0)
+                        System::calc_mismatch_locations(self, &s.borrow().0)
                     }
                     PyStateOrRef::Ref(s) => {
-                        DynSystem::calc_mismatch_locations(self, &s.borrow().clone_state().0)
+                        System::calc_mismatch_locations(self, &s.borrow().clone_state().0)
                     }
                 };
                 Ok(PyArray2::from_array(py, &ra))
@@ -459,7 +459,7 @@ macro_rules! create_py_system {
             ///     The type of state update needed.  This can be passed to
             ///    `update_state` to update the state.
             fn set_param(&mut self, param_name: &str, value: RustAny) -> PyResult<NeededUpdate> {
-                Ok(DynSystem::set_param(self, param_name, value.0)?)
+                Ok(System::set_param(self, param_name, value.0)?)
             }
 
             /// Names of tiles, by tile number.
@@ -526,12 +526,12 @@ macro_rules! create_py_system {
             }
 
             fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
-                Ok(RustAny(DynSystem::get_param(self, param_name)?))
+                Ok(RustAny(System::get_param(self, param_name)?))
             }
 
             #[pyo3(signature = (state, needed = &NeededUpdate::All))]
             fn update_all(&self, state: &mut PyState, needed: &NeededUpdate) {
-                DynSystem::update_state(self, &mut state.0, needed)
+                System::update_state(self, &mut state.0, needed)
             }
 
             /// Recalculate a state's rates.
@@ -548,12 +548,12 @@ macro_rules! create_py_system {
             ///   will be recalculated.
             #[pyo3(signature = (state, needed = &NeededUpdate::All))]
             fn update_state(&self, state: &mut PyState, needed: &NeededUpdate) {
-                DynSystem::update_state(self, &mut state.0, needed)
+                System::update_state(self, &mut state.0, needed)
             }
 
             #[pyo3(name = "setup_state")]
             fn py_setup_state(&self, state: &mut PyState) -> PyResult<()> {
-                DynSystem::setup_state(self, &mut state.0).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+                self.setup_state(&mut state.0).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
                 Ok(())
             }
 
@@ -585,7 +585,7 @@ macro_rules! create_py_system {
                     }
                 }
 
-                let res = py.allow_threads(|| DynSystem::run_ffs(self, &c));
+                let res = py.allow_threads(|| self.run_ffs(&c));
                 match res {
                     Ok(res) => Ok(res),
                     Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -595,7 +595,7 @@ macro_rules! create_py_system {
             }
 
             fn __repr__(&self) -> String {
-                format!("System({})", DynSystem::system_info(self))
+                format!("System({})", System::system_info(self))
             }
 
             pub fn print_debug(&self) {

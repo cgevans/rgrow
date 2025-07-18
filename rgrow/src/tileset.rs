@@ -588,7 +588,7 @@ impl TileSet {
         }
     }
 
-    pub fn create_dynsystem(&self) -> Result<SystemEnum, RgrowError> {
+    pub fn create_system(&self) -> Result<SystemEnum, RgrowError> {
         Ok(match self.model.unwrap_or(MODEL_DEFAULT) {
             Model::KTAM => SystemEnum::KTAM(KTAM::try_from(self)?),
             Model::ATAM => SystemEnum::ATAM(ATAM::try_from(self)?),
@@ -622,7 +622,7 @@ impl TileSet {
 
         let mut st = StateEnum::from_array(canvas.view(), kind, tracking, 1)?;
 
-        let sys = self.create_dynsystem()?;
+        let sys = self.create_system()?;
 
         sys.update_state(&mut st, &NeededUpdate::All);
 
@@ -638,7 +638,7 @@ impl TileSet {
 
     /// Create a system and state
     pub fn create_system_and_state(&self) -> Result<(SystemEnum, StateEnum), RgrowError> {
-        let sys = self.create_dynsystem()?;
+        let sys = self.create_system()?;
         let state = self.create_state_with_system(&sys)?;
         Ok((sys, state))
     }
