@@ -14,7 +14,7 @@ use crate::models::sdc1d::SDC;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{
-    DimerInfo, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo, System
+    DimerInfo, EvolveBounds, EvolveOutcome, NeededUpdate, SystemWithDimers, TileBondInfo, System, DynSystem
 };
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
