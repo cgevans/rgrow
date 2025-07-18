@@ -9,23 +9,18 @@ use rand::{distr::weighted::WeightedIndex, distr::Distribution};
 /// tiles arranged in a ring (eg, around a single point) are a single connected
 /// group.
 ///
-/// Using `lazy_static!`, the array can be calculated with the code below, but it is
-/// simpler to have the pre-computed array in the code directly, as it will not change.
+/// The array is calculated with the code below. A test verifies that the
+/// generating code produces the same array as the pre-computed constant.
 ///
 /// ```ignore
-/// lazy_static! {
-///     pub static ref CONNECTED_RING: Vec<bool> = {
-///         let mut v = Vec::<bool>::with_capacity(2usize.pow(8));
-///         v.push(false); // All zeros
-///         for i in 0b1u8..0b11111111 {
-///             let i = i.rotate_right(i.trailing_ones());
-///             let i = i.rotate_right(i.trailing_zeros());
-///             v.push((i+1).is_power_of_two())
-///         }
-///         v.push(true); // All ones
-///         v
-///     };
+/// let mut v = Vec::<bool>::with_capacity(2usize.pow(8));
+/// v.push(false); // All zeros
+/// for i in 0b1u8..0b11111111 {
+///     let i = i.rotate_right(i.trailing_ones());
+///     let i = i.rotate_right(i.trailing_zeros());
+///     v.push((i+1).is_power_of_two())
 /// }
+/// v.push(true); // All ones
 /// ```
 pub(super) static CONNECTED_RING: &[bool] = &[
     false, true, true, true, true, false, true, true, true, false, false, false, true, false, true,
@@ -223,4 +218,23 @@ impl GroupInfo {
 pub enum FissionResult {
     NoFission,
     FissionGroups(GroupInfo),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_connected_ring_generation() {
+        let mut v = Vec::<bool>::with_capacity(2usize.pow(8));
+        v.push(false); // All zeros
+        for i in 0b1u8..0b11111111 {
+            let i = i.rotate_right(i.trailing_ones());
+            let i = i.rotate_right(i.trailing_zeros());
+            v.push((i+1).is_power_of_two())
+        }
+        v.push(true); // All ones
+        
+        assert_eq!(v, CONNECTED_RING);
+    }
 }
