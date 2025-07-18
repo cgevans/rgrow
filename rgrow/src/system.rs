@@ -645,6 +645,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
         Ok(evres)
     }
+
+    /// Returns information on dimers that the system can form.
+    fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
+        Err(GrowError::NotSupported("Dimer calculation not supported by this system".to_string()))
+    }
 }
 
 #[enum_dispatch]
@@ -686,7 +691,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError>;
 }
 
-impl<S: System + SystemWithDimers> DynSystem for S
+impl<S: System> DynSystem for S
 where
     SystemEnum: From<S>,
 {
@@ -752,7 +757,7 @@ where
     }
 }
 
-#[enum_dispatch(DynSystem, TileBondInfo, SystemWithDimers)]
+#[enum_dispatch(DynSystem, TileBondInfo)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject))]
 pub enum SystemEnum {
@@ -780,17 +785,6 @@ impl<'py> IntoPyObject<'py> for SystemEnum {
     type Error = pyo3::PyErr;
 }
 
-#[enum_dispatch]
-pub trait SystemWithDimers {
-    /// Returns information on dimers that the system can form, similarly useful for starting out a state.
-    fn calc_dimers(&self) -> Vec<DimerInfo>;
-}
-
-impl SystemWithDimers for SDC {
-    fn calc_dimers(&self) -> Vec<DimerInfo> {
-        panic!("Not implemented")
-    }
-}
 
 #[enum_dispatch]
 pub trait TileBondInfo {

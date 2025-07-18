@@ -2,7 +2,7 @@ use crate::{
     base::{RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
-    system::{Event, System, SystemInfo, SystemWithDimers, TileBondInfo},
+    system::{Event, System, SystemInfo, TileBondInfo},
     tileset::{ProcessedTileSet, TileSet},
     units::{PerSecond, Rate},
 };
@@ -928,11 +928,6 @@ impl SystemInfo for ATAM {
     }
 }
 
-impl SystemWithDimers for ATAM {
-    fn calc_dimers(&self) -> Vec<crate::system::DimerInfo> {
-        todo!()
-    }
-}
 
 #[cfg(feature = "python")]
 #[pymethods]

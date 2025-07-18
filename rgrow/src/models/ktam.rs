@@ -15,7 +15,7 @@ use crate::{
     state::State,
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
-        System, SystemInfo, SystemWithDimers, TileBondInfo,
+        System, SystemInfo, TileBondInfo,
     },
     tileset::{ProcessedTileSet, TileSet, GMC_DEFAULT, GSE_DEFAULT},
     units::{MolarSq, PerMolarSecond, PerSecond, Rate},
@@ -818,10 +818,8 @@ impl System for KTAM {
             self.alpha
         )
     }
-}
 
-impl SystemWithDimers for KTAM {
-    fn calc_dimers(&self) -> Vec<DimerInfo> {
+    fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
         // It is (reasonably) safe for us to use the same code that we used in the old StaticKTAM, despite duples being
         // here, because our EW/NS energies include the right/bottom tiles.  However, (FIXME), we need to think about
         // how this might actually double-count / double some rates: if, eg, a single tile can attach in two places to
@@ -854,9 +852,10 @@ impl SystemWithDimers for KTAM {
             }
         }
 
-        dvec
+        Ok(dvec)
     }
 }
+
 
 impl TileBondInfo for KTAM {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {

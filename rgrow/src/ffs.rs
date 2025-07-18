@@ -9,7 +9,7 @@ use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonal
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{NullStateTracker, QuadTreeState};
-use crate::system::{EvolveBounds, SystemWithDimers};
+use crate::system::EvolveBounds;
 use crate::tileset::{CanvasType, Model, TileSet, SIZE_DEFAULT};
 use crate::units::{MolarPerSecond, PerSecond};
 
@@ -362,14 +362,14 @@ pub struct FFSRun<St: ClonableState> {
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
-    pub fn create<Sy: SystemWithDimers + System>(
+    pub fn create<Sy: System>(
         system: &mut Sy,
         config: &FFSRunConfig,
     ) -> Result<Self, GrowError> {
         let level_list = Vec::new();
 
         let dimerization_rate: MolarPerSecond = system
-            .calc_dimers()
+            .calc_dimers()?
             .iter()
             .fold(MolarPerSecond::zero(), |acc, d| acc + d.formation_rate);
 
@@ -440,7 +440,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
     pub fn create_from_tileset<
         'a,
-        Sy: SystemWithDimers + System + TryFrom<&'a TileSet, Error = RgrowError>,
+        Sy: System + TryFrom<&'a TileSet, Error = RgrowError>,
     >(
         tileset: &'a TileSet,
         config: &FFSRunConfig,
@@ -475,7 +475,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         self
     }
 
-    pub fn next_level<Sy: SystemWithDimers + System>(
+    pub fn next_level<Sy: System>(
         &self,
         system: &mut Sy,
         config: &FFSRunConfig,
@@ -562,13 +562,13 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         })
     }
 
-    pub fn nmers_from_dimers<Sy: SystemWithDimers + System>(
+    pub fn nmers_from_dimers<Sy: System>(
         system: &mut Sy,
         config: &FFSRunConfig,
     ) -> Result<(Self, Self), GrowError> {
         let mut rng = SmallRng::from_os_rng();
 
-        let dimers = system.calc_dimers();
+        let dimers = system.calc_dimers()?;
 
         let mut state_list = Vec::with_capacity(config.min_configs);
         let mut previous_list = Vec::with_capacity(config.min_configs);
@@ -1063,7 +1063,7 @@ impl FFSRunResult {
         Ok(())
     }
 
-    pub fn run_from_system<Sy: SystemWithDimers + System>(
+    pub fn run_from_system<Sy: System>(
         sys: &mut Sy,
         config: &FFSRunConfig,
     ) -> Result<FFSRunResult, RgrowError>

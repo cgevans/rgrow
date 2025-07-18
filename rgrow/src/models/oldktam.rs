@@ -19,12 +19,12 @@ use serde::{Deserialize, Serialize};
 type Rate = f64;
 
 use crate::{
-    base::{Energy, Glue, ModelError, Point, RgrowError, Tile},
+    base::{Energy, Glue, ModelError, Point, RgrowError, Tile, GrowError},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, Orientation, System,
-        SystemInfo, SystemWithDimers, TileBondInfo,
+        SystemInfo, TileBondInfo,
     },
     tileset::{ProcessedTileSet, TileSet},
 };
@@ -1008,10 +1008,8 @@ impl System for OldKTAM {
             self.alpha
         )
     }
-}
 
-impl SystemWithDimers for OldKTAM {
-    fn calc_dimers(&self) -> Vec<DimerInfo> {
+    fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
         let mut dvec = Vec::new();
 
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
@@ -1042,9 +1040,10 @@ impl SystemWithDimers for OldKTAM {
             }
         }
 
-        dvec
+        Ok(dvec)
     }
 }
+
 
 impl TryFrom<&TileSet> for OldKTAM {
     type Error = RgrowError;
