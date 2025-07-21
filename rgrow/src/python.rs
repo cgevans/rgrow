@@ -646,7 +646,7 @@ macro_rules! create_py_system {
             ///     Probability of reaching cutoff_size (between 0.0 and 1.0)
             #[pyo3(name = "calc_committer_adaptive", signature = (state, cutoff_size, conf_interval_margin, max_time=None, max_events=None))]
             fn py_calc_committer_adaptive(
-                &mut self,
+                &self,
                 state: &PyState,
                 cutoff_size: NumTiles,
                 conf_interval_margin: f64,
@@ -664,6 +664,26 @@ macro_rules! create_py_system {
                     )
                 })
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+            }
+
+            #[pyo3(name = "calc_committers_adaptive", signature = (states, cutoff_size, conf_interval_margin, max_time=None, max_events=None))]
+
+            fn py_calc_committers_adaptive<'py>(
+                &self,
+                states: Vec<Bound<'py, PyState>>,
+                cutoff_size: NumTiles,
+                conf_interval_margin: f64,
+                max_time: Option<f64>,
+                max_events: Option<NumEvents>,
+                py: Python<'py>,
+            ) -> PyResult<Vec<f64>> {
+
+                let refs = states.iter().map(|x| x.borrow()).collect::<Vec<_>>();
+                let states = refs.iter().map(|x| &x.0).collect::<Vec<_>>();
+                let committers = py.allow_threads(|| {
+                    self.calc_committers_adaptive(&states, cutoff_size, max_time, max_events, conf_interval_margin)
+                });
+                Ok(committers.unwrap())
             }
 
             /// Run FFS.

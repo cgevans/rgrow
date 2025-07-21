@@ -722,13 +722,22 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     ) -> Result<f64, GrowError>;
 
     fn calc_committer_adaptive(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
         max_time: Option<f64>,
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
     ) -> Result<f64, GrowError>;
+
+    fn calc_committers_adaptive(
+        &self,
+        initial_states: &[&StateEnum],
+        cutoff_size: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        conf_interval_margin: f64,
+    ) -> Result<Vec<f64>, GrowError>;
 }
 
 impl<S: System> DynSystem for S
@@ -838,7 +847,7 @@ where
 
 
     fn calc_committer_adaptive(
-        &mut self,
+        &self,
         initial_state: &StateEnum, 
         cutoff_size: NumTiles,
         max_time: Option<f64>,
@@ -873,6 +882,23 @@ where
         }
 
         Ok(successes as f64 / num_trials as f64)
+    }
+
+    fn calc_committers_adaptive(
+        &self,
+        initial_states: &[&StateEnum],
+        cutoff_size: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        conf_interval_margin: f64,
+    ) -> Result<Vec<f64>, GrowError> {
+        let committers = initial_states.par_iter().map(|initial_state| {
+            self.calc_committer_adaptive(initial_state, cutoff_size, max_time, max_events, conf_interval_margin)
+        }).collect::<Vec<_>>();
+
+        let committers = committers.into_iter().map(|r| r.unwrap()).collect();
+
+        Ok(committers)
     }
 }
 
