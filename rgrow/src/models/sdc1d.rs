@@ -267,7 +267,7 @@ impl SDC {
     }
 
     /// Fill the energy_bonds array
-    fn fill_energy_array(&mut self) {
+    pub fn fill_energy_array(&mut self) {
         let num_of_strands = self.strand_names.len();
         let glue_links = ndarray::Zip::from(&self.delta_g_matrix)
             .and(&self.entropy_matrix)
@@ -976,7 +976,7 @@ impl SDC {
     }
 
     /// Get the mfe configuration, as well as its energy
-    fn mfe_configuration(&self) -> (Vec<Tile>, f64) {
+    pub fn mfe_configuration(&self) -> (Vec<Tile>, f64) {
         let mfe_mat = self.mfe_matrix();
         let l = mfe_mat.len();
         let mut iterator = mfe_mat.into_iter().rev();
@@ -1796,12 +1796,12 @@ impl AnnealProtocol {
         )
     }
 
-    fn run_anneal_default_system(&self, sdc: SDC) -> Result<AnnealOutput, GrowError> {
+    pub fn run_anneal_default_system(&self, sdc: SDC) -> Result<AnnealOutput, GrowError> {
         let state = self.default_state(&sdc)?;
         self.run_system(sdc, state)
     }
 
-    fn run_many_anneals_default_system(
+    pub fn run_many_anneals_default_system(
         &self,
         sdcs: Vec<SDC>,
     ) -> Vec<Result<AnnealOutput, GrowError>> {
@@ -2066,9 +2066,9 @@ mod test_anneal {
                 ("e".to_string(), "o".to_string())
             };
 
-            let name = format!("0{}0", base);
-            let lg = format!("0{}*", leo);
-            let rg = format!("0{}", reo);
+            let name = format!("0{base}0");
+            let lg = format!("0{leo}*");
+            let rg = format!("0{reo}");
             strands.push(SDCStrand {
                 name: Some(name),
                 color: None,
@@ -2078,9 +2078,9 @@ mod test_anneal {
                 right_glue: Some(rg),
             });
 
-            let name = format!("1{}1", base);
-            let lg = format!("1{}*", leo);
-            let rg = format!("1{}*", reo);
+            let name = format!("1{base}1");
+            let lg = format!("1{leo}*");
+            let rg = format!("1{reo}*");
             strands.push(SDCStrand {
                 name: Some(name),
                 color: None,
@@ -2382,9 +2382,9 @@ mod test_sdc_model {
                 ("e".to_string(), "o".to_string())
             };
 
-            let name = format!("0{}0", base);
-            let lg = format!("0{}*", leo);
-            let rg = format!("0{}", reo);
+            let name = format!("0{base}0");
+            let lg = format!("0{leo}*");
+            let rg = format!("0{reo}");
             strands.push(SDCStrand {
                 name: Some(name),
                 color: None,
@@ -2394,9 +2394,9 @@ mod test_sdc_model {
                 right_glue: Some(rg),
             });
 
-            let name = format!("1{}1", base);
-            let lg = format!("1{}*", leo);
-            let rg = format!("1{}*", reo);
+            let name = format!("1{base}1");
+            let lg = format!("1{leo}*");
+            let rg = format!("1{reo}*");
             strands.push(SDCStrand {
                 name: Some(name),
                 color: None,
@@ -2485,7 +2485,7 @@ mod test_sdc_model {
 
         probs.sort_by(|(_, p1), (_, p2)| {
             p2.partial_cmp(p1)
-                .unwrap_or_else(|| panic!("{} -- {}", p1, p2))
+                .unwrap_or_else(|| panic!("{p1} -- {p2}"))
         });
 
         // The perfect combination would be all 0's
