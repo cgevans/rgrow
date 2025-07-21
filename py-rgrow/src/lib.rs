@@ -43,8 +43,6 @@ mod rgrow {
     #[pymodule_export]
     use rgrow::system::NeededUpdate;
     #[pymodule_export]
-    use rgrow::system::CommitterAdaptiveConfig;
-    #[pymodule_export]
     use rgrow::utils::loop_penalty;
     #[pymodule_export]
     use rgrow::utils::string_dna_dg_ds;

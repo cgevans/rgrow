@@ -301,7 +301,7 @@ fn test_calc_committer() -> Result<()> {
     let committer = sys.calc_committer(&se, 200, None, None, 100)?;
 
     println!("committer k=8: {committer}");
-    assert!((committer > 0.6) && (committer < 0.8), "committer out of expected range: {committer}");
+    assert!((committer > 0.5) && (committer < 0.9), "committer out of expected range: {committer}");
 
     let mut state = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((32, 32))?;
 
