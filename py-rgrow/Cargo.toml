@@ -19,7 +19,6 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-bincode = "^1"
 indent = "0.1.1"
 serde = { workspace = true }
 rand = { workspace = true }

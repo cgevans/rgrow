@@ -12,7 +12,7 @@ categories = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "^0.6", features = ["html_reports"] }
 
 [[bench]]
 name = "sierpinski"
@@ -55,14 +55,14 @@ bimap = "0.6"
 serde_yaml = "0.9"
 serde_json = "1"
 serde = { workspace = true }
-pixels = { version = "^0.13", optional = true }
+pixels = { version = "^0.15", optional = true }
 phf = { version = "^0", features = ["macros"] }
 nom = { version = "7", optional = false }
 # winit = { version = "^0", optional = true }
 # winit_input_helper = {version = "^0", optional = true}
 # winit-modular = {version = "^0", optional = true}
 rayon = { workspace = true }
-thiserror = "1"
+thiserror = "2"
 anyhow = "1"
 numpy = { workspace = true, optional = true }
 pyo3 = { workspace = true, optional = true }
@@ -72,7 +72,6 @@ enum_dispatch = "0.3"
 polars = { workspace = true }
 pyo3-polars = {workspace = true, optional = true}
 approx = { workspace = true }
-bincode = "1"
 astro-float = "0.9.4"
 paste="1.0.15"
 bpci = "0.1.0"
@@ -83,11 +82,11 @@ features = ["derive"]
 
 
 [dependencies.cached]
-version = "0.18"
+version = "^0.55"
 default-features = false
 
 [dependencies.num-traits]
-version = "0.2"
+version = "^0.2"
 
 [package.metadata.docs.rs]
 no-default-features = true
