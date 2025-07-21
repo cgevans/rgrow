@@ -1,14 +1,12 @@
 extern crate rgrow;
 
 use anyhow::{Context, Result};
+use ndarray::array;
 
 use std::fs::File;
 
 use rgrow::{
-    canvas::{Canvas, CanvasPeriodic, PointSafe2},
-    state::{NullStateTracker, QuadTreeState, StateStatus},
-    system::{EvolveBounds, FissionHandling, DynSystem, System},
-    tileset::{Seed, Size, TileSet},
+    canvas::{Canvas, CanvasPeriodic, PointSafe2}, models::ktam::KTAM, state::{NullStateTracker, QuadTreeState, StateEnum, StateStatus}, system::{DynSystem, EvolveBounds, FissionHandling, System}, tileset::{Seed, Size, TileSet}
 };
 
 fn test_sim(ts: &TileSet) -> Result<()> {
@@ -254,4 +252,73 @@ fn nucrate_test() -> Result<()> {
 fn get_sierpinski() -> Result<TileSet> {
     serde_yaml::from_reader(File::open("examples/sierpinski.yaml")?)
         .context("Failure opening sierpinski example.")
+}
+
+#[test]
+fn test_calc_committer() -> Result<()> {
+    // In these conditions, the max energy square is k=8.
+    let mut sys = KTAM::new_sized(1, 1);
+    sys.tile_edges = array![[0,0,0,0],[1,1,1,1]];
+    sys.tile_concs = array![0., 1e-7];
+    sys.alpha = -7.1;
+    sys.glue_strengths = array![0.0, 1.0];
+
+    sys.g_se = 4.8;
+
+    sys.update_system();
+
+    let mut state = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((32, 32))?;
+
+    let k = 14;
+    for r in 0..k {
+        for c in 0..k {
+            sys.set_safe_point(&mut state, PointSafe2((r, c)), 1);
+        }
+    }
+    sys.setup_state(&mut state)?;
+
+    let se = StateEnum::PeriodicCanvasNoTracker(state);
+
+    let committer = sys.calc_committer(&se, 200, None, None, 100)?;
+
+    println!("committer k=14: {committer}");
+    assert!((committer > 0.9), "committer out of expected range: {committer}");
+
+
+
+    let mut state = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((32, 32))?;
+
+    let k = 8;
+    for r in 0..k {
+        for c in 0..k {
+            sys.set_safe_point(&mut state, PointSafe2((r, c)), 1);
+        }
+    }
+    sys.setup_state(&mut state)?;
+
+    let se = StateEnum::PeriodicCanvasNoTracker(state);
+
+    let committer = sys.calc_committer(&se, 200, None, None, 100)?;
+
+    println!("committer k=8: {committer}");
+    assert!((committer > 0.6) && (committer < 0.8), "committer out of expected range: {committer}");
+
+    let mut state = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((32, 32))?;
+
+    let k = 5;
+    for r in 0..k {
+        for c in 0..k {
+            sys.set_safe_point(&mut state, PointSafe2((r, c)), 1);
+        }
+    }
+    sys.setup_state(&mut state)?;
+
+    let se = StateEnum::PeriodicCanvasNoTracker(state);
+
+    let committer = sys.calc_committer(&se, 200, None, None, 100)?;
+
+    println!("committer k=5: {committer}");
+    assert!((committer < 0.1), "committer out of expected range: {committer}");
+
+    Ok(())
 }

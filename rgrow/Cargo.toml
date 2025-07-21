@@ -18,6 +18,10 @@ criterion = { version = "0.5", features = ["html_reports"] }
 name = "sierpinski"
 harness = false
 
+[[bench]]
+name = "committer"
+harness = false
+
 # [[bench]]
 # name = "ratestore"
 # harness = false
