@@ -14,7 +14,7 @@ use crate::models::sdc1d::SDC;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{
-    DimerInfo, EvolveBounds, EvolveOutcome, NeededUpdate, TileBondInfo, System, DynSystem
+    DimerInfo, EvolveBounds, EvolveOutcome, NeededUpdate, TileBondInfo, System, DynSystem, CommitterAdaptiveConfig
 };
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
@@ -581,6 +581,46 @@ macro_rules! create_py_system {
             fn py_setup_state(&self, state: &mut PyState) -> PyResult<()> {
                 self.setup_state(&mut state.0).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
                 Ok(())
+            }
+
+            /// Calculate the committer function for a state: the probability that when a simulation
+            /// is started from that state, the assembly will grow to a larger size (cutoff_size)
+            /// rather than melting to zero tiles.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State
+            ///     The state to analyze
+            /// cutoff_size : int
+            ///     Size threshold for commitment
+            /// num_trials : int
+            ///     Number of trials to run
+            /// max_time : float, optional
+            ///     Maximum simulation time per trial
+            /// max_events : int, optional
+            ///     Maximum events per trial
+            ///
+            /// Returns
+            /// -------
+            /// float
+            ///     Probability of reaching cutoff_size (between 0.0 and 1.0)
+            #[pyo3(name = "calc_committer", signature = (state, cutoff_size, num_trials, max_time=None, max_events=None))]
+            fn py_calc_committer(
+                &mut self,
+                state: &PyState,
+                cutoff_size: NumTiles,
+                num_trials: usize,
+                max_time: Option<f64>,
+                max_events: Option<NumEvents>,
+            ) -> PyResult<f64> {
+                self.calc_committer(
+                    &state.0,
+                    cutoff_size,
+                    max_time,
+                    max_events,
+                    num_trials,
+                )
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }
 
             /// Run FFS.

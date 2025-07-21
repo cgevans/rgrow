@@ -222,6 +222,55 @@ pub enum ChunkHandling {
     Equilibrium,
 }
 
+/// Configuration for adaptive committer function calculation.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
+pub struct CommitterAdaptiveConfig {
+    /// Maximum simulation time per trial.
+    pub max_time: Option<f64>,
+    /// Maximum events per trial.
+    pub max_events: Option<NumEvents>,
+    /// Target precision for 90% confidence interval.
+    pub target_precision: f64,
+    /// Minimum number of trials to run.
+    pub min_trials: usize,
+    /// Maximum number of trials to run.
+    pub max_trials: usize,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl CommitterAdaptiveConfig {
+    #[new]
+    #[pyo3(signature = (max_time=None, max_events=None, target_precision=0.05, min_trials=100, max_trials=10000))]
+    pub fn new(
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        target_precision: f64,
+        min_trials: usize,
+        max_trials: usize,
+    ) -> Self {
+        Self {
+            max_time,
+            max_events,
+            target_precision,
+            min_trials,
+            max_trials,
+        }
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!(
+            "CommitterAdaptiveConfig(max_time={}, max_events={}, target_precision={}, min_trials={}, max_trials={})",
+            self.max_time.map_or("None".to_string(), |v| format!("{v:?}")),
+            self.max_events.map_or("None".to_string(), |v| format!("{v:?}")),
+            self.target_precision,
+            self.min_trials,
+            self.max_trials
+        )
+    }
+}
+
 impl TryFrom<&str> for ChunkHandling {
     type Error = StringConvError;
 
@@ -664,6 +713,115 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
         Err(GrowError::NotSupported("Dimer calculation not supported by this system".to_string()))
     }
+
+    // /// Calculates the committer function for a state: the probability that when a simulation
+    // /// is started from that state, the assembly will grow to a larger size (cutoff_size)
+    // /// rather than melting to zero tiles.
+    // #[cfg(feature = "use_rayon")]
+    // fn calc_committer<St: State + StateWithCreate>(
+    //     &self,
+    //     initial_state: &St,
+    //     cutoff_size: NumTiles,
+    //     max_time: Option<f64>,
+    //     max_events: Option<NumEvents>,
+    //     num_trials: usize,
+    // ) -> Result<f64, GrowError> {
+    //     if num_trials == 0 {
+    //         return Err(GrowError::NotSupported("Number of trials must be greater than 0".to_string()));
+    //     }
+
+    //     let mut successes = 0;
+
+    //     let mut trial_states = (0..num_trials).map(|_| St::empty(initial_state.get_params())).collect::<Result<Vec<_>, GrowError>>()?;
+    //     trial_states.par_iter_mut().for_each(|mut trial_state| {
+    //         trial_state.zeroed_copy_from_state_nonzero_rate(initial_state);
+    //     });
+
+    //     let bounds = EvolveBounds {
+    //         size_min: Some(0),
+    //         size_max: Some(cutoff_size),
+    //         for_time: max_time,
+    //         for_events: max_events,
+    //         ..Default::default()
+    //     };
+
+    //     let outcomes = self.evolve_states(&mut trial_states, bounds);
+
+    //     for (i, &outcome) in outcomes.iter().enumerate() {
+    //         let outcome = outcome?;
+    //         match outcome {
+    //             EvolveOutcome::ReachedSizeMax => successes += 1,
+    //             EvolveOutcome::ReachedSizeMin => {},
+    //             _ => {
+    //                 return Err(GrowError::NotSupported("Evolve outcome not supported".to_string())); // FIXME: this should make more sense
+    //             },
+    //         }
+    //     }
+    
+
+    //     Ok(successes as f64 / num_trials as f64)
+    // }
+
+    // /// Calculates the committer function with adaptive sampling to achieve a target confidence interval.
+    // /// Runs simulations until the 90% confidence interval is within the specified range.
+    // fn calc_committer_adaptive<St: State + StateWithCreate>(
+    //     &self,
+    //     initial_state: &St,
+    //     cutoff_size: NumTiles,
+    //     config: CommitterAdaptiveConfig,
+    // ) -> Result<(f64, f64, usize), GrowError> {
+    //     let CommitterAdaptiveConfig { max_time, max_events, target_precision, min_trials, max_trials } = config;
+    //     if min_trials == 0 {
+    //         return Err(GrowError::NotSupported("Minimum number of trials must be greater than 0".to_string()));
+    //     }
+    //     if max_trials < min_trials {
+    //         return Err(GrowError::NotSupported("Maximum trials must be >= minimum trials".to_string()));
+    //     }
+    //     if target_precision <= 0.0 || target_precision >= 1.0 {
+    //         return Err(GrowError::NotSupported("Target precision must be between 0 and 1".to_string()));
+    //     }
+
+    //     let mut successes = 0;
+    //     let mut trials = 0;
+
+    //     for _ in 0..max_trials {
+    //         let mut trial_state = St::empty(initial_state.get_params())?;
+    //         trial_state.zeroed_copy_from_state_nonzero_rate(initial_state);
+
+    //         let bounds = EvolveBounds {
+    //             size_min: Some(0),
+    //             size_max: Some(cutoff_size),
+    //             for_time: max_time,
+    //             for_events: max_events,
+    //             ..Default::default()
+    //         };
+
+    //         match self.evolve(&mut trial_state, bounds)? {
+    //             EvolveOutcome::ReachedSizeMax => successes += 1,
+    //             EvolveOutcome::ReachedSizeMin => {},
+    //             _ => {},
+    //         }
+
+    //         trials += 1;
+
+    //         if trials >= min_trials {
+    //             let p = successes as f64 / trials as f64;
+                
+    //             let se = (p * (1.0 - p) / trials as f64).sqrt();
+    //             let confidence_width = 1.645 * se;
+                
+    //             if confidence_width <= target_precision {
+    //                 return Ok((p, confidence_width, trials));
+    //             }
+    //         }
+    //     }
+
+    //     let p = successes as f64 / trials as f64;
+    //     let se = (p * (1.0 - p) / trials as f64).sqrt();
+    //     let confidence_width = 1.645 * se;
+        
+    //     Ok((p, confidence_width, trials))
+    // }
 }
 
 #[enum_dispatch]
@@ -703,6 +861,16 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     fn system_info(&self) -> String;
 
     fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError>;
+
+    fn calc_committer(
+        &mut self,
+        initial_state: &StateEnum,
+        cutoff_size: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        num_trials: usize,
+    ) -> Result<f64, GrowError>;
+
 }
 
 impl<S: System> DynSystem for S
@@ -768,6 +936,48 @@ where
 
     fn system_info(&self) -> String {
         self.system_info()
+    }
+
+    #[cfg(feature = "use_rayon")]
+    fn calc_committer(
+        &mut self,
+        initial_state: &StateEnum, 
+        cutoff_size: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        num_trials: usize,
+    ) -> Result<f64, GrowError> {
+        if num_trials == 0 {
+            return Err(GrowError::NotSupported("Number of trials must be greater than 0".to_string()));
+        }
+
+        let mut successes = 0;
+
+        let mut trial_states = (0..num_trials).map(|_| initial_state.clone()).collect::<Vec<_>>();
+
+        let bounds = EvolveBounds {
+            size_min: Some(0),
+            size_max: Some(cutoff_size),
+            for_time: max_time,
+            for_events: max_events,
+            ..Default::default()
+        };
+
+        let outcomes = self.evolve_states(&mut trial_states, bounds);
+
+        for (i, outcome) in outcomes.iter().enumerate() {
+            let outcome = outcome.as_ref().map_err(|e| GrowError::NotSupported(e.to_string()))?;
+            match outcome {
+                EvolveOutcome::ReachedSizeMax => successes += 1,
+                EvolveOutcome::ReachedSizeMin => {},
+                _ => {
+                    return Err(GrowError::NotSupported("Evolve outcome not supported".to_string())); // FIXME: this should make more sense
+                },
+            }
+        }
+    
+
+        Ok(successes as f64 / num_trials as f64)
     }
 }
 

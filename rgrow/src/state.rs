@@ -63,6 +63,7 @@ impl_clonable_state! {
 #[enum_dispatch(
     State,
     StateStatus,
+    StateWithCreate,
     Canvas,
     RateStore,
     TrackerData,
@@ -158,6 +159,7 @@ pub trait TileCounts {
     /// Change the tile count based on the tile detaching
     fn update_detachment(&mut self, tile: Tile);
 }
+
 
 pub trait StateWithCreate: State + Sized {
     type Params;
