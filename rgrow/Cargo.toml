@@ -36,9 +36,8 @@ name = "rgrow"
 path = "src/main.rs"
 
 [features]
-default = ["use_rayon"]
+default = []
 ui = ["fltk", "pixels"]
-use_rayon = ["rayon"]
 python = ["pyo3", "numpy", "pyo3-polars"]
 
 [dependencies]
@@ -58,7 +57,7 @@ nom = { version = "7", optional = false }
 # winit = { version = "^0", optional = true }
 # winit_input_helper = {version = "^0", optional = true}
 # winit-modular = {version = "^0", optional = true}
-rayon = { workspace = true, optional = true }
+rayon = { workspace = true }
 thiserror = "1"
 anyhow = "1"
 numpy = { workspace = true, optional = true }
@@ -87,4 +86,4 @@ version = "0.2"
 
 [package.metadata.docs.rs]
 no-default-features = true
-features = ["use_rayon", "python"]
+features = ["python"]

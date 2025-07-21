@@ -10,8 +10,7 @@ categories = { workspace = true }
 
 
 [features]
-default = ["use_rayon"] # , "ui"]         # "ui"
-use_rayon = ["rgrow/use_rayon", "rayon"]
+default = [] # , "ui"]         # "ui"
 ui = ["rgrow/ui"]
 
 [lib]
@@ -26,13 +25,13 @@ serde = { workspace = true }
 rand = { workspace = true }
 ndarray = { workspace = true }
 numpy = { workspace = true }
-rayon = { version = "1", optional = true }
+rayon = { version = "1" }
 polars = {workspace = true}
 pyo3-polars = {workspace = true}
 
 [dependencies.rgrow]
 path = "../rgrow"
-features = ["python", "use_rayon"]
+features = ["python"]
 default-features = false
 
 [dependencies.pyo3]

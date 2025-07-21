@@ -39,7 +39,6 @@ use fltk::{app, prelude::*, window::Window};
 #[cfg(feature = "ui")]
 use pixels::{Pixels, SurfaceTexture};
 
-#[cfg(feature = "use_rayon")]
 use rayon::prelude::*;
 
 #[cfg(feature = "python")]
@@ -403,7 +402,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         }
     }
 
-    #[cfg(feature = "use_rayon")]
     fn evolve_states<St: State>(
         &mut self,
         states: &mut [St],
@@ -717,7 +715,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     // /// Calculates the committer function for a state: the probability that when a simulation
     // /// is started from that state, the assembly will grow to a larger size (cutoff_size)
     // /// rather than melting to zero tiles.
-    // #[cfg(feature = "use_rayon")]
+    //
     // fn calc_committer<St: State + StateWithCreate>(
     //     &self,
     //     initial_state: &St,
@@ -834,7 +832,6 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     ) -> Result<EvolveOutcome, GrowError>;
 
     /// Evolve a list of states, in parallel.
-    #[cfg(feature = "use_rayon")]
     fn evolve_states(
         &mut self,
         states: &mut [&mut StateEnum],
@@ -885,7 +882,6 @@ where
         self.evolve(state, bounds)
     }
 
-    #[cfg(feature = "use_rayon")]
     fn evolve_states(
         &mut self,
         states: &mut [&mut StateEnum],
@@ -938,7 +934,6 @@ where
         self.system_info()
     }
 
-    #[cfg(feature = "use_rayon")]
     fn calc_committer(
         &mut self,
         initial_state: &StateEnum, 
