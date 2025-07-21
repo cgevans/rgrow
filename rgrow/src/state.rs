@@ -24,6 +24,7 @@ pub trait State: RateStore + Canvas + StateStatus + Sync + Send + TrackerData + 
 #[enum_dispatch]
 pub trait ClonableState: State {
     fn clone_as_stateenum(&self) -> StateEnum;
+    fn clone_into_state(&self, target: &mut StateEnum);
 }
 
 macro_rules! impl_clonable_state {
@@ -32,6 +33,13 @@ macro_rules! impl_clonable_state {
             impl ClonableState for QuadTreeState<$canvas, $tracker> {
                 fn clone_as_stateenum(&self) -> StateEnum {
                     StateEnum::$variant(self.clone())
+                }
+
+                fn clone_into_state(&self, target: &mut StateEnum) {
+                    match target {
+                        StateEnum::$variant(target) => target.clone_from(self),
+                        _ => panic!("Invalid target state enum variant"),
+                    }
                 }
             }
         )*
@@ -68,7 +76,8 @@ impl_clonable_state! {
     RateStore,
     TrackerData,
     CloneAsStateEnum,
-    TileCounts
+    TileCounts,
+    ClonableState
 )]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StateEnum {
@@ -161,14 +170,15 @@ pub trait TileCounts {
 }
 
 
-pub trait StateWithCreate: State + Sized {
+pub trait StateWithCreate: State + Sized + Clone {
     type Params;
     // fn new_raw(canvas: Self::RawCanvas) -> Result<Self, GrowError>;
     fn empty(params: Self::Params) -> Result<Self, GrowError>;
     fn empty_with_types(params: Self::Params, n_tile_types: usize) -> Result<Self, GrowError>;
     fn from_array(arr: Array2<Tile>) -> Result<Self, GrowError>;
     fn get_params(&self) -> Self::Params;
-    fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self;
+    fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self);
+    fn reset_state(&mut self);
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -453,7 +463,7 @@ where
     /// This is fast when the number of tiles << the size of the canvas, eg, when putting in dimers.
     ///
     /// If on debug, conditions should be checked (TODO)
-    fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) -> &mut Self {
+    fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) {
         let max_level = self.rates.0.len() - 1; // FIXME: should not go into RateStore
 
         self.copy_level_quad(source, max_level, (0, 0));
@@ -462,15 +472,25 @@ where
         self.ntiles = source.ntiles;
         self.total_events = source.total_events;
         self.time = source.time;
-        self.tracker = source.tracker.clone();
-
+        self.tracker.clone_from(&source.tracker);
         self.rates.1 = source.rates.1;
-
-        self
+        self.tile_counts.clone_from(&source.tile_counts);
     }
+    
+    
 
     fn get_params(&self) -> Self::Params {
         (self.canvas.nrows(), self.canvas.ncols())
+    }
+    
+    fn reset_state(&mut self) {
+        self.rates.0.iter_mut().for_each(|r| r.fill(PerSecond::new(0.)));
+        self.canvas.raw_array_mut().fill(0);
+        self.ntiles = 0;
+        self.total_events = 0;
+        self.time = Second::new(0.);
+        self.tracker.reset();
+        self.tile_counts.fill(0);
     }
 }
 

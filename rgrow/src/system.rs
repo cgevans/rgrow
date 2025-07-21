@@ -660,6 +660,19 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
         Err(GrowError::NotSupported("Dimer calculation not supported by this system".to_string()))
     }
+
+    fn clone_state<St: StateWithCreate>(&self, initial_state: &St) -> St {
+        // Default here is to just clone the state
+        initial_state.clone()
+    }
+
+    fn clone_state_into_state<St: StateWithCreate>(&self, initial_state: &St, target: &mut St) {
+        target.clone_from(initial_state);
+    }
+
+    fn clone_state_into_empty_state<St: StateWithCreate>(&self, initial_state: &St, target: &mut St) {
+        self.clone_state_into_state(initial_state, target);
+    }
 }
 
 #[enum_dispatch]
