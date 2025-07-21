@@ -516,7 +516,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                 };
                 i_old_state = chooser.sample(&mut rng);
 
-                state.zeroed_copy_from_state_nonzero_rate(&self.state_list[i_old_state]);
+                system.clone_state_into_empty_state(&self.state_list[i_old_state], &mut state);
                 debug_assert_eq!(system.calc_n_tiles(&state), state.n_tiles());
 
                 system.evolve(&mut state, bounds).unwrap();

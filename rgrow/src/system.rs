@@ -660,6 +660,128 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
         Err(GrowError::NotSupported("Dimer calculation not supported by this system".to_string()))
     }
+
+    // /// Calculates the committer function for a state: the probability that when a simulation
+    // /// is started from that state, the assembly will grow to a larger size (cutoff_size)
+    // /// rather than melting to zero tiles.
+    //
+    // fn calc_committer<St: State + StateWithCreate>(
+    //     &self,
+    //     initial_state: &St,
+    //     cutoff_size: NumTiles,
+    //     max_time: Option<f64>,
+    //     max_events: Option<NumEvents>,
+    //     num_trials: usize,
+    // ) -> Result<f64, GrowError> {
+    //     if num_trials == 0 {
+    //         return Err(GrowError::NotSupported("Number of trials must be greater than 0".to_string()));
+    //     }
+
+    //     let mut successes = 0;
+
+    //     let mut trial_states = (0..num_trials).map(|_| St::empty(initial_state.get_params())).collect::<Result<Vec<_>, GrowError>>()?;
+    //     trial_states.par_iter_mut().for_each(|mut trial_state| {
+    //         trial_state.zeroed_copy_from_state_nonzero_rate(initial_state);
+    //     });
+
+    //     let bounds = EvolveBounds {
+    //         size_min: Some(0),
+    //         size_max: Some(cutoff_size),
+    //         for_time: max_time,
+    //         for_events: max_events,
+    //         ..Default::default()
+    //     };
+
+    //     let outcomes = self.evolve_states(&mut trial_states, bounds);
+
+    //     for (i, &outcome) in outcomes.iter().enumerate() {
+    //         let outcome = outcome?;
+    //         match outcome {
+    //             EvolveOutcome::ReachedSizeMax => successes += 1,
+    //             EvolveOutcome::ReachedSizeMin => {},
+    //             _ => {
+    //                 return Err(GrowError::NotSupported("Evolve outcome not supported".to_string())); // FIXME: this should make more sense
+    //             },
+    //         }
+    //     }
+    
+
+    //     Ok(successes as f64 / num_trials as f64)
+    // }
+
+    // /// Calculates the committer function with adaptive sampling to achieve a target confidence interval.
+    // /// Runs simulations until the 90% confidence interval is within the specified range.
+    // fn calc_committer_adaptive<St: State + StateWithCreate>(
+    //     &self,
+    //     initial_state: &St,
+    //     cutoff_size: NumTiles,
+    //     config: CommitterAdaptiveConfig,
+    // ) -> Result<(f64, f64, usize), GrowError> {
+    //     let CommitterAdaptiveConfig { max_time, max_events, target_precision, min_trials, max_trials } = config;
+    //     if min_trials == 0 {
+    //         return Err(GrowError::NotSupported("Minimum number of trials must be greater than 0".to_string()));
+    //     }
+    //     if max_trials < min_trials {
+    //         return Err(GrowError::NotSupported("Maximum trials must be >= minimum trials".to_string()));
+    //     }
+    //     if target_precision <= 0.0 || target_precision >= 1.0 {
+    //         return Err(GrowError::NotSupported("Target precision must be between 0 and 1".to_string()));
+    //     }
+
+    //     let mut successes = 0;
+    //     let mut trials = 0;
+
+    //     for _ in 0..max_trials {
+    //         let mut trial_state = St::empty(initial_state.get_params())?;
+    //         trial_state.zeroed_copy_from_state_nonzero_rate(initial_state);
+
+    //         let bounds = EvolveBounds {
+    //             size_min: Some(0),
+    //             size_max: Some(cutoff_size),
+    //             for_time: max_time,
+    //             for_events: max_events,
+    //             ..Default::default()
+    //         };
+
+    //         match self.evolve(&mut trial_state, bounds)? {
+    //             EvolveOutcome::ReachedSizeMax => successes += 1,
+    //             EvolveOutcome::ReachedSizeMin => {},
+    //             _ => {},
+    //         }
+
+    //         trials += 1;
+
+    //         if trials >= min_trials {
+    //             let p = successes as f64 / trials as f64;
+                
+    //             let se = (p * (1.0 - p) / trials as f64).sqrt();
+    //             let confidence_width = 1.645 * se;
+                
+    //             if confidence_width <= target_precision {
+    //                 return Ok((p, confidence_width, trials));
+    //             }
+    //         }
+    //     }
+
+    //     let p = successes as f64 / trials as f64;
+    //     let se = (p * (1.0 - p) / trials as f64).sqrt();
+    //     let confidence_width = 1.645 * se;
+        
+    //     Ok((p, confidence_width, trials))
+    // }
+
+    fn clone_state<St: StateWithCreate>(&self, initial_state: &St) -> St {
+        // Default here is to just clone the state
+        initial_state.clone()
+    }
+
+    fn clone_state_into_state<St: StateWithCreate>(&self, initial_state: &St, target: &mut St) {
+        target.clone_from(initial_state);
+    }
+
+    fn clone_state_into_empty_state<St: StateWithCreate>(&self, initial_state: &St, target: &mut St) {
+        self.clone_state_into_state(initial_state, target);
+    }
 }
 
 #[enum_dispatch]

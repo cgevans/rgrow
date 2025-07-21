@@ -917,6 +917,16 @@ impl System for KTAM {
             }
         }
     }
+
+    fn clone_state<St: crate::state::StateWithCreate>(&self, initial_state: &St) -> St {
+        let mut state = St::empty(initial_state.get_params()).unwrap();
+        state.zeroed_copy_from_state_nonzero_rate(initial_state);
+        state
+    }
+
+    fn clone_state_into_empty_state<St: crate::state::StateWithCreate>(&self, initial_state: &St, target: &mut St) {
+        target.zeroed_copy_from_state_nonzero_rate(initial_state);
+    }
 }
 
 

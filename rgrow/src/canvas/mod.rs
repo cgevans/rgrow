@@ -10,7 +10,7 @@ pub mod tube_zz;
 pub use tube_diagonals::CanvasTubeDiagonals;
 pub use tube_zz::CanvasTube;
 
-pub trait CanvasCreate: Sized + Canvas {
+pub trait CanvasCreate: Sized + Canvas + Clone {
     type Params;
     fn new_sized(shape: Self::Params) -> GrowResult<Self>;
     fn from_array(arr: Array2<Tile>) -> GrowResult<Self>;
