@@ -708,6 +708,14 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         num_trials: usize,
     ) -> Result<f64, GrowError>;
 
+    fn calc_committer_adaptive(
+        &mut self,
+        initial_state: &StateEnum,
+        cutoff_size: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        conf_interval_margin: f64,
+    ) -> Result<f64, GrowError>;
 }
 
 impl<S: System> DynSystem for S
@@ -811,6 +819,46 @@ where
             }
         }
     
+
+        Ok(successes as f64 / num_trials as f64)
+    }
+
+
+    fn calc_committer_adaptive(
+        &mut self,
+        initial_state: &StateEnum, 
+        cutoff_size: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        conf_interval_margin: f64,
+    ) -> Result<f64, GrowError> {
+
+        use bpci::{NSuccessesSample, WilsonScore};
+
+        let mut successes = 0;
+        let mut num_trials = 0;
+
+        let trial_state = initial_state.clone();
+
+        let bounds = EvolveBounds {
+            size_min: Some(0),
+            size_max: Some(cutoff_size),
+            for_time: max_time,
+            for_events: max_events,
+            ..Default::default()
+        };
+
+        while NSuccessesSample::new(successes, num_trials).unwrap().wilson_score(1.960).margin > conf_interval_margin {
+            let mut trial_state = trial_state.clone();
+            let outcome = self.evolve(&mut trial_state, bounds)?;
+            match outcome {
+                EvolveOutcome::ReachedSizeMax => {successes += 1; num_trials += 1},
+                EvolveOutcome::ReachedSizeMin => {num_trials += 1},
+                _ => {
+                    return Err(GrowError::NotSupported("Evolve outcome not supported".to_string())); // FIXME: this should make more sense
+                },
+            }
+        }
 
         Ok(successes as f64 / num_trials as f64)
     }

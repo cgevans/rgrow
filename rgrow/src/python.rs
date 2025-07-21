@@ -622,6 +622,50 @@ macro_rules! create_py_system {
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }
 
+            /// Calculate the committer function for a state using adaptive sampling: the probability 
+            /// that when a simulation is started from that state, the assembly will grow to a larger 
+            /// size (cutoff_size) rather than melting to zero tiles. Automatically determines the 
+            /// number of trials needed to achieve a specified confidence interval margin.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State
+            ///     The state to analyze
+            /// cutoff_size : int
+            ///     Size threshold for commitment
+            /// conf_interval_margin : float
+            ///     Confidence interval margin (e.g., 0.05 for 5%)
+            /// max_time : float, optional
+            ///     Maximum simulation time per trial
+            /// max_events : int, optional
+            ///     Maximum events per trial
+            ///
+            /// Returns
+            /// -------
+            /// float
+            ///     Probability of reaching cutoff_size (between 0.0 and 1.0)
+            #[pyo3(name = "calc_committer_adaptive", signature = (state, cutoff_size, conf_interval_margin, max_time=None, max_events=None))]
+            fn py_calc_committer_adaptive(
+                &mut self,
+                state: &PyState,
+                cutoff_size: NumTiles,
+                conf_interval_margin: f64,
+                max_time: Option<f64>,
+                max_events: Option<NumEvents>,
+                py: Python<'_>,
+            ) -> PyResult<f64> {
+                py.allow_threads(|| {
+                    self.calc_committer_adaptive(
+                        &state.0,
+                        cutoff_size,
+                        max_time,
+                        max_events,
+                        conf_interval_margin,
+                    )
+                })
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+            }
+
             /// Run FFS.
             ///
             /// Parameters
