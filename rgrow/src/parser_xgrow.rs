@@ -187,19 +187,19 @@ enum XgrowArgs<'a> {
     VDoubleTile(TileIdent, TileIdent),
 }
 
-fn arg_block(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_block(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     map(preceded(tag("block="), take_u32), |x| {
         XgrowArgs::Block(x as usize)
     })(input)
 }
 
-fn arg_size(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_size(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     map(preceded(tag("size="), take_u32), |x| {
         XgrowArgs::Size(x as usize)
     })(input)
 }
 
-fn arg_gluelink(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_gluelink(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     let (input, (g1, _, g2)) = preceded(
         tag("g"),
         delimited(tag("("), tuple((take_u32, tag(","), take_u32)), tag(")")),
@@ -210,21 +210,21 @@ fn arg_gluelink(input: &str) -> IResult<&str, XgrowArgs> {
     Ok((input, XgrowArgs::GlueLink(g1, g2, v)))
 }
 
-fn arg_gse(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_gse(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     map(preceded(tag("Gse="), string_f64), XgrowArgs::Gse)(input)
 }
 
-fn arg_gmc(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_gmc(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     map(preceded(tag("Gmc="), string_f64), XgrowArgs::Gmc)(input)
 }
 
-fn arg_update_rate(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_update_rate(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     map(preceded(tag("update_rate="), take_u32), |x| {
         XgrowArgs::UpdateRate(x as u64)
     })(input)
 }
 
-fn arg_seed(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_seed(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     preceded(
         tag("seed="),
         map(
@@ -236,7 +236,7 @@ fn arg_seed(input: &str) -> IResult<&str, XgrowArgs> {
     )(input)
 }
 
-fn arg_hdoubletile(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_hdoubletile(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     preceded(
         tag("doubletile="),
         map(tuple((take_u32, tag(","), take_u32)), |(x, _, y)| {
@@ -245,7 +245,7 @@ fn arg_hdoubletile(input: &str) -> IResult<&str, XgrowArgs> {
     )(input)
 }
 
-fn arg_vdoubletile(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_vdoubletile(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     preceded(
         tag("vdoubletile="),
         map(tuple((take_u32, tag(","), take_u32)), |(x, _, y)| {
@@ -254,7 +254,7 @@ fn arg_vdoubletile(input: &str) -> IResult<&str, XgrowArgs> {
     )(input)
 }
 
-fn arg_periodic(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_periodic(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     alt((
         map(tag("periodic=False"), |_| XgrowArgs::Periodic(false)),
         map(tag("periodic=True"), |_| XgrowArgs::Periodic(true)),
@@ -262,11 +262,11 @@ fn arg_periodic(input: &str) -> IResult<&str, XgrowArgs> {
     ))(input)
 }
 
-fn arg_threshold(input: &str) -> IResult<&str, XgrowArgs> {
+fn arg_threshold(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     map(preceded(tag("T="), string_f64), XgrowArgs::T)(input)
 }
 
-fn unhandled_option(input: &str) -> IResult<&str, XgrowArgs> {
+fn unhandled_option(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     map(is_not(" \t\r\n%"), XgrowArgs::Unhandled)(input)
 }
 

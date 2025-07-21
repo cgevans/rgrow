@@ -27,7 +27,6 @@ pub trait Temperature: Sized {
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject, IntoPyObject))]
-
 pub struct Kelvin(pub f64);
 
 impl Kelvin {

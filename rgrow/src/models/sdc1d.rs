@@ -1927,8 +1927,7 @@ impl SDC {
         let att_rate = self.quencher_att_rate();
         let det_rate = self.quencher_det_rate();
         format!(
-            "Attachment Rate: {}, Detachment Rate: {}",
-            att_rate, det_rate
+            "Attachment Rate: {att_rate}, Detachment Rate: {det_rate}"
         )
     }
 
@@ -1936,8 +1935,7 @@ impl SDC {
         let att_rate = self.fluorophore_att_rate();
         let det_rate = self.fluorophore_det_rate();
         format!(
-            "Attachment Rate: {}, Detachment Rate: {}",
-            att_rate, det_rate
+            "Attachment Rate: {att_rate}, Detachment Rate: {det_rate}"
         )
     }
 

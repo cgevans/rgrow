@@ -111,6 +111,6 @@ fn run_sdc_system() {
             .unwrap();
     sdc_sys.update_state(&mut state, &NeededUpdate::All);
     let bounds = EvolveBounds::default().for_time(1.0 * 60.0 * 60.0);
-    let eo = System::evolve(&sdc_sys, &mut state, bounds).unwrap();
+    let _eo = System::evolve(&sdc_sys, &mut state, bounds).unwrap();
     assert_ne!(state.total_events(), 0)
 }

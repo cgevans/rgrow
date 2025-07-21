@@ -175,8 +175,7 @@ impl FromPyObject<'_> for RustAny {
             Ok(RustAny(Box::new(val)))
         } else {
             Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
-                "Cannot convert value {:?}",
-                obj
+                "Cannot convert value {obj:?}"
             )))
         }
     }

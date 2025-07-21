@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     base::{Glue, HashSetType, GrowError},
-    canvas::{Canvas, PointSafe2, PointSafeHere},
+    canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{
         DimerInfo, Event, FissionHandling, Orientation, System, TileBondInfo,
@@ -21,6 +21,9 @@ use crate::{
 use crate::python::PyState;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+use crate::canvas::Canvas;
 
 type_alias!( u32 => Sides );
 
@@ -62,7 +65,6 @@ impl From<u32> for TileState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 #[cfg_attr(feature = "python", derive(FromPyObject))]
-
 pub struct TileType(pub(crate) usize);
 
 impl TileType {
@@ -503,6 +505,7 @@ impl KBlock {
         self.kf * self.tile_concentration(tile)
     }
 
+    #[cfg(feature = "python")]
     fn blocker_attachment_rate_at_side(&self, side: Sides, tile: TileState) -> PerSecond {
         self.kf * self.free_blocker_concentrations[self.glue_on_side(side, tile)]
     }
@@ -1328,6 +1331,7 @@ mod test_kblock {
 
     #[test]
     fn test_bfs() {
+        use crate::canvas::Canvas;
         let tile_a = KBlockTile {
             name: "TileA".to_string(),
             concentration: 1e-2,
@@ -1364,7 +1368,7 @@ mod test_kblock {
         se.set_sa(&PointSafe2((5, 4)), &(1 << 4));
 
         let removals = kblock.unseeded(&se, PointSafe2((3, 2)));
-        println!("{:?}", removals);
+        println!("{removals:?}");
         assert_eq!(removals.len(), 5);
         assert!(removals.contains(&PointSafe2((4, 2))));
         assert!(removals.contains(&PointSafe2((5, 2))));
@@ -1410,7 +1414,7 @@ impl pyo3::FromPyObject<'_> for KBlockTile {
                 // If that fails, try to extract as a string and use get_color
                 let color_str: String = ob.getattr("color")?.extract()?;
                 crate::colors::get_color(&color_str)
-                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{}", e)))?
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{e}")))?
             }
         };
 
@@ -1740,7 +1744,7 @@ impl KBlock {
                 let blocker_info = if blockers.is_empty() {
                     "no blockers".to_string()
                 } else {
-                    format!("blockers: {}", blockers)
+                    format!("blockers: {blockers}")
                 };
                 println!(
                     "  {} (id: {}, {}) - rate: {:.e}",
@@ -1751,7 +1755,7 @@ impl KBlock {
                 );
             }
 
-            println!("Total attachment rate: {:.e}", total_rate);
+            println!("Total attachment rate: {total_rate:.e}");
             return;
         }
 
@@ -1781,7 +1785,7 @@ impl KBlock {
         }
         // Tile detachment
         let detachment_rate = self.tile_detachment_rate(&state.0, point);
-        acc.push_str(format!("Tile detachment rate {:.e}", detachment_rate).as_str());
-        println!("{}", acc)
+        acc.push_str(format!("Tile detachment rate {detachment_rate:.e}").as_str());
+        println!("{acc}")
     }
 }

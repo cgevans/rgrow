@@ -450,14 +450,14 @@ mod test_utils {
 
         for (&seq, &dG) in seqs.iter().zip(dG_at_37.iter()) {
             let result = string_dna_delta_g(seq, Celsius(37.0));
-            println!("{}", seq);
+            println!("{seq}");
             // TODO: Undo dG properly
             assert_ulps_eq!(KcalPerMol(dG) + INITIATION_DG, result, max_ulps = 10);
         }
 
         for (&seq, &dG) in seqs.iter().zip(dG_at_50.iter()) {
             let result = string_dna_delta_g(seq, Celsius(50.0));
-            println!("{}", seq);
+            println!("{seq}");
             assert_ulps_eq!(
                 KcalPerMol(dG + 1.96) - (Celsius(50.0) - T37C) * INITIATION_DS,
                 result,

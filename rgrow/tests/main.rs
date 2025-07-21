@@ -134,7 +134,7 @@ fn ktam_test() -> Result<()> {
 fn ktam_barish_test() -> Result<()> {
     let mut ts = TileSet::from_file("examples/barish-perfect.yaml")?;
 
-    print!("ts: {:?}", ts);
+    print!("ts: {ts:?}");
 
     ts.model = Some(rgrow::tileset::Model::KTAM);
     ts.gse = Some(8.5);

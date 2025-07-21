@@ -11,7 +11,7 @@
 use super::fission_base::*;
 use crate::{
     base::{GrowError, RgrowError},
-    canvas::{PointSafe2, PointSafeHere, Canvas},
+    canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{
         ChunkHandling, ChunkSize, DimerInfo, Event, FissionHandling, NeededUpdate, Orientation,
@@ -38,6 +38,9 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
 use crate::python::PyState;
+
+#[cfg(feature = "python")]
+use crate::canvas::Canvas;
 
 /// Concentration (M)
 type Conc = f64;
@@ -910,7 +913,7 @@ impl System for KTAM {
             }
             TileShape::DupleToLeft(_) | TileShape::DupleToTop(_) => {
                 // This shouldn't happen after our redirection above
-                panic!("Internal error: tried to place fake tile {} after redirection", actual_tile);
+                panic!("Internal error: tried to place fake tile {actual_tile} after redirection");
             }
         }
     }
@@ -1959,7 +1962,7 @@ impl KTAM {
         FissionResult::FissionGroups(groupinfo)
     }
 
-    fn total_free_energy_from_point<S: State>(&self, state: &S, p: PointSafe2) -> Energy {
+    pub fn total_free_energy_from_point<S: State>(&self, state: &S, p: PointSafe2) -> Energy {
         let t = state.tile_at_point(p);
         let pn = state.move_sa_n(p);
         let tn = state.v_sh(pn);
@@ -1985,7 +1988,7 @@ impl KTAM {
         }
     }
 
-    fn state_energy<St: State>(&self, state: &St) -> f64 {
+    pub fn state_energy<St: State>(&self, state: &St) -> f64 {
         let ncols = state.ncols();
         let nrows = state.nrows();
 
@@ -2086,7 +2089,7 @@ mod tests {
     use anyhow::Context;
 
     use crate::{
-        canvas::{CanvasPeriodic, CanvasSquare, CanvasTube},
+        canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, Canvas},
         state::{NullStateTracker, QuadTreeState, State, StateWithCreate},
     };
 
@@ -2150,7 +2153,7 @@ mod tests {
                     let expected_formation_rate = system.kf * system.tile_concs[2] * system.tile_concs[1]; // 1e6 * 2e-6 * 1e-6 = 2e-6
                     let actual_formation_rate = f64::from(dimer.formation_rate);
                     assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-12, 
-                        "Formation rate mismatch for (2,1) NS: expected {}, got {}", expected_formation_rate, actual_formation_rate);
+                        "Formation rate mismatch for (2,1) NS: expected {expected_formation_rate}, got {actual_formation_rate}");
                     // Placeholder for equilibrium concentration check
                     assert!(f64::from(dimer.equilibrium_conc) > 0.0);
                 }
@@ -2159,7 +2162,7 @@ mod tests {
                     let expected_formation_rate = system.kf * system.tile_concs[3] * system.tile_concs[3]; // 1e6 * 0.5e-6 * 0.5e-6 = 0.25e-6
                     let actual_formation_rate = f64::from(dimer.formation_rate);
                     assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-12, 
-                        "Formation rate mismatch for (3,3) NS: expected {}, got {}", expected_formation_rate, actual_formation_rate);
+                        "Formation rate mismatch for (3,3) NS: expected {expected_formation_rate}, got {actual_formation_rate}");
                     // Placeholder for equilibrium concentration check
                     assert!(f64::from(dimer.equilibrium_conc) > 0.0);
                 }
@@ -2168,7 +2171,7 @@ mod tests {
                     let expected_formation_rate = system.kf * system.tile_concs[1] * system.tile_concs[2]; // 1e6 * 1e-6 * 2e-6 = 2e-6
                     let actual_formation_rate = f64::from(dimer.formation_rate);
                     assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-12, 
-                        "Formation rate mismatch for (1,2) WE: expected {}, got {}", expected_formation_rate, actual_formation_rate);
+                        "Formation rate mismatch for (1,2) WE: expected {expected_formation_rate}, got {actual_formation_rate}");
                     // Placeholder for equilibrium concentration check
                     assert!(f64::from(dimer.equilibrium_conc) > 0.0);
                 }
@@ -2177,7 +2180,7 @@ mod tests {
                     let expected_formation_rate = system.kf * system.tile_concs[3] * system.tile_concs[3]; // 1e6 * 0.5e-6 * 0.5e-6 = 0.25e-6
                     let actual_formation_rate = f64::from(dimer.formation_rate);
                     assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-12, 
-                        "Formation rate mismatch for (3,3) WE: expected {}, got {}", expected_formation_rate, actual_formation_rate);
+                        "Formation rate mismatch for (3,3) WE: expected {expected_formation_rate}, got {actual_formation_rate}");
                     // Placeholder for equilibrium concentration check
                     assert!(f64::from(dimer.equilibrium_conc) > 0.0);
                 }
@@ -2224,8 +2227,7 @@ mod tests {
                     let expected_formation_rate = system.kf * system.tile_concs[4] * system.tile_concs[1]; // 1e6 * 0.8e-6 * 1e-6
                     let actual_formation_rate = f64::from(dimer.formation_rate);
                     assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-15, 
-                        "Formation rate should use real duple part concentration: expected {}, got {}", 
-                        expected_formation_rate, actual_formation_rate);
+                        "Formation rate should use real duple part concentration: expected {expected_formation_rate}, got {actual_formation_rate}");
                     // Placeholder for equilibrium concentration check
                     assert!(f64::from(dimer.equilibrium_conc) >= 0.0);
                 }
@@ -2239,8 +2241,7 @@ mod tests {
                     let expected_formation_rate = system.kf * system.tile_concs[2] * system.tile_concs[4]; // 1e6 * 0.5e-6 * 0.8e-6
                     let actual_formation_rate = f64::from(dimer.formation_rate);
                     assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-15, 
-                        "Formation rate should use real duple part concentration: expected {}, got {}", 
-                        expected_formation_rate, actual_formation_rate);
+                        "Formation rate should use real duple part concentration: expected {expected_formation_rate}, got {actual_formation_rate}");
                     // Placeholder for equilibrium concentration check
                     assert!(f64::from(dimer.equilibrium_conc) >= 0.0);
                 }
@@ -2254,8 +2255,7 @@ mod tests {
                     let expected_formation_rate = system.kf * system.tile_concs[4] * system.tile_concs[4]; // 1e6 * 0.8e-6 * 0.8e-6
                     let actual_formation_rate = f64::from(dimer.formation_rate);
                     assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-15, 
-                        "Formation rate should use real duple part concentration: expected {}, got {}", 
-                        expected_formation_rate, actual_formation_rate);
+                        "Formation rate should use real duple part concentration: expected {expected_formation_rate}, got {actual_formation_rate}");
                     // Placeholder for equilibrium concentration check
                     assert!(f64::from(dimer.equilibrium_conc) >= 0.0);
                 }
@@ -2269,7 +2269,7 @@ mod tests {
     #[test]
     fn test_place_tile_with_double_tiles() -> Result<(), anyhow::Error> {
         use crate::canvas::CanvasSquare;
-        use crate::state::{NullStateTracker, QuadTreeState, State};
+        use crate::state::{NullStateTracker, QuadTreeState};
 
         let mut system = KTAM::new_sized(5, 3);
         system.tile_edges = array![

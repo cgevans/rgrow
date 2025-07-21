@@ -186,14 +186,12 @@ pub enum EvolveOutcome {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
-
 pub enum Orientation {
     NS,
     WE,
 }
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
-
 pub struct DimerInfo {
     pub t1: Tile,
     pub t2: Tile,
@@ -206,7 +204,7 @@ pub struct DimerInfo {
 #[pymethods]
 impl DimerInfo {
     pub fn __repr__(&self) -> String {
-        format!("{:?}", self)
+        format!("{self:?}")
     }
 }
 
@@ -960,7 +958,7 @@ where
 
         let outcomes = self.evolve_states(&mut trial_states, bounds);
 
-        for (i, outcome) in outcomes.iter().enumerate() {
+        for outcome in outcomes.iter() {
             let outcome = outcome.as_ref().map_err(|e| GrowError::NotSupported(e.to_string()))?;
             match outcome {
                 EvolveOutcome::ReachedSizeMax => successes += 1,

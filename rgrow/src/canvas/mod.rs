@@ -42,8 +42,8 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     fn inbounds(&self, p: Point) -> bool;
     fn calc_n_tiles(&self) -> NumTiles;
     fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles;
-    fn raw_array(&self) -> ArrayView2<Tile>;
-    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile>;
+    fn raw_array(&self) -> ArrayView2<'_, Tile>;
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<'_, Tile>;
     fn nrows(&self) -> usize;
     fn ncols(&self) -> usize;
     fn nrows_usable(&self) -> usize;
@@ -475,11 +475,11 @@ impl Canvas for CanvasSquare {
         self.0.fold(0, |x, y| x + u32::from(*y != 0))
     }
 
-    fn raw_array(&self) -> ArrayView2<Tile> {
+    fn raw_array(&self) -> ArrayView2<'_, Tile> {
         self.0.view()
     }
 
-    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<'_, Tile> {
         self.0.view_mut()
     }
 
@@ -566,11 +566,11 @@ impl Canvas for CanvasPeriodic {
             .fold(0, |x, y| x + u32::from(should_be_counted[*y as usize]))
     }
 
-    fn raw_array(&self) -> ArrayView2<Tile> {
+    fn raw_array(&self) -> ArrayView2<'_, Tile> {
         self.0.view()
     }
 
-    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<'_, Tile> {
         self.0.view_mut()
     }
 
