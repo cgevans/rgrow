@@ -43,14 +43,14 @@ jobs:
       #- name: Install X components
       #  run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
       - name: Run Clippy
-        run: cargo clippy --no-default-features --features use_rayon
+        run: cargo clippy
       - name: Run tests and coverage
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
-          cargo test --no-default-features --features use_rayon # FIXME: ui
+          cargo test
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
       - uses: codecov/codecov-action@v3
         with:
@@ -103,7 +103,7 @@ jobs:
           uv pip install maturin pytest pytest-cov hypothesis
       # - name: Install X components
       #   run: sudo apt-get install -y gdb libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
-      - name: Run coverage #           cargo clippy --features python,use_rayon
+      - name: Run coverage
         run: |
           source venv/bin/activate
           cd py-rgrow
