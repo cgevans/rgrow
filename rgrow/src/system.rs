@@ -838,7 +838,7 @@ where
         let mut successes = 0;
         let mut num_trials = 0;
 
-        let trial_state = initial_state.clone();
+        let mut trial_state = initial_state.clone();
 
         let bounds = EvolveBounds {
             size_min: Some(0),
@@ -848,12 +848,11 @@ where
             ..Default::default()
         };
 
-        while NSuccessesSample::new(successes, num_trials).unwrap().wilson_score(1.960).margin > conf_interval_margin {
-            let mut trial_state = trial_state.clone();
+        while (NSuccessesSample::new(num_trials, successes).unwrap().wilson_score(1.960).margin > conf_interval_margin) || num_trials < 1 {
             let outcome = self.evolve(&mut trial_state, bounds)?;
             match outcome {
-                EvolveOutcome::ReachedSizeMax => {successes += 1; num_trials += 1},
-                EvolveOutcome::ReachedSizeMin => {num_trials += 1},
+                EvolveOutcome::ReachedSizeMax => {successes += 1; num_trials += 1; initial_state.clone_into(&mut trial_state);},
+                EvolveOutcome::ReachedSizeMin => {num_trials += 1; initial_state.clone_into(&mut trial_state);},
                 _ => {
                     return Err(GrowError::NotSupported("Evolve outcome not supported".to_string())); // FIXME: this should make more sense
                 },
