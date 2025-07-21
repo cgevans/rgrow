@@ -27,7 +27,7 @@ pub trait RateStore {
     fn update_point(&mut self, point: PointSafeHere, new_rate: PerSecond);
     fn update_multiple(&mut self, to_update: &[(PointSafeHere, PerSecond)]);
     fn total_rate(&self) -> PerSecond;
-    fn rate_array(&self) -> ArrayView2<PerSecond>;
+    fn rate_array(&'_ self) -> ArrayView2<'_, PerSecond>;
 }
 
 pub trait CreateSizedRateStore {
@@ -140,7 +140,7 @@ impl RateStore for QuadTreeSquareArray<PerSecond> {
         self.1
     }
 
-    fn rate_array(&self) -> ArrayView2<PerSecond> {
+    fn rate_array(&self) -> ArrayView2<'_, PerSecond> {
         self.0.first().unwrap().view()
     }
 }

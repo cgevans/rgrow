@@ -850,14 +850,14 @@ where
 }
 
 pub trait FFSSurface: Send + Sync {
-    fn get_config(&self, i: usize) -> ArrayView2<Tile>;
+    fn get_config(&self, i: usize) -> ArrayView2<'_, Tile>;
     fn get_state(&self, i: usize) -> Arc<StateEnum>;
     fn states(&self) -> Vec<Arc<StateEnum>> {
         (0..self.num_stored_states())
             .map(|i| self.get_state(i))
             .collect()
     }
-    fn configs(&self) -> Vec<ArrayView2<Tile>> {
+    fn configs(&self) -> Vec<ArrayView2<'_, Tile>> {
         (0..self.num_stored_states())
             .map(|i| self.get_config(i))
             .collect()
@@ -1155,7 +1155,7 @@ impl FFSRunResult {
 }
 
 impl FFSLevelResult {
-    pub fn get_config(&self, i: usize) -> ArrayView2<Tile> {
+    pub fn get_config(&self, i: usize) -> ArrayView2<'_, Tile> {
         self.state_list[i].raw_array()
     }
 

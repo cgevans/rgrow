@@ -14,7 +14,7 @@ use crate::models::sdc1d::SDC;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{
-    DimerInfo, EvolveBounds, EvolveOutcome, NeededUpdate, TileBondInfo, System, DynSystem, CommitterAdaptiveConfig
+    DimerInfo, EvolveBounds, EvolveOutcome, NeededUpdate, TileBondInfo, System, DynSystem
 };
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
@@ -130,8 +130,7 @@ impl PyState {
             Ok(self.0.rate_at_point(PointSafeHere(point)).into())
         } else {
             Err(PyValueError::new_err(format!(
-                "Point {:?} is out of bounds.",
-                point
+                "Point {point:?} is out of bounds."
             )))
         }
     }

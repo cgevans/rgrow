@@ -127,8 +127,7 @@ impl FromPyObject<'_> for TileShape {
             "horizontal" | "h" => Ok(Self::Horizontal),
             "vertical" | "v" => Ok(Self::Vertical),
             _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "Unknown tile shape {}",
-                s
+                "Unknown tile shape {s}"
             ))),
         }
     }

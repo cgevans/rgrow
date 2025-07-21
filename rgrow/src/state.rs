@@ -151,7 +151,7 @@ pub trait StateStatus {
 
 #[enum_dispatch]
 pub trait TileCounts {
-    fn tile_counts(&self) -> ArrayView1<NumTiles>;
+    fn tile_counts(&self) -> ArrayView1<'_, NumTiles>;
     fn count_of_tile(&self, tile: Tile) -> NumTiles;
 
     /// Change the tile count based on the tile attaching
@@ -190,7 +190,7 @@ impl<C: Canvas, T: StateTracker> QuadTreeState<C, T> {
 }
 
 impl<C: Canvas, T: StateTracker> TileCounts for QuadTreeState<C, T> {
-    fn tile_counts(&self) -> ArrayView1<NumTiles> {
+    fn tile_counts(&self) -> ArrayView1<'_, NumTiles> {
         self.tile_counts.view()
     }
 
@@ -253,7 +253,7 @@ impl<C: Canvas, T: StateTracker> RateStore for QuadTreeState<C, T> {
         self.rates.total_rate()
     }
 
-    fn rate_array(&self) -> ArrayView2<PerSecond> {
+    fn rate_array(&self) -> ArrayView2<'_, PerSecond> {
         self.rates
             .0
             .first()
@@ -299,11 +299,11 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
         self.canvas.calc_n_tiles_with_tilearray(should_be_counted)
     }
 
-    fn raw_array(&self) -> ArrayView2<Tile> {
+    fn raw_array(&self) -> ArrayView2<'_, Tile> {
         self.canvas.raw_array()
     }
 
-    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<'_, Tile> {
         self.canvas.raw_array_mut()
     }
 

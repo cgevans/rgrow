@@ -65,7 +65,7 @@ fn main() -> anyhow::Result<()> {
     let opts = Opts::parse();
 
     match opts.subcmd {
-        SubCommand::Run(po) => {
+        SubCommand::Run(_po) => {
             #[cfg(feature = "ui")]
             {
                 let parsed = TileSet::from_file(po.input)?;

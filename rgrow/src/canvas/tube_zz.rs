@@ -100,11 +100,11 @@ impl Canvas for CanvasTube {
             .fold(0, |x, y| x + u32::from(should_be_counted[*y as usize]))
     }
 
-    fn raw_array(&self) -> ArrayView2<Tile> {
+    fn raw_array(&self) -> ArrayView2<'_, Tile> {
         self.0.view()
     }
 
-    fn raw_array_mut(&mut self) -> ArrayViewMut2<Tile> {
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<'_, Tile> {
         self.0.view_mut()
     }
 
