@@ -417,6 +417,20 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         self
     }
 
+    /// Place a tile at a particular location, handling double tiles appropriately for kTAM.
+    /// For kTAM, placing a "real" tile (left/top part of double tile) will also place the 
+    /// corresponding "fake" tile (right/bottom part). Attempting to place a "fake" tile
+    /// directly will place the corresponding "real" tile instead.
+    fn place_tile<St: State>(
+        &self,
+        state: &mut St,
+        point: PointSafe2,
+        tile: Tile,
+    ) -> Result<&Self, GrowError> {
+        // Default implementation: just place the tile directly
+        Ok(self.set_safe_point(state, point, tile))
+    }
+
     fn configure_empty_state<St: State>(&self, state: &mut St) -> Result<(), GrowError> {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;

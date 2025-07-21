@@ -821,14 +821,16 @@ impl System for KTAM {
 
     fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
         // It is (reasonably) safe for us to use the same code that we used in the old StaticKTAM, despite duples being
-        // here, because our EW/NS energies include the right/bottom tiles.  However, (FIXME), we need to think about
-        // how this might actually double-count / double some rates: if, eg, a single tile can attach in two places to
-        // a double tile, are we double-counting the rates?  Note also that this relies on
+        // here, because our EW/NS energies include the right/bottom tiles.  This doesn't double count formation rate, because
+        // there are actually multiple attachment pathways.  However, FIXME we do need a better eq. conc implementation eventually.
         let mut dvec = Vec::new();
 
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
             if *e > 0. {
-                let biconc: MolarSq = (self.tile_concs[t1] * self.tile_concs[t2]).into();
+                // Get effective concentrations, using real tile concentration for fake duple parts
+                let conc1 = self.get_effective_concentration(t1 as Tile);
+                let conc2 = self.get_effective_concentration(t2 as Tile);
+                let biconc: MolarSq = (conc1 * conc2).into();
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
@@ -841,7 +843,10 @@ impl System for KTAM {
 
         for ((t1, t2), e) in self.energy_we.indexed_iter() {
             if *e > 0. {
-                let biconc: MolarSq = (self.tile_concs[t1] * self.tile_concs[t2]).into();
+                // Get effective concentrations, using real tile concentration for fake duple parts
+                let conc1 = self.get_effective_concentration(t1 as Tile);
+                let conc2 = self.get_effective_concentration(t2 as Tile);
+                let biconc: MolarSq = (conc1 * conc2).into();
                 dvec.push(DimerInfo {
                     t1: t1 as Tile,
                     t2: t2 as Tile,
@@ -853,6 +858,61 @@ impl System for KTAM {
         }
 
         Ok(dvec)
+    }
+
+    fn place_tile<St: State>(
+        &self,
+        state: &mut St,
+        point: PointSafe2,
+        tile: Tile,
+    ) -> Result<&Self, GrowError> {
+        // For kTAM, handle double tiles properly
+        if !self.has_duples {
+            // No double tiles, just place the tile normally
+            return Ok(self.set_safe_point(state, point, tile));
+        }
+
+        // Check if this is a fake tile - if so, redirect to the real tile
+        let (actual_tile, actual_point) = match self.duple_info[tile as usize] {
+            TileShape::DupleToLeft(real_tile) => {
+                // This is a fake tile (right part of double), place the real tile to the left
+                let left_point = PointSafe2(state.move_sa_w(point).0);
+                (real_tile, left_point)
+            }
+            TileShape::DupleToTop(real_tile) => {
+                // This is a fake tile (bottom part of double), place the real tile above
+                let top_point = PointSafe2(state.move_sa_n(point).0);
+                (real_tile, top_point)
+            }
+            _ => {
+                // This is either a single tile or the real part of a double tile
+                (tile, point)
+            }
+        };
+
+        // Now place the actual tile
+        match self.duple_info[actual_tile as usize] {
+            TileShape::Single => {
+                // Single tile, just place it
+                Ok(self.set_safe_point(state, actual_point, actual_tile))
+            }
+            TileShape::DupleToRight(fake_tile) => {
+                // This is the real tile (left part) of a horizontal double tile
+                let right_point = PointSafe2(state.move_sa_e(actual_point).0);
+                let changelist = [(actual_point, actual_tile), (right_point, fake_tile)];
+                Ok(self.set_safe_points(state, &changelist))
+            }
+            TileShape::DupleToBottom(fake_tile) => {
+                // This is the real tile (top part) of a vertical double tile
+                let bottom_point = PointSafe2(state.move_sa_s(actual_point).0);
+                let changelist = [(actual_point, actual_tile), (bottom_point, fake_tile)];
+                Ok(self.set_safe_points(state, &changelist))
+            }
+            TileShape::DupleToLeft(_) | TileShape::DupleToTop(_) => {
+                // This shouldn't happen after our redirection above
+                panic!("Internal error: tried to place fake tile {} after redirection", actual_tile);
+            }
+        }
     }
 }
 
@@ -1941,6 +2001,20 @@ impl KTAM {
 
         energy
     }
+
+    /// Get the effective concentration for a tile, using the real tile concentration for fake duple parts
+    fn get_effective_concentration(&self, tile: Tile) -> f64 {
+        if self.has_duples && !self.should_be_counted[tile as usize] {
+            // This is a fake duple part, find the corresponding real tile
+            match self.tile_shape(tile) {
+                TileShape::DupleToLeft(real_tile) => self.tile_concs[real_tile as usize],
+                TileShape::DupleToTop(real_tile) => self.tile_concs[real_tile as usize],
+                _ => self.tile_concs[tile as usize], // Shouldn't happen for fake tiles
+            }
+        } else {
+            self.tile_concs[tile as usize]
+        }
+    }
 }
 
 
@@ -2044,6 +2118,216 @@ mod tests {
             .context("CanvasPeriodic")?;
         test_set_point_newktam::<QuadTreeState<CanvasTube, NullStateTracker>>()
             .context("CanvasTube")?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_calc_dimers_single_tiles() -> Result<(), anyhow::Error> {
+        let mut system = KTAM::new_sized(4, 2);
+
+        // Set tile edges using array! macro
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [1, 2, 0, 0], // tile 1: N=1, E=2, S=0, W=0
+            [0, 0, 1, 2], // tile 2: N=0, E=0, S=1, W=2
+            [2, 1, 2, 1], // tile 3: N=2, E=1, S=2, W=1
+            ];
+
+        system.glue_strengths = array![0.0, 1.0, 1.1, 1.2];
+        system.tile_concs = array![0.0, 1e-6, 2e-6, 0.5e-6];
+        system.g_se = 8.0;
+        system.alpha = 7.1;
+        system.kf = 1e6;
+        system.update_system();
+
+        let dimers = system.calc_dimers()?;
+        assert_eq!(dimers.len(), 4, "Should find exactly 4 dimers");
+        
+        for dimer in &dimers {
+            match (dimer.t1, dimer.t2, &dimer.orientation) {
+                // Tile 2 south (glue 1) -> Tile 1 north (glue 1): NS dimer
+                (2, 1, crate::system::Orientation::NS) => {
+                    let expected_formation_rate = system.kf * system.tile_concs[2] * system.tile_concs[1]; // 1e6 * 2e-6 * 1e-6 = 2e-6
+                    let actual_formation_rate = f64::from(dimer.formation_rate);
+                    assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-12, 
+                        "Formation rate mismatch for (2,1) NS: expected {}, got {}", expected_formation_rate, actual_formation_rate);
+                    // Placeholder for equilibrium concentration check
+                    assert!(f64::from(dimer.equilibrium_conc) > 0.0);
+                }
+                // Tile 3 south (glue 2) -> Tile 3 north (glue 2): NS dimer
+                (3, 3, crate::system::Orientation::NS) => {
+                    let expected_formation_rate = system.kf * system.tile_concs[3] * system.tile_concs[3]; // 1e6 * 0.5e-6 * 0.5e-6 = 0.25e-6
+                    let actual_formation_rate = f64::from(dimer.formation_rate);
+                    assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-12, 
+                        "Formation rate mismatch for (3,3) NS: expected {}, got {}", expected_formation_rate, actual_formation_rate);
+                    // Placeholder for equilibrium concentration check
+                    assert!(f64::from(dimer.equilibrium_conc) > 0.0);
+                }
+                // Tile 1 east (glue 2) -> Tile 2 west (glue 2): WE dimer  
+                (1, 2, crate::system::Orientation::WE) => {
+                    let expected_formation_rate = system.kf * system.tile_concs[1] * system.tile_concs[2]; // 1e6 * 1e-6 * 2e-6 = 2e-6
+                    let actual_formation_rate = f64::from(dimer.formation_rate);
+                    assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-12, 
+                        "Formation rate mismatch for (1,2) WE: expected {}, got {}", expected_formation_rate, actual_formation_rate);
+                    // Placeholder for equilibrium concentration check
+                    assert!(f64::from(dimer.equilibrium_conc) > 0.0);
+                }
+                // Tile 3 east (glue 1) -> Tile 3 west (glue 1): WE dimer
+                (3, 3, crate::system::Orientation::WE) => {
+                    let expected_formation_rate = system.kf * system.tile_concs[3] * system.tile_concs[3]; // 1e6 * 0.5e-6 * 0.5e-6 = 0.25e-6
+                    let actual_formation_rate = f64::from(dimer.formation_rate);
+                    assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-12, 
+                        "Formation rate mismatch for (3,3) WE: expected {}, got {}", expected_formation_rate, actual_formation_rate);
+                    // Placeholder for equilibrium concentration check
+                    assert!(f64::from(dimer.equilibrium_conc) > 0.0);
+                }
+                _ => panic!("Unexpected dimer: t1={} t2={} orientation={:?}", dimer.t1, dimer.t2, dimer.orientation),
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calc_dimers_double_tiles() -> Result<(), anyhow::Error> {
+        let mut system = KTAM::new_sized(5, 3);
+
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [1, 0, 0, 0], // tile 1 (single)
+            [2, 0, 0, 0], // tile 2 (left part of duple)
+            [3, 1, 0, 0], // tile 3 (right part of duple)
+            [0, 2, 0, 1], // tile 4 (top part of duple)
+            [0, 3, 1, 2], // tile 5 (bottom part of duple)
+        ];
+
+        system.set_duples(vec![(2, 3)], vec![(4, 5)]);
+        system.glue_strengths = array![0.0, 2.0, 1.5, 1.0];
+        system.tile_concs = array![0.0, 1e-6, 0.5e-6, 0.0, 0.8e-6, 0.0];
+        system.g_se = 8.0;
+        system.alpha = 0.5;
+        system.kf = 1e6;
+        system.update_system();
+
+        let dimers = system.calc_dimers()?;
+        assert_eq!(dimers.len(), 3, "Should find exactly 3 dimers with double tiles");
+        
+        for dimer in &dimers {
+            match (dimer.t1, dimer.t2, &dimer.orientation) {
+                // Tile 5 (bottom part of vertical duple 4-5) NS binding with tile 1
+                // This represents the bottom part of the vertical double tile binding to tile 1
+                // Formation rate should use the concentration of the real tile (4), not the fake tile (5)
+                (5, 1, crate::system::Orientation::NS) => {
+                    assert!(!system.should_be_counted[5], "Tile 5 is fake duple part");
+                    assert!(system.should_be_counted[1], "Tile 1 should be counted");
+                    // Formation rate should use tile 4's concentration (the real part of the duple)
+                    let expected_formation_rate = system.kf * system.tile_concs[4] * system.tile_concs[1]; // 1e6 * 0.8e-6 * 1e-6
+                    let actual_formation_rate = f64::from(dimer.formation_rate);
+                    assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-15, 
+                        "Formation rate should use real duple part concentration: expected {}, got {}", 
+                        expected_formation_rate, actual_formation_rate);
+                    // Placeholder for equilibrium concentration check
+                    assert!(f64::from(dimer.equilibrium_conc) >= 0.0);
+                }
+                // Tile 3 (right part of horizontal duple 2-3) WE binding with tile 4
+                // This represents the right part of the horizontal double tile binding to tile 4
+                // Formation rate should use the concentration of the real tile (2), not the fake tile (3)
+                (3, 4, crate::system::Orientation::WE) => {
+                    assert!(!system.should_be_counted[3], "Tile 3 is fake duple part");
+                    assert!(system.should_be_counted[4], "Tile 4 should be counted");
+                    // Formation rate should use tile 2's concentration (the real part of the duple)
+                    let expected_formation_rate = system.kf * system.tile_concs[2] * system.tile_concs[4]; // 1e6 * 0.5e-6 * 0.8e-6
+                    let actual_formation_rate = f64::from(dimer.formation_rate);
+                    assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-15, 
+                        "Formation rate should use real duple part concentration: expected {}, got {}", 
+                        expected_formation_rate, actual_formation_rate);
+                    // Placeholder for equilibrium concentration check
+                    assert!(f64::from(dimer.equilibrium_conc) >= 0.0);
+                }
+                // Tile 4 (real part of vertical duple) WE binding with tile 5 (fake part)
+                // This represents internal binding within the vertical double tile structure
+                // Formation rate should use tile 4's concentration for both parts
+                (4, 5, crate::system::Orientation::WE) => {
+                    assert!(system.should_be_counted[4], "Tile 4 should be counted");
+                    assert!(!system.should_be_counted[5], "Tile 5 is fake duple part");
+                    // Formation rate should use tile 4's concentration for both parts of the duple
+                    let expected_formation_rate = system.kf * system.tile_concs[4] * system.tile_concs[4]; // 1e6 * 0.8e-6 * 0.8e-6
+                    let actual_formation_rate = f64::from(dimer.formation_rate);
+                    assert!((actual_formation_rate - expected_formation_rate).abs() < 1e-15, 
+                        "Formation rate should use real duple part concentration: expected {}, got {}", 
+                        expected_formation_rate, actual_formation_rate);
+                    // Placeholder for equilibrium concentration check
+                    assert!(f64::from(dimer.equilibrium_conc) >= 0.0);
+                }
+                _ => panic!("Unexpected dimer: t1={} t2={} orientation={:?}", dimer.t1, dimer.t2, dimer.orientation),
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_place_tile_with_double_tiles() -> Result<(), anyhow::Error> {
+        use crate::canvas::CanvasSquare;
+        use crate::state::{NullStateTracker, QuadTreeState, State};
+
+        let mut system = KTAM::new_sized(5, 3);
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [1, 0, 0, 0], // tile 1 (single)
+            [2, 0, 0, 0], // tile 2 (left part of horizontal duple)
+            [3, 1, 0, 0], // tile 3 (right part of horizontal duple)
+            [0, 2, 0, 1], // tile 4 (top part of vertical duple)
+            [0, 3, 1, 2], // tile 5 (bottom part of vertical duple)
+        ];
+        system.set_duples(vec![(2, 3)], vec![(4, 5)]);
+        system.glue_strengths = array![0.0, 2.0, 1.5, 1.0];
+        system.tile_concs = array![0.0, 1e-6, 0.5e-6, 0.0, 0.8e-6, 0.0];
+        system.g_se = 8.0;
+        system.alpha = 0.5;
+        system.kf = 1e6;
+        system.update_system();
+
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> = system.new_state((10, 10))?;
+
+        // Test placing a single tile
+        let single_point = PointSafe2((5, 5));
+        system.place_tile(&mut state, single_point, 1)?;
+        assert_eq!(state.tile_at_point(single_point), 1, "Single tile should be placed");
+
+        // Test placing a horizontal double tile (real part)
+        let hdouble_left = PointSafe2((3, 3));
+        let hdouble_right = PointSafe2((3, 4));
+        system.place_tile(&mut state, hdouble_left, 2)?; // Place real tile (left part)
+        assert_eq!(state.tile_at_point(hdouble_left), 2, "Left part of horizontal double should be placed");
+        assert_eq!(state.tile_at_point(hdouble_right), 3, "Right part of horizontal double should be automatically placed");
+
+        // Test placing a vertical double tile (real part)
+        let vdouble_top = PointSafe2((7, 7));
+        let vdouble_bottom = PointSafe2((8, 7));
+        system.place_tile(&mut state, vdouble_top, 4)?; // Place real tile (top part)
+        assert_eq!(state.tile_at_point(vdouble_top), 4, "Top part of vertical double should be placed");
+        assert_eq!(state.tile_at_point(vdouble_bottom), 5, "Bottom part of vertical double should be automatically placed");
+
+        // Test placing a fake tile (should redirect to real tile)
+        let fake_h_point = PointSafe2((6, 6));
+        let real_h_point = PointSafe2((6, 5)); // Should place the real tile to the left
+        system.place_tile(&mut state, fake_h_point, 3)?; // Try to place fake horizontal tile
+        assert_eq!(state.tile_at_point(real_h_point), 2, "Real horizontal tile should be placed when fake tile requested");
+        assert_eq!(state.tile_at_point(fake_h_point), 3, "Fake horizontal tile should be automatically placed");
+
+        // Test placing a fake vertical tile (should redirect to real tile)
+        let fake_v_point = PointSafe2((9, 9));
+        let real_v_point = PointSafe2((8, 9)); // Should place the real tile above
+        system.place_tile(&mut state, fake_v_point, 5)?; // Try to place fake vertical tile
+        assert_eq!(state.tile_at_point(real_v_point), 4, "Real vertical tile should be placed when fake tile requested");
+        assert_eq!(state.tile_at_point(fake_v_point), 5, "Fake vertical tile should be automatically placed");
+
+        // Test that tile counts are correct (fake tiles shouldn't be counted)
+        let expected_tile_count = 5; // 1 single + 2 horizontal doubles (counted as 1) + 2 vertical doubles (counted as 1) = 5
+        let actual_tile_count = system.calc_n_tiles(&state);
+        assert_eq!(actual_tile_count, expected_tile_count, "Tile count should not include fake tiles");
+
         Ok(())
     }
 }
