@@ -13,6 +13,8 @@ class Graphing:
         self.title = title
         self.fig, self.ax1 = plt.subplots()
         self.ax2 = self.ax1.twinx()
+        # Without this line, notebooks will display an empty graph when __init__ is called.
+        plt.close(self.fig)
         self._times = None
         self._temps = None
 
