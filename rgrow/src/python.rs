@@ -705,6 +705,127 @@ macro_rules! create_py_system {
                 Ok((committers.into_pyarray(py), trials.into_pyarray(py)))
             }
 
+            /// Calculate forward probability for a given state.
+            ///
+            /// This function calculates the probability that a state will grow by at least
+            /// `forward_step` tiles before shrinking to size 0. Unlike calc_committer which
+            /// uses a fixed cutoff size, this uses a dynamic cutoff based on the current
+            /// state size plus the forward_step parameter.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State
+            ///     The initial state to analyze
+            /// forward_step : int, optional
+            ///     Number of tiles to grow beyond current size (default: 1)
+            /// num_trials : int
+            ///     Number of simulation trials to run
+            /// max_time : float, optional
+            ///     Maximum simulation time per trial
+            /// max_events : int, optional
+            ///     Maximum number of events per trial
+            ///
+            /// Returns
+            /// -------
+            /// float
+            ///     Probability of reaching forward_step additional tiles (between 0.0 and 1.0)
+            #[pyo3(name = "calc_forward_probability", signature = (state, num_trials, forward_step=1, max_time=None, max_events=None))]
+            fn py_calc_forward_probability(
+                &mut self,
+                state: &PyState,
+                num_trials: usize,
+                forward_step: NumTiles,
+                max_time: Option<f64>,
+                max_events: Option<NumEvents>,
+            ) -> PyResult<f64> {
+                let result = self.calc_forward_probability(&state.0, forward_step, max_time, max_events, num_trials);
+                match result {
+                    Ok(probability) => Ok(probability),
+                    Err(e) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string())),
+                }
+            }
+
+            /// Calculate forward probability adaptively for a given state.
+            ///
+            /// Uses adaptive sampling to determine the number of trials needed based on a
+            /// confidence interval margin. Runs until the confidence interval is narrow enough.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State
+            ///     The initial state to analyze
+            /// forward_step : int, optional
+            ///     Number of tiles to grow beyond current size (default: 1)
+            /// conf_interval_margin : float
+            ///     Desired confidence interval margin (e.g., 0.05 for 5%)
+            /// max_time : float, optional
+            ///     Maximum simulation time per trial
+            /// max_events : int, optional
+            ///     Maximum number of events per trial
+            ///
+            /// Returns
+            /// -------
+            /// tuple[float, int]
+            ///     Tuple of (forward probability, number of trials run)
+            #[pyo3(name = "calc_forward_probability_adaptive", signature = (state, conf_interval_margin, forward_step=1, max_time=None, max_events=None))]
+            fn py_calc_forward_probability_adaptive(
+                &self,
+                state: &PyState,
+                conf_interval_margin: f64,
+                forward_step: NumTiles,
+                max_time: Option<f64>,
+                max_events: Option<NumEvents>,
+                py: Python<'_>,
+            ) -> PyResult<(f64, usize)> {
+                let (probability, trials) = py.allow_threads(|| {
+                    self.calc_forward_probability_adaptive(&state.0, forward_step, max_time, max_events, conf_interval_margin)
+                }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+                
+                Ok((probability, trials))
+            }
+
+            /// Calculate forward probabilities adaptively for multiple states.
+            ///
+            /// Uses adaptive sampling for each state in parallel to determine forward
+            /// probabilities with specified confidence intervals.
+            ///
+            /// Parameters
+            /// ----------
+            /// states : list[State]
+            ///     List of initial states to analyze
+            /// forward_step : int, optional
+            ///     Number of tiles to grow beyond current size for each state (default: 1)
+            /// conf_interval_margin : float
+            ///     Desired confidence interval margin (e.g., 0.05 for 5%)
+            /// max_time : float, optional
+            ///     Maximum simulation time per trial
+            /// max_events : int, optional
+            ///     Maximum number of events per trial
+            ///
+            /// Returns
+            /// -------
+            /// tuple[NDArray[float64], NDArray[usize]]
+            ///     Tuple of (forward probabilities, number of trials for each state)
+            #[pyo3(name = "calc_forward_probabilities_adaptive", signature = (states, conf_interval_margin, forward_step=1, max_time=None, max_events=None))]
+            fn py_calc_forward_probabilities_adaptive<'py>(
+                &self,
+                states: Vec<Bound<'py, PyState>>,
+                conf_interval_margin: f64,
+                forward_step: NumTiles,
+                max_time: Option<f64>,
+                max_events: Option<NumEvents>,
+                py: Python<'py>,
+            ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<usize>>)> {
+
+                let refs = states.iter().map(|x| x.borrow()).collect::<Vec<_>>();
+                let states = refs.iter().map(|x| &x.0).collect::<Vec<_>>();
+                let (probabilities, trials) = py.allow_threads(|| {
+                    self.calc_forward_probabilities_adaptive(&states, forward_step, max_time, max_events, conf_interval_margin)
+                }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+                
+                Ok((probabilities.into_pyarray(py), trials.into_pyarray(py)))
+            }
+
             /// Run FFS.
             ///
             /// Parameters

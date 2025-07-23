@@ -16,6 +16,7 @@ use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
 use crate::state::State;
 use crate::state::StateEnum;
+use crate::state::StateStatus;
 use crate::units::Molar;
 use crate::units::MolarPerSecond;
 use crate::units::Second;
@@ -738,6 +739,33 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
     ) -> Result<(Vec<f64>, Vec<usize>), GrowError>;
+
+    fn calc_forward_probability(
+        &mut self,
+        initial_state: &StateEnum,
+        forward_step: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        num_trials: usize,
+    ) -> Result<f64, GrowError>;
+
+    fn calc_forward_probability_adaptive(
+        &self,
+        initial_state: &StateEnum,
+        forward_step: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        conf_interval_margin: f64,
+    ) -> Result<(f64, usize), GrowError>;
+
+    fn calc_forward_probabilities_adaptive(
+        &self,
+        initial_states: &[&StateEnum],
+        forward_step: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        conf_interval_margin: f64,
+    ) -> Result<(Vec<f64>, Vec<usize>), GrowError>;
 }
 
 impl<S: System> DynSystem for S
@@ -902,6 +930,109 @@ where
         let trials: Vec<usize> = results.iter().map(|(_, t)| *t).collect();
 
         Ok((committers, trials))
+    }
+
+    fn calc_forward_probability(
+        &mut self,
+        initial_state: &StateEnum,
+        forward_step: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        num_trials: usize,
+    ) -> Result<f64, GrowError> {
+        if num_trials == 0 {
+            return Err(GrowError::NotSupported("Number of trials must be greater than 0".to_string()));
+        }
+
+        let initial_size = initial_state.n_tiles();
+        let cutoff_size = initial_size + forward_step;
+
+        let mut successes = 0;
+
+        let mut trial_states = (0..num_trials).map(|_| initial_state.clone()).collect::<Vec<_>>();
+
+        let bounds = EvolveBounds {
+            size_min: Some(0),
+            size_max: Some(cutoff_size),
+            for_time: max_time,
+            for_events: max_events,
+            ..Default::default()
+        };
+
+        let outcomes = self.evolve_states(&mut trial_states, bounds);
+
+        for outcome in outcomes.iter() {
+            let outcome = outcome.as_ref().map_err(|e| GrowError::NotSupported(e.to_string()))?;
+            match outcome {
+                EvolveOutcome::ReachedSizeMax => successes += 1,
+                EvolveOutcome::ReachedSizeMin => {},
+                _ => {
+                    return Err(GrowError::NotSupported("Evolve outcome not supported".to_string()));
+                },
+            }
+        }
+
+        Ok(successes as f64 / num_trials as f64)
+    }
+
+    fn calc_forward_probability_adaptive(
+        &self,
+        initial_state: &StateEnum,
+        forward_step: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        conf_interval_margin: f64,
+    ) -> Result<(f64, usize), GrowError> {
+        use bpci::{NSuccessesSample, WilsonScore};
+
+        let initial_size = initial_state.n_tiles();
+        let cutoff_size = initial_size + forward_step;
+
+        let mut successes = 0u32;
+        let mut num_trials = 0u32;
+
+        let mut trial_state = initial_state.clone();
+
+        let bounds = EvolveBounds {
+            size_min: Some(0),
+            size_max: Some(cutoff_size),
+            for_time: max_time,
+            for_events: max_events,
+            ..Default::default()
+        };
+
+        while (NSuccessesSample::new(num_trials, successes).unwrap().wilson_score(1.960).margin > conf_interval_margin) || num_trials < 1 {
+            let outcome = self.evolve(&mut trial_state, bounds)?;
+            match outcome {
+                EvolveOutcome::ReachedSizeMax => {successes += 1; num_trials += 1; initial_state.clone_into(&mut trial_state);},
+                EvolveOutcome::ReachedSizeMin => {num_trials += 1; initial_state.clone_into(&mut trial_state);},
+                _ => {
+                    return Err(GrowError::NotSupported("Evolve outcome not supported".to_string()));
+                },
+            }
+        }
+
+        Ok((successes as f64 / num_trials as f64, num_trials as usize))
+    }
+
+    fn calc_forward_probabilities_adaptive(
+        &self,
+        initial_states: &[&StateEnum],
+        forward_step: NumTiles,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        conf_interval_margin: f64,
+    ) -> Result<(Vec<f64>, Vec<usize>), GrowError> {
+        let results = initial_states.par_iter().map(|initial_state| {
+            self.calc_forward_probability_adaptive(initial_state, forward_step, max_time, max_events, conf_interval_margin)
+        }).collect::<Vec<_>>();
+
+        let results: Vec<(f64, usize)> = results.into_iter().map(|r| r.unwrap()).collect();
+        
+        let probabilities: Vec<f64> = results.iter().map(|(p, _)| *p).collect();
+        let trials: Vec<usize> = results.iter().map(|(_, t)| *t).collect();
+
+        Ok((probabilities, trials))
     }
 }
 
