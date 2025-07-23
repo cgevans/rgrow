@@ -642,8 +642,8 @@ macro_rules! create_py_system {
             ///
             /// Returns
             /// -------
-            /// float
-            ///     Probability of reaching cutoff_size (between 0.0 and 1.0)
+            /// tuple[float, int]
+            ///     Tuple of (probability of reaching cutoff_size, number of trials run)
             #[pyo3(name = "calc_committer_adaptive", signature = (state, cutoff_size, conf_interval_margin, max_time=None, max_events=None))]
             fn py_calc_committer_adaptive(
                 &self,
@@ -653,7 +653,7 @@ macro_rules! create_py_system {
                 max_time: Option<f64>,
                 max_events: Option<NumEvents>,
                 py: Python<'_>,
-            ) -> PyResult<f64> {
+            ) -> PyResult<(f64, usize)> {
                 py.allow_threads(|| {
                     self.calc_committer_adaptive(
                         &state.0,
@@ -666,8 +666,26 @@ macro_rules! create_py_system {
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }
 
+            /// Calculate the committer function for multiple states using adaptive sampling.
+            ///
+            /// Parameters
+            /// ----------
+            /// states : List[State]
+            ///     The states to analyze
+            /// cutoff_size : int
+            ///     Size threshold for commitment
+            /// conf_interval_margin : float
+            ///     Confidence interval margin (e.g., 0.05 for 5%)
+            /// max_time : float, optional
+            ///     Maximum simulation time per trial
+            /// max_events : int, optional
+            ///     Maximum events per trial
+            ///
+            /// Returns
+            /// -------
+            /// tuple[NDArray[float64], NDArray[usize]]
+            ///     Tuple of (committer probabilities, number of trials for each state)
             #[pyo3(name = "calc_committers_adaptive", signature = (states, cutoff_size, conf_interval_margin, max_time=None, max_events=None))]
-
             fn py_calc_committers_adaptive<'py>(
                 &self,
                 states: Vec<Bound<'py, PyState>>,
@@ -676,14 +694,15 @@ macro_rules! create_py_system {
                 max_time: Option<f64>,
                 max_events: Option<NumEvents>,
                 py: Python<'py>,
-            ) -> PyResult<Vec<f64>> {
+            ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<usize>>)> {
 
                 let refs = states.iter().map(|x| x.borrow()).collect::<Vec<_>>();
                 let states = refs.iter().map(|x| &x.0).collect::<Vec<_>>();
-                let committers = py.allow_threads(|| {
+                let (committers, trials) = py.allow_threads(|| {
                     self.calc_committers_adaptive(&states, cutoff_size, max_time, max_events, conf_interval_margin)
-                });
-                Ok(committers.unwrap())
+                }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+                
+                Ok((committers.into_pyarray(py), trials.into_pyarray(py)))
             }
 
             /// Run FFS.

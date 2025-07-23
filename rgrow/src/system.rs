@@ -728,7 +728,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         max_time: Option<f64>,
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
-    ) -> Result<f64, GrowError>;
+    ) -> Result<(f64, usize), GrowError>;
 
     fn calc_committers_adaptive(
         &self,
@@ -737,7 +737,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         max_time: Option<f64>,
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
-    ) -> Result<Vec<f64>, GrowError>;
+    ) -> Result<(Vec<f64>, Vec<usize>), GrowError>;
 }
 
 impl<S: System> DynSystem for S
@@ -853,12 +853,12 @@ where
         max_time: Option<f64>,
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
-    ) -> Result<f64, GrowError> {
+    ) -> Result<(f64, usize), GrowError> {
 
         use bpci::{NSuccessesSample, WilsonScore};
 
-        let mut successes = 0;
-        let mut num_trials = 0;
+        let mut successes = 0u32;
+        let mut num_trials = 0u32;
 
         let mut trial_state = initial_state.clone();
 
@@ -881,7 +881,7 @@ where
             }
         }
 
-        Ok(successes as f64 / num_trials as f64)
+        Ok((successes as f64 / num_trials as f64, num_trials as usize))
     }
 
     fn calc_committers_adaptive(
@@ -891,14 +891,17 @@ where
         max_time: Option<f64>,
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
-    ) -> Result<Vec<f64>, GrowError> {
-        let committers = initial_states.par_iter().map(|initial_state| {
+    ) -> Result<(Vec<f64>, Vec<usize>), GrowError> {
+        let results = initial_states.par_iter().map(|initial_state| {
             self.calc_committer_adaptive(initial_state, cutoff_size, max_time, max_events, conf_interval_margin)
         }).collect::<Vec<_>>();
 
-        let committers = committers.into_iter().map(|r| r.unwrap()).collect();
+        let results: Vec<(f64, usize)> = results.into_iter().map(|r| r.unwrap()).collect();
+        
+        let committers: Vec<f64> = results.iter().map(|(c, _)| *c).collect();
+        let trials: Vec<usize> = results.iter().map(|(_, t)| *t).collect();
 
-        Ok(committers)
+        Ok((committers, trials))
     }
 }
 
