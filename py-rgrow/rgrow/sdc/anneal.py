@@ -209,7 +209,7 @@ class AnnealOutputs:
             sdc = SDC(data["sdc_params"], data["sdc_name"])
             return AnnealOutputs(
                 system=sdc,
-                canvas_arr=data["canvas_arr"],
+                canvas_arr=canvas_arr,
                 anneal=data["anneal"],
                 state=None
             )
