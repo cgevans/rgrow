@@ -203,8 +203,8 @@ class AnnealOutputs:
         try:
             canvas_arr = np.load(save_path / "canvas_arr.npz")["canvas_arr"]
             file_path = save_path / "simulation.yaml"
-            with file_path.open("rb") as f:
-                data = pickle.load(f)
+            with file_path.open("r") as f:
+                data = yaml.load(f, Loader=yaml.Loader)
 
             sdc = SDC(data["sdc_params"], data["sdc_name"])
             return AnnealOutputs(
