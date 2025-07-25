@@ -54,6 +54,10 @@ class Anneal:
     timestep: float = 2.0
     temperature_adjustment: float = 8.0
 
+    def without_temperature_adjustment(self) -> "Anneal":
+        self.temperature_adjustment = 0
+        return self
+
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
 
@@ -148,7 +152,6 @@ class AnnealOutputs:
     anneal: "Anneal"
     state: "State"
 
-
     def save_data(self, ident: str, app_dir: Path):
         """
         Saves the annealing simulation output data into a directory named `ident`
@@ -189,7 +192,6 @@ class AnnealOutputs:
 
         except Exception as e:
             print(f"[ERROR] Failed to write file: {e}", file=sys.stderr)
-
 
     @staticmethod
     def load_data(save_path: Path) -> "AnnealOutputs | None":
