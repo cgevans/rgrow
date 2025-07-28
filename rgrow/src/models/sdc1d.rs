@@ -96,6 +96,91 @@ fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum FriendsHashing {
+    /// Hashing that works for arbitrarily many strands, but in O(n)
+    Naive,
+    /// Hashing that works for a small number of tiles, but in O(1) (with small constant?)
+    ///
+    /// There can be a maximum of 128 tiles for this
+    BitSetSmall(u128),
+}
+
+impl FriendsHashing {
+    fn insert(&mut self, tile: Tile) {
+        match self {
+            FriendsHashing::Naive => {}
+            FriendsHashing::BitSetSmall(bits) => *bits |= (1u128 << tile),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FriendsHere {
+    hashing: FriendsHashing,
+    tiles: Vec<Tile>,
+}
+
+impl PartialEq for FriendsHere {
+    fn eq(&self, other: &Self) -> bool {
+        self.tiles == other.tiles
+    }
+}
+
+impl FriendsHere {
+    /// max_tiles: Maximum number of competiting strands
+    fn empty_with_max(max_tiles: usize) -> Self {
+        let tiles = vec![];
+        let hashing = match max_tiles {
+            0..128 => FriendsHashing::BitSetSmall(0),
+            _ => FriendsHashing::Naive,
+        };
+
+        FriendsHere { hashing, tiles }
+    }
+
+    /// Check if some given tile is part of the `tiles` vector.
+    fn is_friends(&self, tile: Tile) -> bool {
+        match &self.hashing {
+            FriendsHashing::Naive => self.tiles.contains(&tile),
+            FriendsHashing::BitSetSmall(bits) => (bits & (1u128 << tile)) == 0,
+        }
+    }
+
+    fn insert(&mut self, tile: Tile) {
+        self.hashing.insert(tile);
+        self.tiles.push(tile);
+    }
+
+    fn empty() -> Self {
+        FriendsHere {
+            hashing: FriendsHashing::Naive,
+            tiles: vec![],
+        }
+    }
+
+    fn friends_count(&self) -> usize {
+        self.tiles.len()
+    }
+}
+
+impl From<&[u32]> for FriendsHere {
+    fn from(value: &[u32]) -> Self {
+        match value.len() {
+            0..128 => FriendsHere {
+                hashing: FriendsHashing::BitSetSmall(
+                    value.iter().fold(0u128, |acc, tile| acc | (*tile as u128)),
+                ),
+                tiles: value.to_vec(),
+            },
+            _ => FriendsHere {
+                hashing: FriendsHashing::Naive,
+                tiles: value.to_vec(),
+            },
+        }
+    }
+}
+
 #[cfg_attr(feature = "python", pyclass(subclass, module = "rgrow.sdc"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC {
@@ -140,7 +225,7 @@ pub struct SDC {
     /// The (de)attachment rates will depend on this constant(for the system) value
     pub kf: PerMolarSecond,
     /// Set of tiles that can stick to scaffold gap with a given glue
-    pub friends_btm: Vec<HashSet<Tile>>,
+    pub friends_btm: Vec<FriendsHere>,
     /// Delta G at 37 degrees C in the formula to generate the glue strengths
     pub delta_g_matrix: Array2<KcalPerMol>,
     /// S in the formula to generate the glue strengths
@@ -200,6 +285,7 @@ impl SDC {
     }
 
     fn generate_friends(&mut self) {
+        let tile_count = self.strand_names.len();
         let max_glue_scaffold = *self.scaffold.iter().max().unwrap();
         let max_glue_strands = *self
             .glues
@@ -208,7 +294,8 @@ impl SDC {
             .max()
             .unwrap();
         let max_glue = max_glue_scaffold.max(max_glue_strands);
-        let mut friends_btm: Vec<HashSet<Tile>> = vec![HashSet::new(); max_glue + 1];
+        let mut friends_btm: Vec<FriendsHere> =
+            vec![FriendsHere::empty_with_max(tile_count); max_glue + 1];
         for (t, &b) in self
             .glues
             .index_axis(ndarray::Axis(1), BOTTOM_GLUE_INDEX)
@@ -536,10 +623,15 @@ impl SDC {
             .get(index)
             .unwrap_or_else(|| panic!("Invalid Index: {index:?}"));
 
-        let empty_map = HashSet::default();
-        let friends = self.friends_btm.get(*scaffold_glue).unwrap_or(&empty_map);
+        let friends = self
+            .friends_btm
+            .get(*scaffold_glue)
+            // When creating friends_btm, every glue in the sacaffold should have a friends index
+            // (perhaps empty)
+            .expect(format!("Missing friends for {}", scaffold_glue).as_str());
+
         let mut rand_thread = rand::rng();
-        for &strand in friends {
+        for &strand in &friends.tiles {
             acc -= self.kf * self.strand_concentration[strand as usize];
             if acc <= PerSecond::zero() && (!just_calc) {
                 let rand: f64 = rand_thread.random();
@@ -634,7 +726,7 @@ impl SDC {
         for b in &scaffold {
             if let Some(x) = self.friends_btm.get(*b) {
                 // number of possible times + none
-                acc *= x.len() + 1;
+                acc *= x.friends_count() + 1;
             }
         }
 
@@ -642,8 +734,10 @@ impl SDC {
         possible_scaffolds.push(Vec::default());
 
         for b in &scaffold {
-            let def = HashSet::default();
-            let friends = self.friends_btm.get(*b).unwrap_or(&def);
+            let friends = self
+                .friends_btm
+                .get(*b)
+                .expect(format!("Missing friends for {}", b).as_str());
 
             possible_scaffolds = possible_scaffolds
                 .iter()
@@ -651,7 +745,7 @@ impl SDC {
                     let mut new_combinations: Vec<Vec<u32>> = Vec::new();
 
                     // Each one of the friends will make one possible state
-                    for f in friends {
+                    for f in &friends.tiles {
                         let mut comb = scaffold_attachments.clone();
                         comb.push(*f);
                         new_combinations.push(comb);
@@ -689,7 +783,12 @@ impl SDC {
 
         let max_competition = scaffold
             .iter()
-            .map(|x| self.friends_btm.get(*x).map(|y| y.len()).unwrap_or(0))
+            .map(|x| {
+                self.friends_btm
+                    .get(*x)
+                    .map(|y| y.friends_count())
+                    .unwrap_or(0)
+            })
             .max()
             .unwrap();
 
@@ -714,7 +813,7 @@ impl SDC {
             };
 
             // Iterating through each possible attachment at the current location.
-            for (j, &f) in friends.iter().enumerate() {
+            for (j, &f) in friends.tiles.iter().enumerate() {
                 let attachment_beta_dg =
                     self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln();
 
@@ -732,7 +831,7 @@ impl SDC {
                     let mut t2 = 0.;
 
                     if let Some(ff) = self.friends_btm.get(scaffold[i - 1]) {
-                        for (k, &g) in ff.iter().enumerate() {
+                        for (k, &g) in ff.tiles.iter().enumerate() {
                             let left_beta_dg = self.bond_between_strands(g, f);
                             t2 += z_prev[k] * (-left_beta_dg).exp();
                         }
@@ -764,7 +863,12 @@ impl SDC {
 
         let max_competition = scaffold
             .iter()
-            .map(|x| self.friends_btm.get(*x).map(|y| y.len()).unwrap_or(0))
+            .map(|x| {
+                self.friends_btm
+                    .get(*x)
+                    .map(|y| y.friends_count())
+                    .unwrap_or(0)
+            })
             .max()
             .unwrap();
 
@@ -791,7 +895,7 @@ impl SDC {
             };
 
             // Iterating through each possible attachment at the current location.
-            for (j, &f) in friends.iter().enumerate() {
+            for (j, &f) in friends.tiles.iter().enumerate() {
                 let attachment_beta_dg =
                     self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln();
 
@@ -809,7 +913,7 @@ impl SDC {
                     let mut t2 = BigFloat::from_f64(0., prec);
 
                     if let Some(ff) = self.friends_btm.get(scaffold[i - 1]) {
-                        for (k, &g) in ff.iter().enumerate() {
+                        for (k, &g) in ff.tiles.iter().enumerate() {
                             let left_beta_dg = self.bond_between_strands(g, f);
                             t2 = t2.add(
                                 &BigFloat::from_f64(-left_beta_dg, prec)
@@ -921,11 +1025,10 @@ impl SDC {
 
     /// This is for the standard case where the acc is not empty and the friends here hashset is
     /// not empty
-    fn mfe_next_vector(&self, acc: &MfeValues, friends_here: &HashSet<Tile>) -> MfeValues {
+    fn mfe_next_vector(&self, acc: &MfeValues, friends_here: Iter<Tile>) -> MfeValues {
         // If there are no friends, then this will not run at all, and the return type will be an
         // empty vector.
         let mut connection_answ = friends_here
-            .iter()
             .map(|tile| {
                 let (l, e) = self.best_energy_for_strand(acc, tile);
                 (l, e, *tile)
@@ -961,10 +1064,11 @@ impl SDC {
     /// energy among all possible final strands
     fn mfe_matrix(&self) -> Vec<MfeValues> {
         let connection_matrix = self.scaffold().into_iter().scan(vec![], |acc, glue| {
-            let empty_map = HashSet::new();
-            let friends = self.friends_btm.get(glue).unwrap_or(&empty_map);
-
-            let n_vec = self.mfe_next_vector(acc, friends);
+            let friends = self
+                .friends_btm
+                .get(glue)
+                .expect(format!("Missing friends for {}", glue).as_str());
+            let n_vec = self.mfe_next_vector(acc, friends.tiles.iter());
 
             *acc = n_vec;
             Some(
@@ -1297,6 +1401,7 @@ impl TileBondInfo for SDC {
 // Here is potentially another way to process this, though not done.  Feel free to delete or modify.
 
 use std::hash::Hash;
+use std::slice::Iter;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
@@ -2253,11 +2358,11 @@ mod test_sdc_model {
 
         // Check that the friends hashmap is being generated as expected
         let expected_friends = vec![
-            HashSet::from([]),
-            HashSet::from([4]),
-            HashSet::from([7]),
-            HashSet::from([6, 8]),
-            HashSet::from([3, 5]),
+            FriendsHere::from([].as_ref()),     // 0
+            FriendsHere::from([4].as_ref()),    // 1 -> Tiles with 2 in the bottom
+            FriendsHere::from([7].as_ref()),    // 2 -> Tiles with 1 in the bottom
+            FriendsHere::from([6, 8].as_ref()), // 3
+            FriendsHere::from([3, 5].as_ref()), // 4
         ];
         assert_eq!(expected_friends, sdc.friends_btm);
     }
