@@ -4,7 +4,6 @@ import json
 import numpy as np
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-import pickle
 
 import yaml
 from pathlib import Path
