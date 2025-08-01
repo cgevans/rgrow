@@ -139,10 +139,8 @@ pub struct SDC {
     pub colors: Vec<[u8; 4]>,
     /// The (de)attachment rates will depend on this constant(for the system) value
     pub kf: PerMolarSecond,
-    /// FIXME: Change this to a vector to avoid hashing time
-    ///
     /// Set of tiles that can stick to scaffold gap with a given glue
-    pub friends_btm: HashMap<Glue, HashSet<Tile>>,
+    pub friends_btm: Vec<Vec<Tile>>,
     /// Delta G at 37 degrees C in the formula to generate the glue strengths
     pub delta_g_matrix: Array2<KcalPerMol>,
     /// S in the formula to generate the glue strengths
@@ -202,7 +200,16 @@ impl SDC {
     }
 
     fn generate_friends(&mut self) {
-        let mut friends_btm = HashMap::new();
+        let tile_count = self.strand_names.len();
+        let max_glue_scaffold = *self.scaffold.iter().max().unwrap();
+        let max_glue_strands = *self
+            .glues
+            .index_axis(ndarray::Axis(1), BOTTOM_GLUE_INDEX)
+            .iter()
+            .max()
+            .unwrap();
+        let max_glue = max_glue_scaffold.max(max_glue_strands);
+        let mut friends_btm: Vec<Vec<Tile>> = vec![Vec::new(); max_glue + 1];
         for (t, &b) in self
             .glues
             .index_axis(ndarray::Axis(1), BOTTOM_GLUE_INDEX)
@@ -219,10 +226,7 @@ impl SDC {
             }
 
             let b_inverse = if b % 2 == 1 { b + 1 } else { b - 1 };
-            friends_btm
-                .entry(b_inverse)
-                .or_insert(HashSet::new())
-                .insert(t as u32);
+            friends_btm[b_inverse].push(t as Tile);
         }
         self.friends_btm = friends_btm;
     }
@@ -533,10 +537,14 @@ impl SDC {
             .get(index)
             .unwrap_or_else(|| panic!("Invalid Index: {index:?}"));
 
-        let empty_map = HashSet::default();
-        let friends = self.friends_btm.get(scaffold_glue).unwrap_or(&empty_map);
-        let mut rand_thread = rand::rng();
+        let friends = self
+            .friends_btm
+            .get(*scaffold_glue)
+            // When creating friends_btm, every glue in the sacaffold should have a friends index
+            // (perhaps empty)
+            .expect(format!("Missing friends for {}", scaffold_glue).as_str());
 
+        let mut rand_thread = rand::rng();
         for &strand in friends {
             acc -= self.kf * self.strand_concentration[strand as usize];
             if acc <= PerSecond::zero() && (!just_calc) {
@@ -630,7 +638,7 @@ impl SDC {
 
         let mut acc = 1;
         for b in &scaffold {
-            if let Some(x) = self.friends_btm.get(b) {
+            if let Some(x) = self.friends_btm.get(*b) {
                 // number of possible times + none
                 acc *= x.len() + 1;
             }
@@ -640,8 +648,10 @@ impl SDC {
         possible_scaffolds.push(Vec::default());
 
         for b in &scaffold {
-            let def = HashSet::default();
-            let friends = self.friends_btm.get(b).unwrap_or(&def);
+            let friends = self
+                .friends_btm
+                .get(*b)
+                .expect(format!("Missing friends for {}", b).as_str());
 
             possible_scaffolds = possible_scaffolds
                 .iter()
@@ -687,7 +697,12 @@ impl SDC {
 
         let max_competition = scaffold
             .iter()
-            .map(|x| self.friends_btm.get(x).map(|y| y.len()).unwrap_or(0))
+            .map(|x| {
+                self.friends_btm
+                    .get(*x)
+                    .map(|y| y.len())
+                    .unwrap_or(0)
+            })
             .max()
             .unwrap();
 
@@ -706,7 +721,7 @@ impl SDC {
             z_prev.assign(&z_curr);
             z_curr.fill(0.);
 
-            let friends = match self.friends_btm.get(b) {
+            let friends = match self.friends_btm.get(*b) {
                 Some(f) => f,
                 None => continue,
             };
@@ -729,7 +744,7 @@ impl SDC {
                     // t2 will hold the different cases where side i-1 has tile g in it.
                     let mut t2 = 0.;
 
-                    if let Some(ff) = self.friends_btm.get(&scaffold[i - 1]) {
+                    if let Some(ff) = self.friends_btm.get(scaffold[i - 1]) {
                         for (k, &g) in ff.iter().enumerate() {
                             let left_beta_dg = self.bond_between_strands(g, f);
                             t2 += z_prev[k] * (-left_beta_dg).exp();
@@ -762,7 +777,12 @@ impl SDC {
 
         let max_competition = scaffold
             .iter()
-            .map(|x| self.friends_btm.get(x).map(|y| y.len()).unwrap_or(0))
+            .map(|x| {
+                self.friends_btm
+                    .get(*x)
+                    .map(|y| y.len())
+                    .unwrap_or(0)
+            })
             .max()
             .unwrap();
 
@@ -783,7 +803,7 @@ impl SDC {
             z_prev.assign(&z_curr);
             z_curr.fill(BigFloat::from_i32(0, prec));
 
-            let friends = match self.friends_btm.get(b) {
+            let friends = match self.friends_btm.get(*b) {
                 Some(f) => f,
                 None => continue,
             };
@@ -806,7 +826,7 @@ impl SDC {
                     // t2 will hold the different cases where side i-1 has tile g in it.
                     let mut t2 = BigFloat::from_f64(0., prec);
 
-                    if let Some(ff) = self.friends_btm.get(&scaffold[i - 1]) {
+                    if let Some(ff) = self.friends_btm.get(scaffold[i - 1]) {
                         for (k, &g) in ff.iter().enumerate() {
                             let left_beta_dg = self.bond_between_strands(g, f);
                             t2 = t2.add(
@@ -919,11 +939,10 @@ impl SDC {
 
     /// This is for the standard case where the acc is not empty and the friends here hashset is
     /// not empty
-    fn mfe_next_vector(&self, acc: &MfeValues, friends_here: &HashSet<Tile>) -> MfeValues {
+    fn mfe_next_vector(&self, acc: &MfeValues, friends_here: Iter<Tile>) -> MfeValues {
         // If there are no friends, then this will not run at all, and the return type will be an
         // empty vector.
         let mut connection_answ = friends_here
-            .iter()
             .map(|tile| {
                 let (l, e) = self.best_energy_for_strand(acc, tile);
                 (l, e, *tile)
@@ -959,10 +978,11 @@ impl SDC {
     /// energy among all possible final strands
     fn mfe_matrix(&self) -> Vec<MfeValues> {
         let connection_matrix = self.scaffold().into_iter().scan(vec![], |acc, glue| {
-            let empty_map = HashSet::new();
-            let friends = self.friends_btm.get(&glue).unwrap_or(&empty_map);
-
-            let n_vec = self.mfe_next_vector(acc, friends);
+            let friends = self
+                .friends_btm
+                .get(glue)
+                .expect(format!("Missing friends for {}", glue).as_str());
+            let n_vec = self.mfe_next_vector(acc, friends.iter());
 
             *acc = n_vec;
             Some(
@@ -1295,6 +1315,7 @@ impl TileBondInfo for SDC {
 // Here is potentially another way to process this, though not done.  Feel free to delete or modify.
 
 use std::hash::Hash;
+use std::slice::Iter;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
@@ -1637,7 +1658,7 @@ impl SDC {
                 scaffold_concentration,
                 // These will be generated by the update_system function next, so just leave them
                 // empty for now
-                friends_btm: HashMap::new(),
+                friends_btm: Vec::new(),
                 strand_energy_bonds: Array2::default((strand_count, strand_count)),
                 scaffold_energy_bonds: Array1::default(strand_count),
             };
@@ -2227,7 +2248,7 @@ mod test_sdc_model {
             ],
             colors: Vec::new(),
             kf: PerMolarSecond::zero(),
-            friends_btm: HashMap::new(),
+            friends_btm: Vec::new(),
             entropy_matrix: (array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]])
                 .mapv(KcalPerMolKelvin),
             delta_g_matrix: (array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]])
@@ -2250,12 +2271,13 @@ mod test_sdc_model {
         // TODO Check that the energy bonds are being generated as expected
 
         // Check that the friends hashmap is being generated as expected
-        let expected_friends = HashMap::from([
-            (3, HashSet::from([6, 8])),
-            (4, HashSet::from([3, 5])),
-            (1, HashSet::from([4])),
-            (2, HashSet::from([7])),
-        ]);
+        let expected_friends = vec![
+            vec![],    // 0
+            vec![4],   // 1 -> Tiles with 2 in the bottom
+            vec![7],   // 2 -> Tiles with 1 in the bottom
+            vec![6,8], // 3
+            vec![3,5], // 4
+        ];
         assert_eq!(expected_friends, sdc.friends_btm);
     }
 
@@ -2312,7 +2334,7 @@ mod test_sdc_model {
             scaffold_concentration: Molar::zero(),
             colors: Vec::new(),
             kf: PerMolarSecond::zero(),
-            friends_btm: HashMap::new(),
+            friends_btm: Vec::new(),
             entropy_matrix: array![[1., 2., 3.], [5., 1., 8.], [5., -2., 12.]]
                 .mapv(KcalPerMolKelvin),
             delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]]
