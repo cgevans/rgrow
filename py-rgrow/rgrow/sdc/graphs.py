@@ -13,6 +13,8 @@ class Graphing:
         self.title = title
         self.fig, self.ax1 = plt.subplots()
         self.ax2 = self.ax1.twinx()
+        # Without this line, notebooks will display an empty graph when __init__ is called.
+        plt.close(self.fig)
         self._times = None
         self._temps = None
 
@@ -57,4 +59,5 @@ class Graphing:
             self.fig.savefig(save_path)
             print(f"[INFO] Saved plot to: {save_path}")
         else:
-            plt.show()
+            self.fig.tight_layout()
+            return self.fig

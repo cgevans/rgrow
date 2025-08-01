@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 import pickle
 
 import yaml
-from platformdirs import user_data_dir
 from pathlib import Path
 import sys
 
@@ -54,6 +53,10 @@ class Anneal:
     scaffold_count: int = 100
     timestep: float = 2.0
     temperature_adjustment: float = 8.0
+
+    def without_temperature_adjustment(self) -> "Anneal":
+        self.temperature_adjustment = 0
+        return self
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -149,39 +152,67 @@ class AnnealOutputs:
     anneal: "Anneal"
     state: "State"
 
-    def save_data(self, file_name: str, app_dir: Path = (Path(user_data_dir("rgrow")) / "sdc")):
+    def save_data(self, ident: str, app_dir: Path):
+        """
+        Saves the annealing simulation output data into a directory named `ident`
+        inside `app_dir`. 
+
+        The output may (and usually will be) very large due to the `canvas_arr`. Because of this, the
+        save is divided into two files, one containing the `canvas_arr` in a compressed format, and
+        one containing the anneal protocol, the SDC Params, and the system's name in a human readable
+        format. The exact directory strucutre is:
+
+        <app_dir>/
+        └── <ident>/
+            ├── canvas_arr.npz
+            └── data.yaml 
+        
+        Parameters
+        ----------
+        ident : str
+            Name of the subdirectory inside `app_dir` where data will be saved.
+        app_dir : Path
+            Path to the base directory where simulation outputs are stored.
+        """
         try:
-            app_dir.mkdir(parents=True, exist_ok=True)
-            file_path = app_dir / file_name
+            save_dir = app_dir / ident
+            save_dir.mkdir(parents=True, exist_ok=True)
+
+            # Save the `canvas_arr` on a different, compressed file
+            np.savez_compressed(save_dir / "canvas_arr.npz", canvas_arr=self.canvas_arr.astype(np.uint16))
+
+            # Save `sdc_params` and `anneal_protocol` in human-readable format
             data = {
-                "canvas_arr": self.canvas_arr,
                 "anneal": self.anneal,
-                "sdc_params": self.system.params,
                 "sdc_name": self.system.name,
+                "sdc_params": self.system.params,
             }
-            with file_path.open("wb") as f:
-                pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
+            with open(save_dir / "simulation.yaml", "w") as f:
+                yaml.dump(data, f, sort_keys=False)
+
         except Exception as e:
             print(f"[ERROR] Failed to write file: {e}", file=sys.stderr)
 
     @staticmethod
-    def load_data(file_name: str, app_dir: Path = (Path(user_data_dir("rgrow")) / "sdc")) -> "AnnealOutputs":
+    def load_data(save_path: Path) -> "AnnealOutputs | None":
         """
         Loads a previously saved simulation result, and reconstructs the system and state.
         """
         from .sdc import SDC
 
         try:
-            file_path = app_dir / file_name
-            with file_path.open("rb") as f:
-                data = pickle.load(f)
+            canvas_arr = np.load(save_path / "canvas_arr.npz")["canvas_arr"]
+            file_path = save_path / "simulation.yaml"
+            with file_path.open("r") as f:
+                data = yaml.load(f, Loader=yaml.Loader)
 
             sdc = SDC(data["sdc_params"], data["sdc_name"])
             return AnnealOutputs(
                 system=sdc,
-                canvas_arr=data["canvas_arr"],
+                canvas_arr=canvas_arr,
                 anneal=data["anneal"],
                 state=None
             )
         except Exception as e:
-            print(f"[ERROR] Failed to load file '{file_name}': {e}", file=sys.stderr)
+            print(f"[ERROR] Failed to load data from '{save_path}': {e}", file=sys.stderr)
+            return None
