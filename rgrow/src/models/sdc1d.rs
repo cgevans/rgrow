@@ -1458,6 +1458,11 @@ impl SDCParams {
     fn fluo_quen_check(&self) {
         let qn = self.quencher_name.clone();
         let rn = self.reporter_name.clone();
+
+        if qn.is_none() && rn.is_none() { 
+            return;
+        }
+
         self.strands.iter().for_each(|SDCStrand { name, left_glue, right_glue, .. }| {
             if name.clone() == qn && right_glue.is_none() {
                 panic!("Quenching strand must have a right glue -- No sequence provided for the quencher.");
