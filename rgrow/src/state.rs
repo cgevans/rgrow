@@ -169,7 +169,6 @@ pub trait TileCounts {
     fn update_detachment(&mut self, tile: Tile);
 }
 
-
 pub trait StateWithCreate: State + Sized + Clone {
     type Params;
     // fn new_raw(canvas: Self::RawCanvas) -> Result<Self, GrowError>;
@@ -476,15 +475,16 @@ where
         self.rates.1 = source.rates.1;
         self.tile_counts.clone_from(&source.tile_counts);
     }
-    
-    
 
     fn get_params(&self) -> Self::Params {
         (self.canvas.nrows(), self.canvas.ncols())
     }
-    
+
     fn reset_state(&mut self) {
-        self.rates.0.iter_mut().for_each(|r| r.fill(PerSecond::new(0.)));
+        self.rates
+            .0
+            .iter_mut()
+            .for_each(|r| r.fill(PerSecond::new(0.)));
         self.canvas.raw_array_mut().fill(0);
         self.ntiles = 0;
         self.total_events = 0;
@@ -501,8 +501,6 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     fn n_tiles(&self) -> NumTiles {
         self.ntiles
     }
-
-    
 
     #[inline(always)]
     fn total_events(&self) -> NumEvents {
@@ -532,9 +530,9 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     fn reset_tracking_assuming_empty_state(&mut self) {
         self.tracker.reset_assuming_empty_state()
     }
-    
+
     #[inline(always)]
-    fn set_n_tiles(&mut self,n:NumTiles) {
+    fn set_n_tiles(&mut self, n: NumTiles) {
         self.ntiles = n;
     }
 }

@@ -6,7 +6,11 @@ use ndarray::array;
 use std::fs::File;
 
 use rgrow::{
-    canvas::{Canvas, CanvasPeriodic, PointSafe2}, models::ktam::KTAM, state::{NullStateTracker, QuadTreeState, StateEnum, StateStatus}, system::{DynSystem, EvolveBounds, FissionHandling, System}, tileset::{Seed, Size, TileSet}
+    canvas::{Canvas, CanvasPeriodic, PointSafe2},
+    models::ktam::KTAM,
+    state::{NullStateTracker, QuadTreeState, StateEnum, StateStatus},
+    system::{DynSystem, EvolveBounds, FissionHandling, System},
+    tileset::{Seed, Size, TileSet},
 };
 
 fn test_sim(ts: &TileSet) -> Result<()> {
@@ -258,7 +262,7 @@ fn get_sierpinski() -> Result<TileSet> {
 fn test_calc_committer() -> Result<()> {
     // In these conditions, the max energy square is k=8.
     let mut sys = KTAM::new_sized(1, 1);
-    sys.tile_edges = array![[0,0,0,0],[1,1,1,1]];
+    sys.tile_edges = array![[0, 0, 0, 0], [1, 1, 1, 1]];
     sys.tile_concs = array![0., 1e-7];
     sys.alpha = -7.1;
     sys.glue_strengths = array![0.0, 1.0];
@@ -282,9 +286,10 @@ fn test_calc_committer() -> Result<()> {
     let committer = sys.calc_committer(&se, 200, None, None, 100)?;
 
     println!("committer k=14: {committer}");
-    assert!((committer > 0.9), "committer out of expected range: {committer}");
-
-
+    assert!(
+        (committer > 0.9),
+        "committer out of expected range: {committer}"
+    );
 
     let mut state = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((32, 32))?;
 
@@ -301,7 +306,10 @@ fn test_calc_committer() -> Result<()> {
     let committer = sys.calc_committer(&se, 200, None, None, 100)?;
 
     println!("committer k=8: {committer}");
-    assert!((committer > 0.5) && (committer < 0.9), "committer out of expected range: {committer}");
+    assert!(
+        (committer > 0.5) && (committer < 0.9),
+        "committer out of expected range: {committer}"
+    );
 
     let mut state = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((32, 32))?;
 
@@ -318,7 +326,10 @@ fn test_calc_committer() -> Result<()> {
     let committer = sys.calc_committer(&se, 200, None, None, 100)?;
 
     println!("committer k=5: {committer}");
-    assert!((committer < 0.1), "committer out of expected range: {committer}");
+    assert!(
+        (committer < 0.1),
+        "committer out of expected range: {committer}"
+    );
 
     Ok(())
 }

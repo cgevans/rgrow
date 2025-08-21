@@ -40,11 +40,11 @@ use ndarray::prelude::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "python")]
+use numpy::PyArrayMethods;
+#[cfg(feature = "python")]
 use numpy::ToPyArray;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
-#[cfg(feature = "python")]
-use numpy::PyArrayMethods;
 
 const WEST_GLUE_INDEX: usize = 0;
 const BOTTOM_GLUE_INDEX: usize = 1;
@@ -183,7 +183,8 @@ impl SDC {
 
             let x_inv = if x_bmt % 2 == 1 { x_bmt + 1 } else { x_bmt - 1 };
             let glue_value = self.delta_g_matrix[(x_bmt, x_inv)]
-                - (self.temperature - Celsius(37.0)).to_celsius() * self.entropy_matrix[(x_bmt, x_inv)];
+                - (self.temperature - Celsius(37.0)).to_celsius()
+                    * self.entropy_matrix[(x_bmt, x_inv)];
             glue_value.times_beta(self.temperature)
         })
     }
@@ -349,18 +350,20 @@ impl SDC {
         match g {
             0 => 0,
             x if x.is_multiple_of(2) => x - 1,
-            x => x + 1
+            x => x + 1,
         }
     }
 
     /// The fluorophore attaches to the left of the reporter
     fn fluorophore_det_rate(&self) -> PerSecond {
-        if self.reporter_id.is_none() { return PerSecond::zero(); }
+        if self.reporter_id.is_none() {
+            return PerSecond::zero();
+        }
         let fluo_glue = self.glues[(self.reporter_id.unwrap() as usize, WEST_GLUE_INDEX)];
         let inv_glue = Self::inverse_glue_id(fluo_glue);
         let glue_value = self.delta_g_matrix[(inv_glue, fluo_glue)]
             - (self.temperature - Celsius(37.0)).to_celsius()
-            * self.entropy_matrix[(inv_glue, fluo_glue)];
+                * self.entropy_matrix[(inv_glue, fluo_glue)];
         let bond_energy = glue_value.times_beta(self.temperature);
         // TODO: Is there a minus missing here ?
         self.kf * Molar::u0_times(bond_energy.exp())
@@ -378,12 +381,14 @@ impl SDC {
     }
 
     fn quencher_det_rate(&self) -> PerSecond {
-        if self.quencher_id.is_none() { return PerSecond::zero(); }
+        if self.quencher_id.is_none() {
+            return PerSecond::zero();
+        }
         let quench_glue = self.glues[(self.quencher_id.unwrap() as usize, EAST_GLUE_INDEX)];
         let inv_glue = Self::inverse_glue_id(quench_glue);
         let glue_value = self.delta_g_matrix[(quench_glue, inv_glue)]
             - (self.temperature - Celsius(37.0)).to_celsius()
-            * self.entropy_matrix[(quench_glue, inv_glue)];
+                * self.entropy_matrix[(quench_glue, inv_glue)];
         let bond_energy = glue_value.times_beta(self.temperature);
         // TODO: Is there a minus missing here?
         self.kf * Molar::u0_times(bond_energy.exp())
@@ -466,24 +471,32 @@ impl SDC {
                 } else {
                     (true, acc, Event::MonomerAttachment(point, 2))
                 }
-            },
+            }
             // The quencher is currently attached
             Some(1) => {
                 acc -= self.quencher_det_rate();
                 if acc > PerSecond::zero() {
                     (true, acc, Event::None)
                 } else {
-                    (true, acc, Event::MonomerChange(point, self.quencher_id.unwrap()))
+                    (
+                        true,
+                        acc,
+                        Event::MonomerChange(point, self.quencher_id.unwrap()),
+                    )
                 }
-            },
+            }
             Some(2) => {
                 acc -= self.fluorophore_det_rate();
                 if acc > PerSecond::zero() {
                     (true, acc, Event::None)
                 } else {
-                    (true, acc, Event::MonomerChange(point, self.reporter_id.unwrap()))
+                    (
+                        true,
+                        acc,
+                        Event::MonomerChange(point, self.reporter_id.unwrap()),
+                    )
                 }
-            },
+            }
             _ => (false, acc, Event::None),
         }
     }
@@ -531,7 +544,7 @@ impl SDC {
             return (false, acc, Event::None);
         }
 
-        let index = (point.0.0.rem_euclid(self.scaffold.dim().0), point.0.1);
+        let index = (point.0 .0.rem_euclid(self.scaffold.dim().0), point.0 .1);
         let scaffold_glue = self
             .scaffold
             .get(index)
@@ -697,12 +710,7 @@ impl SDC {
 
         let max_competition = scaffold
             .iter()
-            .map(|x| {
-                self.friends_btm
-                    .get(*x)
-                    .map(|y| y.len())
-                    .unwrap_or(0)
-            })
+            .map(|x| self.friends_btm.get(*x).map(|y| y.len()).unwrap_or(0))
             .max()
             .unwrap();
 
@@ -777,12 +785,7 @@ impl SDC {
 
         let max_competition = scaffold
             .iter()
-            .map(|x| {
-                self.friends_btm
-                    .get(*x)
-                    .map(|y| y.len())
-                    .unwrap_or(0)
-            })
+            .map(|x| self.friends_btm.get(*x).map(|y| y.len()).unwrap_or(0))
             .max()
             .unwrap();
 
@@ -1089,17 +1092,20 @@ impl System for SDC {
         point: crate::canvas::PointSafe2,
         acc: PerSecond,
     ) -> crate::system::Event {
-        let (occur, acc, event) =
-            self.choose_monomer_detachment_at_point(state, point, acc);
-        if occur { return event; }
+        let (occur, acc, event) = self.choose_monomer_detachment_at_point(state, point, acc);
+        if occur {
+            return event;
+        }
 
-        let (occur, acc, event) =
-            self.choose_monomer_attachment_at_point(state, point, acc);
-        if occur { return event; }
+        let (occur, acc, event) = self.choose_monomer_attachment_at_point(state, point, acc);
+        if occur {
+            return event;
+        }
 
-        let (occur, acc, event) =
-            self.choose_monomer_change_at_point(state, point, acc);
-        if occur { return event; }
+        let (occur, acc, event) = self.choose_monomer_change_at_point(state, point, acc);
+        if occur {
+            return event;
+        }
 
         // Now for debugging purposes:
 
@@ -1123,7 +1129,14 @@ impl System for SDC {
             "Change: rate of {rate_monomer_change:?}, event {event_monomer_change:?}\n"
         ));
 
-        panic!("{:?}\nRate: {:?}, {:?}, {:?}, {:?}", str_builder, acc, point, state, state.raw_array());
+        panic!(
+            "{:?}\nRate: {:?}, {:?}, {:?}, {:?}",
+            str_builder,
+            acc,
+            point,
+            state,
+            state.raw_array()
+        );
     }
 
     fn seed_locs(&self) -> Vec<(crate::canvas::PointSafe2, Tile)> {
@@ -1459,7 +1472,7 @@ impl SDCParams {
         let qn = self.quencher_name.clone();
         let rn = self.reporter_name.clone();
 
-        if qn.is_none() && rn.is_none() { 
+        if qn.is_none() && rn.is_none() {
             return;
         }
 
@@ -1952,17 +1965,13 @@ impl SDC {
     fn quencher_rates(&self) -> String {
         let att_rate = self.quencher_att_rate();
         let det_rate = self.quencher_det_rate();
-        format!(
-            "Attachment Rate: {att_rate}, Detachment Rate: {det_rate}"
-        )
+        format!("Attachment Rate: {att_rate}, Detachment Rate: {det_rate}")
     }
 
     fn fluorophore_rates(&self) -> String {
         let att_rate = self.fluorophore_att_rate();
         let det_rate = self.fluorophore_det_rate();
-        format!(
-            "Attachment Rate: {att_rate}, Detachment Rate: {det_rate}"
-        )
+        format!("Attachment Rate: {att_rate}, Detachment Rate: {det_rate}")
     }
 
     #[pyo3(name = "partition_function")]
@@ -2022,10 +2031,7 @@ impl SDC {
     }
 
     #[getter]
-    fn get_entropy_matrix<'py>(
-        &self,
-        py: Python<'py>,
-    ) -> Bound<'py, numpy::PyArray2<f64>> {
+    fn get_entropy_matrix<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
         self.entropy_matrix.mapv(|x| x.0).to_pyarray(py)
     }
 
@@ -2037,10 +2043,7 @@ impl SDC {
     }
 
     #[getter]
-    fn get_delta_g_matrix<'py>(
-        &self,
-        py: Python<'py>,
-    ) -> Bound<'py, numpy::PyArray2<f64>> {
+    fn get_delta_g_matrix<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
         self.delta_g_matrix.mapv(|x| x.0).to_pyarray(py)
     }
 
@@ -2277,11 +2280,11 @@ mod test_sdc_model {
 
         // Check that the friends hashmap is being generated as expected
         let expected_friends = vec![
-            vec![],    // 0
-            vec![4],   // 1 -> Tiles with 2 in the bottom
-            vec![7],   // 2 -> Tiles with 1 in the bottom
-            vec![6,8], // 3
-            vec![3,5], // 4
+            vec![],     // 0
+            vec![4],    // 1 -> Tiles with 2 in the bottom
+            vec![7],    // 2 -> Tiles with 1 in the bottom
+            vec![6, 8], // 3
+            vec![3, 5], // 4
         ];
         assert_eq!(expected_friends, sdc.friends_btm);
     }
@@ -2511,8 +2514,7 @@ mod test_sdc_model {
             .collect::<Vec<_>>();
 
         probs.sort_by(|(_, p1), (_, p2)| {
-            p2.partial_cmp(p1)
-                .unwrap_or_else(|| panic!("{p1} -- {p2}"))
+            p2.partial_cmp(p1).unwrap_or_else(|| panic!("{p1} -- {p2}"))
         });
 
         // The perfect combination would be all 0's

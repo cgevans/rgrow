@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 type Rate = f64;
 
 use crate::{
-    base::{Energy, Glue, ModelError, Point, RgrowError, Tile, GrowError},
+    base::{Energy, Glue, GrowError, ModelError, Point, RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{
@@ -1043,7 +1043,6 @@ impl System for OldKTAM {
         Ok(dvec)
     }
 }
-
 
 impl TryFrom<&TileSet> for OldKTAM {
     type Error = RgrowError;

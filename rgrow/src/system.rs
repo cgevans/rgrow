@@ -415,7 +415,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 
     /// Place a tile at a particular location, handling double tiles appropriately for kTAM.
-    /// For kTAM, placing a "real" tile (left/top part of double tile) will also place the 
+    /// For kTAM, placing a "real" tile (left/top part of double tile) will also place the
     /// corresponding "fake" tile (right/bottom part). Attempting to place a "fake" tile
     /// directly will place the corresponding "real" tile instead.
     fn place_tile<St: State>(
@@ -659,7 +659,9 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
     /// Returns information on dimers that the system can form.
     fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
-        Err(GrowError::NotSupported("Dimer calculation not supported by this system".to_string()))
+        Err(GrowError::NotSupported(
+            "Dimer calculation not supported by this system".to_string(),
+        ))
     }
 
     fn clone_state<St: StateWithCreate>(&self, initial_state: &St) -> St {
@@ -671,7 +673,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         target.clone_from(initial_state);
     }
 
-    fn clone_state_into_empty_state<St: StateWithCreate>(&self, initial_state: &St, target: &mut St) {
+    fn clone_state_into_empty_state<St: StateWithCreate>(
+        &self,
+        initial_state: &St,
+        target: &mut St,
+    ) {
         self.clone_state_into_state(initial_state, target);
     }
 }
@@ -834,19 +840,23 @@ where
 
     fn calc_committer(
         &mut self,
-        initial_state: &StateEnum, 
+        initial_state: &StateEnum,
         cutoff_size: NumTiles,
         max_time: Option<f64>,
         max_events: Option<NumEvents>,
         num_trials: usize,
     ) -> Result<f64, GrowError> {
         if num_trials == 0 {
-            return Err(GrowError::NotSupported("Number of trials must be greater than 0".to_string()));
+            return Err(GrowError::NotSupported(
+                "Number of trials must be greater than 0".to_string(),
+            ));
         }
 
         let mut successes = 0;
 
-        let mut trial_states = (0..num_trials).map(|_| initial_state.clone()).collect::<Vec<_>>();
+        let mut trial_states = (0..num_trials)
+            .map(|_| initial_state.clone())
+            .collect::<Vec<_>>();
 
         let bounds = EvolveBounds {
             size_min: Some(0),
@@ -859,30 +869,31 @@ where
         let outcomes = self.evolve_states(&mut trial_states, bounds);
 
         for outcome in outcomes.iter() {
-            let outcome = outcome.as_ref().map_err(|e| GrowError::NotSupported(e.to_string()))?;
+            let outcome = outcome
+                .as_ref()
+                .map_err(|e| GrowError::NotSupported(e.to_string()))?;
             match outcome {
                 EvolveOutcome::ReachedSizeMax => successes += 1,
-                EvolveOutcome::ReachedSizeMin => {},
+                EvolveOutcome::ReachedSizeMin => {}
                 _ => {
-                    return Err(GrowError::NotSupported("Evolve outcome not supported".to_string())); // FIXME: this should make more sense
-                },
+                    return Err(GrowError::NotSupported(
+                        "Evolve outcome not supported".to_string(),
+                    )); // FIXME: this should make more sense
+                }
             }
         }
-    
 
         Ok(successes as f64 / num_trials as f64)
     }
 
-
     fn calc_committer_adaptive(
         &self,
-        initial_state: &StateEnum, 
+        initial_state: &StateEnum,
         cutoff_size: NumTiles,
         max_time: Option<f64>,
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
     ) -> Result<(f64, usize), GrowError> {
-
         use bpci::{NSuccessesSample, WilsonScore};
 
         let mut successes = 0u32;
@@ -898,14 +909,29 @@ where
             ..Default::default()
         };
 
-        while (NSuccessesSample::new(num_trials, successes).unwrap().wilson_score(1.960).margin > conf_interval_margin) || num_trials < 1 {
+        while (NSuccessesSample::new(num_trials, successes)
+            .unwrap()
+            .wilson_score(1.960)
+            .margin
+            > conf_interval_margin)
+            || num_trials < 1
+        {
             let outcome = self.evolve(&mut trial_state, bounds)?;
             match outcome {
-                EvolveOutcome::ReachedSizeMax => {successes += 1; num_trials += 1; initial_state.clone_into(&mut trial_state);},
-                EvolveOutcome::ReachedSizeMin => {num_trials += 1; initial_state.clone_into(&mut trial_state);},
+                EvolveOutcome::ReachedSizeMax => {
+                    successes += 1;
+                    num_trials += 1;
+                    initial_state.clone_into(&mut trial_state);
+                }
+                EvolveOutcome::ReachedSizeMin => {
+                    num_trials += 1;
+                    initial_state.clone_into(&mut trial_state);
+                }
                 _ => {
-                    return Err(GrowError::NotSupported("Evolve outcome not supported".to_string())); // FIXME: this should make more sense
-                },
+                    return Err(GrowError::NotSupported(
+                        "Evolve outcome not supported".to_string(),
+                    )); // FIXME: this should make more sense
+                }
             }
         }
 
@@ -920,12 +946,21 @@ where
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
     ) -> Result<(Vec<f64>, Vec<usize>), GrowError> {
-        let results = initial_states.par_iter().map(|initial_state| {
-            self.calc_committer_adaptive(initial_state, cutoff_size, max_time, max_events, conf_interval_margin)
-        }).collect::<Vec<_>>();
+        let results = initial_states
+            .par_iter()
+            .map(|initial_state| {
+                self.calc_committer_adaptive(
+                    initial_state,
+                    cutoff_size,
+                    max_time,
+                    max_events,
+                    conf_interval_margin,
+                )
+            })
+            .collect::<Vec<_>>();
 
         let results: Vec<(f64, usize)> = results.into_iter().map(|r| r.unwrap()).collect();
-        
+
         let committers: Vec<f64> = results.iter().map(|(c, _)| *c).collect();
         let trials: Vec<usize> = results.iter().map(|(_, t)| *t).collect();
 
@@ -941,7 +976,9 @@ where
         num_trials: usize,
     ) -> Result<f64, GrowError> {
         if num_trials == 0 {
-            return Err(GrowError::NotSupported("Number of trials must be greater than 0".to_string()));
+            return Err(GrowError::NotSupported(
+                "Number of trials must be greater than 0".to_string(),
+            ));
         }
 
         let initial_size = initial_state.n_tiles();
@@ -949,7 +986,9 @@ where
 
         let mut successes = 0;
 
-        let mut trial_states = (0..num_trials).map(|_| initial_state.clone()).collect::<Vec<_>>();
+        let mut trial_states = (0..num_trials)
+            .map(|_| initial_state.clone())
+            .collect::<Vec<_>>();
 
         let bounds = EvolveBounds {
             size_min: Some(0),
@@ -962,13 +1001,17 @@ where
         let outcomes = self.evolve_states(&mut trial_states, bounds);
 
         for outcome in outcomes.iter() {
-            let outcome = outcome.as_ref().map_err(|e| GrowError::NotSupported(e.to_string()))?;
+            let outcome = outcome
+                .as_ref()
+                .map_err(|e| GrowError::NotSupported(e.to_string()))?;
             match outcome {
                 EvolveOutcome::ReachedSizeMax => successes += 1,
-                EvolveOutcome::ReachedSizeMin => {},
+                EvolveOutcome::ReachedSizeMin => {}
                 _ => {
-                    return Err(GrowError::NotSupported("Evolve outcome not supported".to_string()));
-                },
+                    return Err(GrowError::NotSupported(
+                        "Evolve outcome not supported".to_string(),
+                    ));
+                }
             }
         }
 
@@ -1001,14 +1044,29 @@ where
             ..Default::default()
         };
 
-        while (NSuccessesSample::new(num_trials, successes).unwrap().wilson_score(1.960).margin > conf_interval_margin) || num_trials < 1 {
+        while (NSuccessesSample::new(num_trials, successes)
+            .unwrap()
+            .wilson_score(1.960)
+            .margin
+            > conf_interval_margin)
+            || num_trials < 1
+        {
             let outcome = self.evolve(&mut trial_state, bounds)?;
             match outcome {
-                EvolveOutcome::ReachedSizeMax => {successes += 1; num_trials += 1; initial_state.clone_into(&mut trial_state);},
-                EvolveOutcome::ReachedSizeMin => {num_trials += 1; initial_state.clone_into(&mut trial_state);},
+                EvolveOutcome::ReachedSizeMax => {
+                    successes += 1;
+                    num_trials += 1;
+                    initial_state.clone_into(&mut trial_state);
+                }
+                EvolveOutcome::ReachedSizeMin => {
+                    num_trials += 1;
+                    initial_state.clone_into(&mut trial_state);
+                }
                 _ => {
-                    return Err(GrowError::NotSupported("Evolve outcome not supported".to_string()));
-                },
+                    return Err(GrowError::NotSupported(
+                        "Evolve outcome not supported".to_string(),
+                    ));
+                }
             }
         }
 
@@ -1023,12 +1081,21 @@ where
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
     ) -> Result<(Vec<f64>, Vec<usize>), GrowError> {
-        let results = initial_states.par_iter().map(|initial_state| {
-            self.calc_forward_probability_adaptive(initial_state, forward_step, max_time, max_events, conf_interval_margin)
-        }).collect::<Vec<_>>();
+        let results = initial_states
+            .par_iter()
+            .map(|initial_state| {
+                self.calc_forward_probability_adaptive(
+                    initial_state,
+                    forward_step,
+                    max_time,
+                    max_events,
+                    conf_interval_margin,
+                )
+            })
+            .collect::<Vec<_>>();
 
         let results: Vec<(f64, usize)> = results.into_iter().map(|r| r.unwrap()).collect();
-        
+
         let probabilities: Vec<f64> = results.iter().map(|(p, _)| *p).collect();
         let trials: Vec<usize> = results.iter().map(|(_, t)| *t).collect();
 
@@ -1063,7 +1130,6 @@ impl<'py> IntoPyObject<'py> for SystemEnum {
     type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
     type Error = pyo3::PyErr;
 }
-
 
 #[enum_dispatch]
 pub trait TileBondInfo {

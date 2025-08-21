@@ -5,12 +5,10 @@ use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    base::{Glue, HashSetType, GrowError},
+    base::{Glue, GrowError, HashSetType},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
-    system::{
-        DimerInfo, Event, FissionHandling, Orientation, System, TileBondInfo,
-    },
+    system::{DimerInfo, Event, FissionHandling, Orientation, System, TileBondInfo},
     type_alias,
     units::*,
 };
@@ -895,7 +893,6 @@ impl KBlock {
     }
 }
 
-
 /*
 * The idea right now is that:
 * 1. All tiles have a different id
@@ -1578,9 +1575,7 @@ impl From<KBlockParams> for KBlock {
 
             // Lets check that we are in bounds
             if glue_links.get((glue, inverse)).is_none() {
-                panic!(
-                    "({glue:?} {inverse:?}) not in index ({glue_id:?} {glue_id:?})"
-                );
+                panic!("({glue:?} {inverse:?}) not in index ({glue_id:?} {glue_id:?})");
             }
 
             let stren_dg = match strength_new {

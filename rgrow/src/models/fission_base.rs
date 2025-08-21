@@ -231,10 +231,10 @@ mod tests {
         for i in 0b1u8..0b11111111 {
             let i = i.rotate_right(i.trailing_ones());
             let i = i.rotate_right(i.trailing_zeros());
-            v.push((i+1).is_power_of_two())
+            v.push((i + 1).is_power_of_two())
         }
         v.push(true); // All ones
-        
+
         assert_eq!(v, CONNECTED_RING);
     }
 }

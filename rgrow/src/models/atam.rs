@@ -928,7 +928,6 @@ impl SystemInfo for ATAM {
     }
 }
 
-
 #[cfg(feature = "python")]
 #[pymethods]
 impl ATAM {

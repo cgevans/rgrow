@@ -362,10 +362,7 @@ pub struct FFSRun<St: ClonableState> {
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
-    pub fn create<Sy: System>(
-        system: &mut Sy,
-        config: &FFSRunConfig,
-    ) -> Result<Self, GrowError> {
+    pub fn create<Sy: System>(system: &mut Sy, config: &FFSRunConfig) -> Result<Self, GrowError> {
         let level_list = Vec::new();
 
         let dimerization_rate: MolarPerSecond = system
@@ -438,10 +435,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
-    pub fn create_from_tileset<
-        'a,
-        Sy: System + TryFrom<&'a TileSet, Error = RgrowError>,
-    >(
+    pub fn create_from_tileset<'a, Sy: System + TryFrom<&'a TileSet, Error = RgrowError>>(
         tileset: &'a TileSet,
         config: &FFSRunConfig,
     ) -> Result<Self, RgrowError> {

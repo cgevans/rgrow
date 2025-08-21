@@ -14,7 +14,7 @@ use crate::models::sdc1d::SDC;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{
-    DimerInfo, EvolveBounds, EvolveOutcome, NeededUpdate, TileBondInfo, System, DynSystem
+    DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, System, TileBondInfo,
 };
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
@@ -372,19 +372,18 @@ macro_rules! create_py_system {
                             .map(|x| x.borrow_mut())
                             .collect::<Vec<_>>();
                         let mut states = refs.iter_mut().map(|x| x.deref_mut()).collect::<Vec<_>>();
-                        let out = if parallel {
-                            py.allow_threads(|| {
+                        let out = py.allow_threads(|| {
+                            if parallel {
                                 states
                                     .par_iter_mut()
                                     .map(|state| System::evolve(self, &mut state.0, bounds))
                                     .collect::<Vec<_>>()
-                            })
                         } else {
                             states
                                 .iter_mut()
                                 .map(|state| System::evolve(self, &mut state.0, bounds))
                                 .collect::<Vec<_>>()
-                        };
+                        }});
                         let o: Result<Vec<EvolveOutcome>, PyErr> = out
                             .into_iter()
                             .map(|x| {
@@ -611,20 +610,25 @@ macro_rules! create_py_system {
                 num_trials: usize,
                 max_time: Option<f64>,
                 max_events: Option<NumEvents>,
+                py: Python<'_>,
             ) -> PyResult<f64> {
-                self.calc_committer(
-                    &state.0,
-                    cutoff_size,
-                    max_time,
-                    max_events,
-                    num_trials,
-                )
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+
+                let state = &state.0;
+                
+                let out = py.allow_threads(|| {
+                    self.calc_committer(
+                        &state,
+                        cutoff_size,
+                        max_time,
+                        max_events,
+                        num_trials,
+                    )});
+                out.map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }
 
-            /// Calculate the committer function for a state using adaptive sampling: the probability 
-            /// that when a simulation is started from that state, the assembly will grow to a larger 
-            /// size (cutoff_size) rather than melting to zero tiles. Automatically determines the 
+            /// Calculate the committer function for a state using adaptive sampling: the probability
+            /// that when a simulation is started from that state, the assembly will grow to a larger
+            /// size (cutoff_size) rather than melting to zero tiles. Automatically determines the
             /// number of trials needed to achieve a specified confidence interval margin.
             ///
             /// Parameters
@@ -701,7 +705,7 @@ macro_rules! create_py_system {
                 let (committers, trials) = py.allow_threads(|| {
                     self.calc_committers_adaptive(&states, cutoff_size, max_time, max_events, conf_interval_margin)
                 }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
-                
+
                 Ok((committers.into_pyarray(py), trials.into_pyarray(py)))
             }
 
@@ -780,7 +784,7 @@ macro_rules! create_py_system {
                 let (probability, trials) = py.allow_threads(|| {
                     self.calc_forward_probability_adaptive(&state.0, forward_step, max_time, max_events, conf_interval_margin)
                 }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
-                
+
                 Ok((probability, trials))
             }
 
@@ -822,7 +826,7 @@ macro_rules! create_py_system {
                 let (probabilities, trials) = py.allow_threads(|| {
                     self.calc_forward_probabilities_adaptive(&states, forward_step, max_time, max_events, conf_interval_margin)
                 }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
-                
+
                 Ok((probabilities.into_pyarray(py), trials.into_pyarray(py)))
             }
 
