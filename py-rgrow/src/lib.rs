@@ -1,6 +1,6 @@
 use pyo3::pymodule;
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 mod rgrow {
     #[pymodule_export]
     use rgrow::tileset::TileSet;
