@@ -481,6 +481,7 @@ pub enum TrackingType {
     Order,
     LastAttachTime,
     PrintEvent,
+    Movie,
 }
 
 impl TryFrom<&str> for CanvasType {
@@ -506,6 +507,7 @@ impl TryFrom<&str> for TrackingType {
             "order" => Ok(TrackingType::Order),
             "lastattachtime" => Ok(TrackingType::LastAttachTime),
             "printevent" => Ok(TrackingType::PrintEvent),
+            "movie" => Ok(TrackingType::Movie),
             _ => Err(StringConvError(format!(
                 "Unknown tracking type {value}.  Valid options are \"none\", \"order\", \"lastattachtime\", \"printevent\"."
             ))),

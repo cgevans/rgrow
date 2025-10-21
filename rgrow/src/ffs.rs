@@ -8,7 +8,7 @@ use crate::base::{GrowError, RgrowError, Tile};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals, PointSafe2};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
-use crate::state::{NullStateTracker, QuadTreeState};
+use crate::state::{MovieTracker, NullStateTracker, QuadTreeState};
 use crate::system::EvolveBounds;
 use crate::tileset::{CanvasType, Model, TileSet, SIZE_DEFAULT};
 use crate::units::{MolarPerSecond, PerSecond};
@@ -622,7 +622,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                 system.place_tile(&mut state, mid, dimer.t1)?;
                 system.place_tile(&mut state, other, dimer.t2)?;
                 let cl = [(mid, dimer.t1), (other, dimer.t2)];
-                state.record_event(&system::Event::PolymerAttachment(cl.to_vec()));
+                state.record_event(&system::Event::PolymerAttachment(cl.to_vec()), PerSecond::zero());
 
                 debug_assert_eq!(system.calc_n_tiles(&state), state.n_tiles());
 
@@ -637,7 +637,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     // Use place_tile to properly handle double tiles for dimer state too
                     system.place_tile(&mut dimer_state, mid, dimer.t1)?;
                     system.place_tile(&mut dimer_state, other, dimer.t2)?;
-                    dimer_state.record_event(&system::Event::PolymerAttachment(cl.to_vec()));
+                    dimer_state.record_event(&system::Event::PolymerAttachment(cl.to_vec()), PerSecond::zero());
 
                     state_list.push(state);
 
@@ -1085,6 +1085,10 @@ impl FFSRunResult {
                 FFSRun::<QuadTreeState<CanvasSquare, PrintEventTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
+            (CanvasType::Square, TrackingType::Movie) => {
+                FFSRun::<QuadTreeState<CanvasSquare, MovieTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
             (CanvasType::Periodic, TrackingType::None) => {
                 FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(sys, config)
                     .map(|x| x.into())
@@ -1099,6 +1103,10 @@ impl FFSRunResult {
             }
             (CanvasType::Periodic, TrackingType::PrintEvent) => {
                 FFSRun::<QuadTreeState<CanvasPeriodic, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Periodic, TrackingType::Movie) => {
+                FFSRun::<QuadTreeState<CanvasPeriodic, MovieTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
             (CanvasType::Tube, TrackingType::None) => {
@@ -1117,6 +1125,10 @@ impl FFSRunResult {
                 FFSRun::<QuadTreeState<CanvasTube, PrintEventTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
+            (CanvasType::Tube, TrackingType::Movie) => {
+                FFSRun::<QuadTreeState<CanvasTube, MovieTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
             (CanvasType::TubeDiagonals, TrackingType::None) => {
                 FFSRun::<QuadTreeState<CanvasTubeDiagonals, NullStateTracker>>::create(sys, config)
                     .map(|x| x.into())
@@ -1133,6 +1145,10 @@ impl FFSRunResult {
             }
             (CanvasType::TubeDiagonals, TrackingType::PrintEvent) => {
                 FFSRun::<QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::TubeDiagonals, TrackingType::Movie) => {
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, MovieTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
         })?;

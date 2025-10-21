@@ -13,6 +13,7 @@ use crate::{
 use ndarray::prelude::*;
 
 use enum_dispatch::enum_dispatch;
+use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -65,7 +66,12 @@ impl_clonable_state! {
     (CanvasSquare, PrintEventTracker) => SquarePrintEventTracking,
     (CanvasPeriodic, PrintEventTracker) => PeriodicPrintEventTracking,
     (CanvasTube, PrintEventTracker) => TubePrintEventTracking,
-    (CanvasTubeDiagonals, PrintEventTracker) => TubeDiagonalsPrintEventTracking
+    (CanvasTubeDiagonals, PrintEventTracker) => TubeDiagonalsPrintEventTracking,
+
+    (CanvasSquare, MovieTracker) => SquareMovieTracking,
+    (CanvasPeriodic, MovieTracker) => PeriodicMovieTracking,
+    (CanvasTube, MovieTracker) => TubeMovieTracking,
+    (CanvasTubeDiagonals, MovieTracker) => TubeDiagonalsMovieTracking
 }
 
 #[enum_dispatch(
@@ -97,6 +103,10 @@ pub enum StateEnum {
     PeriodicPrintEventTracking(QuadTreeState<CanvasPeriodic, PrintEventTracker>),
     TubePrintEventTracking(QuadTreeState<CanvasTube, PrintEventTracker>),
     TubeDiagonalsPrintEventTracking(QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>),
+    SquareMovieTracking(QuadTreeState<CanvasSquare, MovieTracker>),
+    PeriodicMovieTracking(QuadTreeState<CanvasPeriodic, MovieTracker>),
+    TubeMovieTracking(QuadTreeState<CanvasTube, MovieTracker>),
+    TubeDiagonalsMovieTracking(QuadTreeState<CanvasTubeDiagonals, MovieTracker>),
 }
 
 impl StateEnum {
@@ -132,6 +142,7 @@ impl StateEnum {
                     TrackingType::Order => create_state!($canvas, OrderTracker),
                     TrackingType::LastAttachTime => create_state!($canvas, LastAttachTimeTracker),
                     TrackingType::PrintEvent => create_state!($canvas, PrintEventTracker),
+                    TrackingType::Movie => create_state!($canvas, MovieTracker),
                 }
             };
         }
@@ -154,7 +165,7 @@ pub trait StateStatus {
     fn add_time(&mut self, time: Second);
     fn set_n_tiles(&mut self, n: NumTiles);
     fn time(&self) -> Second;
-    fn record_event(&mut self, event: &system::Event);
+    fn record_event(&mut self, event: &system::Event, total_rate: PerSecond);
     fn reset_tracking_assuming_empty_state(&mut self);
 }
 
@@ -523,8 +534,8 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
         self.total_events = 0;
     }
 
-    fn record_event(&mut self, event: &system::Event) {
-        self.tracker.record_single_event(event, self.time);
+    fn record_event(&mut self, event: &system::Event, total_rate: PerSecond) {
+        self.tracker.record_single_event(event, self.time, total_rate);
     }
 
     fn reset_tracking_assuming_empty_state(&mut self) {
@@ -606,7 +617,7 @@ impl<C: Canvas, T: StateTracker> TrackerData for QuadTreeState<C, T> {
 pub trait StateTracker: Clone + Debug + Sync + Send {
     fn default(canvas: &dyn Canvas) -> Self;
 
-    fn record_single_event(&mut self, event: &system::Event, time: Second) -> &mut Self;
+    fn record_single_event(&mut self, event: &system::Event, time: Second, total_rate: PerSecond) -> &mut Self;
 
     fn get_tracker_data(&self) -> RustAny;
 
@@ -625,7 +636,7 @@ impl StateTracker for NullStateTracker {
         Self
     }
 
-    fn record_single_event(&mut self, _event: &system::Event, _time: Second) -> &mut Self {
+    fn record_single_event(&mut self, _event: &system::Event, _time: Second, _total_rate: PerSecond) -> &mut Self {
         self
     }
 
@@ -659,7 +670,7 @@ impl StateTracker for OrderTracker {
         self.order = 1;
     }
 
-    fn record_single_event(&mut self, event: &system::Event, _time: Second) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, _time: Second, _total_rate: PerSecond) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -725,7 +736,7 @@ impl StateTracker for LastAttachTimeTracker {
 
     fn reset_assuming_empty_state(&mut self) {}
 
-    fn record_single_event(&mut self, event: &system::Event, time: Second) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, time: Second, _total_rate: PerSecond) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -778,12 +789,125 @@ impl StateTracker for PrintEventTracker {
         // Default is to do nothing
     }
 
-    fn record_single_event(&mut self, event: &system::Event, time: Second) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, time: Second, _total_rate: PerSecond) -> &mut Self {
         println!("{time}: {event:?}");
         self
     }
 
     fn get_tracker_data(&self) -> RustAny {
         RustAny(Box::new(()))
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MovieTracker {
+    pub event_id: Vec<NumEvents>,
+    pub time: Vec<Second>,
+    pub coord: Vec<Point>,
+    pub new_tile: Vec<Tile>,
+    pub total_rate_before: Vec<PerSecond>,
+    current_event_id: NumEvents,
+}
+
+impl StateTracker for MovieTracker {
+    fn default(state: &dyn Canvas) -> Self {
+
+        let mut movie_tracker = MovieTracker {
+            event_id: Vec::new(),
+            time: Vec::new(),
+            coord: Vec::new(),
+            new_tile: Vec::new(),
+            total_rate_before: Vec::new(),
+            current_event_id: 0,
+        };
+        for i in 0..state.nrows() {
+            for j in 0..state.ncols() {
+                movie_tracker.event_id.push(0);
+                movie_tracker.time.push(Second::new(f64::NAN));
+                movie_tracker.coord.push((i, j));
+                movie_tracker.new_tile.push(0);
+                movie_tracker.total_rate_before.push(PerSecond::zero());
+            }
+        }
+        movie_tracker
+    }
+
+    fn reset(&mut self) {
+        self.event_id.clear();
+        self.time.clear();
+        self.coord.clear();
+        self.new_tile.clear();
+        self.total_rate_before.clear();
+        self.current_event_id = 0;
+    }
+
+    fn record_single_event(&mut self, event: &system::Event, time: Second, total_rate: PerSecond) -> &mut Self {
+        match event {
+            system::Event::None => self,
+            system::Event::MonomerAttachment(p, t) => {
+                self.event_id.push(self.current_event_id);
+                self.time.push(time);
+                self.coord.push(p.0);
+                self.new_tile.push(*t);
+                self.total_rate_before.push(total_rate);
+                self.current_event_id += 1;
+                self
+            }
+            system::Event::MonomerDetachment(p) => {
+                self.event_id.push(self.current_event_id);
+                self.time.push(time);
+                self.coord.push(p.0);
+                self.new_tile.push(0);
+                self.total_rate_before.push(total_rate);
+                self.current_event_id += 1;
+                self
+            }
+            system::Event::MonomerChange(p, t) => {
+                self.event_id.push(self.current_event_id);
+                self.time.push(time);
+                self.coord.push(p.0);
+                self.new_tile.push(*t);
+                self.total_rate_before.push(total_rate);
+                self.current_event_id += 1;
+                self
+            }
+            system::Event::PolymerChange(vec) => {
+                for (p, t) in vec {
+                    self.event_id.push(self.current_event_id);
+                    self.time.push(time);
+                    self.coord.push(p.0);
+                    self.new_tile.push(*t);
+                    self.total_rate_before.push(total_rate);
+                }
+                self.current_event_id += 1;
+                self
+            }
+            system::Event::PolymerAttachment(vec) => {
+                for (p, t) in vec {
+                    self.event_id.push(self.current_event_id);
+                    self.time.push(time);
+                    self.coord.push(p.0);
+                    self.new_tile.push(*t);
+                    self.total_rate_before.push(total_rate);
+                }
+                self.current_event_id += 1;
+                self
+            }
+            system::Event::PolymerDetachment(vec) => {
+                for p in vec {
+                    self.event_id.push(self.current_event_id);
+                    self.time.push(time);
+                    self.coord.push(p.0);
+                    self.new_tile.push(0);
+                    self.total_rate_before.push(total_rate);
+                }
+                self.current_event_id += 1;
+                self
+            }
+        }
+    }
+    
+    fn get_tracker_data(&self) -> RustAny {
+        RustAny(Box::new((self.event_id.clone(), self.time.clone(), self.coord.clone(), self.new_tile.clone(), self.total_rate_before.clone())))
     }
 }

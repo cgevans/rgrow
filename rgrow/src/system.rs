@@ -270,7 +270,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 
     fn take_single_step<St: State>(&self, state: &mut St, max_time_step: Second) -> StepOutcome {
-        let time_step = -f64::ln(rng().random()) / state.total_rate();
+        let total_rate = state.total_rate();
+        let time_step = -f64::ln(rng().random()) / total_rate;
         if time_step > max_time_step {
             state.add_time(max_time_step);
             return StepOutcome::NoEventIn(max_time_step);
@@ -290,7 +291,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         self.update_after_event(state, &event);
         state.add_time(time_step);
         state.add_events(1);
-        state.record_event(&event);
+        state.record_event(&event, total_rate);
         StepOutcome::HadEventAt(time_step)
     }
 
