@@ -277,7 +277,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             return StepOutcome::NoEventIn(max_time_step);
         }
         let (point, remainder) = state.choose_point(); // todo: resultify
-        let event = self.choose_event_at_point(
+        let (event, chosen_event_rate) = self.choose_event_at_point(
             state,
             PointSafe2(point),
             PerSecond::from_per_second(remainder),
@@ -287,11 +287,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             return StepOutcome::DeadEventAt(time_step);
         }
 
-        self.perform_event(state, &event);
+        let energy_change = self.perform_event(state, &event);
         self.update_after_event(state, &event);
         state.add_time(time_step);
         state.add_events(1);
-        state.record_event(&event, total_rate);
+        state.record_event(&event, total_rate, chosen_event_rate, energy_change);
         StepOutcome::HadEventAt(time_step)
     }
 
@@ -380,8 +380,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn set_safe_point<St: State>(&self, state: &mut St, point: PointSafe2, tile: Tile) -> &Self {
         let event = Event::MonomerChange(point, tile);
 
-        self.perform_event(state, &event)
-            .update_after_event(state, &event);
+        self.perform_event(state, &event);
+        self.update_after_event(state, &event);
 
         self
     }
@@ -396,8 +396,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 .map(|(p, t)| (PointSafe2(*p), *t))
                 .collect(),
         );
-        self.perform_event(state, &event)
-            .update_after_event(state, &event);
+        self.perform_event(state, &event);
+        self.update_after_event(state, &event);
         self
     }
 
@@ -410,8 +410,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         //     assert!(state.inbounds(*point))
         // }
         let event = Event::PolymerChange(changelist.to_vec());
-        self.perform_event(state, &event)
-            .update_after_event(state, &event);
+        self.perform_event(state, &event);
+        self.update_after_event(state, &event);
         self
     }
 
@@ -419,14 +419,17 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     /// For kTAM, placing a "real" tile (left/top part of double tile) will also place the
     /// corresponding "fake" tile (right/bottom part). Attempting to place a "fake" tile
     /// directly will place the corresponding "real" tile instead.
+    /// 
+    /// Returns energy change caused by placement, or NaN if energy is not calculated.
     fn place_tile<St: State>(
         &self,
         state: &mut St,
         point: PointSafe2,
         tile: Tile,
-    ) -> Result<&Self, GrowError> {
+    ) -> Result<f64, GrowError> {
         // Default implementation: just place the tile directly
-        Ok(self.set_safe_point(state, point, tile))
+        self.set_safe_point(state, point, tile);
+        Ok(f64::NAN)
     }
 
     fn configure_empty_state<St: State>(&self, state: &mut St) -> Result<(), GrowError> {
@@ -438,7 +441,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
     /// Perform a particular event/change to a state.  Do not update the state's time/etc,
     /// or rates, which should be done in update_after_event and take_single_step.
-    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
+    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> f64 {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
@@ -458,7 +461,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 }
             }
         };
-        self
+        f64::NAN // FIXME: should return the energy change
     }
 
     fn update_after_event<St: State>(&self, state: &mut St, event: &Event);
@@ -467,8 +470,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn event_rate_at_point<St: State>(&self, state: &St, p: PointSafeHere) -> PerSecond;
 
     /// Given a point, and an accumulated random rate choice `acc` (which should be less than the total rate at the point),
-    /// return the event that should take place.
-    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: PerSecond) -> Event;
+    /// return the event that should take place, and the rate of that particular event.
+    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: PerSecond) -> (Event, f64);
 
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;

@@ -14,6 +14,7 @@ use ndarray::prelude::*;
 
 use enum_dispatch::enum_dispatch;
 use num_traits::Zero;
+use polars::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -165,7 +166,7 @@ pub trait StateStatus {
     fn add_time(&mut self, time: Second);
     fn set_n_tiles(&mut self, n: NumTiles);
     fn time(&self) -> Second;
-    fn record_event(&mut self, event: &system::Event, total_rate: PerSecond);
+    fn record_event(&mut self, event: &system::Event, total_rate: PerSecond, chosen_event_rate: f64, energy_change: f64);
     fn reset_tracking_assuming_empty_state(&mut self);
 }
 
@@ -534,8 +535,8 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
         self.total_events = 0;
     }
 
-    fn record_event(&mut self, event: &system::Event, total_rate: PerSecond) {
-        self.tracker.record_single_event(event, self.time, total_rate);
+    fn record_event(&mut self, event: &system::Event, total_rate: PerSecond, chosen_event_rate: f64, energy_change: f64) {
+        self.tracker.record_single_event(event, self.time, total_rate, chosen_event_rate, energy_change);
     }
 
     fn reset_tracking_assuming_empty_state(&mut self) {
@@ -617,7 +618,7 @@ impl<C: Canvas, T: StateTracker> TrackerData for QuadTreeState<C, T> {
 pub trait StateTracker: Clone + Debug + Sync + Send {
     fn default(canvas: &dyn Canvas) -> Self;
 
-    fn record_single_event(&mut self, event: &system::Event, time: Second, total_rate: PerSecond) -> &mut Self;
+    fn record_single_event(&mut self, event: &system::Event, time: Second, total_rate: PerSecond, chosen_event_rate: f64, energy_change: f64) -> &mut Self;
 
     fn get_tracker_data(&self) -> RustAny;
 
@@ -636,7 +637,7 @@ impl StateTracker for NullStateTracker {
         Self
     }
 
-    fn record_single_event(&mut self, _event: &system::Event, _time: Second, _total_rate: PerSecond) -> &mut Self {
+    fn record_single_event(&mut self, _event: &system::Event, _time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64) -> &mut Self {
         self
     }
 
@@ -670,7 +671,7 @@ impl StateTracker for OrderTracker {
         self.order = 1;
     }
 
-    fn record_single_event(&mut self, event: &system::Event, _time: Second, _total_rate: PerSecond) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, _time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -736,7 +737,7 @@ impl StateTracker for LastAttachTimeTracker {
 
     fn reset_assuming_empty_state(&mut self) {}
 
-    fn record_single_event(&mut self, event: &system::Event, time: Second, _total_rate: PerSecond) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -789,7 +790,7 @@ impl StateTracker for PrintEventTracker {
         // Default is to do nothing
     }
 
-    fn record_single_event(&mut self, event: &system::Event, time: Second, _total_rate: PerSecond) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64) -> &mut Self {
         println!("{time}: {event:?}");
         self
     }
@@ -806,6 +807,8 @@ pub struct MovieTracker {
     pub coord: Vec<Point>,
     pub new_tile: Vec<Tile>,
     pub total_rate_before: Vec<PerSecond>,
+    pub chosen_event_rate: Vec<f64>,
+    pub energy_change: Vec<f64>,
     current_event_id: NumEvents,
 }
 
@@ -818,16 +821,30 @@ impl StateTracker for MovieTracker {
             coord: Vec::new(),
             new_tile: Vec::new(),
             total_rate_before: Vec::new(),
+            chosen_event_rate: Vec::new(),
+            energy_change: Vec::new(),
             current_event_id: 0,
         };
+        let mut had_init = false;
         for i in 0..state.nrows() {
             for j in 0..state.ncols() {
-                movie_tracker.event_id.push(0);
-                movie_tracker.time.push(Second::new(f64::NAN));
-                movie_tracker.coord.push((i, j));
-                movie_tracker.new_tile.push(0);
-                movie_tracker.total_rate_before.push(PerSecond::zero());
+                if state.inbounds((i, j)) {
+                    let tile =  state.tile_at_point(PointSafe2((i, j)));
+                    if tile > 0 {
+                        movie_tracker.event_id.push(0);
+                        movie_tracker.time.push(Second::new(f64::NAN));
+                        movie_tracker.coord.push((i, j));
+                        movie_tracker.new_tile.push(tile);
+                        movie_tracker.total_rate_before.push(PerSecond::zero());
+                        movie_tracker.chosen_event_rate.push(f64::NAN);
+                        movie_tracker.energy_change.push(0.);
+                        had_init = true;
+                    }
+                }
             }
+        }
+        if had_init {
+            movie_tracker.current_event_id = 1;
         }
         movie_tracker
     }
@@ -838,10 +855,12 @@ impl StateTracker for MovieTracker {
         self.coord.clear();
         self.new_tile.clear();
         self.total_rate_before.clear();
+        self.chosen_event_rate.clear();
+        self.energy_change.clear();
         self.current_event_id = 0;
     }
 
-    fn record_single_event(&mut self, event: &system::Event, time: Second, total_rate: PerSecond) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, time: Second, total_rate: PerSecond, chosen_event_rate: f64, energy_change: f64) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, t) => {
@@ -850,6 +869,8 @@ impl StateTracker for MovieTracker {
                 self.coord.push(p.0);
                 self.new_tile.push(*t);
                 self.total_rate_before.push(total_rate);
+                self.energy_change.push(energy_change);
+                self.chosen_event_rate.push(chosen_event_rate);
                 self.current_event_id += 1;
                 self
             }
@@ -859,6 +880,8 @@ impl StateTracker for MovieTracker {
                 self.coord.push(p.0);
                 self.new_tile.push(0);
                 self.total_rate_before.push(total_rate);
+                self.energy_change.push(energy_change);
+                self.chosen_event_rate.push(chosen_event_rate);
                 self.current_event_id += 1;
                 self
             }
@@ -868,6 +891,8 @@ impl StateTracker for MovieTracker {
                 self.coord.push(p.0);
                 self.new_tile.push(*t);
                 self.total_rate_before.push(total_rate);
+                self.energy_change.push(energy_change);
+                self.chosen_event_rate.push(chosen_event_rate);
                 self.current_event_id += 1;
                 self
             }
@@ -878,6 +903,8 @@ impl StateTracker for MovieTracker {
                     self.coord.push(p.0);
                     self.new_tile.push(*t);
                     self.total_rate_before.push(total_rate);
+                    self.energy_change.push(energy_change);
+                    self.chosen_event_rate.push(chosen_event_rate);
                 }
                 self.current_event_id += 1;
                 self
@@ -889,6 +916,8 @@ impl StateTracker for MovieTracker {
                     self.coord.push(p.0);
                     self.new_tile.push(*t);
                     self.total_rate_before.push(total_rate);
+                    self.energy_change.push(energy_change);
+                    self.chosen_event_rate.push(chosen_event_rate);
                 }
                 self.current_event_id += 1;
                 self
@@ -900,6 +929,8 @@ impl StateTracker for MovieTracker {
                     self.coord.push(p.0);
                     self.new_tile.push(0);
                     self.total_rate_before.push(total_rate);
+                    self.energy_change.push(energy_change);
+                    self.chosen_event_rate.push(chosen_event_rate);
                 }
                 self.current_event_id += 1;
                 self
@@ -908,6 +939,26 @@ impl StateTracker for MovieTracker {
     }
     
     fn get_tracker_data(&self) -> RustAny {
-        RustAny(Box::new((self.event_id.clone(), self.time.clone(), self.coord.clone(), self.new_tile.clone(), self.total_rate_before.clone())))
+        // Convert time and rates to f64 for DataFrame
+        let time_f64: Vec<f64> = self.time.iter().map(|&t| t.into()).collect();
+        let rate_f64: Vec<f64> = self.total_rate_before.iter().map(|&r| r.into()).collect();
+        let chosen_event_rate_f64: Vec<f64> = self.chosen_event_rate.iter().map(|&r| r).collect();
+        // Extract row and column from coord tuples (convert to u64 for polars compatibility)
+        let row: Vec<u64> = self.coord.iter().map(|c| c.0 as u64).collect();
+        let col: Vec<u64> = self.coord.iter().map(|c| c.1 as u64).collect();
+
+        // Create DataFrame
+        let df = df! {
+            "event_id" => &self.event_id,
+            "time" => &time_f64,
+            "row" => &row,
+            "col" => &col,
+            "new_tile" => &self.new_tile,
+            "total_rate_before" => &rate_f64,
+            "chosen_event_rate" => &chosen_event_rate_f64,
+            "energy_change" => &self.energy_change,
+        }.expect("Failed to create DataFrame from MovieTracker data");
+
+        RustAny(Box::new(df))
     }
 }

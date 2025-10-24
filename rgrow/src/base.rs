@@ -184,7 +184,12 @@ impl FromPyObject<'_> for RustAny {
 #[cfg(feature = "python")]
 impl<'py> IntoPyObject<'py> for RustAny {
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-        if let Some(val) = self.0.downcast_ref::<f64>() {
+        use polars::prelude::DataFrame;
+        use pyo3_polars::PyDataFrame;
+
+        if let Some(val) = self.0.downcast_ref::<DataFrame>() {
+            PyDataFrame(val.clone()).into_bound_py_any(py)
+        } else if let Some(val) = self.0.downcast_ref::<f64>() {
             val.into_bound_py_any(py)
         } else if let Some(val) = self.0.downcast_ref::<u64>() {
             val.into_bound_py_any(py)
