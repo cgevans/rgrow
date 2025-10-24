@@ -621,7 +621,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                 // Use place_tile to properly handle double tiles
                 let energy_change = system.place_tile(&mut state, mid, dimer.t1)? + system.place_tile(&mut state, other, dimer.t2)?;
                 let cl = [(mid, dimer.t1), (other, dimer.t2)];
-                state.record_event(&system::Event::PolymerAttachment(cl.to_vec()), PerSecond::zero(), f64::NAN, energy_change);
+                state.record_event(&system::Event::PolymerAttachment(cl.to_vec()), PerSecond::zero(), f64::NAN, energy_change, energy_change, 2);
 
                 debug_assert_eq!(system.calc_n_tiles(&state), state.n_tiles());
 
@@ -635,7 +635,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
                     // Use place_tile to properly handle double tiles for dimer state too
                     let energy_change = system.place_tile(&mut dimer_state, mid, dimer.t1)? + system.place_tile(&mut dimer_state, other, dimer.t2)?;
-                    dimer_state.record_event(&system::Event::PolymerAttachment(cl.to_vec()), PerSecond::zero(), f64::NAN, energy_change);
+                    dimer_state.record_event(&system::Event::PolymerAttachment(cl.to_vec()), PerSecond::zero(), f64::NAN, energy_change, energy_change, 2);
 
                     state_list.push(state);
 

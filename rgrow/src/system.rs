@@ -291,7 +291,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         self.update_after_event(state, &event);
         state.add_time(time_step);
         state.add_events(1);
-        state.record_event(&event, total_rate, chosen_event_rate, energy_change);
+        state.record_event(&event, total_rate, chosen_event_rate, energy_change, state.energy(), state.n_tiles());
         StepOutcome::HadEventAt(time_step)
     }
 

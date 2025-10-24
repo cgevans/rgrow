@@ -702,6 +702,7 @@ impl System for KTAM {
                 }
             }
         }
+        state.change_energy(energy_change);
         energy_change
     }
 
