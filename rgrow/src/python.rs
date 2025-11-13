@@ -902,6 +902,33 @@ macro_rules! create_py_system {
             pub fn read_json(filename: &str) -> Result<Self, RgrowError> {
                 Ok(serde_json::from_reader(File::open(filename)?).unwrap())
             }
+
+            /// Place a tile at a point in the given state.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : PyState
+            ///     The state to modify.
+            /// point : tuple of int
+            ///     The coordinates at which to place the tile (i, j).
+            /// tile : int
+            ///     The tile number to place.
+            ///
+            /// Returns
+            /// -------
+            /// float
+            ///     The energy change from placing the tile.
+            #[pyo3(name = "place_tile")]
+            pub fn py_place_tile(
+                &self,
+                state: &mut PyState,
+                point: (usize, usize),
+                tile: u32,
+            ) -> Result<f64, RgrowError> {
+                let pt = PointSafe2(point);
+                let energy_change = self.place_tile(&mut state.0, pt, tile.into())?;
+                Ok(energy_change)
+            }
         }
     };
 }
