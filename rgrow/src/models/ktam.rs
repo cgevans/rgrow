@@ -855,7 +855,7 @@ impl System for KTAM {
     fn system_info(&self) -> String {
         format!(
             "kTAM with {} tiles and {} glues, G_se = {}, α = {}",
-            self.tile_names.len(),
+            self.tile_names.len() - 1,
             self.glue_strengths.len(),
             self.g_se,
             self.alpha
