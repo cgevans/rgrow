@@ -509,7 +509,7 @@ impl TryFrom<&str> for TrackingType {
             "printevent" => Ok(TrackingType::PrintEvent),
             "movie" => Ok(TrackingType::Movie),
             _ => Err(StringConvError(format!(
-                "Unknown tracking type {value}.  Valid options are \"none\", \"order\", \"lastattachtime\", \"printevent\"."
+                "Unknown tracking type {value}.  Valid options are \"none\", \"order\", \"lastattachtime\", \"printevent\", \"movie\"."
             ))),
         }
     }
