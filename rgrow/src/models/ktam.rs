@@ -350,7 +350,7 @@ impl System for KTAM {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) => {
                 energy_change += self.energy_change_from_point_change(state, *point, *tile);
-                state.set_sa(point, tile);
+                state.set_sa_countabletilearray(point, tile, &self.should_be_counted);
                 match self.tile_shape(*tile) {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
@@ -2151,7 +2151,7 @@ mod tests {
 
     use crate::{
         canvas::{Canvas, CanvasPeriodic, CanvasSquare, CanvasTube},
-        state::{NullStateTracker, QuadTreeState, State, StateWithCreate},
+        state::{NullStateTracker, QuadTreeState, State, StateStatus, StateWithCreate},
     };
 
     use super::*;
@@ -2367,7 +2367,7 @@ mod tests {
         system.update_system();
 
         let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
-            system.new_state((10, 10))?;
+            system.new_state((16, 16))?;
 
         // Test placing a single tile
         let single_point = PointSafe2((5, 5));
@@ -2444,6 +2444,12 @@ mod tests {
         assert_eq!(
             actual_tile_count, expected_tile_count,
             "Tile count should not include fake tiles"
+        );
+
+        // Also check that the state's ntiles count is correct
+        assert_eq!(
+            state.n_tiles(), expected_tile_count,
+            "State's ntiles count should be correct"
         );
 
         Ok(())
