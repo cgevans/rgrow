@@ -61,7 +61,7 @@ impl TileSet {
                     "hdoubletiles" => tileset.hdoubletiles = Some(v.extract()?),
                     "vdoubletiles" => tileset.vdoubletiles = Some(v.extract()?),
                     "model" => tileset.model = Some(v.extract::<&str>()?.try_into()?),
-                    v => Python::with_gil(|py| {
+                    v => Python::attach(|py| {
                         let user_warning = py.get_type::<pyo3::exceptions::PyUserWarning>();
                         PyErr::warn(
                             py,
@@ -96,8 +96,8 @@ impl TileSet {
     /// FIXME: implement this without the json trip.
     #[pyo3(name = "from_dict")]
     #[classmethod]
-    fn py_from_dict(_cls: &Bound<'_, PyType>, data: PyObject) -> PyResult<Self> {
-        let json: String = Python::with_gil(|py| {
+    fn py_from_dict(_cls: &Bound<'_, PyType>, data: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let json: String = Python::attach(|py| {
             let json = PyModule::import(py, "json")?;
             json.call_method1("dumps", (data,))?.extract::<String>()
         })?;
@@ -197,7 +197,7 @@ impl TileSet {
             }
         }
 
-        let res = py.allow_threads(|| self.run_ffs(&c));
+        let res = py.detach(|| self.run_ffs(&c));
         match res {
             Ok(res) => Ok(res),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(

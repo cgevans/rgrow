@@ -77,19 +77,14 @@ pub enum Seed {
     MultiTile(HashMapType<PointSafe2, Tile>),
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
 enum TileShape {
+    #[default]
     Single,
     DupleToRight(Tile),
     DupleToBottom(Tile),
     DupleToLeft(Tile),
     DupleToTop(Tile),
-}
-
-impl Default for TileShape {
-    fn default() -> Self {
-        Self::Single
-    }
 }
 
 #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]

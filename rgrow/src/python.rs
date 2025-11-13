@@ -323,7 +323,7 @@ macro_rules! create_py_system {
                 show_window: bool,
                 parallel: bool,
                 py: Python<'py>,
-            ) -> PyResult<PyObject> {
+            ) -> PyResult<Py<PyAny>> {
                 let bounds = EvolveBounds {
                     for_events,
                     for_time,
@@ -351,13 +351,13 @@ macro_rules! create_py_system {
                         let state = &mut pystate.borrow_mut().0;
                         if show_window {
                             py
-                                .allow_threads(|| {
+                                .detach(|| {
                                     System::evolve_in_window(self, state, None, bounds)
                                 })?
                                 .into_py_any(py)
                         } else {
                             py
-                                .allow_threads(|| System::evolve(self, state, bounds))?
+                                .detach(|| System::evolve(self, state, bounds))?
                                 .into_py_any(py)
                         }
                     }
@@ -372,7 +372,7 @@ macro_rules! create_py_system {
                             .map(|x| x.borrow_mut())
                             .collect::<Vec<_>>();
                         let mut states = refs.iter_mut().map(|x| x.deref_mut()).collect::<Vec<_>>();
-                        let out = py.allow_threads(|| {
+                        let out = py.detach(|| {
                             if parallel {
                                 states
                                     .par_iter_mut()
@@ -615,7 +615,7 @@ macro_rules! create_py_system {
 
                 let state = &state.0;
                 
-                let out = py.allow_threads(|| {
+                let out = py.detach(|| {
                     self.calc_committer(
                         &state,
                         cutoff_size,
@@ -658,7 +658,7 @@ macro_rules! create_py_system {
                 max_events: Option<NumEvents>,
                 py: Python<'_>,
             ) -> PyResult<(f64, usize)> {
-                py.allow_threads(|| {
+                py.detach(|| {
                     self.calc_committer_adaptive(
                         &state.0,
                         cutoff_size,
@@ -702,7 +702,7 @@ macro_rules! create_py_system {
 
                 let refs = states.iter().map(|x| x.borrow()).collect::<Vec<_>>();
                 let states = refs.iter().map(|x| &x.0).collect::<Vec<_>>();
-                let (committers, trials) = py.allow_threads(|| {
+                let (committers, trials) = py.detach(|| {
                     self.calc_committers_adaptive(&states, cutoff_size, max_time, max_events, conf_interval_margin)
                 }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
 
@@ -781,7 +781,7 @@ macro_rules! create_py_system {
                 max_events: Option<NumEvents>,
                 py: Python<'_>,
             ) -> PyResult<(f64, usize)> {
-                let (probability, trials) = py.allow_threads(|| {
+                let (probability, trials) = py.detach(|| {
                     self.calc_forward_probability_adaptive(&state.0, forward_step, max_time, max_events, conf_interval_margin)
                 }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
 
@@ -823,7 +823,7 @@ macro_rules! create_py_system {
 
                 let refs = states.iter().map(|x| x.borrow()).collect::<Vec<_>>();
                 let states = refs.iter().map(|x| &x.0).collect::<Vec<_>>();
-                let (probabilities, trials) = py.allow_threads(|| {
+                let (probabilities, trials) = py.detach(|| {
                     self.calc_forward_probabilities_adaptive(&states, forward_step, max_time, max_events, conf_interval_margin)
                 }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
 
@@ -858,7 +858,7 @@ macro_rules! create_py_system {
                     }
                 }
 
-                let res = py.allow_threads(|| self.run_ffs(&c));
+                let res = py.detach(|| self.run_ffs(&c));
                 match res {
                     Ok(res) => Ok(res),
                     Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(

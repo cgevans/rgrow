@@ -17,7 +17,7 @@ macro_rules! type_alias {
 * */
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::Debug,
     sync::OnceLock,
 };
@@ -201,7 +201,6 @@ impl SDC {
     }
 
     fn generate_friends(&mut self) {
-        let tile_count = self.strand_names.len();
         let max_glue_scaffold = *self.scaffold.iter().max().unwrap();
         let max_glue_strands = *self
             .glues
@@ -562,7 +561,7 @@ impl SDC {
             .get(*scaffold_glue)
             // When creating friends_btm, every glue in the sacaffold should have a friends index
             // (perhaps empty)
-            .expect(format!("Missing friends for {}", scaffold_glue).as_str());
+            .unwrap_or_else(|| panic!("Missing friends for {}", scaffold_glue));
 
         let mut rand_thread = rand::rng();
         for &strand in friends {
@@ -672,7 +671,7 @@ impl SDC {
             let friends = self
                 .friends_btm
                 .get(*b)
-                .expect(format!("Missing friends for {}", b).as_str());
+                .unwrap_or_else(|| panic!("Missing friends for {}", b));
 
             possible_scaffolds = possible_scaffolds
                 .iter()
@@ -992,7 +991,7 @@ impl SDC {
             let friends = self
                 .friends_btm
                 .get(glue)
-                .expect(format!("Missing friends for {}", glue).as_str());
+                .unwrap_or_else(|| panic!("Missing friends for {}", glue));
             let n_vec = self.mfe_next_vector(acc, friends.iter());
 
             *acc = n_vec;
@@ -1102,17 +1101,17 @@ impl System for SDC {
     ) -> (crate::system::Event, f64) {
         let (occur, acc, event, rate) = self.choose_monomer_detachment_at_point(state, point, acc);
         if occur {
-            return (event, rate.into());
+            return (event, rate);
         }
 
         let (occur, acc, event, rate) = self.choose_monomer_attachment_at_point(state, point, acc);
         if occur {
-            return (event, rate.into());
+            return (event, rate);
         }
 
         let (occur, acc, event, rate) = self.choose_monomer_change_at_point(state, point, acc);
         if occur {
-            return (event, rate.into());
+            return (event, rate);
         }
 
         // Now for debugging purposes:

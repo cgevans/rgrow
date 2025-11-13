@@ -639,6 +639,7 @@ impl<C: Canvas, T: StateTracker> TrackerData for QuadTreeState<C, T> {
 pub trait StateTracker: Clone + Debug + Sync + Send {
     fn default(canvas: &dyn Canvas) -> Self;
 
+    #[allow(clippy::too_many_arguments)]
     fn record_single_event(&mut self, event: &system::Event, time: Second, total_rate: PerSecond, chosen_event_rate: f64, energy_change: f64, energy: Energy, n_tiles: NumTiles) -> &mut Self;
 
     fn get_tracker_data(&self) -> RustAny;
@@ -658,7 +659,7 @@ impl StateTracker for NullStateTracker {
         Self
     }
 
-    fn record_single_event(&mut self, _event: &system::Event, _time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64, energy: Energy, n_tiles: NumTiles) -> &mut Self {
+    fn record_single_event(&mut self, _event: &system::Event, _time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64, _energy: Energy, _n_tiles: NumTiles) -> &mut Self {
         self
     }
 
@@ -692,7 +693,7 @@ impl StateTracker for OrderTracker {
         self.order = 1;
     }
 
-    fn record_single_event(&mut self, event: &system::Event, _time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64, energy: Energy, n_tiles: NumTiles) -> &mut Self {
+    fn record_single_event(&mut self, event: &system::Event, _time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64, _energy: Energy, _n_tiles: NumTiles) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {

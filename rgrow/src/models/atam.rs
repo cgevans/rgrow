@@ -162,7 +162,7 @@ impl System for ATAM {
         match self.choose_attachment_at_point(state, p, f64::from_per_second(acc)) {
             (true, _, event, rate) => {
                 // println!("{:?} {:?}", acc, event);
-                (event, rate.into())
+                (event, rate)
             }
             (false, acc, _, _) => {
                 panic!(
@@ -526,7 +526,7 @@ impl ATAM {
             let rate = self.tile_stoics[t as usize];
             acc -= rate;
             if !just_calc & (acc <= (0.)) {
-                return (true, acc, Event::MonomerAttachment(p, t), rate.into());
+                return (true, acc, Event::MonomerAttachment(p, t), rate);
             }
         }
         (false, acc, Event::None, f64::NAN  )

@@ -248,7 +248,7 @@ fn calculate_single_mismatch_penalty(
 }
 
 #[cfg_attr(feature = "python", pyfunction)]
-fn sequence_pair_str_dg_ds(dna_a: &'_ str, dna_b: &'_ str) -> (KcalPerMol, KcalPerMolKelvin) {
+pub fn sequence_pair_str_dg_ds(dna_a: &'_ str, dna_b: &'_ str) -> (KcalPerMol, KcalPerMolKelvin) {
     let dna_seq_a = dna_a.chars().map(DnaNucleotideBase::from);
     let dna_seq_b = dna_b.chars().map(DnaNucleotideBase::from);
     sequence_pair_dg_ds(dna_seq_a.collect(), dna_seq_b.collect())
