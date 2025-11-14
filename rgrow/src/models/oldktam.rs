@@ -803,21 +803,21 @@ impl System for OldKTAM {
                     }
                 }
             } else {
-                match self.chunk_handling {
+                let rate: PerSecond = match self.chunk_handling {  // FIXM: needs review
                     ChunkHandling::None => {
                         panic!("Ran out of event possibilities at {p:#?}, acc={acc:#?}")
                     }
                     ChunkHandling::Detach | ChunkHandling::Equilibrium => {
-                        let rate = self.choose_chunk_detachment(
+                        self.choose_chunk_detachment(
                             canvas,
                             p,
                             tile,
                             &mut acc,
                             &mut now_empty,
                             &mut possible_starts,
-                        );
+                        ).into()
                     }
-                }
+                };
 
                 match self.determine_fission(canvas, &possible_starts, &now_empty) {
                     super::fission_base::FissionResult::NoFission => {
