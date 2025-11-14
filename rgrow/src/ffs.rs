@@ -59,35 +59,130 @@ use state::{
 use system::{DynSystem, Orientation, System, SystemEnum};
 //use std::convert::{TryFrom, TryInto};
 
-/// Configuration options for FFS.
+/// Configuration options for Forward Flux Sampling (FFS) simulations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
 pub struct FFSRunConfig {
     /// Use constant-variance, variable-configurations-per-surface method.
-    /// If false, use max_configs for each surface.
+    /// 
+    /// When true, the number of configurations generated at each surface is determined
+    /// dynamically to achieve a target variance of the forward probablity relative to the mean 
+    /// squared (var_per_mean2). When false, exactly max_configs configurations are generated at 
+    /// each surface. 
     pub constant_variance: bool,
-    /// Variance per mean^2 for constant-variance method.
+    
+    /// Target variance per mean squared for the constant-variance method.
+    /// 
+    /// Controls the statistical precision when constant_variance is true. Lower values
+    /// require more configurations but provide better statistics. Typical values are
+    /// 0.01 (1% variance) to 0.1 (10% variance). Only used when constant_variance is true.
     pub var_per_mean2: f64,
-    /// Minimum number of configuratons to generate at each level.
+    
+    /// Minimum number of configurations to generate at each surface level.
+    /// 
+    /// Ensures a minimum sample size even when constant_variance is true and the
+    /// target variance is achieved with fewer configurations.
     pub min_configs: usize,
-    /// Maximum number of configurations to generate at each level.
+    
+    /// Maximum number of configurations to generate at each surface level.
+    /// 
+    /// When constant_variance is false, exactly this many configurations are generated.
+    /// When constant_variance is true, this serves as an upper limit to prevent
+    /// excessive computation when success probabilities are very low.
     pub max_configs: usize,
-    /// Use early cutoff for constant-variance method.
+    
+    /// Enable early termination when success probabilities become very high.
+    /// 
+    /// When true, FFS will terminate early if the success probability exceeds
+    /// cutoff_probability for cutoff_number consecutive surfaces, provided the
+    /// structure size is at least min_cutoff_size.
     pub early_cutoff: bool,
+    
+    /// Success probability threshold for early cutoff.
+    /// 
+    /// If early_cutoff is true and the success probability exceeds this value
+    /// for cutoff_number consecutive surfaces, FFS terminates early.
     pub cutoff_probability: f64,
+    
+    /// Number of consecutive high-probability surfaces required for early cutoff.
+    /// 
+    /// FFS terminates early only after this many consecutive surfaces exceed
+    /// cutoff_probability. Prevents premature termination due to statistical
+    /// fluctuations. Only used when early_cutoff is true.
     pub cutoff_number: usize,
+    
+    /// Minimum structure size required before early cutoff can occur.
+    /// 
+    /// Prevents early termination when structures are still small, even if success
+    /// probabilities are high. Ensures the simulation reaches a meaningful size
+    /// before terminating. Only used when early_cutoff is true.
     pub min_cutoff_size: NumTiles,
+    
+    /// Evolution bounds for the initial dimer-to-n-mer surface, to avoid 
+    /// infinite simulations.
     pub init_bound: EvolveBounds,
+    
+    /// Evolution bounds for subsequent surface-to-surface transitions, to avoid
+    /// infinite simulations.
     pub subseq_bound: EvolveBounds,
+    
+    /// Initial cluster size for the first FFS surface.
+    /// 
+    /// The size (number of tiles) that defines the first surface.  Must be >=2.
     pub start_size: NumTiles,
+    
+    /// Size increment between consecutive FFS surfaces.
+    /// 
+    /// The number of tiles by which the target size increases between consecutive
+    /// surfaces.
     pub size_step: NumTiles,
+    
+    /// Whether to retain configuration data for each surface.
+    /// 
+    /// When true, all generated configurations are stored in memory, consuming significant memory
+    /// but allowing state access. When false, only statistics are retained.
     pub keep_configs: bool,
+    
+    /// Minimum nucleation rate threshold for early termination.
+    /// 
+    /// If specified, FFS terminates early when the calculated nucleation rate
+    /// falls below this threshold. Useful for avoiding excessive computation
+    /// when nucleation rates become negligibly small. Units: M/s.
     pub min_nuc_rate: Option<MolarPerSecond>,
+    
+    /// Canvas dimensions (width, height) for the simulation.
+    /// 
+    /// Defines the size of the 2D lattice on which tile assembly occurs.
+    /// Must be large enough to accommodate the largest expected structures.
     pub canvas_size: (usize, usize),
+    
+    /// Type of boundary conditions for the simulation canvas.
+    /// 
+    /// Determines how the edges of the canvas are handled:
+    /// - Periodic: opposite edges are connected (torus topology)
+    /// - Square: finite canvas with hard boundaries
+    /// - Tube: periodic in one dimension, finite in the other
     pub canvas_type: CanvasType,
+    
+    /// Type of additional data tracking during simulation.
+    /// 
+    /// Controls what extra information is recorded during evolution:
+    /// - None: no additional tracking (fastest, default)
+    /// - Order: track attachment order of tiles
+    /// - LastAttachTime: track when the tile at each location last attached
+    /// - PrintEvent: print events as they occur (debugging)
+    /// - Movie: record all events
     pub tracking: TrackingType,
+    
+    /// Target structure size for FFS termination.
     pub target_size: NumTiles,
+    
+    /// Whether to store the FFS configuration in the result.
+    /// 
+    /// When true, the complete FFSRunConfig is saved with the results.
     pub store_ffs_config: bool,
+    
+    /// Whether to store the tile system in the result.
     pub store_system: bool,
 }
 

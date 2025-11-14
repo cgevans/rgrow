@@ -576,51 +576,105 @@ class EvolveOutcome: ...
 
 class FFSRunConfig:
     """
-    Configuration options for Forward Flux Sampling (FFS).
+    Configuration options for Forward Flux Sampling (FFS) simulations.
+    
+    FFS is a rare event sampling method that calculates nucleation rates by dividing
+    the nucleation process into a series of surfaces (levels) based on cluster size,
+    then computing the probability of crossing each surface.
     
     Parameters
     ----------
     constant_variance : bool, optional
         Use constant-variance, variable-configurations-per-surface method.
-        If False, use max_configs for each surface. Default is True.
+        When True, the number of configurations generated at each surface is determined
+        dynamically to achieve a target variance of the forward probability relative to the mean 
+        squared (var_per_mean2). When False, exactly max_configs configurations are generated at 
+        each surface. Default is True.
     var_per_mean2 : float, optional
-        Variance per mean² for constant-variance method. Default is 0.01.
+        Target variance per mean squared for the constant-variance method.
+        Controls the statistical precision when constant_variance is True. Lower values
+        require more configurations but provide better statistics. Typical values are
+        0.01 (1% variance) to 0.1 (10% variance). Only used when constant_variance is True.
+        Default is 0.01.
     min_configs : int, optional
-        Minimum number of configurations to generate at each level. Default is 1000.
+        Minimum number of configurations to generate at each surface level.
+        Ensures a minimum sample size even when constant_variance is True and the
+        target variance is achieved with fewer configurations. Default is 1000.
     max_configs : int, optional
-        Maximum number of configurations to generate at each level. Default is 100000.
+        Maximum number of configurations to generate at each surface level.
+        When constant_variance is False, exactly this many configurations are generated.
+        When constant_variance is True, this serves as an upper limit to prevent
+        excessive computation when success probabilities are very low. Default is 100000.
     early_cutoff : bool, optional
-        Use early cutoff for constant-variance method. Default is True.
+        Enable early termination when success probabilities become very high.
+        When True, FFS will terminate early if the success probability exceeds
+        cutoff_probability for cutoff_number consecutive surfaces, provided the
+        structure size is at least min_cutoff_size. Default is True.
     cutoff_probability : float, optional
-        Probability threshold for early cutoff. Default is 0.99.
+        Success probability threshold for early cutoff.
+        If early_cutoff is True and the success probability exceeds this value
+        for cutoff_number consecutive surfaces, FFS terminates early. Default is 0.99.
     cutoff_number : int, optional
-        Number for cutoff calculations. Default is 4.
+        Number of consecutive high-probability surfaces required for early cutoff.
+        FFS terminates early only after this many consecutive surfaces exceed
+        cutoff_probability. Prevents premature termination due to statistical
+        fluctuations. Only used when early_cutoff is True. Default is 4.
     min_cutoff_size : int, optional
-        Minimum number of tiles for cutoff. Default is 30.
+        Minimum structure size required before early cutoff can occur.
+        Prevents early termination when structures are still small, even if success
+        probabilities are high. Ensures the simulation reaches a meaningful size
+        before terminating. Only used when early_cutoff is True. Default is 30.
     init_bound : EvolveBounds, optional
-        Evolution bounds for initial surface. Default is EvolveBounds(for_time=1e7).
+        Evolution bounds for the initial dimer-to-n-mer surface, to avoid 
+        infinite simulations. Default is EvolveBounds(for_time=1e7).
     subseq_bound : EvolveBounds, optional
-        Evolution bounds for subsequent surfaces. Default is EvolveBounds(for_time=1e7).
+        Evolution bounds for subsequent surface-to-surface transitions, to avoid
+        infinite simulations. Default is EvolveBounds(for_time=1e7).
     start_size : int, optional
-        Starting number of tiles for first surface. Default is 3.
+        Initial cluster size for the first FFS surface.
+        The size (number of tiles) that defines the first surface. Must be >=2.
+        Default is 3.
     size_step : int, optional
-        Step size between surfaces. Default is 1.
+        Size increment between consecutive FFS surfaces.
+        The number of tiles by which the target size increases between consecutive
+        surfaces. Default is 1.
     keep_configs : bool, optional
-        Whether to keep configurations in memory. Default is False.
+        Whether to retain configuration data for each surface.
+        When True, all generated configurations are stored in memory, consuming significant memory
+        but allowing state access. When False, only statistics are retained. Default is False.
     min_nuc_rate : float, optional
-        Minimum nucleation rate. Default is None.
+        Minimum nucleation rate threshold for early termination.
+        If specified, FFS terminates early when the calculated nucleation rate
+        falls below this threshold. Useful for avoiding excessive computation
+        when nucleation rates become negligibly small. Units: M/s. Default is None.
     canvas_size : tuple[int, int], optional
-        Size of the simulation canvas. Default is (32, 32).
+        Canvas dimensions (width, height) for the simulation.
+        Defines the size of the 2D lattice on which tile assembly occurs.
+        Must be large enough to accommodate the largest expected structures.
+        Default is (32, 32).
     canvas_type : Any, optional
-        Type of canvas (Periodic, etc.). Default is Periodic.
+        Type of boundary conditions for the simulation canvas.
+        Determines how the edges of the canvas are handled:
+        - Periodic: opposite edges are connected (torus topology)
+        - Square: finite canvas with hard boundaries
+        - Tube: periodic in one dimension, finite in the other
+        Default is Periodic.
     tracking : Any, optional
-        Type of tracking for the simulation. Default is None.
+        Type of additional data tracking during simulation.
+        Controls what extra information is recorded during evolution:
+        - None: no additional tracking (fastest, default)
+        - Order: track attachment order of tiles
+        - LastAttachTime: track when the tile at each location last attached
+        - PrintEvent: print events as they occur (debugging)
+        - Movie: record all events
+        Default is None.
     target_size : int, optional
-        Target assembly size. Default is 100.
+        Target structure size for FFS termination. Default is 100.
     store_ffs_config : bool, optional
-        Whether to store this configuration in the result. Default is True.
+        Whether to store the FFS configuration in the result.
+        When True, the complete FFSRunConfig is saved with the results. Default is True.
     store_system : bool, optional
-        Whether to store the system in the result. Default is False.
+        Whether to store the tile system in the result. Default is False.
     """
     def __init__(
         self,
@@ -647,24 +701,150 @@ class FFSRunConfig:
     ): ...
 
 class FFSLevelRef:
-    def get_state(self, i): ...
-    def has_stored_states(self): ...
+    @property
+    def configs(self) -> list[NDArray[np.uint]]:
+        """list[NDArray[np.uint]]: List of configuration arrays for this surface."""
+        
+    @property
+    def states(self) -> list[FFSStateRef]:
+        """list[FFSStateRef]: List of state references for this surface."""
+        
+    @property
+    def previous_indices(self) -> list[int]:
+        """list[int]: Previous indices for configurations in this surface."""
+    
+    def get_state(self, i: int) -> FFSStateRef:
+        """
+        Get a specific state from this surface.
+        
+        Parameters
+        ----------
+        i : int
+            Index of the state to retrieve.
+            
+        Returns
+        -------
+        FFSStateRef
+            The state at the given index.
+        """
+        
+    def has_stored_states(self) -> bool:
+        """
+        Check if this surface has stored states.
+        
+        Returns
+        -------
+        bool
+            True if states are stored, False otherwise.
+        """
 
 class FFSRunResult:
-    def configs_dataframe(self): ...
-    def into_resdf(self): ...
-    def surfaces_dataframe(self): ...
-    def write_files(self, prefix): ...
+    @property
+    def nucleation_rate(self) -> float:
+        """float: Nucleation rate, in M/s. Calculated from the forward probability vector and dimerization rate."""
+        
+    @property
+    def forward_vec(self) -> NDArray[np.float64]:
+        """NDArray[np.float64]: Forward probability vector."""
+        
+    @property
+    def dimerization_rate(self) -> float:
+        """float: Dimerization rate, in M/s."""
+        
+    @property
+    def surfaces(self) -> list[FFSLevelRef]:
+        """list[FFSLevelRef]: List of surfaces."""
+        
+    @property
+    def previous_indices(self) -> list[list[int]]:
+        """list[list[int]]: Previous indices for each surface."""
+    
+    def configs_dataframe(self) -> pl.DataFrame:
+        """
+        Get the configurations as a Polars DataFrame.
+        
+        Returns
+        -------
+        pl.DataFrame
+        """
+        
+    def surfaces_dataframe(self) -> pl.DataFrame:
+        """
+        Get the surfaces as a Polars DataFrame.
+        
+        Returns
+        -------
+        pl.DataFrame
+        """
+        
+    def surfaces_to_polars(self) -> pl.DataFrame:
+        """
+        Get the surfaces as a Polars DataFrame.
+        
+        Returns
+        -------
+        pl.DataFrame
+        """
+        
+    def states_to_polars(self) -> pl.DataFrame:
+        """
+        Get the states as a Polars DataFrame.
+        
+        Returns
+        -------
+        pl.DataFrame
+        """
+    
+    def into_resdf(self) -> FFSRunResultDF:
+        """Convert to FFSRunResultDF format."""
+        
+    def write_files(self, prefix: str) -> None:
+        """
+        Write dataframes and result data to files.
+        
+        Parameters
+        ----------
+        prefix : str
+           Prefix for the filenames. The files will be named
+           `{prefix}.surfaces.parquet`, `{prefix}.configurations.parquet`, and
+           `{prefix}.ffs_result.json`.
+        """
 
 class FFSRunResultDF:
-    def configs_dataframe(self): ...
-    def read_files(prefix) -> Self:
+    @property
+    def nucleation_rate(self) -> float:
+        """float: Nucleation rate, in M/s. Calculated from the forward probability vector and dimerization rate."""
+        
+    @property
+    def forward_vec(self) -> NDArray[np.float64]:
+        """NDArray[np.float64]: Forward probability vector."""
+        
+    @property
+    def dimerization_rate(self) -> float:
+        """float: Dimerization rate, in M/s."""
+    
+    def configs_dataframe(self) -> pl.DataFrame:
+        """
+        Get the configurations as a Polars DataFrame.
+        
+        Returns
+        -------
+        pl.DataFrame
+        """
+        
+    @staticmethod
+    def read_files(prefix: str) -> FFSRunResultDF:
         """
         Read dataframes and result data from files.
 
+        Parameters
+        ----------
+        prefix : str
+           Prefix for the filenames to read from.
+
         Returns
         -------
-        Self
+        FFSRunResultDF
         """
 
     def surfaces_dataframe(self) -> pl.DataFrame:
@@ -689,16 +869,69 @@ class FFSRunResultDF:
         """
 
 class FFSStateRef:
-    def canvas_copy(self) -> None:
-        """A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`."""
-
-    def clone_state(self): ...
     @property
-    def canvas_view(self) -> NDArray[np.uint]: ...
-    def n_tiles(self) -> int: ...
-    def time(self) -> float: ...
-    def total_events(self) -> int: ...
-    def tracking_copy(self) -> Any: ...
+    def time(self) -> float:
+        """float: The total time the state has simulated, in seconds."""
+        
+    @property
+    def total_events(self) -> int:
+        """int: The total number of events that have occurred in the state."""
+        
+    @property
+    def n_tiles(self) -> int:
+        """int: The number of tiles in the state."""
+        
+    @property
+    def canvas_view(self) -> NDArray[np.uint]:
+        """NDArray[np.uint]: A direct, mutable view of the state's canvas. This is potentially unsafe."""
+        
+    @property
+    def total_rate(self) -> float:
+        """float: The total rate of possible next events for the state."""
+
+    def canvas_copy(self) -> NDArray[np.uint]:
+        """
+        Create a copy of the state's canvas.
+        
+        This is safe, but can't be modified and is slower than `canvas_view`.
+        
+        Returns
+        -------
+        NDArray[np.uint]
+            A copy of the state's canvas.
+        """
+
+    def clone_state(self) -> State:
+        """
+        Return a copy of the state behind the reference as a mutable `State` object.
+        
+        Returns
+        -------
+        State
+            A mutable copy of the state.
+        """
+        
+    def tracking_copy(self) -> Any:
+        """
+        Return a copy of the tracker's tracking data.
+        
+        Returns
+        -------
+        Any
+            The tracking data.
+        """
+        
+    def rate_array(self) -> NDArray[np.float64]:
+        """
+        Return a cloned copy of an array with the total possible next event rate for each point in the canvas.
+        
+        This is the deepest level of the quadtree for tree-based states.
+        
+        Returns
+        -------
+        NDArray[np.float64]
+            Array of rates for each canvas position.
+        """
 
 class KTAM:
     @property
