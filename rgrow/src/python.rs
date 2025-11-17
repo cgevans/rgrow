@@ -709,6 +709,74 @@ macro_rules! create_py_system {
                 Ok((committers.into_pyarray(py), trials.into_pyarray(py)))
             }
 
+            /// Determine whether the committer probability for a state is above or below a threshold
+            /// with a specified confidence level using adaptive sampling.
+            ///
+            /// This function uses adaptive sampling to determine with the desired confidence whether
+            /// the true committer probability is above or below the given threshold. It continues
+            /// sampling until the confidence interval is narrow enough to make a definitive determination.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State
+            ///     The state to analyze
+            /// cutoff_size : int
+            ///     Size threshold for commitment
+            /// threshold : float
+            ///     The probability threshold to compare against (e.g., 0.5)
+            /// confidence_level : float
+            ///     Confidence level for the threshold test (e.g., 0.95 for 95% confidence)
+            /// max_time : float, optional
+            ///     Maximum simulation time per trial
+            /// max_events : int, optional
+            ///     Maximum events per trial
+            /// max_trials : int, optional
+            ///     Maximum number of trials to run (default: 100000)
+            /// return_on_max_trials : bool, optional
+            ///     If True, return results even when max_trials is exceeded (default: False)
+            /// ci_confidence_level : float, optional
+            ///     Confidence level for the returned confidence interval (default: None, no CI returned)
+            ///     Can be different from confidence_level (e.g., test at 95%, show 99% CI)
+            ///
+            /// Returns
+            /// -------
+            /// tuple[bool, float, tuple[float, float] | None, int, bool]
+            ///     Tuple of (is_above_threshold, probability_estimate, confidence_interval, num_trials, exceeded_max_trials) where:
+            ///     - is_above_threshold: True if probability is above threshold with given confidence
+            ///     - probability_estimate: The estimated probability
+            ///     - confidence_interval: Tuple of (lower_bound, upper_bound) or None if ci_confidence_level not provided
+            ///     - num_trials: Number of trials performed
+            ///     - exceeded_max_trials: True if max_trials was exceeded (warning flag)
+            #[pyo3(name = "calc_committer_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false, ci_confidence_level=None))]
+            fn py_calc_committer_threshold_test(
+                &self,
+                state: &PyState,
+                cutoff_size: NumTiles,
+                threshold: f64,
+                confidence_level: f64,
+                max_time: Option<f64>,
+                max_events: Option<NumEvents>,
+                max_trials: Option<usize>,
+                return_on_max_trials: bool,
+                ci_confidence_level: Option<f64>,
+                py: Python<'_>,
+            ) -> PyResult<(bool, f64, Option<(f64, f64)>, usize, bool)> {
+                py.detach(|| {
+                    self.calc_committer_threshold_test(
+                        &state.0,
+                        cutoff_size,
+                        threshold,
+                        confidence_level,
+                        max_time,
+                        max_events,
+                        max_trials,
+                        return_on_max_trials,
+                        ci_confidence_level,
+                    )
+                })
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+            }
+
             /// Calculate forward probability for a given state.
             ///
             /// This function calculates the probability that a state will grow by at least
