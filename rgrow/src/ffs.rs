@@ -12,6 +12,7 @@ use crate::state::{MovieTracker, NullStateTracker, QuadTreeState};
 use crate::system::EvolveBounds;
 use crate::tileset::{CanvasType, Model, TileSet, SIZE_DEFAULT};
 use crate::units::{MolarPerSecond, PerSecond};
+use crate::state::TrackerData;
 
 use canvas::Canvas;
 use num_traits::{Float, Num, Zero};
@@ -25,11 +26,79 @@ use ratestore::RateStore;
 use serde::{Deserialize, Serialize};
 
 use super::*;
+
+/// Configuration data retention mode for FFS simulations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+pub enum ConfigRetentionMode {
+    /// No configuration data retained (minimal memory usage).
+    None,
+    /// Only dataframe-compatible data retained (balanced memory usage, default).
+    #[default]
+    DataFrameOnly,
+    /// Full state objects retained (maximum memory usage, allows full state access).
+    Full,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl ConfigRetentionMode {
+    /// Create ConfigRetentionMode.None
+    #[classattr]
+    const NONE: Self = Self::None;
+    
+    /// Create ConfigRetentionMode.DataFrameOnly
+    #[classattr]
+    const DATAFRAME_ONLY: Self = Self::DataFrameOnly;
+    
+    /// Create ConfigRetentionMode.Full
+    #[classattr]
+    const FULL: Self = Self::Full;
+
+    fn __str__(&self) -> &'static str {
+        match self {
+            Self::None => "None",
+            Self::DataFrameOnly => "DataFrameOnly", 
+            Self::Full => "Full",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ConfigRetentionMode.{}", self.__str__())
+    }
+}
+
+/// Extracted dataframe data for a single configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigDataFrameRow {
+    pub surface_index: u64,
+    pub config_index: u64,
+    pub size: NumTiles,
+    pub time: f64,
+    pub previous_config: u64,
+    pub canvas: Vec<Tile>,
+    pub min_i: u64,
+    pub min_j: u64,
+    pub shape_i: u64,
+    pub shape_j: u64,
+    pub energy: f64,
+}
+
+/// Dataframe data for an FFS level.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FFSLevelDataFrame {
+    pub config_rows: Vec<ConfigDataFrameRow>,
+    pub previous_list: Vec<usize>,
+    pub p_r: f64,
+    pub num_states: usize,
+    pub num_trials: usize,
+    pub target_size: NumTiles,
+}
 //use ndarray::prelude::*;
 //use ndarray::Zip;
 use base::NumTiles;
 
-use ndarray::{s, Array2, ArrayView2};
+use ndarray::{s, ArrayView2};
 #[cfg(feature = "python")]
 use numpy::{PyArray2, ToPyArray};
 use rand::{distr::weighted::WeightedIndex, distr::Uniform, prelude::Distribution};
@@ -53,7 +122,7 @@ use pyo3_polars::PyDataFrame;
 
 use state::{
     ClonableState, LastAttachTimeTracker, PrintEventTracker, StateEnum, StateStatus,
-    StateWithCreate, TrackerData,
+    StateWithCreate
 };
 
 use system::{DynSystem, Orientation, System, SystemEnum};
@@ -137,11 +206,17 @@ pub struct FFSRunConfig {
     /// surfaces.
     pub size_step: NumTiles,
     
-    /// Whether to retain configuration data for each surface.
+    /// Configuration data retention mode for each surface.
     /// 
-    /// When true, all generated configurations are stored in memory, consuming significant memory
-    /// but allowing state access. When false, only statistics are retained.
-    pub keep_configs: bool,
+    /// Controls what data is retained during FFS simulation:
+    /// - ConfigRetentionMode.None: No configuration data retained (minimal memory)
+    /// - ConfigRetentionMode.DataFrameOnly: Only dataframe-compatible data retained (default)
+    /// - ConfigRetentionMode.Full: Full state objects retained (maximum memory, allows full access)
+    /// 
+    /// For backward compatibility, bool values are also accepted:
+    /// - False -> ConfigRetentionMode.None
+    /// - True -> ConfigRetentionMode.Full
+    pub keep_configs: ConfigRetentionMode,
     
     /// Minimum nucleation rate threshold for early termination.
     /// 
@@ -201,7 +276,7 @@ impl Default for FFSRunConfig {
             subseq_bound: EvolveBounds::default().for_time(1e7),
             start_size: 3,
             size_step: 1,
-            keep_configs: false,
+            keep_configs: ConfigRetentionMode::default(),
             min_nuc_rate: None,
             canvas_size: (32, 32),
             canvas_type: CanvasType::Periodic,
@@ -229,7 +304,18 @@ impl FFSRunConfig {
             "subseq_bound" => self.subseq_bound = v.extract()?,
             "start_size" => self.start_size = v.extract()?,
             "size_step" => self.size_step = v.extract()?,
-            "keep_configs" => self.keep_configs = v.extract()?,
+            "keep_configs" => {
+                // Handle backward compatibility: accept bool or ConfigRetentionMode
+                if let Ok(bool_val) = v.extract::<bool>() {
+                    self.keep_configs = if bool_val {
+                        ConfigRetentionMode::Full
+                    } else {
+                        ConfigRetentionMode::None
+                    };
+                } else {
+                    self.keep_configs = v.extract()?;
+                }
+            },
             "min_nuc_rate" => self.min_nuc_rate = v.extract()?,
             "canvas_size" => self.canvas_size = v.extract()?,
             "target_size" => self.target_size = v.extract()?,
@@ -284,13 +370,13 @@ impl FFSRunConfig {
         subseq_bound: Option<EvolveBounds>,
         start_size: Option<NumTiles>,
         size_step: Option<NumTiles>,
-        keep_configs: Option<bool>,
+        keep_configs: Option<Bound<'_, PyAny>>,  // bool (backward compatibility) or ConfigRetentionMode
         min_nuc_rate: Option<f64>,
         canvas_size: Option<(usize, usize)>,
         target_size: Option<NumTiles>,
         store_ffs_config: Option<bool>,
         store_system: Option<bool>,
-    ) -> Self {
+    ) -> PyResult<Self> {
         let mut rc = Self::default();
 
         if let Some(x) = constant_variance {
@@ -332,7 +418,20 @@ impl FFSRunConfig {
             rc.size_step = x;
         }
         if let Some(x) = keep_configs {
-            rc.keep_configs = x;
+            // Handle backward compatibility: accept bool or ConfigRetentionMode
+            if let Ok(bool_val) = x.extract::<bool>() {
+                rc.keep_configs = if bool_val {
+                    ConfigRetentionMode::Full
+                } else {
+                    ConfigRetentionMode::None
+                };
+            } else if let Ok(mode) = x.extract::<ConfigRetentionMode>() {
+                rc.keep_configs = mode;
+            } else {
+                return Err(PyTypeError::new_err(
+                    "keep_configs must be bool or ConfigRetentionMode"
+                ));
+            }
         }
 
         rc.min_nuc_rate = min_nuc_rate.map(MolarPerSecond::new);
@@ -349,7 +448,7 @@ impl FFSRunConfig {
         if let Some(x) = store_system {
             rc.store_system = x;
         }
-        rc
+        Ok(rc)
     }
 }
 
@@ -450,6 +549,31 @@ fn max_prob(num_success: usize, num_trials: usize) -> f64 {
     p + z * (p * (1. - p) / num_trials as f64).sqrt()
 }
 
+/// Extract dataframe data from a state.
+fn extract_dataframe_data<St: ClonableState>(
+    state: &St,
+    surface_index: u64,
+    config_index: u64,
+    previous_config: u64,
+) -> ConfigDataFrameRow {
+    let ss = &state.raw_array();
+    let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(ss);
+
+    ConfigDataFrameRow {
+        surface_index,
+        config_index,
+        size: state.n_tiles(),
+        time: state.time().into(),
+        previous_config,
+        canvas: m.iter().copied().collect(),
+        min_i: mini as u64,
+        min_j: minj as u64,
+        shape_i: (maxi - mini + 1) as u64,
+        shape_j: (maxj - minj + 1) as u64,
+        energy: state.energy().into(),
+    }
+}
+
 pub struct FFSRun<St: ClonableState> {
     pub level_list: Vec<FFSLevel<St>>,
     pub dimerization_rate: MolarPerSecond,
@@ -477,8 +601,16 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
 
         let mut current_size = first_level.target_size;
 
-        if !config.keep_configs {
-            dimer_level.drop_states();
+        match config.keep_configs {
+            ConfigRetentionMode::None => {
+                dimer_level.drop_states();
+            }
+            ConfigRetentionMode::DataFrameOnly => {
+                dimer_level.drop_states_keep_dataframe();
+            }
+            ConfigRetentionMode::Full => {
+                // Keep everything
+            }
         }
 
         ret.level_list.push(dimer_level);
@@ -491,10 +623,19 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
                 .min_nuc_rate
                 .map(|min_nuc_rate| min_nuc_rate / ret.nucleation_rate());
 
+            let surface_index = ret.level_list.len() as u64;
             let last = ret.level_list.last_mut().unwrap();
-            let next = last.next_level(system, config, min_prob)?;
-            if !config.keep_configs {
-                last.drop_states();
+            let next = last.next_level(system, config, min_prob, surface_index)?;
+            match config.keep_configs {
+                ConfigRetentionMode::None => {
+                    last.drop_states();
+                }
+                ConfigRetentionMode::DataFrameOnly => {
+                    last.drop_states_keep_dataframe();
+                }
+                ConfigRetentionMode::Full => {
+                    // Keep everything
+                }
             }
             let pf = next.p_r;
             ret.forward_prob.push(pf);
@@ -555,6 +696,7 @@ pub struct FFSLevel<St: ClonableState> {
     pub num_states: usize,
     pub num_trials: usize,
     pub target_size: NumTiles,
+    pub dataframe_data: Option<Vec<ConfigDataFrameRow>>,
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> {
@@ -564,16 +706,27 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         self
     }
 
+    pub fn drop_states_keep_dataframe(&mut self) -> &Self {
+        drop(self.state_list.drain(..));
+        self
+    }
+
     pub fn next_level<Sy: System>(
         &self,
         system: &mut Sy,
         config: &FFSRunConfig,
         min_prob: Option<f64>,
+        surface_index: u64,
     ) -> Result<Self, GrowError> {
         let mut rng = rng();
 
         let mut state_list = Vec::new();
         let mut previous_list = Vec::new();
+        let mut dataframe_data = if config.keep_configs == ConfigRetentionMode::DataFrameOnly {
+            Some(Vec::new())
+        } else {
+            None
+        };
         let mut i = 0usize;
         let target_size = self.target_size + config.size_step;
 
@@ -614,7 +767,22 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
             if state.n_tiles() >= target_size {
                 // >= hack for duples
-                state_list.push(state);
+                
+                // Extract dataframe data if needed
+                if let Some(ref mut df_data) = dataframe_data {
+                    let df_row = extract_dataframe_data(
+                        &state,
+                        surface_index,
+                        state_list.len() as u64,
+                        i_old_state as u64,
+                    );
+                    df_data.push(df_row);
+                }
+                
+                // Store state based on retention mode
+                if config.keep_configs == ConfigRetentionMode::Full {
+                    state_list.push(state);
+                }
                 previous_list.push(i_old_state);
             } else {
                 println!(
@@ -648,6 +816,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             target_size,
             num_states,
             num_trials: i,
+            dataframe_data,
         })
     }
 
@@ -661,6 +830,16 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
         let mut state_list = Vec::with_capacity(config.min_configs);
         let mut previous_list = Vec::with_capacity(config.min_configs);
+        let mut dataframe_data = if config.keep_configs == ConfigRetentionMode::DataFrameOnly {
+            Some(Vec::new())
+        } else {
+            None
+        };
+        let mut dimer_dataframe_data = if config.keep_configs == ConfigRetentionMode::DataFrameOnly {
+            Some(Vec::new())
+        } else {
+            None
+        };
         let mut i = 0usize;
 
         let mut dimer_state_list = Vec::with_capacity(config.min_configs);
@@ -732,9 +911,32 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     let energy_change = system.place_tile(&mut dimer_state, mid, dimer.t1)? + system.place_tile(&mut dimer_state, other, dimer.t2)?;
                     dimer_state.record_event(&system::Event::PolymerAttachment(cl.to_vec()), PerSecond::zero(), f64::NAN, energy_change, energy_change, 2);
 
-                    state_list.push(state);
+                    // Extract dataframe data if needed
+                    if let Some(ref mut df_data) = dataframe_data {
+                        let df_row = extract_dataframe_data(
+                            &state,
+                            1, // surface index 1 for first level
+                            num_states as u64,
+                            num_states as u64,
+                        );
+                        df_data.push(df_row);
+                    }
+                    
+                    if let Some(ref mut dimer_df_data) = dimer_dataframe_data {
+                        let dimer_df_row = extract_dataframe_data(
+                            &dimer_state,
+                            0, // surface index 0 for dimer level
+                            num_states as u64,
+                            if rng.random::<bool>() { dimer.t1 as u64 } else { dimer.t2 as u64 },
+                        );
+                        dimer_df_data.push(dimer_df_row);
+                    }
 
-                    dimer_state_list.push(dimer_state);
+                    // Store states based on retention mode
+                    if config.keep_configs == ConfigRetentionMode::Full {
+                        state_list.push(state);
+                        dimer_state_list.push(dimer_state);
+                    }
 
                     if rng.random::<bool>() {
                         tile_list.push(dimer.t1);
@@ -776,6 +978,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                 target_size: config.start_size,
                 num_states,
                 num_trials: i,
+                dataframe_data,
             },
             Self {
                 state_list: dimer_state_list,
@@ -784,6 +987,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                 target_size: 2,
                 num_states,
                 num_trials: num_states,
+                dataframe_data: dimer_dataframe_data,
             },
         ))
     }
@@ -914,6 +1118,7 @@ pub struct FFSLevelResult {
     pub num_states: usize,
     pub num_trials: usize,
     pub target_size: NumTiles,
+    pub dataframe_data: Option<Vec<ConfigDataFrameRow>>,
 }
 
 impl<St: ClonableState> From<FFSLevel<St>> for FFSLevelResult
@@ -932,6 +1137,7 @@ where
             num_states: value.num_states,
             num_trials: value.num_trials,
             target_size: value.target_size,
+            dataframe_data: value.dataframe_data,
         }
     }
 }
@@ -1010,34 +1216,63 @@ impl FFSRunResult {
         let mut shape_j = Vec::new();
         let mut surfaceindex = Vec::new();
         let mut configindex = Vec::new();
+        let mut energies = Vec::new();
 
-        for (i, surface) in self.surfaces().iter().enumerate() {
-            for (j, state) in surface.upgrade().unwrap().state_list.iter().enumerate() {
-                sizes.push(state.n_tiles());
-                times.push(state.time().into());
-                let ss = &state.raw_array();
-                let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(ss);
-                canvases.push(m.iter().collect::<Series>());
-                surfaceindex.push(i as u64);
-                configindex.push(j as u64);
-                arr_mini.push(mini as u64);
-                arr_minj.push(minj as u64);
-                shape_i.push((maxi - mini + 1) as u64);
-                shape_j.push((maxj - minj + 1) as u64);
+        // Check if we have pre-compiled dataframe data
+        let has_dataframe_data = self.surfaces().iter()
+            .any(|s| s.upgrade().unwrap().dataframe_data.is_some());
+
+        if has_dataframe_data {
+            // Use pre-compiled dataframe data
+            for surface in self.surfaces().iter() {
+                let surface_ref = surface.upgrade().unwrap();
+                if let Some(ref df_data) = surface_ref.dataframe_data {
+                    for row in df_data {
+                        sizes.push(row.size);
+                        times.push(row.time);
+                        canvases.push(Series::from_vec("canvas".into(), row.canvas.clone()));
+                        surfaceindex.push(row.surface_index);
+                        configindex.push(row.config_index);
+                        arr_mini.push(row.min_i);
+                        arr_minj.push(row.min_j);
+                        shape_i.push(row.shape_i);
+                        shape_j.push(row.shape_j);
+                        previndices.push(row.previous_config);
+                        energies.push(row.energy);
+                    }
+                }
             }
-            if !surface.upgrade().unwrap().state_list.is_empty() {
-                previndices.extend(
-                    surface
-                        .upgrade()
-                        .unwrap()
-                        .previous_list()
-                        .iter()
-                        .map(|x| *x as u64),
-                );
+        } else {
+            // Fall back to extracting from states
+            for (i, surface) in self.surfaces().iter().enumerate() {
+                for (j, state) in surface.upgrade().unwrap().state_list.iter().enumerate() {
+                    sizes.push(state.n_tiles());
+                    times.push(state.time().into());
+                    let ss = &state.raw_array();
+                    let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(ss);
+                    canvases.push(m.iter().collect::<Series>());
+                    surfaceindex.push(i as u64);
+                    configindex.push(j as u64);
+                    arr_mini.push(mini as u64);
+                    arr_minj.push(minj as u64);
+                    shape_i.push((maxi - mini + 1) as u64);
+                    shape_j.push((maxj - minj + 1) as u64);
+                    energies.push(state.energy().into());
+                }
+                if !surface.upgrade().unwrap().state_list.is_empty() {
+                    previndices.extend(
+                        surface
+                            .upgrade()
+                            .unwrap()
+                            .previous_list()
+                            .iter()
+                            .map(|x| *x as u64),
+                    );
+                }
             }
         }
 
-        let mut df = df!(
+        let df = df!(
             "surface_index" => surfaceindex,
             "config_index" => configindex,
             "size" => sizes,
@@ -1048,92 +1283,10 @@ impl FFSRunResult {
             "min_j" => arr_minj,
             "shape_i" => shape_i,
             "shape_j" => shape_j,
+            "energy" => energies,
         )
         .unwrap();
 
-        let s = self
-            .surfaces()
-            .last()
-            .unwrap()
-            .upgrade()
-            .unwrap()
-            .get_state(0)
-            .unwrap();
-
-        let a = s.get_tracker_data();
-
-        if a.0.downcast_ref::<Array2<u64>>().is_some() {
-            let mut arrs = Vec::new();
-            let mut minis = Vec::new();
-            let mut minjs = Vec::new();
-            let mut shapeis = Vec::new();
-            let mut shapejs = Vec::new();
-
-            for surface in self.surfaces().iter() {
-                for state in surface.upgrade().unwrap().state_list.iter() {
-                    if let Some(val) = state.get_tracker_data().0.downcast_ref::<Array2<u64>>() {
-                        let v = &val.view();
-                        let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(v);
-                        arrs.push(m.iter().collect::<Series>());
-                        minis.push(mini as u64);
-                        minjs.push(minj as u64);
-                        shapeis.push((maxi - mini + 1) as u64);
-                        shapejs.push((maxj - minj + 1) as u64);
-                    } else {
-                        panic!()
-                    }
-                }
-            }
-
-            df = df
-                .lazy()
-                .with_columns([
-                    Series::new("tracker".into(), arrs).lit(),
-                    Series::new("tracker_min_i".into(), minis).lit(),
-                    Series::new("tracker_min_j".into(), minjs).lit(),
-                    Series::new("tracker_shape_i".into(), shapeis).lit(),
-                    Series::new("tracker_shape_j".into(), shapejs).lit(),
-                ])
-                .collect()
-                .unwrap();
-        } else if a.0.downcast_ref::<Array2<f64>>().is_some() {
-            let mut arrs = Vec::new();
-            let mut minis = Vec::new();
-            let mut minjs = Vec::new();
-            let mut shapeis = Vec::new();
-            let mut shapejs = Vec::new();
-
-            for surface in self.surfaces().iter() {
-                for state in surface.upgrade().unwrap().state_list.iter() {
-                    if let Some(val) = state.get_tracker_data().0.downcast_ref::<Array2<f64>>() {
-                        let v = &val.view();
-                        let (m, mini, minj, maxi, maxj) = _bounded_nonnan_region_of_array(v);
-                        arrs.push(m.iter().collect::<Series>());
-                        minis.push(mini as u64);
-                        minjs.push(minj as u64);
-                        shapeis.push((maxi - mini + 1) as u64);
-                        shapejs.push((maxj - minj + 1) as u64);
-                    } else {
-                        panic!()
-                    }
-                }
-            }
-
-            df = df
-                .lazy()
-                .with_columns([
-                    Series::new("tracker".into(), arrs).lit(),
-                    Series::new("tracker_min_i".into(), minis).lit(),
-                    Series::new("tracker_min_j".into(), minjs).lit(),
-                    Series::new("tracker_shape_i".into(), shapeis).lit(),
-                    Series::new("tracker_shape_j".into(), shapejs).lit(),
-                ])
-                .collect()
-                .unwrap();
-        } else if a.0.downcast_ref::<()>().is_some() {
-        } else {
-            println!("Unknown tracker data type: skipping tracker data.")
-        }
 
         Ok(df)
     }
