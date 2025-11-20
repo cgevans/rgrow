@@ -570,7 +570,32 @@ fn extract_dataframe_data<St: ClonableState>(
         min_j: minj as u64,
         shape_i: (maxi - mini + 1) as u64,
         shape_j: (maxj - minj + 1) as u64,
-        energy: state.energy().into(),
+        energy: state.energy(),
+    }
+}
+
+/// Extract dataframe data from a StateEnum.
+fn extract_dataframe_data_from_state_enum(
+    state: &StateEnum,
+    surface_index: u64,
+    config_index: u64,
+    previous_config: u64,
+) -> ConfigDataFrameRow {
+    let ss = &state.raw_array();
+    let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(ss);
+
+    ConfigDataFrameRow {
+        surface_index,
+        config_index,
+        size: state.n_tiles(),
+        time: state.time().into(),
+        previous_config,
+        canvas: m.iter().copied().collect(),
+        min_i: mini as u64,
+        min_j: minj as u64,
+        shape_i: (maxi - mini + 1) as u64,
+        shape_j: (maxj - minj + 1) as u64,
+        energy: state.energy(),
     }
 }
 
@@ -1144,8 +1169,8 @@ where
 
 pub trait FFSSurface: Send + Sync {
     fn get_config(&self, i: usize) -> ArrayView2<'_, Tile>;
-    fn get_state(&self, i: usize) -> Arc<StateEnum>;
-    fn states(&self) -> Vec<Arc<StateEnum>> {
+    fn get_state(&self, i: usize) -> Weak<StateEnum>;
+    fn states(&self) -> Vec<Weak<StateEnum>> {
         (0..self.num_stored_states())
             .map(|i| self.get_state(i))
             .collect()
@@ -1182,8 +1207,8 @@ impl FFSRunResult {
         self.level_list.iter().map(Arc::downgrade).collect()
     }
 
-    pub fn get_surface(&self, i: usize) -> Option<Arc<FFSLevelResult>> {
-        self.level_list.get(i).map(|x| (*x).clone())
+    pub fn get_surface(&self, i: usize) -> Option<Weak<FFSLevelResult>> {
+        self.level_list.get(i).map(Arc::downgrade)
     }
 
     pub fn dimerization_rate(&self) -> MolarPerSecond {
@@ -1257,7 +1282,7 @@ impl FFSRunResult {
                     arr_minj.push(minj as u64);
                     shape_i.push((maxi - mini + 1) as u64);
                     shape_j.push((maxj - minj + 1) as u64);
-                    energies.push(state.energy().into());
+                    energies.push(state.energy());
                 }
                 if !surface.upgrade().unwrap().state_list.is_empty() {
                     previndices.extend(
@@ -1415,8 +1440,8 @@ impl FFSLevelResult {
         self.state_list[i].raw_array()
     }
 
-    pub fn get_state(&self, i: usize) -> Option<Arc<StateEnum>> {
-        self.state_list.get(i).map(|x| (*x).clone())
+    pub fn get_state(&self, i: usize) -> Option<Weak<StateEnum>> {
+        self.state_list.get(i).map(Arc::downgrade)
     }
 
     pub fn num_configs(&self) -> usize {
@@ -1469,9 +1494,9 @@ impl FFSRunResult {
     /// list[FFSLevelRef]: list of surfaces.
     #[getter]
     fn get_surfaces(&self) -> Vec<FFSLevelRef> {
-        self.surfaces()
+        self.level_list
             .iter()
-            .map(|f| FFSLevelRef(f.upgrade().unwrap().clone()))
+            .map(|f| FFSLevelRef(Arc::downgrade(f)))
             .collect()
     }
 
@@ -1577,9 +1602,9 @@ impl FFSRunResultDF {
 
     // #[getter]
     // fn get_surfaces(&self) -> Vec<FFSLevelRef> {
-    //     self.surfaces()
+    //     self.level_list
     //         .iter()
-    //         .map(|f| FFSLevelRef(f.upgrade().unwrap().clone()))
+    //         .map(|f| FFSLevelRef(Arc::downgrade(f)))
     //         .collect()
     // }
 
@@ -1658,14 +1683,15 @@ impl FFSRunResultDF {
 
 #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[allow(dead_code)] // This is used in the python interface
-pub struct FFSLevelRef(Arc<FFSLevelResult>);
+pub struct FFSLevelRef(Weak<FFSLevelResult>);
 
 #[cfg(feature = "python")]
 #[pymethods]
 impl FFSLevelRef {
     #[getter]
     fn get_configs<'py>(&self, py: Python<'py>) -> Vec<Bound<'py, PyArray2<crate::base::Tile>>> {
-        self.0
+        let level = self.0.upgrade().expect("FFSLevelResult has been dropped");
+        level
             .state_list
             .iter()
             .map(|x| x.raw_array().to_pyarray(py))
@@ -1674,16 +1700,18 @@ impl FFSLevelRef {
 
     #[getter]
     fn get_states(&self) -> Vec<FFSStateRef> {
-        self.0
+        let level = self.0.upgrade().expect("FFSLevelResult has been dropped");
+        level
             .state_list
             .iter()
-            .map(|x| FFSStateRef(x.clone()))
+            .map(|x| FFSStateRef(Arc::downgrade(x)))
             .collect()
     }
 
     #[getter]
     fn get_previous_indices(&self) -> Vec<usize> {
-        self.0.previous_list.clone()
+        let level = self.0.upgrade().expect("FFSLevelResult has been dropped");
+        level.previous_list.clone()
     }
 
     // #[getter]
@@ -1692,20 +1720,23 @@ impl FFSLevelRef {
     // }
 
     fn get_state(&self, i: usize) -> FFSStateRef {
-        FFSStateRef(self.0.state_list[i].clone())
+        let level = self.0.upgrade().expect("FFSLevelResult has been dropped");
+        FFSStateRef(Arc::downgrade(&level.state_list[i]))
     }
 
     fn has_stored_states(&self) -> bool {
-        !self.0.state_list.is_empty()
+        let level = self.0.upgrade().expect("FFSLevelResult has been dropped");
+        !level.state_list.is_empty()
     }
 
     fn __repr__(&self) -> String {
+        let level = self.0.upgrade().expect("FFSLevelResult has been dropped");
         format!(
             "FFSLevelRef(n_configs={}, n_trials={}, target_size={}, p_r={}, has_stored_states={})",
-            self.0.num_configs(),
-            self.0.num_trials(),
-            self.0.target_size(),
-            self.0.p_r(),
+            level.num_configs(),
+            level.num_trials(),
+            level.target_size(),
+            level.p_r(),
             self.has_stored_states()
         )
     }
@@ -1714,7 +1745,7 @@ impl FFSLevelRef {
 #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[allow(dead_code)] // This is used in the python interface
 #[derive(Clone)]
-pub struct FFSStateRef(Arc<StateEnum>);
+pub struct FFSStateRef(Weak<StateEnum>);
 
 #[cfg(feature = "python")]
 #[pymethods]
@@ -1722,19 +1753,19 @@ impl FFSStateRef {
     /// float: the total time the state has simulated, in seconds.
     #[getter]
     pub fn time(&self) -> f64 {
-        (*self.0).time().into()
+        self.0.upgrade().expect("StateEnum has been dropped").time().into()
     }
 
     /// int: the total number of events that have occurred in the state.
     #[getter]
     pub fn total_events(&self) -> base::NumEvents {
-        (*self.0).total_events()
+        self.0.upgrade().expect("StateEnum has been dropped").total_events()
     }
 
     /// int: the number of tiles in the state.
     #[getter]
     pub fn n_tiles(&self) -> NumTiles {
-        (*self.0).n_tiles()
+        self.0.upgrade().expect("StateEnum has been dropped").n_tiles()
     }
 
     /// Return a copy of the state behind the reference as a mutable `State` object.
@@ -1743,7 +1774,7 @@ impl FFSStateRef {
     /// -------
     /// State
     pub fn clone_state(&self) -> PyState {
-        PyState((*self.0).clone())
+        PyState(self.0.upgrade().expect("StateEnum has been dropped").as_ref().clone())
     }
 
     #[getter]
@@ -1753,7 +1784,8 @@ impl FFSStateRef {
         _py: Python<'py>,
     ) -> PyResult<Bound<'py, PyArray2<crate::base::Tile>>> {
         let t = this.borrow();
-        let ra = (*t.0).raw_array();
+        let state = t.0.upgrade().expect("StateEnum has been dropped");
+        let ra = state.raw_array();
 
         unsafe { Ok(PyArray2::borrow_from_array(&ra, this.into_any())) }
     }
@@ -1770,7 +1802,8 @@ impl FFSStateRef {
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyArray2<crate::base::Tile>>> {
         let t = this.borrow();
-        let ra = (*t.0).raw_array();
+        let state = t.0.upgrade().expect("StateEnum has been dropped");
+        let ra = state.raw_array();
 
         Ok(PyArray2::from_array(py, &ra))
     }
@@ -1782,20 +1815,22 @@ impl FFSStateRef {
     /// Any
     pub fn tracking_copy(this: &Bound<Self>) -> PyResult<RustAny> {
         let t = this.borrow();
-        let ra = (*t.0).get_tracker_data();
+        let state = t.0.upgrade().expect("StateEnum has been dropped");
+        let ra = state.get_tracker_data();
 
         Ok(ra)
     }
 
     pub fn __repr__(&self) -> String {
+        let state = self.0.upgrade().expect("StateEnum has been dropped");
         format!(
             "FFSStateRef(n_tiles={}, time={} s, events={}, size=({}, {}), total_rate={})",
-            self.0.n_tiles(),
-            self.0.time(),
-            self.0.total_events(),
-            self.0.ncols(),
-            self.0.nrows(),
-            self.0.total_rate()
+            state.n_tiles(),
+            state.time(),
+            state.total_events(),
+            state.ncols(),
+            state.nrows(),
+            state.total_rate()
         )
     }
 
@@ -1806,12 +1841,14 @@ impl FFSStateRef {
     /// -------
     /// NDArray[np.uint]
     pub fn rate_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.0.rate_array().mapv(f64::from).to_pyarray(py)
+        let state = self.0.upgrade().expect("StateEnum has been dropped");
+        state.rate_array().mapv(f64::from).to_pyarray(py)
     }
 
     /// float: the total rate of possible next events for the state.
     #[getter]
     pub fn total_rate(&self) -> f64 {
-        RateStore::total_rate(self.0.deref()).into()
+        let state = self.0.upgrade().expect("StateEnum has been dropped");
+        RateStore::total_rate(state.deref()).into()
     }
 }
