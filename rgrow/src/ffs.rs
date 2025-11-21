@@ -781,6 +781,8 @@ pub struct FFSLevel<St: ClonableState> {
     pub p_r: f64,
     pub num_states: usize,
     pub num_trials: usize,
+    pub last_surface_num_trials: Vec<usize>,
+    pub last_surface_num_successes: Vec<usize>,
     pub target_size: NumTiles,
     pub dataframe_data: Option<Vec<ConfigDataFrameRow>>,
 }
@@ -817,8 +819,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         let target_size = self.target_size + config.size_step;
 
         // Track trials and successes per configuration from previous level
-        let mut config_trials: Vec<u64> = vec![0; self.state_list.len()];
-        let mut config_successes: Vec<u64> = vec![0; self.state_list.len()];
+        let mut config_trials = vec![0; self.state_list.len()];
+        let mut config_successes = vec![0; self.state_list.len()];
 
         let bounds = {
             let mut b = config.subseq_bound;
@@ -871,16 +873,13 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                         surface_index,
                         state_list.len() as u64,
                         i_old_state as u64,
-                        config_trials[i_old_state],
-                        config_successes[i_old_state],
+                        0, // empty for now, will be filled in later
+                        0, // empty for now, will be filled in later
                     );
                     df_data.push(df_row);
                 }
                 
-                // Store state based on retention mode
-                if config.keep_configs == ConfigRetentionMode::Full {
-                    state_list.push(state);
-                }
+                state_list.push(state);
                 previous_list.push(i_old_state);
             } else {
                 println!(
@@ -915,6 +914,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
             num_states,
             num_trials: i,
             dataframe_data,
+            last_surface_num_trials: config_trials,
+            last_surface_num_successes: config_successes,
         })
     }
 
@@ -1034,11 +1035,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                         dimer_df_data.push(dimer_df_row);
                     }
 
-                    // Store states based on retention mode
-                    if config.keep_configs == ConfigRetentionMode::Full {
-                        state_list.push(state);
-                        dimer_state_list.push(dimer_state);
-                    }
+                    state_list.push(state);
+                    dimer_state_list.push(dimer_state);
 
                     if rng.random::<bool>() {
                         tile_list.push(dimer.t1);
@@ -1071,6 +1069,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         }
 
         let p_r = (num_states as f64) / (i as f64);
+        let n_dimers = dimer_state_list.len();
 
         Ok((
             Self {
@@ -1081,6 +1080,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                 num_states,
                 num_trials: i,
                 dataframe_data,
+                last_surface_num_trials: vec![1; n_dimers],
+                last_surface_num_successes: vec![1; n_dimers],
             },
             Self {
                 state_list: dimer_state_list,
@@ -1090,6 +1091,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                 num_states,
                 num_trials: num_states,
                 dataframe_data: dimer_dataframe_data,
+                last_surface_num_trials: Vec::default(),
+                last_surface_num_successes: Vec::default(),
             },
         ))
     }
@@ -1221,6 +1224,8 @@ pub struct FFSLevelResult {
     pub num_trials: usize,
     pub target_size: NumTiles,
     pub dataframe_data: Option<Vec<ConfigDataFrameRow>>,
+    pub last_surface_num_trials: Vec<usize>,
+    pub last_surface_num_successes: Vec<usize>,
 }
 
 impl<St: ClonableState> From<FFSLevel<St>> for FFSLevelResult
@@ -1240,6 +1245,8 @@ where
             num_trials: value.num_trials,
             target_size: value.target_size,
             dataframe_data: value.dataframe_data,
+            last_surface_num_trials: value.last_surface_num_trials,
+            last_surface_num_successes: value.last_surface_num_successes,
         }
     }
 }
@@ -1329,7 +1336,7 @@ impl FFSRunResult {
         if has_dataframe_data {
             // Use pre-compiled dataframe data
             for surface in self.surfaces().iter() {
-                let surface_ref = surface.upgrade().unwrap();
+                let surface_ref: Arc<FFSLevelResult> = surface.upgrade().unwrap();
                 if let Some(ref df_data) = surface_ref.dataframe_data {
                     for row in df_data {
                         sizes.push(row.size);
@@ -1343,9 +1350,9 @@ impl FFSRunResult {
                         shape_j.push(row.shape_j);
                         previndices.push(row.previous_config);
                         energies.push(row.energy);
-                        num_trials.push(row.num_trials);
-                        num_successes.push(row.num_successes);
                     }
+                    num_trials.extend(surface_ref.last_surface_num_trials.iter().map(|x| *x as u64));
+                    num_successes.extend(surface_ref.last_surface_num_successes.iter().map(|x| *x as u64));    
                 }
             }
         } else {
@@ -1364,10 +1371,9 @@ impl FFSRunResult {
                     shape_i.push((maxi - mini + 1) as u64);
                     shape_j.push((maxj - minj + 1) as u64);
                     energies.push(state.energy());
-                    // For fallback mode, we don't have trial/success data, so use 0
-                    num_trials.push(0u64);
-                    num_successes.push(0u64);
                 }
+                num_trials.extend(surface.upgrade().unwrap().last_surface_num_trials.iter().map(|x| *x as u64));
+                num_successes.extend(surface.upgrade().unwrap().last_surface_num_successes.iter().map(|x| *x as u64));
                 if !surface.upgrade().unwrap().state_list.is_empty() {
                     previndices.extend(
                         surface
@@ -1380,6 +1386,11 @@ impl FFSRunResult {
                 }
             }
         }
+
+        // We need to add 0 trials, 0 successes for the last surface
+        let last_surface_num_configs = self.surfaces().last().unwrap().upgrade().unwrap().num_configs();
+        num_trials.extend(vec![0u64; last_surface_num_configs]);
+        num_successes.extend(vec![0u64; last_surface_num_configs]);
 
         let df = df!(
             "surface_index" => surfaceindex,
