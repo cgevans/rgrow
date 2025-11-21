@@ -1,10 +1,11 @@
 #![allow(clippy::too_many_arguments)]
 
+use std::fmt::{Display, Formatter};
 #[cfg(feature = "python")]
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
 
-use crate::base::{GrowError, RgrowError, Tile};
+use crate::base::{GrowError, RgrowError, StringConvError, Tile};
 use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals, PointSafe2};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
@@ -18,6 +19,8 @@ use canvas::Canvas;
 use num_traits::{Float, Num, Zero};
 use polars::prelude::*;
 #[cfg(feature = "python")]
+use pyo3::prelude::*;
+#[cfg(feature = "python")]
 use pyo3_polars::error::PyPolarsErr;
 #[cfg(feature = "python")]
 use python::PyState;
@@ -29,7 +32,7 @@ use super::*;
 
 /// Configuration data retention mode for FFS simulations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+// #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub enum ConfigRetentionMode {
     /// No configuration data retained (minimal memory usage).
     None,
@@ -40,32 +43,80 @@ pub enum ConfigRetentionMode {
     Full,
 }
 
-#[cfg(feature = "python")]
-#[pymethods]
-impl ConfigRetentionMode {
-    /// Create ConfigRetentionMode.None
-    #[classattr]
-    const NONE: Self = Self::None;
+// #[cfg(feature = "python")]
+// #[pymethods]
+// impl ConfigRetentionMode {
+//     /// Create ConfigRetentionMode.None
+//     #[classattr]
+//     const NONE: Self = Self::None;
     
-    /// Create ConfigRetentionMode.DataFrameOnly
-    #[classattr]
-    const DATAFRAME_ONLY: Self = Self::DataFrameOnly;
+//     /// Create ConfigRetentionMode.DataFrameOnly
+//     #[classattr]
+//     const DATAFRAME_ONLY: Self = Self::DataFrameOnly;
     
-    /// Create ConfigRetentionMode.Full
-    #[classattr]
-    const FULL: Self = Self::Full;
+//     /// Create ConfigRetentionMode.Full
+//     #[classattr]
+//     const FULL: Self = Self::Full;
 
-    fn __str__(&self) -> &'static str {
-        match self {
-            Self::None => "None",
-            Self::DataFrameOnly => "DataFrameOnly", 
-            Self::Full => "Full",
+//     fn __str__(&self) -> &'static str {
+//         match self {
+//             Self::None => "None",
+//             Self::DataFrameOnly => "DataFrameOnly", 
+//             Self::Full => "Full",
+//         }
+//     }
+
+//     fn __repr__(&self) -> String {
+//         format!("ConfigRetentionMode.{}", self.__str__())
+//     }
+// }
+
+impl TryFrom<&str> for ConfigRetentionMode {
+    type Error = StringConvError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "none" => Ok(ConfigRetentionMode::None),
+            "dataframeonly" | "dataframe_only" | "dataframe-only" => Ok(ConfigRetentionMode::DataFrameOnly),
+            "full" => Ok(ConfigRetentionMode::Full),
+            _ => Err(StringConvError(format!(
+                "Unknown config retention mode {value}. Valid options are \"none\", \"dataframeonly\", \"full\"."
+            ))),
         }
     }
+}
 
-    fn __repr__(&self) -> String {
-        format!("ConfigRetentionMode.{}", self.__str__())
+impl Display for ConfigRetentionMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConfigRetentionMode::None => write!(f, "none"),
+            ConfigRetentionMode::DataFrameOnly => write!(f, "dataframeonly"),
+            ConfigRetentionMode::Full => write!(f, "full"),
+        }
     }
+}
+
+#[cfg(feature = "python")]
+impl FromPyObject<'_> for ConfigRetentionMode {
+    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let s: &str = ob.extract()?;
+        ConfigRetentionMode::try_from(s)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+}
+
+#[cfg(feature = "python")]
+impl<'py> IntoPyObject<'py> for ConfigRetentionMode {
+    fn into_pyobject(self, py: Python<'py>) -> std::result::Result<pyo3::Bound<'py, pyo3::PyAny>, pyo3::PyErr> {
+        match self {
+            ConfigRetentionMode::None => pyo3::IntoPyObjectExt::into_bound_py_any("none", py),
+            ConfigRetentionMode::DataFrameOnly => pyo3::IntoPyObjectExt::into_bound_py_any("dataframeonly", py),
+            ConfigRetentionMode::Full => pyo3::IntoPyObjectExt::into_bound_py_any("full", py),
+        }
+    }
+    type Target = pyo3::PyAny; // the Python type
+    type Output = pyo3::Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = pyo3::PyErr;
 }
 
 /// Extracted dataframe data for a single configuration.
@@ -82,6 +133,8 @@ pub struct ConfigDataFrameRow {
     pub shape_i: u64,
     pub shape_j: u64,
     pub energy: f64,
+    pub num_trials: u64,
+    pub num_successes: u64,
 }
 
 /// Dataframe data for an FFS level.
@@ -555,6 +608,8 @@ fn extract_dataframe_data<St: ClonableState>(
     surface_index: u64,
     config_index: u64,
     previous_config: u64,
+    num_trials: u64,
+    num_successes: u64,
 ) -> ConfigDataFrameRow {
     let ss = &state.raw_array();
     let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(ss);
@@ -571,6 +626,8 @@ fn extract_dataframe_data<St: ClonableState>(
         shape_i: (maxi - mini + 1) as u64,
         shape_j: (maxj - minj + 1) as u64,
         energy: state.energy(),
+        num_trials,
+        num_successes,
     }
 }
 
@@ -580,6 +637,8 @@ fn extract_dataframe_data_from_state_enum(
     surface_index: u64,
     config_index: u64,
     previous_config: u64,
+    num_trials: u64,
+    num_successes: u64,
 ) -> ConfigDataFrameRow {
     let ss = &state.raw_array();
     let (m, mini, minj, maxi, maxj) = _bounded_nonzero_region_of_array(ss);
@@ -596,6 +655,8 @@ fn extract_dataframe_data_from_state_enum(
         shape_i: (maxi - mini + 1) as u64,
         shape_j: (maxj - minj + 1) as u64,
         energy: state.energy(),
+        num_trials,
+        num_successes,
     }
 }
 
@@ -755,6 +816,10 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         let mut i = 0usize;
         let target_size = self.target_size + config.size_step;
 
+        // Track trials and successes per configuration from previous level
+        let mut config_trials: Vec<u64> = vec![0; self.state_list.len()];
+        let mut config_successes: Vec<u64> = vec![0; self.state_list.len()];
+
         let bounds = {
             let mut b = config.subseq_bound;
             b.size_max = Some(target_size);
@@ -790,8 +855,14 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                 i += 1;
             }
 
+            // Increment trial count for the selected configuration
+            config_trials[i_old_state] += 1;
+
             if state.n_tiles() >= target_size {
                 // >= hack for duples
+                
+                // Increment success count for the selected configuration
+                config_successes[i_old_state] += 1;
                 
                 // Extract dataframe data if needed
                 if let Some(ref mut df_data) = dataframe_data {
@@ -800,6 +871,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                         surface_index,
                         state_list.len() as u64,
                         i_old_state as u64,
+                        config_trials[i_old_state],
+                        config_successes[i_old_state],
                     );
                     df_data.push(df_row);
                 }
@@ -943,6 +1016,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                             1, // surface index 1 for first level
                             num_states as u64,
                             num_states as u64,
+                            1, // Each successful configuration had 1 trial
+                            1, // Each successful configuration had 1 success
                         );
                         df_data.push(df_row);
                     }
@@ -953,6 +1028,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                             0, // surface index 0 for dimer level
                             num_states as u64,
                             if rng.random::<bool>() { dimer.t1 as u64 } else { dimer.t2 as u64 },
+                            1, // Each dimer configuration had 1 trial
+                            1, // Each dimer configuration had 1 success
                         );
                         dimer_df_data.push(dimer_df_row);
                     }
@@ -1242,6 +1319,8 @@ impl FFSRunResult {
         let mut surfaceindex = Vec::new();
         let mut configindex = Vec::new();
         let mut energies = Vec::new();
+        let mut num_trials = Vec::new();
+        let mut num_successes = Vec::new();
 
         // Check if we have pre-compiled dataframe data
         let has_dataframe_data = self.surfaces().iter()
@@ -1264,6 +1343,8 @@ impl FFSRunResult {
                         shape_j.push(row.shape_j);
                         previndices.push(row.previous_config);
                         energies.push(row.energy);
+                        num_trials.push(row.num_trials);
+                        num_successes.push(row.num_successes);
                     }
                 }
             }
@@ -1283,6 +1364,9 @@ impl FFSRunResult {
                     shape_i.push((maxi - mini + 1) as u64);
                     shape_j.push((maxj - minj + 1) as u64);
                     energies.push(state.energy());
+                    // For fallback mode, we don't have trial/success data, so use 0
+                    num_trials.push(0u64);
+                    num_successes.push(0u64);
                 }
                 if !surface.upgrade().unwrap().state_list.is_empty() {
                     previndices.extend(
@@ -1309,6 +1393,8 @@ impl FFSRunResult {
             "shape_i" => shape_i,
             "shape_j" => shape_j,
             "energy" => energies,
+            "num_trials" => num_trials,
+            "num_successes" => num_successes,
         )
         .unwrap();
 
