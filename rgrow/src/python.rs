@@ -323,7 +323,7 @@ macro_rules! create_py_system {
                 show_window: bool,
                 parallel: bool,
                 py: Python<'py>,
-            ) -> PyResult<PyObject> {
+            ) -> PyResult<Py<PyAny>> {
                 let bounds = EvolveBounds {
                     for_events,
                     for_time,
@@ -351,13 +351,13 @@ macro_rules! create_py_system {
                         let state = &mut pystate.borrow_mut().0;
                         if show_window {
                             py
-                                .allow_threads(|| {
+                                .detach(|| {
                                     System::evolve_in_window(self, state, None, bounds)
                                 })?
                                 .into_py_any(py)
                         } else {
                             py
-                                .allow_threads(|| System::evolve(self, state, bounds))?
+                                .detach(|| System::evolve(self, state, bounds))?
                                 .into_py_any(py)
                         }
                     }
@@ -372,7 +372,7 @@ macro_rules! create_py_system {
                             .map(|x| x.borrow_mut())
                             .collect::<Vec<_>>();
                         let mut states = refs.iter_mut().map(|x| x.deref_mut()).collect::<Vec<_>>();
-                        let out = py.allow_threads(|| {
+                        let out = py.detach(|| {
                             if parallel {
                                 states
                                     .par_iter_mut()
@@ -615,7 +615,7 @@ macro_rules! create_py_system {
 
                 let state = &state.0;
                 
-                let out = py.allow_threads(|| {
+                let out = py.detach(|| {
                     self.calc_committer(
                         &state,
                         cutoff_size,
@@ -658,7 +658,7 @@ macro_rules! create_py_system {
                 max_events: Option<NumEvents>,
                 py: Python<'_>,
             ) -> PyResult<(f64, usize)> {
-                py.allow_threads(|| {
+                py.detach(|| {
                     self.calc_committer_adaptive(
                         &state.0,
                         cutoff_size,
@@ -702,11 +702,79 @@ macro_rules! create_py_system {
 
                 let refs = states.iter().map(|x| x.borrow()).collect::<Vec<_>>();
                 let states = refs.iter().map(|x| &x.0).collect::<Vec<_>>();
-                let (committers, trials) = py.allow_threads(|| {
+                let (committers, trials) = py.detach(|| {
                     self.calc_committers_adaptive(&states, cutoff_size, max_time, max_events, conf_interval_margin)
                 }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
 
                 Ok((committers.into_pyarray(py), trials.into_pyarray(py)))
+            }
+
+            /// Determine whether the committer probability for a state is above or below a threshold
+            /// with a specified confidence level using adaptive sampling.
+            ///
+            /// This function uses adaptive sampling to determine with the desired confidence whether
+            /// the true committer probability is above or below the given threshold. It continues
+            /// sampling until the confidence interval is narrow enough to make a definitive determination.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State
+            ///     The state to analyze
+            /// cutoff_size : int
+            ///     Size threshold for commitment
+            /// threshold : float
+            ///     The probability threshold to compare against (e.g., 0.5)
+            /// confidence_level : float
+            ///     Confidence level for the threshold test (e.g., 0.95 for 95% confidence)
+            /// max_time : float, optional
+            ///     Maximum simulation time per trial
+            /// max_events : int, optional
+            ///     Maximum events per trial
+            /// max_trials : int, optional
+            ///     Maximum number of trials to run (default: 100000)
+            /// return_on_max_trials : bool, optional
+            ///     If True, return results even when max_trials is exceeded (default: False)
+            /// ci_confidence_level : float, optional
+            ///     Confidence level for the returned confidence interval (default: None, no CI returned)
+            ///     Can be different from confidence_level (e.g., test at 95%, show 99% CI)
+            ///
+            /// Returns
+            /// -------
+            /// tuple[bool, float, tuple[float, float] | None, int, bool]
+            ///     Tuple of (is_above_threshold, probability_estimate, confidence_interval, num_trials, exceeded_max_trials) where:
+            ///     - is_above_threshold: True if probability is above threshold with given confidence
+            ///     - probability_estimate: The estimated probability
+            ///     - confidence_interval: Tuple of (lower_bound, upper_bound) or None if ci_confidence_level not provided
+            ///     - num_trials: Number of trials performed
+            ///     - exceeded_max_trials: True if max_trials was exceeded (warning flag)
+            #[pyo3(name = "calc_committer_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false, ci_confidence_level=None))]
+            fn py_calc_committer_threshold_test(
+                &self,
+                state: &PyState,
+                cutoff_size: NumTiles,
+                threshold: f64,
+                confidence_level: f64,
+                max_time: Option<f64>,
+                max_events: Option<NumEvents>,
+                max_trials: Option<usize>,
+                return_on_max_trials: bool,
+                ci_confidence_level: Option<f64>,
+                py: Python<'_>,
+            ) -> PyResult<(bool, f64, Option<(f64, f64)>, usize, bool)> {
+                py.detach(|| {
+                    self.calc_committer_threshold_test(
+                        &state.0,
+                        cutoff_size,
+                        threshold,
+                        confidence_level,
+                        max_time,
+                        max_events,
+                        max_trials,
+                        return_on_max_trials,
+                        ci_confidence_level,
+                    )
+                })
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }
 
             /// Calculate forward probability for a given state.
@@ -781,7 +849,7 @@ macro_rules! create_py_system {
                 max_events: Option<NumEvents>,
                 py: Python<'_>,
             ) -> PyResult<(f64, usize)> {
-                let (probability, trials) = py.allow_threads(|| {
+                let (probability, trials) = py.detach(|| {
                     self.calc_forward_probability_adaptive(&state.0, forward_step, max_time, max_events, conf_interval_margin)
                 }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
 
@@ -823,7 +891,7 @@ macro_rules! create_py_system {
 
                 let refs = states.iter().map(|x| x.borrow()).collect::<Vec<_>>();
                 let states = refs.iter().map(|x| &x.0).collect::<Vec<_>>();
-                let (probabilities, trials) = py.allow_threads(|| {
+                let (probabilities, trials) = py.detach(|| {
                     self.calc_forward_probabilities_adaptive(&states, forward_step, max_time, max_events, conf_interval_margin)
                 }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
 
@@ -858,7 +926,7 @@ macro_rules! create_py_system {
                     }
                 }
 
-                let res = py.allow_threads(|| self.run_ffs(&c));
+                let res = py.detach(|| self.run_ffs(&c));
                 match res {
                     Ok(res) => Ok(res),
                     Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -901,6 +969,33 @@ macro_rules! create_py_system {
             #[staticmethod]
             pub fn read_json(filename: &str) -> Result<Self, RgrowError> {
                 Ok(serde_json::from_reader(File::open(filename)?).unwrap())
+            }
+
+            /// Place a tile at a point in the given state.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : PyState
+            ///     The state to modify.
+            /// point : tuple of int
+            ///     The coordinates at which to place the tile (i, j).
+            /// tile : int
+            ///     The tile number to place.
+            ///
+            /// Returns
+            /// -------
+            /// float
+            ///     The energy change from placing the tile.
+            #[pyo3(name = "place_tile")]
+            pub fn py_place_tile(
+                &self,
+                state: &mut PyState,
+                point: (usize, usize),
+                tile: u32,
+            ) -> Result<f64, RgrowError> {
+                let pt = PointSafe2(point);
+                let energy_change = self.place_tile(&mut state.0, pt, tile.into())?;
+                Ok(energy_change)
             }
         }
     };

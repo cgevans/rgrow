@@ -77,19 +77,14 @@ pub enum Seed {
     MultiTile(HashMapType<PointSafe2, Tile>),
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
 enum TileShape {
+    #[default]
     Single,
     DupleToRight(Tile),
     DupleToBottom(Tile),
     DupleToLeft(Tile),
     DupleToTop(Tile),
-}
-
-impl Default for TileShape {
-    fn default() -> Self {
-        Self::Single
-    }
 }
 
 #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
@@ -236,7 +231,7 @@ impl KTAM {
                 "Point out of bounds",
             ));
         }
-        Ok(self.total_free_energy_from_point(state, PointSafe2(p)))
+        Ok(self.energy_contribution_from_point(state, PointSafe2(p)))
     }
 
     #[pyo3(name = "state_energy")]
@@ -326,12 +321,12 @@ impl System for KTAM {
         }
     }
 
-    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: PerSecond) -> Event {
+    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: PerSecond) -> (Event, f64) {
         match self.choose_detachment_at_point(state, p, Rate64::from_per_second(acc)) {
-            (true, _, event) => event,
-            (false, acc, _) => match self.choose_attachment_at_point(state, p, acc) {
-                (true, _, event) => event,
-                (false, acc, _) => {
+            (true, _, event, rate) => (event, rate),
+            (false, acc, _, _) => match self.choose_attachment_at_point(state, p, acc) {
+                (true, _, event, rate) => (event, rate),
+                (false, acc, _, _) => {
                     panic!(
                         "Rate: {:?}, {:?}, {:?}, {:?}",
                         acc,
@@ -344,15 +339,18 @@ impl System for KTAM {
         }
     }
 
-    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> &Self {
+    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> f64 {
+        let mut energy_change = 0.;
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) => {
-                state.set_sa(point, tile);
+                energy_change += self.energy_change_from_point_change(state, *point, *tile);
+                state.set_sa_countabletilearray(point, tile, &self.should_be_counted);
                 match self.tile_shape(*tile) {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(state.tile_to_e(*point), 0);
+                        energy_change += self.energy_change_from_point_change(state, *point, dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_e(*point).0),
                             &dt,
@@ -361,6 +359,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(state.tile_to_s(*point), 0);
+                        energy_change += self.energy_change_from_point_change(state, *point, dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_s(*point).0),
                             &dt,
@@ -369,6 +368,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(state.tile_to_w(*point), 0);
+                        energy_change += self.energy_change_from_point_change(state, *point, dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_w(*point).0),
                             &dt,
@@ -377,6 +377,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(state.tile_to_n(*point), 0);
+                        energy_change += self.energy_change_from_point_change(state, *point, dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_n(*point).0),
                             &dt,
@@ -393,6 +394,7 @@ impl System for KTAM {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(dt, state.tile_to_e(*point));
+                        energy_change += self.energy_change_from_point_change(state, *point, 0);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_e(*point).0),
                             &0,
@@ -401,6 +403,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(dt, state.tile_to_s(*point));
+                        energy_change += self.energy_change_from_point_change(state, *point, 0);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_s(*point).0),
                             &0,
@@ -409,6 +412,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(dt, state.tile_to_w(*point));
+                        energy_change += self.energy_change_from_point_change(state, *point, 0);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_w(*point).0),
                             &0,
@@ -417,6 +421,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(dt, state.tile_to_n(*point));
+                        energy_change += self.energy_change_from_point_change(state, *point, 0);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_n(*point).0),
                             &0,
@@ -425,12 +430,14 @@ impl System for KTAM {
                     }
                 }
 
+                energy_change += self.energy_change_from_point_change(state, *point, *tile);
                 state.set_sa_countabletilearray(point, tile, &self.should_be_counted);
 
                 match self.tile_shape(*tile) {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(state.tile_to_e(*point), 0);
+                        energy_change += self.energy_change_from_point_change(state, *point, dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_e(*point).0),
                             &dt,
@@ -439,6 +446,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(state.tile_to_s(*point), 0);
+                        energy_change += self.energy_change_from_point_change(state, *point, dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_s(*point).0),
                             &dt,
@@ -447,6 +455,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(state.tile_to_w(*point), 0);
+                        energy_change += self.energy_change_from_point_change(state, *point, dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_w(*point).0),
                             &dt,
@@ -455,6 +464,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(state.tile_to_n(*point), 0);
+                        energy_change += self.energy_change_from_point_change(state, *point, dt);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_n(*point).0),
                             &dt,
@@ -468,6 +478,7 @@ impl System for KTAM {
                     TileShape::Single => (),
                     TileShape::DupleToRight(dt) => {
                         debug_assert_eq!(state.tile_to_e(*point), dt);
+                        energy_change += self.energy_change_from_point_change(state, *point, 0);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_e(*point).0),
                             &0,
@@ -476,6 +487,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToBottom(dt) => {
                         debug_assert_eq!(state.tile_to_s(*point), dt);
+                        energy_change += self.energy_change_from_point_change(state, *point, 0);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_s(*point).0),
                             &0,
@@ -484,6 +496,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToLeft(dt) => {
                         debug_assert_eq!(state.tile_to_w(*point), dt);
+                        energy_change += self.energy_change_from_point_change(state, *point, 0);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_w(*point).0),
                             &0,
@@ -492,6 +505,7 @@ impl System for KTAM {
                     }
                     TileShape::DupleToTop(dt) => {
                         debug_assert_eq!(state.tile_to_n(*point), dt);
+                        energy_change += self.energy_change_from_point_change(state, *point, 0);
                         state.set_sa_countabletilearray(
                             &PointSafe2(state.move_sa_n(*point).0),
                             &0,
@@ -499,15 +513,18 @@ impl System for KTAM {
                         );
                     }
                 }
+                energy_change += self.energy_change_from_point_change(state, *point, 0);
                 state.set_sa_countabletilearray(point, &0, &self.should_be_counted);
             }
             Event::PolymerAttachment(changelist) => {
                 for (point, tile) in changelist {
+                    energy_change += self.energy_change_from_point_change(state, *point, *tile);
                     state.set_sa_countabletilearray(point, tile, &self.should_be_counted);
                     match self.tile_shape(*tile) {
                         TileShape::Single => (),
                         TileShape::DupleToRight(dt) => {
                             debug_assert_eq!(state.tile_to_e(*point), 0);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_e(*point).0),
                                 &dt,
@@ -516,6 +533,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToBottom(dt) => {
                             debug_assert_eq!(state.tile_to_s(*point), 0);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_s(*point).0),
                                 &dt,
@@ -524,6 +542,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToLeft(dt) => {
                             debug_assert_eq!(state.tile_to_w(*point), 0);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_w(*point).0),
                                 &dt,
@@ -532,6 +551,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToTop(dt) => {
                             debug_assert_eq!(state.tile_to_n(*point), 0);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_n(*point).0),
                                 &dt,
@@ -550,6 +570,7 @@ impl System for KTAM {
                         TileShape::Single => (),
                         TileShape::DupleToRight(dt) => {
                             debug_assert_eq!(dt, state.tile_to_e(*point));
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_e(*point).0),
                                 &0,
@@ -558,6 +579,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToBottom(dt) => {
                             debug_assert_eq!(dt, state.tile_to_s(*point));
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_s(*point).0),
                                 &0,
@@ -566,6 +588,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToLeft(dt) => {
                             debug_assert_eq!(dt, state.tile_to_w(*point));
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_w(*point).0),
                                 &0,
@@ -574,6 +597,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToTop(dt) => {
                             debug_assert_eq!(dt, state.tile_to_n(*point));
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_n(*point).0),
                                 &0,
@@ -582,12 +606,14 @@ impl System for KTAM {
                         }
                     }
 
+                    energy_change += self.energy_change_from_point_change(state, *point, *tile);
                     state.set_sa_countabletilearray(point, tile, &self.should_be_counted);
 
                     match self.tile_shape(*tile) {
                         TileShape::Single => (),
                         TileShape::DupleToRight(dt) => {
                             debug_assert_eq!(state.tile_to_e(*point), 0);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_e(*point).0),
                                 &dt,
@@ -596,6 +622,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToBottom(dt) => {
                             debug_assert_eq!(state.tile_to_s(*point), 0);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_s(*point).0),
                                 &dt,
@@ -604,6 +631,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToLeft(dt) => {
                             debug_assert_eq!(state.tile_to_w(*point), 0);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_w(*point).0),
                                 &dt,
@@ -612,6 +640,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToTop(dt) => {
                             debug_assert_eq!(state.tile_to_n(*point), 0);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_n(*point).0),
                                 &dt,
@@ -627,6 +656,7 @@ impl System for KTAM {
                         TileShape::Single => (),
                         TileShape::DupleToRight(dt) => {
                             debug_assert_eq!(state.tile_to_e(*point), dt);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_e(*point).0),
                                 &0,
@@ -635,6 +665,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToBottom(dt) => {
                             debug_assert_eq!(state.tile_to_s(*point), dt);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_s(*point).0),
                                 &0,
@@ -643,6 +674,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToLeft(dt) => {
                             debug_assert_eq!(state.tile_to_w(*point), dt);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_w(*point).0),
                                 &0,
@@ -651,6 +683,7 @@ impl System for KTAM {
                         }
                         TileShape::DupleToTop(dt) => {
                             debug_assert_eq!(state.tile_to_n(*point), dt);
+                            energy_change += self.energy_change_from_point_change(state, *point, 0);
                             state.set_sa_countabletilearray(
                                 &PointSafe2(state.move_sa_n(*point).0),
                                 &0,
@@ -659,11 +692,13 @@ impl System for KTAM {
                         }
                     }
 
+                    energy_change += self.energy_change_from_point_change(state, *point, 0);
                     state.set_sa_countabletilearray(point, &0, &self.should_be_counted);
                 }
             }
         }
-        self
+        state.change_energy(energy_change);
+        energy_change
     }
 
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)> {
@@ -815,7 +850,7 @@ impl System for KTAM {
     fn system_info(&self) -> String {
         format!(
             "kTAM with {} tiles and {} glues, G_se = {}, α = {}",
-            self.tile_names.len(),
+            self.tile_names.len() - 1,
             self.glue_strengths.len(),
             self.g_se,
             self.alpha
@@ -868,54 +903,12 @@ impl System for KTAM {
         state: &mut St,
         point: PointSafe2,
         tile: Tile,
-    ) -> Result<&Self, GrowError> {
-        // For kTAM, handle double tiles properly
-        if !self.has_duples {
-            // No double tiles, just place the tile normally
-            return Ok(self.set_safe_point(state, point, tile));
-        }
-
-        // Check if this is a fake tile - if so, redirect to the real tile
-        let (actual_tile, actual_point) = match self.duple_info[tile as usize] {
-            TileShape::DupleToLeft(real_tile) => {
-                // This is a fake tile (right part of double), place the real tile to the left
-                let left_point = PointSafe2(state.move_sa_w(point).0);
-                (real_tile, left_point)
-            }
-            TileShape::DupleToTop(real_tile) => {
-                // This is a fake tile (bottom part of double), place the real tile above
-                let top_point = PointSafe2(state.move_sa_n(point).0);
-                (real_tile, top_point)
-            }
-            _ => {
-                // This is either a single tile or the real part of a double tile
-                (tile, point)
-            }
-        };
-
-        // Now place the actual tile
-        match self.duple_info[actual_tile as usize] {
-            TileShape::Single => {
-                // Single tile, just place it
-                Ok(self.set_safe_point(state, actual_point, actual_tile))
-            }
-            TileShape::DupleToRight(fake_tile) => {
-                // This is the real tile (left part) of a horizontal double tile
-                let right_point = PointSafe2(state.move_sa_e(actual_point).0);
-                let changelist = [(actual_point, actual_tile), (right_point, fake_tile)];
-                Ok(self.set_safe_points(state, &changelist))
-            }
-            TileShape::DupleToBottom(fake_tile) => {
-                // This is the real tile (top part) of a vertical double tile
-                let bottom_point = PointSafe2(state.move_sa_s(actual_point).0);
-                let changelist = [(actual_point, actual_tile), (bottom_point, fake_tile)];
-                Ok(self.set_safe_points(state, &changelist))
-            }
-            TileShape::DupleToLeft(_) | TileShape::DupleToTop(_) => {
-                // This shouldn't happen after our redirection above
-                panic!("Internal error: tried to place fake tile {actual_tile} after redirection");
-            }
-        }
+    ) -> Result<f64, GrowError> {
+        // FIXME: this does not currently check if the event clobbers something.
+        let event = Event::MonomerAttachment(point, tile);
+        let energy_change = self.perform_event(state, &event);
+        self.update_after_event(state, &event);
+        Ok(energy_change)
     }
 
     fn clone_state<St: crate::state::StateWithCreate>(&self, initial_state: &St) -> St {
@@ -1270,18 +1263,22 @@ impl KTAM {
         v
     }
 
+
+    /// Given an accumulated rate, choose a detachment event at the point, or return false if no event should take place.
+    /// Returns the event, the remaining accumulated rate, and the rate of the chosen event.
     pub fn choose_detachment_at_point<S: State>(
         &self,
         state: &S,
         p: PointSafe2,
         mut acc: Rate64,
-    ) -> (bool, Rate64, Event) {
-        acc -= self.monomer_detachment_rate_at_point(state, p);
+    ) -> (bool, Rate64, Event, Rate64) {
+        let rate = self.monomer_detachment_rate_at_point(state, p);
+        acc -= rate;
         if acc <= 0. {
             // FIXME: may slow things down
             if self.is_seed(p) || ((self.has_duples) && self.is_fake_duple(state.tile_at_point(p)))
             {
-                return (true, acc, Event::None);
+                return (true, acc, Event::None, rate);
             } else {
                 let mut possible_starts = Vec::new();
                 let mut now_empty = Vec::new();
@@ -1308,12 +1305,12 @@ impl KTAM {
                 now_empty.push(p);
 
                 return match self.determine_fission(state, &possible_starts, &now_empty) {
-                    FissionResult::NoFission => (true, acc, Event::MonomerDetachment(p)),
+                    FissionResult::NoFission => (true, acc, Event::MonomerDetachment(p), rate),
                     FissionResult::FissionGroups(g) => {
                         //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
                         match self.fission_handling {
-                            FissionHandling::NoFission => (true, acc, Event::None),
-                            FissionHandling::JustDetach => (true, acc, Event::MonomerDetachment(p)),
+                            FissionHandling::NoFission => (true, acc, Event::None, rate),
+                            FissionHandling::JustDetach => (true, acc, Event::MonomerDetachment(p), rate),
                             FissionHandling::KeepSeeded => {
                                 let sl = self._seed_locs();
                                 (
@@ -1322,17 +1319,20 @@ impl KTAM {
                                     Event::PolymerDetachment(
                                         g.choose_deletions_seed_unattached(sl),
                                     ),
+                                    rate,
                                 )
                             }
                             FissionHandling::KeepLargest => (
                                 true,
                                 acc,
                                 Event::PolymerDetachment(g.choose_deletions_keep_largest_group()),
+                                rate,
                             ),
                             FissionHandling::KeepWeighted => (
                                 true,
                                 acc,
                                 Event::PolymerDetachment(g.choose_deletions_size_weighted()),
+                                rate,
                             ),
                         }
                     }
@@ -1349,10 +1349,10 @@ impl KTAM {
             let tile = { state.tile_at_point(p) };
 
             if tile == 0 {
-                return (false, acc, Event::None);
+                return (false, acc, Event::None, f64::NAN);
             } // FIXME: not quite right, if chunk_detachment rate is nonzero but tile is zero (should be impossible)
 
-            self.choose_chunk_detachment(
+            let rate = self.choose_chunk_detachment(
                 state,
                 p,
                 tile,
@@ -1362,13 +1362,13 @@ impl KTAM {
             );
 
             return match self.determine_fission(state, &possible_starts, &now_empty) {
-                FissionResult::NoFission => (true, acc, Event::PolymerDetachment(now_empty)),
+                FissionResult::NoFission => (true, acc, Event::PolymerDetachment(now_empty), rate),
                 FissionResult::FissionGroups(g) => {
                     //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
                     match self.fission_handling {
-                        FissionHandling::NoFission => (true, acc, Event::None),
+                        FissionHandling::NoFission => (true, acc, Event::None, rate),
                         FissionHandling::JustDetach => {
-                            (true, acc, Event::PolymerDetachment(now_empty))
+                            (true, acc, Event::PolymerDetachment(now_empty), rate)
                         }
                         FissionHandling::KeepSeeded => {
                             let sl = self._seed_locs();
@@ -1376,24 +1376,27 @@ impl KTAM {
                                 true,
                                 acc,
                                 Event::PolymerDetachment(g.choose_deletions_seed_unattached(sl)),
+                                rate,
                             )
                         }
                         FissionHandling::KeepLargest => (
                             true,
                             acc,
                             Event::PolymerDetachment(g.choose_deletions_keep_largest_group()),
+                            rate,
                         ),
                         FissionHandling::KeepWeighted => (
                             true,
                             acc,
                             Event::PolymerDetachment(g.choose_deletions_size_weighted()),
+                            rate,
                         ),
                     }
                 }
             };
         }
 
-        (false, acc, Event::None)
+        (false, acc, Event::None, rate) // FIXME: not the right rate, possibly
     }
 
     pub fn total_monomer_attachment_rate_at_point<S: State>(
@@ -1402,7 +1405,7 @@ impl KTAM {
         p: PointSafe2,
     ) -> Rate64 {
         match self._find_monomer_attachment_possibilities_at_point(state, p, 0., true) {
-            (false, acc, _) => -acc,
+            (false, acc, _, _) => -acc,
             _ => panic!(),
         }
     }
@@ -1412,7 +1415,7 @@ impl KTAM {
         state: &S,
         p: PointSafe2,
         acc: Rate64,
-    ) -> (bool, Rate64, Event) {
+    ) -> (bool, Rate64, Event, Rate64) {
         self.choose_monomer_attachment_at_point(state, p, acc)
     }
 
@@ -1421,7 +1424,7 @@ impl KTAM {
         state: &S,
         p: PointSafe2,
         acc: Rate64,
-    ) -> (bool, Rate64, Event) {
+    ) -> (bool, Rate64, Event, Rate64) {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
@@ -1438,7 +1441,7 @@ impl KTAM {
         p: PointSafe2,
         mut acc: Rate64,
         just_calc: bool,
-    ) -> (bool, Rate64, Event) {
+    ) -> (bool, Rate64, Event, Rate64) {
         let tn = state.tile_to_n(p);
         let tw = state.tile_to_w(p);
         let te = state.tile_to_e(p);
@@ -1465,10 +1468,10 @@ impl KTAM {
         if tn == 0 && tw == 0 && te == 0 && ts == 0 {
             if self.has_duples {
                 if tss == 0 && tne == 0 && tee == 0 && tse == 0 {
-                    return (false, acc, Event::None);
+                    return (false, acc, Event::None, f64::NAN);
                 }
             } else {
-                return (false, acc, Event::None);
+                return (false, acc, Event::None, f64::NAN);
             }
         }
 
@@ -1529,12 +1532,13 @@ impl KTAM {
                     }
                 }
             }
-            acc -= self.kf * self.tile_concs[t as usize];
+            let rate = self.kf * self.tile_concs[t as usize];
+            acc -= rate;
             if !just_calc & (acc <= (0.)) {
-                return (true, acc, Event::MonomerAttachment(p, t));
+                return (true, acc, Event::MonomerAttachment(p, t), rate);
             }
         }
-        (false, acc, Event::None)
+        (false, acc, Event::None, f64::NAN)
     }
 
     pub fn bond_energy_of_tile_type_at_point<S: State>(
@@ -1758,6 +1762,7 @@ impl KTAM {
         }
     }
 
+    /// Given an accumulated rate, choose a chunk detachment event at the point.
     fn choose_chunk_detachment<C: State>(
         &self,
         canvas: &C,
@@ -1766,12 +1771,13 @@ impl KTAM {
         acc: &mut Rate64,
         now_empty: &mut Vec<PointSafe2>,
         possible_starts: &mut Vec<PointSafe2>,
-    ) {
+    ) -> Rate64 {
         match self.chunk_size {
             ChunkSize::Single => panic!("In choose_chunk_detachment for ChunkSize::Single"),
             ChunkSize::Dimer => {
                 let ts = { self.bond_energy_of_tile_type_at_point(canvas, p, tile) };
-                *acc -= self.dimer_s_detach_rate(canvas, PointSafeHere(p.0), tile, ts);
+                let rate = self.dimer_s_detach_rate(canvas, PointSafeHere(p.0), tile, ts);
+                *acc -= rate;
                 if *acc <= 0. {
                     let p2 = PointSafe2(canvas.move_sa_s(p).0);
                     let t2 = { canvas.tile_at_point(p2) };
@@ -1797,9 +1803,10 @@ impl KTAM {
                     if self.get_energy_we(t2, canvas.tile_to_e(p2)) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
                     };
-                    return;
+                    return rate;
                 }
-                *acc -= self.dimer_e_detach_rate(canvas, PointSafeHere(p.0), tile, ts);
+                let rate = self.dimer_e_detach_rate(canvas, PointSafeHere(p.0), tile, ts);
+                *acc -= rate;
                 if *acc <= 0. {
                     let p2 = PointSafe2(canvas.move_sa_e(p).0);
                     let t2 = { canvas.tile_at_point(p2) };
@@ -1825,7 +1832,7 @@ impl KTAM {
                     if self.get_energy_ns(t2, canvas.tile_to_s(p2)) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
                     };
-                    return;
+                    return rate;
                 }
                 panic!("{acc:#?}")
             }
@@ -1975,7 +1982,11 @@ impl KTAM {
         FissionResult::FissionGroups(groupinfo)
     }
 
-    pub fn total_free_energy_from_point<S: State>(&self, state: &S, p: PointSafe2) -> Energy {
+
+    /// Get the non-redundant energy contribution from a point, here defined as the energy of bonds the tile makes
+    /// to the N and W, and the entropic cost of mixing for the tile.  When summed over a canvas, this will result
+    /// in the total free energy of the state.
+    pub fn energy_contribution_from_point<S: State>(&self, state: &S, p: PointSafe2) -> Energy {
         let t = state.tile_at_point(p);
         let pn = state.move_sa_n(p);
         let tn = state.v_sh(pn);
@@ -2001,7 +2012,41 @@ impl KTAM {
         }
     }
 
+    pub fn energy_change_from_point_change<S: State>(&self, state: &S, p: PointSafe2, new_tile: Tile) -> Energy {
+        let old_tile = state.tile_at_point(p);
+        let (tn, te, ts, tw) = (state.tile_to_n(p), state.tile_to_e(p), state.tile_to_s(p), state.tile_to_w(p));
+
+        let mut old_energy = 0.;
+
+        if old_tile != 0 {
+            old_energy -= self.get_energy_ns(tn, old_tile);
+            old_energy -= self.get_energy_we(old_tile, te);
+            old_energy -= self.get_energy_ns(old_tile, ts);
+            old_energy -= self.get_energy_we(tw, old_tile);
+
+            if !self.is_fake_duple(old_tile) && self.tile_concs[old_tile as usize] > 0. {
+                old_energy -= self.tile_concs[old_tile as usize].ln() - self.alpha;
+            }
+        };
+
+        let mut new_energy = 0.;
+
+        if new_tile != 0 {
+            new_energy -= self.get_energy_ns(tn, new_tile);
+            new_energy -= self.get_energy_we(new_tile, te);
+            new_energy -= self.get_energy_ns(new_tile, ts);
+            new_energy -= self.get_energy_we(tw, new_tile);
+
+            if !self.is_fake_duple(new_tile) && self.tile_concs[new_tile as usize] > 0. {
+                new_energy -= self.tile_concs[new_tile as usize].ln() - self.alpha;
+            }
+        };
+
+        new_energy - old_energy
+    }
+
     pub fn state_energy<St: State>(&self, state: &St) -> f64 {
+        // FIXME: needs to handle bounds
         let ncols = state.ncols();
         let nrows = state.nrows();
 
@@ -2012,7 +2057,7 @@ impl KTAM {
             .collect::<Vec<_>>();
 
         for p in all_points {
-            energy += self.total_free_energy_from_point(state, p);
+            energy += self.energy_contribution_from_point(state, p);
         }
 
         energy
@@ -2101,7 +2146,7 @@ mod tests {
 
     use crate::{
         canvas::{Canvas, CanvasPeriodic, CanvasSquare, CanvasTube},
-        state::{NullStateTracker, QuadTreeState, State, StateWithCreate},
+        state::{NullStateTracker, QuadTreeState, State, StateStatus, StateWithCreate},
     };
 
     use super::*;
@@ -2317,7 +2362,7 @@ mod tests {
         system.update_system();
 
         let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
-            system.new_state((10, 10))?;
+            system.new_state((16, 16))?;
 
         // Test placing a single tile
         let single_point = PointSafe2((5, 5));
@@ -2394,6 +2439,12 @@ mod tests {
         assert_eq!(
             actual_tile_count, expected_tile_count,
             "Tile count should not include fake tiles"
+        );
+
+        // Also check that the state's ntiles count is correct
+        assert_eq!(
+            state.n_tiles(), expected_tile_count,
+            "State's ntiles count should be correct"
         );
 
         Ok(())

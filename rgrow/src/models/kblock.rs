@@ -935,7 +935,7 @@ impl System for KBlock {
         format!("{self:?}")
     }
 
-    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
+    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> f64 {
         match event {
             Event::None => panic!("Canot perform None event"),
             Event::MonomerDetachment(point) => state.set_sa(point, &0),
@@ -954,7 +954,7 @@ impl System for KBlock {
                 }
             }
         };
-        self
+        f64::NAN // FIXME: should return the energy change
     }
 
     fn update_after_event<St: crate::state::State>(
@@ -1030,25 +1030,26 @@ impl System for KBlock {
         }
     }
 
+    /// Fixme: currently just ignores rate
     fn choose_event_at_point<St: crate::state::State>(
         &self,
         state: &St,
         point: crate::canvas::PointSafe2,
         acc: PerSecond,
-    ) -> crate::system::Event {
+    ) -> (crate::system::Event, f64) {
         let mut acc = acc;
 
         if let (true, _, event) = self.event_monomer_detachment(state, point, &mut acc) {
-            return event;
+            return (event, f64::NAN);
         };
         if let (true, _, event) = self.event_monomer_attachment(state, point, &mut acc) {
-            return event;
+            return (event, f64::NAN);
         }
         if let (true, _, event) = self.event_blocker_attachment(state, point, &mut acc) {
-            return event;
+            return (event, f64::NAN);
         }
         if let (true, _, event) = self.event_blocker_detachment(state, point, &mut acc) {
-            return event;
+            return (event, f64::NAN);
         }
 
         panic!(

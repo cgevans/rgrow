@@ -453,12 +453,13 @@ impl OldKTAM {
         acc: &mut PerSecond,
         now_empty: &mut Vec<PointSafe2>,
         possible_starts: &mut Vec<PointSafe2>,
-    ) {
+    ) -> f64 {
         match self.chunk_size {
             ChunkSize::Single => panic!(),
             ChunkSize::Dimer => {
                 let ts = { self.bond_strength_of_tile_at_point(canvas, p, tile) };
-                *acc -= self.dimer_s_detach_rate(canvas, p.0, tile, ts).into();
+                let rate = self.dimer_s_detach_rate(canvas, p.0, tile, ts).into();
+                *acc -= rate;
                 if *acc <= PerSecond::zero() {
                     let p2 = PointSafe2(canvas.move_sa_s(p).0);
                     let t2 = { canvas.tile_at_point(p2) };
@@ -484,9 +485,10 @@ impl OldKTAM {
                     if self.get_energy_we(t2, canvas.tile_to_e(p2)) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_e(p2).0))
                     };
-                    return;
+                    return rate.into();
                 }
-                *acc -= self.dimer_e_detach_rate(canvas, p.0, tile, ts).into();
+                let rate = self.dimer_e_detach_rate(canvas, p.0, tile, ts).into();
+                *acc -= rate;
                 if *acc <= PerSecond::zero() {
                     let p2 = PointSafe2(canvas.move_sa_e(p).0);
                     let t2 = { canvas.tile_at_point(p2) };
@@ -512,7 +514,7 @@ impl OldKTAM {
                     if self.get_energy_ns(t2, canvas.tile_to_s(p2)) > 0. {
                         possible_starts.push(PointSafe2(canvas.move_sa_s(p2).0))
                     };
-                    return;
+                    return rate.into();
                 }
                 panic!("{acc:#?}")
             }
@@ -748,7 +750,7 @@ impl System for OldKTAM {
         canvas: &S,
         p: PointSafe2,
         mut acc: PerSecond,
-    ) -> Event {
+    ) -> (Event, f64) {
         let tile = { canvas.tile_at_point(p) };
 
         let tn = { canvas.tile_to_n(p) };
@@ -757,10 +759,8 @@ impl System for OldKTAM {
         let ts = { canvas.tile_to_s(p) };
 
         if tile != 0 {
-            acc -= {
-                (self.k_f_hat() * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile)))
-                    .into()
-            };
+            let rate = (self.k_f_hat() * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile))).into();
+            acc -= rate;
 
             let mut possible_starts = Vec::new();
             let mut now_empty = Vec::new();
@@ -783,27 +783,27 @@ impl System for OldKTAM {
                 now_empty.push(p);
 
                 match self.determine_fission(canvas, &possible_starts, &now_empty) {
-                    super::fission_base::FissionResult::NoFission => Event::MonomerDetachment(p),
+                    super::fission_base::FissionResult::NoFission => (Event::MonomerDetachment(p), rate.into()),
                     super::fission_base::FissionResult::FissionGroups(g) => {
                         //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
                         match self.fission_handling {
-                            FissionHandling::NoFission => Event::None,
-                            FissionHandling::JustDetach => Event::MonomerDetachment(p),
+                            FissionHandling::NoFission => (Event::None, f64::NAN),
+                            FissionHandling::JustDetach => (Event::MonomerDetachment(p), rate.into()),
                             FissionHandling::KeepSeeded => {
                                 let sl = self.seed_locs();
-                                Event::PolymerDetachment(g.choose_deletions_seed_unattached(sl))
+                                (Event::PolymerDetachment(g.choose_deletions_seed_unattached(sl)), rate.into())
                             }
                             FissionHandling::KeepLargest => {
-                                Event::PolymerDetachment(g.choose_deletions_keep_largest_group())
+                                (Event::PolymerDetachment(g.choose_deletions_keep_largest_group()), rate.into())
                             }
                             FissionHandling::KeepWeighted => {
-                                Event::PolymerDetachment(g.choose_deletions_size_weighted())
+                                (Event::PolymerDetachment(g.choose_deletions_size_weighted()), rate.into())
                             }
                         }
                     }
                 }
             } else {
-                match self.chunk_handling {
+                let rate: PerSecond = match self.chunk_handling {  // FIXM: needs review
                     ChunkHandling::None => {
                         panic!("Ran out of event possibilities at {p:#?}, acc={acc:#?}")
                     }
@@ -815,28 +815,28 @@ impl System for OldKTAM {
                             &mut acc,
                             &mut now_empty,
                             &mut possible_starts,
-                        );
+                        ).into()
                     }
-                }
+                };
 
                 match self.determine_fission(canvas, &possible_starts, &now_empty) {
                     super::fission_base::FissionResult::NoFission => {
-                        Event::PolymerDetachment(now_empty)
+                        (Event::PolymerDetachment(now_empty), rate.into())
                     }
                     super::fission_base::FissionResult::FissionGroups(g) => {
                         //println!("Fission handling {:?} {:?}", p, tile);
                         match self.fission_handling {
-                            FissionHandling::NoFission => Event::None,
-                            FissionHandling::JustDetach => Event::PolymerDetachment(now_empty),
+                            FissionHandling::NoFission => (Event::None, f64::NAN),
+                            FissionHandling::JustDetach => (Event::PolymerDetachment(now_empty), rate.into()),
                             FissionHandling::KeepSeeded => {
                                 let sl = System::seed_locs(self);
-                                Event::PolymerDetachment(g.choose_deletions_seed_unattached(sl))
+                                (Event::PolymerDetachment(g.choose_deletions_seed_unattached(sl)), rate.into())
                             }
                             FissionHandling::KeepLargest => {
-                                Event::PolymerDetachment(g.choose_deletions_keep_largest_group())
+                                (Event::PolymerDetachment(g.choose_deletions_keep_largest_group()), rate.into())
                             }
                             FissionHandling::KeepWeighted => {
-                                Event::PolymerDetachment(g.choose_deletions_size_weighted())
+                                (Event::PolymerDetachment(g.choose_deletions_size_weighted()), rate.into())
                             }
                         }
                     }
@@ -851,13 +851,14 @@ impl System for OldKTAM {
             friends.extend(&self.friends_n[ts as usize]);
 
             for t in friends.drain() {
-                acc -= (self.k_f_hat() * self.tile_adj_concs[t as usize]).into();
+                let rate = (self.k_f_hat() * self.tile_adj_concs[t as usize]).into();
+                acc -= rate;
                 if acc <= PerSecond::zero() {
-                    return Event::MonomerAttachment(p, t);
+                    return (Event::MonomerAttachment(p, t), rate.into());
                 };
             }
 
-            panic!();
+            panic!("Ran out of event possibilities at {p:#?}, acc={acc:#?}");
 
             // // Insertion is hard!
             // let r = Zip::indexed(self.energy_ns.row(tn))

@@ -17,7 +17,7 @@ macro_rules! type_alias {
 * */
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::Debug,
     sync::OnceLock,
 };
@@ -201,7 +201,6 @@ impl SDC {
     }
 
     fn generate_friends(&mut self) {
-        let tile_count = self.strand_names.len();
         let max_glue_scaffold = *self.scaffold.iter().max().unwrap();
         let max_glue_strands = *self
             .glues
@@ -453,51 +452,57 @@ impl SDC {
         state: &S,
         point: PointSafe2,
         mut acc: PerSecond,
-    ) -> (bool, PerSecond, Event) {
+    ) -> (bool, PerSecond, Event, f64) {
         let strand = state.tile_at_point(point);
         match Some(strand) {
             q if q == self.quencher_id => {
-                acc -= self.quencher_att_rate();
+                let rate = self.quencher_att_rate();
+                acc -= rate;
                 if acc > PerSecond::zero() {
-                    (true, acc, Event::None)
+                    (true, acc, Event::None, f64::NAN)
                 } else {
-                    (true, acc, Event::MonomerAttachment(point, 1))
+                    (true, acc, Event::MonomerAttachment(point, 1), rate.into())
                 }
             }
             r if r == self.reporter_id => {
-                acc -= self.fluorophore_att_rate();
+                let rate = self.fluorophore_att_rate();
+                acc -= rate;
                 if acc > PerSecond::zero() {
-                    (true, acc, Event::None)
+                    (true, acc, Event::None, f64::NAN)
                 } else {
-                    (true, acc, Event::MonomerAttachment(point, 2))
+                    (true, acc, Event::MonomerAttachment(point, 2), rate.into())
                 }
             }
             // The quencher is currently attached
             Some(1) => {
-                acc -= self.quencher_det_rate();
+                let rate = self.quencher_det_rate();
+                acc -= rate;
                 if acc > PerSecond::zero() {
-                    (true, acc, Event::None)
+                    (true, acc, Event::None, f64::NAN)
                 } else {
                     (
                         true,
                         acc,
                         Event::MonomerChange(point, self.quencher_id.unwrap()),
+                        rate.into()
                     )
                 }
             }
             Some(2) => {
-                acc -= self.fluorophore_det_rate();
+                let rate = self.fluorophore_det_rate();
+                acc -= rate;
                 if acc > PerSecond::zero() {
-                    (true, acc, Event::None)
+                    (true, acc, Event::None, f64::NAN)
                 } else {
                     (
                         true,
                         acc,
                         Event::MonomerChange(point, self.reporter_id.unwrap()),
+                        rate.into()
                     )
                 }
             }
-            _ => (false, acc, Event::None),
+            _ => (false, acc, Event::None, f64::NAN),
         }
     }
 
@@ -506,7 +511,7 @@ impl SDC {
         state: &S,
         point: PointSafe2,
         acc: PerSecond,
-    ) -> (bool, PerSecond, Event) {
+    ) -> (bool, PerSecond, Event, f64) {
         self.find_monomer_attachment_possibilities_at_point(state, acc, point, false)
     }
 
@@ -515,14 +520,15 @@ impl SDC {
         state: &S,
         point: PointSafe2,
         mut acc: PerSecond,
-    ) -> (bool, PerSecond, Event) {
-        acc -= self.monomer_detachment_rate_at_point(state, point);
+    ) -> (bool, PerSecond, Event, f64) {
+        let rate = self.monomer_detachment_rate_at_point(state, point);
+        acc -= rate;
 
         if acc > PerSecond::zero() {
-            return (false, acc, Event::None);
+            return (false, acc, Event::None, rate.into());
         }
 
-        (true, acc, Event::MonomerDetachment(point))
+        (true, acc, Event::MonomerDetachment(point), rate.into())
     }
 
     /// |      x y z <- attached strands (potentially empty)
@@ -535,13 +541,13 @@ impl SDC {
         mut acc: PerSecond,
         scaffold_coord: PointSafe2,
         just_calc: bool,
-    ) -> (bool, PerSecond, Event) {
+    ) -> (bool, PerSecond, Event, f64) {
         let point = scaffold_coord;
         let tile = state.tile_at_point(point);
 
         // If the scaffold already has a strand bound, then nothing can attach to it
         if tile != 0 {
-            return (false, acc, Event::None);
+            return (false, acc, Event::None, f64::NAN);
         }
 
         let index = (point.0 .0.rem_euclid(self.scaffold.dim().0), point.0 .1);
@@ -555,17 +561,18 @@ impl SDC {
             .get(*scaffold_glue)
             // When creating friends_btm, every glue in the sacaffold should have a friends index
             // (perhaps empty)
-            .expect(format!("Missing friends for {}", scaffold_glue).as_str());
+            .unwrap_or_else(|| panic!("Missing friends for {}", scaffold_glue));
 
         let mut rand_thread = rand::rng();
         for &strand in friends {
-            acc -= self.kf * self.strand_concentration[strand as usize];
+            let rate = self.kf * self.strand_concentration[strand as usize];
+            acc -= rate;
             if acc <= PerSecond::zero() && (!just_calc) {
                 let rand: f64 = rand_thread.random();
                 let total = self.total_tile_count(state, strand) as f64;
                 let attached = state.count_of_tile(strand) as f64;
                 if rand <= attached / total {
-                    return (true, acc, Event::None);
+                    return (true, acc, Event::None, rate.into());
                 }
 
                 let strand = match strand {
@@ -574,11 +581,11 @@ impl SDC {
                     other => other,
                 };
 
-                return (true, acc, Event::MonomerAttachment(point, strand));
+                return (true, acc, Event::MonomerAttachment(point, strand), rate.into());
             }
         }
 
-        (false, acc, Event::None)
+        (false, acc, Event::None, f64::NAN)
     }
 
     fn total_monomer_attachment_rate_at_point<S: State>(
@@ -592,7 +599,7 @@ impl SDC {
             scaffold_coord,
             true,
         ) {
-            (false, acc, _) => -acc,
+            (false, acc, _, _) => -acc,
             _ => panic!(),
         }
     }
@@ -664,7 +671,7 @@ impl SDC {
             let friends = self
                 .friends_btm
                 .get(*b)
-                .expect(format!("Missing friends for {}", b).as_str());
+                .unwrap_or_else(|| panic!("Missing friends for {}", b));
 
             possible_scaffolds = possible_scaffolds
                 .iter()
@@ -984,7 +991,7 @@ impl SDC {
             let friends = self
                 .friends_btm
                 .get(glue)
-                .expect(format!("Missing friends for {}", glue).as_str());
+                .unwrap_or_else(|| panic!("Missing friends for {}", glue));
             let n_vec = self.mfe_next_vector(acc, friends.iter());
 
             *acc = n_vec;
@@ -1047,7 +1054,7 @@ impl System for SDC {
         }
     }
 
-    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
+    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> f64 {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, strand) => {
@@ -1062,7 +1069,7 @@ impl System for SDC {
             Event::MonomerChange(point, strand) => state.set_sa(point, strand),
             _ => panic!("This event is not supported in SDC"),
         };
-        self
+        f64::NAN // FIXME: should return the energy change
     }
 
     fn event_rate_at_point<St: State>(
@@ -1091,39 +1098,39 @@ impl System for SDC {
         state: &St,
         point: crate::canvas::PointSafe2,
         acc: PerSecond,
-    ) -> crate::system::Event {
-        let (occur, acc, event) = self.choose_monomer_detachment_at_point(state, point, acc);
+    ) -> (crate::system::Event, f64) {
+        let (occur, acc, event, rate) = self.choose_monomer_detachment_at_point(state, point, acc);
         if occur {
-            return event;
+            return (event, rate);
         }
 
-        let (occur, acc, event) = self.choose_monomer_attachment_at_point(state, point, acc);
+        let (occur, acc, event, rate) = self.choose_monomer_attachment_at_point(state, point, acc);
         if occur {
-            return event;
+            return (event, rate);
         }
 
-        let (occur, acc, event) = self.choose_monomer_change_at_point(state, point, acc);
+        let (occur, acc, event, rate) = self.choose_monomer_change_at_point(state, point, acc);
         if occur {
-            return event;
+            return (event, rate);
         }
 
         // Now for debugging purposes:
 
         let mut str_builder = String::new();
 
-        let (_, rate_monomer_att, event_monomer_att) =
+        let (_, rate_monomer_att, event_monomer_att, _) =
             self.choose_monomer_attachment_at_point(state, point, PerSecond::zero());
         str_builder.push_str(&format!(
             "Attachment: rate of {rate_monomer_att:?}, event {event_monomer_att:?}\n"
         ));
 
-        let (_, rate_monomer_det, event_monomer_det) =
+        let (_, rate_monomer_det, event_monomer_det, _) =
             self.choose_monomer_detachment_at_point(state, point, PerSecond::zero());
         str_builder.push_str(&format!(
             "Detachment: rate of {rate_monomer_det:?}, event {event_monomer_det:?}\n"
         ));
 
-        let (_, rate_monomer_change, event_monomer_change) =
+        let (_, rate_monomer_change, event_monomer_change, _) =
             self.choose_monomer_change_at_point(state, point, PerSecond::zero());
         str_builder.push_str(&format!(
             "Change: rate of {rate_monomer_change:?}, event {event_monomer_change:?}\n"

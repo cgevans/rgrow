@@ -158,13 +158,13 @@ impl System for ATAM {
         }
     }
 
-    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: PerSecond) -> Event {
+    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: PerSecond) -> (Event, f64) {
         match self.choose_attachment_at_point(state, p, f64::from_per_second(acc)) {
-            (true, _, event) => {
+            (true, _, event, rate) => {
                 // println!("{:?} {:?}", acc, event);
-                event
+                (event, rate)
             }
-            (false, acc, _) => {
+            (false, acc, _, _) => {
                 panic!(
                     "Rate: {:?}, {:?}, {:?}, {:?}",
                     acc,
@@ -179,12 +179,12 @@ impl System for ATAM {
     fn set_safe_point<S: State>(&self, state: &mut S, point: PointSafe2, tile: Tile) -> &Self {
         let event = Event::MonomerAttachment(point, tile);
 
-        self.perform_event(state, &event)
-            .update_after_event(state, &event);
+        self.perform_event(state, &event);
+        self.update_after_event(state, &event);
         self
     }
 
-    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> &Self {
+    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> f64 {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) => {
@@ -288,7 +288,7 @@ impl System for ATAM {
                 }
             }
         };
-        self
+        f64::NAN // FIXME: should return the energy change
     }
 
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)> {
@@ -423,7 +423,7 @@ impl ATAM {
         p: PointSafe2,
     ) -> Rate64 {
         match self._find_monomer_attachment_possibilities_at_point(state, p, 0., true) {
-            (false, acc, _) => -acc,
+            (false, acc, _, _) => -acc,
             _ => panic!(),
         }
     }
@@ -433,7 +433,7 @@ impl ATAM {
         state: &S,
         p: PointSafe2,
         acc: Rate64,
-    ) -> (bool, Rate64, Event) {
+    ) -> (bool, Rate64, Event, f64) {
         self.choose_monomer_attachment_at_point(state, p, acc)
     }
 
@@ -442,7 +442,7 @@ impl ATAM {
         state: &S,
         p: PointSafe2,
         acc: Rate64,
-    ) -> (bool, Rate64, Event) {
+    ) -> (bool, Rate64, Event, f64) {
         self._find_monomer_attachment_possibilities_at_point(state, p, acc, false)
     }
 
@@ -452,7 +452,7 @@ impl ATAM {
         p: PointSafe2,
         mut acc: Rate64,
         just_calc: bool,
-    ) -> (bool, Rate64, Event) {
+    ) -> (bool, Rate64, Event, f64) {
         let tn = state.tile_to_n(p);
         let tw = state.tile_to_w(p);
         let te = state.tile_to_e(p);
@@ -523,12 +523,13 @@ impl ATAM {
             if self.bond_energy_of_tile_type_at_point_hypothetical(state, p, t) < self.threshold {
                 continue;
             }
-            acc -= self.tile_stoics[t as usize];
+            let rate = self.tile_stoics[t as usize];
+            acc -= rate;
             if !just_calc & (acc <= (0.)) {
-                return (true, acc, Event::MonomerAttachment(p, t));
+                return (true, acc, Event::MonomerAttachment(p, t), rate);
             }
         }
-        (false, acc, Event::None)
+        (false, acc, Event::None, f64::NAN  )
     }
 
     pub fn bond_energy_of_tile_type_at_point_hypothetical<S: State>(

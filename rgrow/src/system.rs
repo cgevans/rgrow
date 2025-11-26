@@ -270,13 +270,14 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 
     fn take_single_step<St: State>(&self, state: &mut St, max_time_step: Second) -> StepOutcome {
-        let time_step = -f64::ln(rng().random()) / state.total_rate();
+        let total_rate = state.total_rate();
+        let time_step = -f64::ln(rng().random()) / total_rate;
         if time_step > max_time_step {
             state.add_time(max_time_step);
             return StepOutcome::NoEventIn(max_time_step);
         }
         let (point, remainder) = state.choose_point(); // todo: resultify
-        let event = self.choose_event_at_point(
+        let (event, chosen_event_rate) = self.choose_event_at_point(
             state,
             PointSafe2(point),
             PerSecond::from_per_second(remainder),
@@ -286,11 +287,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             return StepOutcome::DeadEventAt(time_step);
         }
 
-        self.perform_event(state, &event);
+        let energy_change = self.perform_event(state, &event);
         self.update_after_event(state, &event);
         state.add_time(time_step);
         state.add_events(1);
-        state.record_event(&event);
+        state.record_event(&event, total_rate, chosen_event_rate, energy_change, state.energy(), state.n_tiles());
         StepOutcome::HadEventAt(time_step)
     }
 
@@ -379,8 +380,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn set_safe_point<St: State>(&self, state: &mut St, point: PointSafe2, tile: Tile) -> &Self {
         let event = Event::MonomerChange(point, tile);
 
-        self.perform_event(state, &event)
-            .update_after_event(state, &event);
+        self.perform_event(state, &event);
+        self.update_after_event(state, &event);
 
         self
     }
@@ -395,8 +396,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 .map(|(p, t)| (PointSafe2(*p), *t))
                 .collect(),
         );
-        self.perform_event(state, &event)
-            .update_after_event(state, &event);
+        self.perform_event(state, &event);
+        self.update_after_event(state, &event);
         self
     }
 
@@ -409,8 +410,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         //     assert!(state.inbounds(*point))
         // }
         let event = Event::PolymerChange(changelist.to_vec());
-        self.perform_event(state, &event)
-            .update_after_event(state, &event);
+        self.perform_event(state, &event);
+        self.update_after_event(state, &event);
         self
     }
 
@@ -418,14 +419,17 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     /// For kTAM, placing a "real" tile (left/top part of double tile) will also place the
     /// corresponding "fake" tile (right/bottom part). Attempting to place a "fake" tile
     /// directly will place the corresponding "real" tile instead.
+    /// 
+    /// Returns energy change caused by placement, or NaN if energy is not calculated.
     fn place_tile<St: State>(
         &self,
         state: &mut St,
         point: PointSafe2,
         tile: Tile,
-    ) -> Result<&Self, GrowError> {
+    ) -> Result<f64, GrowError> {
         // Default implementation: just place the tile directly
-        Ok(self.set_safe_point(state, point, tile))
+        self.set_safe_point(state, point, tile);
+        Ok(f64::NAN)
     }
 
     fn configure_empty_state<St: State>(&self, state: &mut St) -> Result<(), GrowError> {
@@ -437,7 +441,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
     /// Perform a particular event/change to a state.  Do not update the state's time/etc,
     /// or rates, which should be done in update_after_event and take_single_step.
-    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> &Self {
+    fn perform_event<St: State>(&self, state: &mut St, event: &Event) -> f64 {
         match event {
             Event::None => panic!("Being asked to perform null event."),
             Event::MonomerAttachment(point, tile) | Event::MonomerChange(point, tile) => {
@@ -457,7 +461,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 }
             }
         };
-        self
+        f64::NAN // FIXME: should return the energy change
     }
 
     fn update_after_event<St: State>(&self, state: &mut St, event: &Event);
@@ -466,8 +470,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn event_rate_at_point<St: State>(&self, state: &St, p: PointSafeHere) -> PerSecond;
 
     /// Given a point, and an accumulated random rate choice `acc` (which should be less than the total rate at the point),
-    /// return the event that should take place.
-    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: PerSecond) -> Event;
+    /// return the event that should take place, and the rate of that particular event.
+    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: PerSecond) -> (Event, f64);
 
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;
@@ -772,6 +776,113 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
     ) -> Result<(Vec<f64>, Vec<usize>), GrowError>;
+
+    /// Determine whether the committer probability for a state is above or below a threshold
+    /// with a specified confidence level using adaptive sampling.
+    ///
+    /// This function uses adaptive sampling with Wilson Score confidence intervals to determine
+    /// with the desired confidence whether the true committer probability is above or below the
+    /// given threshold. It continues sampling until the confidence interval is narrow enough to
+    /// make a definitive determination, or until the maximum number of trials is reached.
+    ///
+    /// The committer probability is the probability that when a simulation is started from the
+    /// given state, the assembly will grow to reach `cutoff_size` rather than melting to zero tiles.
+    ///
+    /// # Arguments
+    ///
+    /// * `initial_state` - The state to analyze
+    /// * `cutoff_size` - Size threshold for commitment (number of tiles)
+    /// * `threshold` - The probability threshold to compare against (must be between 0.0 and 1.0)
+    /// * `confidence_level` - Confidence level for the threshold test (e.g., 0.95 for 95% confidence)
+    /// * `max_time` - Optional maximum simulation time per trial
+    /// * `max_events` - Optional maximum number of events per trial
+    /// * `max_trials` - Optional maximum number of trials to run (default: 100,000)
+    /// * `return_on_max_trials` - If `true`, return results even when max_trials is exceeded;
+    ///   if `false`, return an error when max_trials is exceeded without reaching confidence
+    /// * `ci_confidence_level` - Optional confidence level for the returned confidence interval.
+    ///   If `None`, no confidence interval is returned. Can be different from `confidence_level`
+    ///   (e.g., test at 95% confidence but show 99% confidence interval)
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok((is_above_threshold, probability_estimate, confidence_interval, num_trials, exceeded_max_trials))`
+    /// where:
+    /// * `is_above_threshold` - `true` if probability is above threshold with given confidence
+    /// * `probability_estimate` - The estimated committer probability (between 0.0 and 1.0)
+    /// * `confidence_interval` - `Some((lower_bound, upper_bound))` if `ci_confidence_level` is provided,
+    ///   `None` otherwise
+    /// * `num_trials` - Number of trials performed
+    /// * `exceeded_max_trials` - `true` if max_trials was exceeded (warning flag)
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GrowError)` if:
+    /// * `threshold` is not between 0.0 and 1.0
+    /// * `confidence_level` is not between 0.0 and 1.0
+    /// * `ci_confidence_level` is provided but not between 0.0 and 1.0
+    /// * `max_trials` is exceeded and `return_on_max_trials` is `false`
+    /// * Evolution simulation encounters an unsupported outcome
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use rgrow::system::DynSystem;
+    /// # use rgrow::state::StateEnum;
+    /// # fn example(system: &dyn DynSystem, state: &StateEnum) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Test at 95% confidence, no confidence interval returned
+    /// let (is_above, prob, ci, trials, exceeded) = system.calc_committer_threshold_test(
+    ///     state,
+    ///     10,      // cutoff_size
+    ///     0.5,     // threshold
+    ///     0.95,    // confidence_level
+    ///     None,    // max_time
+    ///     None,    // max_events
+    ///     None,    // max_trials (default: 100,000)
+    ///     false,   // return_on_max_trials
+    ///     None,    // ci_confidence_level (no CI returned)
+    /// )?;
+    /// 
+    /// println!("Probability {} threshold 0.5", if is_above { "above" } else { "below" });
+    /// println!("Estimate: {:.4}, Trials: {}", prob, trials);
+    /// assert!(ci.is_none());
+    ///
+    /// // Test at 95% confidence, show 99% confidence interval
+    /// let (is_above, prob, ci, trials, exceeded) = system.calc_committer_threshold_test(
+    ///     state,
+    ///     10,         // cutoff_size
+    ///     0.5,        // threshold
+    ///     0.95,       // confidence_level (for test)
+    ///     None,       // max_time
+    ///     None,       // max_events
+    ///     Some(1000), // max_trials
+    ///     true,       // return_on_max_trials
+    ///     Some(0.99), // ci_confidence_level (99% CI)
+    /// )?;
+    ///
+    /// if let Some((lower, upper)) = ci {
+    ///     println!("99% CI: ({:.4}, {:.4})", lower, upper);
+    /// }
+    /// if exceeded {
+    ///     println!("WARNING: Max trials exceeded!");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// The confidence interval returned (if requested) uses the `ci_confidence_level` parameter,
+    /// which can be different from the `confidence_level` used for the threshold test.
+    fn calc_committer_threshold_test(
+        &self,
+        initial_state: &StateEnum,
+        cutoff_size: NumTiles,
+        threshold: f64,
+        confidence_level: f64,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        max_trials: Option<usize>,
+        return_on_max_trials: bool,
+        ci_confidence_level: Option<f64>,
+    ) -> Result<(bool, f64, Option<(f64, f64)>, usize, bool), GrowError>;
 }
 
 impl<S: System> DynSystem for S
@@ -938,6 +1049,8 @@ where
         Ok((successes as f64 / num_trials as f64, num_trials as usize))
     }
 
+    
+
     fn calc_committers_adaptive(
         &self,
         initial_states: &[&StateEnum],
@@ -1073,6 +1186,7 @@ where
         Ok((successes as f64 / num_trials as f64, num_trials as usize))
     }
 
+
     fn calc_forward_probabilities_adaptive(
         &self,
         initial_states: &[&StateEnum],
@@ -1100,6 +1214,154 @@ where
         let trials: Vec<usize> = results.iter().map(|(_, t)| *t).collect();
 
         Ok((probabilities, trials))
+    }
+
+    /// Implementation of committer threshold test using adaptive sampling.
+    ///
+    /// See trait documentation for detailed parameter and return value descriptions.
+    /// This implementation uses Wilson Score confidence intervals for robust statistical inference.
+    fn calc_committer_threshold_test(
+        &self,
+        initial_state: &StateEnum,
+        cutoff_size: NumTiles,
+        threshold: f64,
+        confidence_level: f64,
+        max_time: Option<f64>,
+        max_events: Option<NumEvents>,
+        max_trials: Option<usize>,
+        return_on_max_trials: bool,
+        ci_confidence_level: Option<f64>,
+    ) -> Result<(bool, f64, Option<(f64, f64)>, usize, bool), GrowError> {
+        use bpci::{NSuccessesSample, WilsonScore};
+
+        if !(0.0..=1.0).contains(&threshold) {
+            return Err(GrowError::NotSupported(
+                "Threshold must be between 0.0 and 1.0".to_string(),
+            ));
+        }
+
+        if !(0.0..=1.0).contains(&confidence_level) {
+            return Err(GrowError::NotSupported(
+                "Confidence level must be between 0.0 and 1.0".to_string(),
+            ));
+        }
+
+        if let Some(ci_level) = ci_confidence_level {
+            if !(0.0..=1.0).contains(&ci_level) {
+                return Err(GrowError::NotSupported(
+                    "CI confidence level must be between 0.0 and 1.0".to_string(),
+                ));
+            }
+        }
+
+        // Helper function to convert confidence level to z-score for Wilson Score intervals.
+        // Uses standard normal distribution critical values for common confidence levels.
+        let confidence_to_z_score = |level: f64| -> f64 {
+            match level {
+                x if x >= 0.999 => 3.291, // 99.9% confidence
+                x if x >= 0.99 => 2.576,  // 99% confidence
+                x if x >= 0.95 => 1.960,  // 95% confidence
+                x if x >= 0.90 => 1.645,  // 90% confidence
+                x if x >= 0.80 => 1.282,  // 80% confidence
+                _ => 1.960, // Default to 95% confidence
+            }
+        };
+
+        // Z-score for the threshold test
+        let test_z_score = confidence_to_z_score(confidence_level);
+
+        let max_trials = max_trials.unwrap_or(100000);
+        let mut successes = 0u32;
+        let mut num_trials = 0u32;
+
+        let mut trial_state = initial_state.clone();
+
+        let bounds = EvolveBounds {
+            size_min: Some(0),
+            size_max: Some(cutoff_size),
+            for_time: max_time,
+            for_events: max_events,
+            ..Default::default()
+        };
+
+        // Helper function to calculate confidence interval if requested.
+        // Returns None if ci_confidence_level is None, otherwise calculates Wilson Score interval.
+        let calculate_confidence_interval = |successes: u32, num_trials: u32| -> Option<(f64, f64)> {
+            ci_confidence_level.map(|ci_level| {
+                let ci_z_score = confidence_to_z_score(ci_level);
+                let sample = NSuccessesSample::new(num_trials, successes).unwrap();
+                let wilson = sample.wilson_score(ci_z_score);
+                let lower_bound = wilson.mean - wilson.margin;
+                let upper_bound = wilson.mean + wilson.margin;
+                (lower_bound, upper_bound)
+            })
+        };
+
+        // Continue sampling until we can determine with confidence whether
+        // the probability is above or below the threshold
+        loop {
+            let outcome = self.evolve(&mut trial_state, bounds)?;
+            match outcome {
+                EvolveOutcome::ReachedSizeMax => {
+                    successes += 1;
+                    num_trials += 1;
+                    initial_state.clone_into(&mut trial_state);
+                }
+                EvolveOutcome::ReachedSizeMin => {
+                    num_trials += 1;
+                    initial_state.clone_into(&mut trial_state);
+                }
+                _ => {
+                    return Err(GrowError::NotSupported(
+                        "Evolve outcome not supported".to_string(),
+                    ));
+                }
+            }
+
+            // Need at least a few trials before we can make any statistical determination
+            if num_trials < 3 {
+                continue;
+            }
+
+            // Calculate Wilson score confidence interval for the threshold test
+            // This uses the test confidence level to determine if we can make a decision
+            let sample = NSuccessesSample::new(num_trials, successes).unwrap();
+            let test_wilson = sample.wilson_score(test_z_score);
+            
+            let test_lower_bound = test_wilson.mean - test_wilson.margin;
+            let test_upper_bound = test_wilson.mean + test_wilson.margin;
+
+            // Check if the test confidence interval excludes the threshold (definitive determination)
+            if test_upper_bound < threshold {
+                // We're confident the probability is below the threshold
+                let probability_estimate = successes as f64 / num_trials as f64;
+                let confidence_interval = calculate_confidence_interval(successes, num_trials);
+                return Ok((false, probability_estimate, confidence_interval, num_trials as usize, false));
+            } else if test_lower_bound > threshold {
+                // We're confident the probability is above the threshold
+                let probability_estimate = successes as f64 / num_trials as f64;
+                let confidence_interval = calculate_confidence_interval(successes, num_trials);
+                return Ok((true, probability_estimate, confidence_interval, num_trials as usize, false));
+            }
+
+            // Check if we've exceeded the maximum number of trials without reaching a decision
+            if num_trials >= max_trials as u32 {
+                let probability_estimate = successes as f64 / num_trials as f64;
+                let confidence_interval = calculate_confidence_interval(successes, num_trials);
+                
+                if return_on_max_trials {
+                    // Return current best estimate with warning flag set
+                    // Use simple point estimate comparison since we couldn't reach statistical confidence
+                    let is_above_threshold = probability_estimate > threshold;
+                    return Ok((is_above_threshold, probability_estimate, confidence_interval, num_trials as usize, true));
+                } else {
+                    // Raise error when max trials exceeded and user doesn't want fallback result
+                    return Err(GrowError::NotSupported(
+                        format!("Maximum number of trials ({}) exceeded without reaching confidence", max_trials),
+                    ));
+                }
+            }
+        }
     }
 }
 
