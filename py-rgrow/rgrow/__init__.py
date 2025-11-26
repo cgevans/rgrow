@@ -26,9 +26,7 @@ from .rgrow import (
     State,
     EvolveBounds,
     FFSStateRef,
-    KBlock
 )
-from .sdc import SDC
 import attrs
 import attr
 
@@ -42,13 +40,14 @@ from typing import (
     TypeAlias,
 )
 
-System: TypeAlias = ATAM | KTAM | OldKTAM | KBlock
-SYSTEMS = (ATAM, KTAM, OldKTAM, SDC, KBlock)
+System: TypeAlias = ATAM | KTAM | OldKTAM
+SYSTEMS = (ATAM, KTAM, OldKTAM)
 
 if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt
     import matplotlib.colors
     from numpy.typing import NDArray
+    from .kblock import KBlock
 
 
 def _system_name_canvas(self: "System", state: State | FFSStateRef) -> np.ndarray:

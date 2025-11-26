@@ -11,6 +11,7 @@ import json
 from .strand import SDCStrand
 from .reporter_methods import ReportingMethod  # noqa: F401
 
+from rgrow import _system_color_canvas, _system_name_canvas, _system_plot_canvas
 
 @dataclasses.dataclass
 class SDCParams:
@@ -67,7 +68,7 @@ class SDCParams:
         strands_info = ""
         for strand in self.strands:
             strands_info += "\n\t" + strand.__str__()
-        return f"Forward Rate: {self.k_f}\nStrands: {strands_info}\nScaffold: " + ", ".join(x if x is not None else "None" for x in self.scaffold[2:-2])
+        return f"Forward Rate: {self.k_f}\nStrands: {strands_info}\nScaffold: " + ", ".join(x if x is not None else 'None' for x in self.scaffold[2:-2])
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -180,3 +181,9 @@ class SDC(rg.rgrow.SDC):
             canvas_arr[i, :, :] = state.canvas_view
 
         return AnnealOutputs(self, canvas_arr, anneal, state)
+
+SDC.plot_canvas = _system_plot_canvas  # type: ignore
+SDC.color_canvas = _system_color_canvas  # type: ignore
+SDC.name_canvas = _system_name_canvas  # type: ignore
+
+__all__ = ["SDC", "SDCParams"]

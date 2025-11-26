@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Sequence
+from ._rgrow import KBlock
+from rgrow import _system_color_canvas, _system_name_canvas, _system_plot_canvas
 
 @dataclass
 class KBlockTile:
@@ -20,3 +22,9 @@ class KBlockParams:
     temp: float = 50.0
     no_partially_blocked_attachments: bool = True
     blocker_energy_adj: float = 0.0
+
+KBlock.plot_canvas = _system_plot_canvas  # type: ignore
+KBlock.color_canvas = _system_color_canvas  # type: ignore
+KBlock.name_canvas = _system_name_canvas  # type: ignore
+
+__all__ = ["KBlock", "KBlockParams", "KBlockTile"]
