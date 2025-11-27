@@ -52,10 +52,11 @@ jobs:
           cargo llvm-cov clean --workspace
           cargo test
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
         with:
           files: coverage.lcov
           name: rust-linux # ${{ matrix.os }}
+          token: ${{ secrets.CODECOV_TOKEN }}
   python_checks:
     name: Checks for Python
     runs-on: ubuntu-latest
@@ -79,18 +80,15 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Setup virtual environment
         run: |
-          uv venv venv
-          source venv/bin/activate
+          uv venv
           uv pip install -U pip setuptools wheel
       - name: Install mypy
         run: |
-          source venv/bin/activate
           uv pip install --upgrade mypy
       - name: Run mypy
         continue-on-error: true
         run: |
-          source venv/bin/activate
-          mypy --cache-dir .mypy_cache/ --install-types --ignore-missing-imports --non-interactive --show-traceback py-rgrow/rgrow/
+          uv run -- mypy --cache-dir .mypy_cache/ --install-types --ignore-missing-imports --non-interactive --show-traceback py-rgrow/rgrow/
       - name: Run Ruff on Python code
         uses: astral-sh/ruff-action@v3
         with:
@@ -99,20 +97,23 @@ jobs:
         run: cargo install cargo-llvm-cov
       - name: Install maturin and pytest
         run: |
-          source venv/bin/activate
           uv pip install maturin pytest pytest-cov hypothesis
       # - name: Install X components
       #   run: sudo apt-get install -y gdb libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
       - name: Run coverage
         run: |
-          source venv/bin/activate
-          cd py-rgrow
-          maturin develop
-          python -m pytest -vvv --debug --cov=rgrow --cov-report xml
-      - uses: codecov/codecov-action@v3
+          source <(cargo llvm-cov show-env --export-prefix)
+          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+          export CARGO_INCREMENTAL=1
+          cargo llvm-cov clean --workspace
+          uv run -- maturin develop --uv
+          uv run -- pytest -vvv --debug --cov=rgrow --cov-report xml
+          cargo llvm-cov --no-run --lcov --output-path coverage.lcov
+      - uses: codecov/codecov-action@v5
         with:
-          files: py-rgrow/coverage.xml
+          files: coverage.xml
           name: python-linux # ${{ matrix.os }}
+          token: ${{ secrets.CODECOV_TOKEN }}
   linux:
     name: Python Linux builds
     needs: [python_checks]
