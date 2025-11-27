@@ -614,7 +614,7 @@ macro_rules! create_py_system {
             ) -> PyResult<f64> {
 
                 let state = &state.0;
-                
+
                 let out = py.detach(|| {
                     self.calc_committer(
                         &state,

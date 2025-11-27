@@ -16,11 +16,7 @@ macro_rules! type_alias {
 * - There are quite a few expects that need to be handled better
 * */
 
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    sync::OnceLock,
-};
+use std::{collections::HashMap, fmt::Debug, sync::OnceLock};
 
 use astro_float::{BigFloat, RoundingMode, Sign};
 use num_traits::Zero;
@@ -484,7 +480,7 @@ impl SDC {
                         true,
                         acc,
                         Event::MonomerChange(point, self.quencher_id.unwrap()),
-                        rate.into()
+                        rate.into(),
                     )
                 }
             }
@@ -498,7 +494,7 @@ impl SDC {
                         true,
                         acc,
                         Event::MonomerChange(point, self.reporter_id.unwrap()),
-                        rate.into()
+                        rate.into(),
                     )
                 }
             }
@@ -581,7 +577,12 @@ impl SDC {
                     other => other,
                 };
 
-                return (true, acc, Event::MonomerAttachment(point, strand), rate.into());
+                return (
+                    true,
+                    acc,
+                    Event::MonomerAttachment(point, strand),
+                    rate.into(),
+                );
             }
         }
 

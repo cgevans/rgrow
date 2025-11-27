@@ -759,7 +759,9 @@ impl System for OldKTAM {
         let ts = { canvas.tile_to_s(p) };
 
         if tile != 0 {
-            let rate = (self.k_f_hat() * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile))).into();
+            let rate = (self.k_f_hat()
+                * Rate::exp(-self.bond_strength_of_tile_at_point(canvas, p, tile)))
+            .into();
             acc -= rate;
 
             let mut possible_starts = Vec::new();
@@ -783,40 +785,52 @@ impl System for OldKTAM {
                 now_empty.push(p);
 
                 match self.determine_fission(canvas, &possible_starts, &now_empty) {
-                    super::fission_base::FissionResult::NoFission => (Event::MonomerDetachment(p), rate.into()),
+                    super::fission_base::FissionResult::NoFission => {
+                        (Event::MonomerDetachment(p), rate.into())
+                    }
                     super::fission_base::FissionResult::FissionGroups(g) => {
                         //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
                         match self.fission_handling {
                             FissionHandling::NoFission => (Event::None, f64::NAN),
-                            FissionHandling::JustDetach => (Event::MonomerDetachment(p), rate.into()),
+                            FissionHandling::JustDetach => {
+                                (Event::MonomerDetachment(p), rate.into())
+                            }
                             FissionHandling::KeepSeeded => {
                                 let sl = self.seed_locs();
-                                (Event::PolymerDetachment(g.choose_deletions_seed_unattached(sl)), rate.into())
+                                (
+                                    Event::PolymerDetachment(
+                                        g.choose_deletions_seed_unattached(sl),
+                                    ),
+                                    rate.into(),
+                                )
                             }
-                            FissionHandling::KeepLargest => {
-                                (Event::PolymerDetachment(g.choose_deletions_keep_largest_group()), rate.into())
-                            }
-                            FissionHandling::KeepWeighted => {
-                                (Event::PolymerDetachment(g.choose_deletions_size_weighted()), rate.into())
-                            }
+                            FissionHandling::KeepLargest => (
+                                Event::PolymerDetachment(g.choose_deletions_keep_largest_group()),
+                                rate.into(),
+                            ),
+                            FissionHandling::KeepWeighted => (
+                                Event::PolymerDetachment(g.choose_deletions_size_weighted()),
+                                rate.into(),
+                            ),
                         }
                     }
                 }
             } else {
-                let rate: PerSecond = match self.chunk_handling {  // FIXM: needs review
+                let rate: PerSecond = match self.chunk_handling {
+                    // FIXM: needs review
                     ChunkHandling::None => {
                         panic!("Ran out of event possibilities at {p:#?}, acc={acc:#?}")
                     }
-                    ChunkHandling::Detach | ChunkHandling::Equilibrium => {
-                        self.choose_chunk_detachment(
+                    ChunkHandling::Detach | ChunkHandling::Equilibrium => self
+                        .choose_chunk_detachment(
                             canvas,
                             p,
                             tile,
                             &mut acc,
                             &mut now_empty,
                             &mut possible_starts,
-                        ).into()
-                    }
+                        )
+                        .into(),
                 };
 
                 match self.determine_fission(canvas, &possible_starts, &now_empty) {
@@ -827,17 +841,26 @@ impl System for OldKTAM {
                         //println!("Fission handling {:?} {:?}", p, tile);
                         match self.fission_handling {
                             FissionHandling::NoFission => (Event::None, f64::NAN),
-                            FissionHandling::JustDetach => (Event::PolymerDetachment(now_empty), rate.into()),
+                            FissionHandling::JustDetach => {
+                                (Event::PolymerDetachment(now_empty), rate.into())
+                            }
                             FissionHandling::KeepSeeded => {
                                 let sl = System::seed_locs(self);
-                                (Event::PolymerDetachment(g.choose_deletions_seed_unattached(sl)), rate.into())
+                                (
+                                    Event::PolymerDetachment(
+                                        g.choose_deletions_seed_unattached(sl),
+                                    ),
+                                    rate.into(),
+                                )
                             }
-                            FissionHandling::KeepLargest => {
-                                (Event::PolymerDetachment(g.choose_deletions_keep_largest_group()), rate.into())
-                            }
-                            FissionHandling::KeepWeighted => {
-                                (Event::PolymerDetachment(g.choose_deletions_size_weighted()), rate.into())
-                            }
+                            FissionHandling::KeepLargest => (
+                                Event::PolymerDetachment(g.choose_deletions_keep_largest_group()),
+                                rate.into(),
+                            ),
+                            FissionHandling::KeepWeighted => (
+                                Event::PolymerDetachment(g.choose_deletions_size_weighted()),
+                                rate.into(),
+                            ),
                         }
                     }
                 }

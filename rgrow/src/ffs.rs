@@ -13,7 +13,6 @@ use crate::state::{MovieTracker, NullStateTracker, QuadTreeState};
 use crate::system::EvolveBounds;
 use crate::tileset::{CanvasType, Model, TileSet, SIZE_DEFAULT};
 use crate::units::{MolarPerSecond, PerSecond};
-use crate::state::TrackerData;
 
 use canvas::Canvas;
 use num_traits::{Float, Num, Zero};
@@ -49,11 +48,11 @@ pub enum ConfigRetentionMode {
 //     /// Create ConfigRetentionMode.None
 //     #[classattr]
 //     const NONE: Self = Self::None;
-    
+
 //     /// Create ConfigRetentionMode.DataFrameOnly
 //     #[classattr]
 //     const DATAFRAME_ONLY: Self = Self::DataFrameOnly;
-    
+
 //     /// Create ConfigRetentionMode.Full
 //     #[classattr]
 //     const FULL: Self = Self::Full;
@@ -61,7 +60,7 @@ pub enum ConfigRetentionMode {
 //     fn __str__(&self) -> &'static str {
 //         match self {
 //             Self::None => "None",
-//             Self::DataFrameOnly => "DataFrameOnly", 
+//             Self::DataFrameOnly => "DataFrameOnly",
 //             Self::Full => "Full",
 //         }
 //     }
@@ -107,10 +106,15 @@ impl FromPyObject<'_> for ConfigRetentionMode {
 
 #[cfg(feature = "python")]
 impl<'py> IntoPyObject<'py> for ConfigRetentionMode {
-    fn into_pyobject(self, py: Python<'py>) -> std::result::Result<pyo3::Bound<'py, pyo3::PyAny>, pyo3::PyErr> {
+    fn into_pyobject(
+        self,
+        py: Python<'py>,
+    ) -> std::result::Result<pyo3::Bound<'py, pyo3::PyAny>, pyo3::PyErr> {
         match self {
             ConfigRetentionMode::None => pyo3::IntoPyObjectExt::into_bound_py_any("none", py),
-            ConfigRetentionMode::DataFrameOnly => pyo3::IntoPyObjectExt::into_bound_py_any("dataframeonly", py),
+            ConfigRetentionMode::DataFrameOnly => {
+                pyo3::IntoPyObjectExt::into_bound_py_any("dataframeonly", py)
+            }
             ConfigRetentionMode::Full => pyo3::IntoPyObjectExt::into_bound_py_any("full", py),
         }
     }
@@ -175,7 +179,7 @@ use pyo3_polars::PyDataFrame;
 
 use state::{
     ClonableState, LastAttachTimeTracker, PrintEventTracker, StateEnum, StateStatus,
-    StateWithCreate
+    StateWithCreate,
 };
 
 use system::{DynSystem, Orientation, System, SystemEnum};
@@ -186,114 +190,114 @@ use system::{DynSystem, Orientation, System, SystemEnum};
 #[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
 pub struct FFSRunConfig {
     /// Use constant-variance, variable-configurations-per-surface method.
-    /// 
+    ///
     /// When true, the number of configurations generated at each surface is determined
-    /// dynamically to achieve a target variance of the forward probablity relative to the mean 
-    /// squared (var_per_mean2). When false, exactly max_configs configurations are generated at 
-    /// each surface. 
+    /// dynamically to achieve a target variance of the forward probablity relative to the mean
+    /// squared (var_per_mean2). When false, exactly max_configs configurations are generated at
+    /// each surface.
     pub constant_variance: bool,
-    
+
     /// Target variance per mean squared for the constant-variance method.
-    /// 
+    ///
     /// Controls the statistical precision when constant_variance is true. Lower values
     /// require more configurations but provide better statistics. Typical values are
     /// 0.01 (1% variance) to 0.1 (10% variance). Only used when constant_variance is true.
     pub var_per_mean2: f64,
-    
+
     /// Minimum number of configurations to generate at each surface level.
-    /// 
+    ///
     /// Ensures a minimum sample size even when constant_variance is true and the
     /// target variance is achieved with fewer configurations.
     pub min_configs: usize,
-    
+
     /// Maximum number of configurations to generate at each surface level.
-    /// 
+    ///
     /// When constant_variance is false, exactly this many configurations are generated.
     /// When constant_variance is true, this serves as an upper limit to prevent
     /// excessive computation when success probabilities are very low.
     pub max_configs: usize,
-    
+
     /// Enable early termination when success probabilities become very high.
-    /// 
+    ///
     /// When true, FFS will terminate early if the success probability exceeds
     /// cutoff_probability for cutoff_number consecutive surfaces, provided the
     /// structure size is at least min_cutoff_size.
     pub early_cutoff: bool,
-    
+
     /// Success probability threshold for early cutoff.
-    /// 
+    ///
     /// If early_cutoff is true and the success probability exceeds this value
     /// for cutoff_number consecutive surfaces, FFS terminates early.
     pub cutoff_probability: f64,
-    
+
     /// Number of consecutive high-probability surfaces required for early cutoff.
-    /// 
+    ///
     /// FFS terminates early only after this many consecutive surfaces exceed
     /// cutoff_probability. Prevents premature termination due to statistical
     /// fluctuations. Only used when early_cutoff is true.
     pub cutoff_number: usize,
-    
+
     /// Minimum structure size required before early cutoff can occur.
-    /// 
+    ///
     /// Prevents early termination when structures are still small, even if success
     /// probabilities are high. Ensures the simulation reaches a meaningful size
     /// before terminating. Only used when early_cutoff is true.
     pub min_cutoff_size: NumTiles,
-    
-    /// Evolution bounds for the initial dimer-to-n-mer surface, to avoid 
+
+    /// Evolution bounds for the initial dimer-to-n-mer surface, to avoid
     /// infinite simulations.
     pub init_bound: EvolveBounds,
-    
+
     /// Evolution bounds for subsequent surface-to-surface transitions, to avoid
     /// infinite simulations.
     pub subseq_bound: EvolveBounds,
-    
+
     /// Initial cluster size for the first FFS surface.
-    /// 
+    ///
     /// The size (number of tiles) that defines the first surface.  Must be >=2.
     pub start_size: NumTiles,
-    
+
     /// Size increment between consecutive FFS surfaces.
-    /// 
+    ///
     /// The number of tiles by which the target size increases between consecutive
     /// surfaces.
     pub size_step: NumTiles,
-    
+
     /// Configuration data retention mode for each surface.
-    /// 
+    ///
     /// Controls what data is retained during FFS simulation:
     /// - ConfigRetentionMode.None: No configuration data retained (minimal memory)
     /// - ConfigRetentionMode.DataFrameOnly: Only dataframe-compatible data retained (default)
     /// - ConfigRetentionMode.Full: Full state objects retained (maximum memory, allows full access)
-    /// 
+    ///
     /// For backward compatibility, bool values are also accepted:
     /// - False -> ConfigRetentionMode.None
     /// - True -> ConfigRetentionMode.Full
     pub keep_configs: ConfigRetentionMode,
-    
+
     /// Minimum nucleation rate threshold for early termination.
-    /// 
+    ///
     /// If specified, FFS terminates early when the calculated nucleation rate
     /// falls below this threshold. Useful for avoiding excessive computation
     /// when nucleation rates become negligibly small. Units: M/s.
     pub min_nuc_rate: Option<MolarPerSecond>,
-    
+
     /// Canvas dimensions (width, height) for the simulation.
-    /// 
+    ///
     /// Defines the size of the 2D lattice on which tile assembly occurs.
     /// Must be large enough to accommodate the largest expected structures.
     pub canvas_size: (usize, usize),
-    
+
     /// Type of boundary conditions for the simulation canvas.
-    /// 
+    ///
     /// Determines how the edges of the canvas are handled:
     /// - Periodic: opposite edges are connected (torus topology)
     /// - Square: finite canvas with hard boundaries
     /// - Tube: periodic in one dimension, finite in the other
     pub canvas_type: CanvasType,
-    
+
     /// Type of additional data tracking during simulation.
-    /// 
+    ///
     /// Controls what extra information is recorded during evolution:
     /// - None: no additional tracking (fastest, default)
     /// - Order: track attachment order of tiles
@@ -301,15 +305,15 @@ pub struct FFSRunConfig {
     /// - PrintEvent: print events as they occur (debugging)
     /// - Movie: record all events
     pub tracking: TrackingType,
-    
+
     /// Target structure size for FFS termination.
     pub target_size: NumTiles,
-    
+
     /// Whether to store the FFS configuration in the result.
-    /// 
+    ///
     /// When true, the complete FFSRunConfig is saved with the results.
     pub store_ffs_config: bool,
-    
+
     /// Whether to store the tile system in the result.
     pub store_system: bool,
 }
@@ -368,7 +372,7 @@ impl FFSRunConfig {
                 } else {
                     self.keep_configs = v.extract()?;
                 }
-            },
+            }
             "min_nuc_rate" => self.min_nuc_rate = v.extract()?,
             "canvas_size" => self.canvas_size = v.extract()?,
             "target_size" => self.target_size = v.extract()?,
@@ -423,7 +427,7 @@ impl FFSRunConfig {
         subseq_bound: Option<EvolveBounds>,
         start_size: Option<NumTiles>,
         size_step: Option<NumTiles>,
-        keep_configs: Option<Bound<'_, PyAny>>,  // bool (backward compatibility) or ConfigRetentionMode
+        keep_configs: Option<Bound<'_, PyAny>>, // bool (backward compatibility) or ConfigRetentionMode
         min_nuc_rate: Option<f64>,
         canvas_size: Option<(usize, usize)>,
         target_size: Option<NumTiles>,
@@ -482,7 +486,7 @@ impl FFSRunConfig {
                 rc.keep_configs = mode;
             } else {
                 return Err(PyTypeError::new_err(
-                    "keep_configs must be bool or ConfigRetentionMode"
+                    "keep_configs must be bool or ConfigRetentionMode",
                 ));
             }
         }
@@ -862,10 +866,10 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
             if state.n_tiles() >= target_size {
                 // >= hack for duples
-                
+
                 // Increment success count for the selected configuration
                 config_successes[i_old_state] += 1;
-                
+
                 // Extract dataframe data if needed
                 if let Some(ref mut df_data) = dataframe_data {
                     let df_row = extract_dataframe_data(
@@ -878,7 +882,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     );
                     df_data.push(df_row);
                 }
-                
+
                 state_list.push(state);
                 previous_list.push(i_old_state);
             } else {
@@ -934,7 +938,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
         } else {
             None
         };
-        let mut dimer_dataframe_data = if config.keep_configs == ConfigRetentionMode::DataFrameOnly {
+        let mut dimer_dataframe_data = if config.keep_configs == ConfigRetentionMode::DataFrameOnly
+        {
             Some(Vec::new())
         } else {
             None
@@ -992,9 +997,17 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     Orientation::WE => PointSafe2(state.move_sa_e(mid).0),
                 };
                 // Use place_tile to properly handle double tiles
-                let energy_change = system.place_tile(&mut state, mid, dimer.t1)? + system.place_tile(&mut state, other, dimer.t2)?;
+                let energy_change = system.place_tile(&mut state, mid, dimer.t1)?
+                    + system.place_tile(&mut state, other, dimer.t2)?;
                 let cl = [(mid, dimer.t1), (other, dimer.t2)];
-                state.record_event(&system::Event::PolymerAttachment(cl.to_vec()), PerSecond::zero(), f64::NAN, energy_change, energy_change, 2);
+                state.record_event(
+                    &system::Event::PolymerAttachment(cl.to_vec()),
+                    PerSecond::zero(),
+                    f64::NAN,
+                    energy_change,
+                    energy_change,
+                    2,
+                );
 
                 debug_assert_eq!(system.calc_n_tiles(&state), state.n_tiles());
 
@@ -1007,8 +1020,16 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     let mut dimer_state = St::empty(config.canvas_size)?;
 
                     // Use place_tile to properly handle double tiles for dimer state too
-                    let energy_change = system.place_tile(&mut dimer_state, mid, dimer.t1)? + system.place_tile(&mut dimer_state, other, dimer.t2)?;
-                    dimer_state.record_event(&system::Event::PolymerAttachment(cl.to_vec()), PerSecond::zero(), f64::NAN, energy_change, energy_change, 2);
+                    let energy_change = system.place_tile(&mut dimer_state, mid, dimer.t1)?
+                        + system.place_tile(&mut dimer_state, other, dimer.t2)?;
+                    dimer_state.record_event(
+                        &system::Event::PolymerAttachment(cl.to_vec()),
+                        PerSecond::zero(),
+                        f64::NAN,
+                        energy_change,
+                        energy_change,
+                        2,
+                    );
 
                     // Extract dataframe data if needed
                     if let Some(ref mut df_data) = dataframe_data {
@@ -1022,13 +1043,17 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                         );
                         df_data.push(df_row);
                     }
-                    
+
                     if let Some(ref mut dimer_df_data) = dimer_dataframe_data {
                         let dimer_df_row = extract_dataframe_data(
                             &dimer_state,
                             0, // surface index 0 for dimer level
                             num_states as u64,
-                            if rng.random::<bool>() { dimer.t1 as u64 } else { dimer.t2 as u64 },
+                            if rng.random::<bool>() {
+                                dimer.t1 as u64
+                            } else {
+                                dimer.t2 as u64
+                            },
                             1, // Each dimer configuration had 1 trial
                             1, // Each dimer configuration had 1 success
                         );
@@ -1330,7 +1355,9 @@ impl FFSRunResult {
         let mut num_successes = Vec::new();
 
         // Check if we have pre-compiled dataframe data
-        let has_dataframe_data = self.surfaces().iter()
+        let has_dataframe_data = self
+            .surfaces()
+            .iter()
             .any(|s| s.upgrade().unwrap().dataframe_data.is_some());
 
         if has_dataframe_data {
@@ -1351,8 +1378,18 @@ impl FFSRunResult {
                         previndices.push(row.previous_config);
                         energies.push(row.energy);
                     }
-                    num_trials.extend(surface_ref.last_surface_num_trials.iter().map(|x| *x as u64));
-                    num_successes.extend(surface_ref.last_surface_num_successes.iter().map(|x| *x as u64));    
+                    num_trials.extend(
+                        surface_ref
+                            .last_surface_num_trials
+                            .iter()
+                            .map(|x| *x as u64),
+                    );
+                    num_successes.extend(
+                        surface_ref
+                            .last_surface_num_successes
+                            .iter()
+                            .map(|x| *x as u64),
+                    );
                 }
             }
         } else {
@@ -1372,8 +1409,22 @@ impl FFSRunResult {
                     shape_j.push((maxj - minj + 1) as u64);
                     energies.push(state.energy());
                 }
-                num_trials.extend(surface.upgrade().unwrap().last_surface_num_trials.iter().map(|x| *x as u64));
-                num_successes.extend(surface.upgrade().unwrap().last_surface_num_successes.iter().map(|x| *x as u64));
+                num_trials.extend(
+                    surface
+                        .upgrade()
+                        .unwrap()
+                        .last_surface_num_trials
+                        .iter()
+                        .map(|x| *x as u64),
+                );
+                num_successes.extend(
+                    surface
+                        .upgrade()
+                        .unwrap()
+                        .last_surface_num_successes
+                        .iter()
+                        .map(|x| *x as u64),
+                );
                 if !surface.upgrade().unwrap().state_list.is_empty() {
                     previndices.extend(
                         surface
@@ -1388,7 +1439,13 @@ impl FFSRunResult {
         }
 
         // We need to add 0 trials, 0 successes for the last surface
-        let last_surface_num_configs = self.surfaces().last().unwrap().upgrade().unwrap().num_configs();
+        let last_surface_num_configs = self
+            .surfaces()
+            .last()
+            .unwrap()
+            .upgrade()
+            .unwrap()
+            .num_configs();
         num_trials.extend(vec![0u64; last_surface_num_configs]);
         num_successes.extend(vec![0u64; last_surface_num_configs]);
 
@@ -1408,7 +1465,6 @@ impl FFSRunResult {
             "num_successes" => num_successes,
         )
         .unwrap();
-
 
         Ok(df)
     }
@@ -1850,19 +1906,29 @@ impl FFSStateRef {
     /// float: the total time the state has simulated, in seconds.
     #[getter]
     pub fn time(&self) -> f64 {
-        self.0.upgrade().expect("StateEnum has been dropped").time().into()
+        self.0
+            .upgrade()
+            .expect("StateEnum has been dropped")
+            .time()
+            .into()
     }
 
     /// int: the total number of events that have occurred in the state.
     #[getter]
     pub fn total_events(&self) -> base::NumEvents {
-        self.0.upgrade().expect("StateEnum has been dropped").total_events()
+        self.0
+            .upgrade()
+            .expect("StateEnum has been dropped")
+            .total_events()
     }
 
     /// int: the number of tiles in the state.
     #[getter]
     pub fn n_tiles(&self) -> NumTiles {
-        self.0.upgrade().expect("StateEnum has been dropped").n_tiles()
+        self.0
+            .upgrade()
+            .expect("StateEnum has been dropped")
+            .n_tiles()
     }
 
     /// Return a copy of the state behind the reference as a mutable `State` object.
@@ -1871,7 +1937,13 @@ impl FFSStateRef {
     /// -------
     /// State
     pub fn clone_state(&self) -> PyState {
-        PyState(self.0.upgrade().expect("StateEnum has been dropped").as_ref().clone())
+        PyState(
+            self.0
+                .upgrade()
+                .expect("StateEnum has been dropped")
+                .as_ref()
+                .clone(),
+        )
     }
 
     #[getter]
@@ -1911,6 +1983,8 @@ impl FFSStateRef {
     /// -------
     /// Any
     pub fn tracking_copy(this: &Bound<Self>) -> PyResult<RustAny> {
+        use crate::state::TrackerData;
+
         let t = this.borrow();
         let state = t.0.upgrade().expect("StateEnum has been dropped");
         let ra = state.get_tracker_data();

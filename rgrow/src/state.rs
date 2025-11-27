@@ -169,7 +169,15 @@ pub trait StateStatus {
     fn change_energy(&mut self, change: Energy);
     fn energy(&self) -> Energy;
     fn time(&self) -> Second;
-    fn record_event(&mut self, event: &system::Event, total_rate: PerSecond, chosen_event_rate: f64, energy_change: f64, energy: Energy, n_tiles: NumTiles);
+    fn record_event(
+        &mut self,
+        event: &system::Event,
+        total_rate: PerSecond,
+        chosen_event_rate: f64,
+        energy_change: f64,
+        energy: Energy,
+        n_tiles: NumTiles,
+    );
     fn reset_tracking_assuming_empty_state(&mut self);
 }
 
@@ -544,8 +552,24 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
         self.total_events = 0;
     }
 
-    fn record_event(&mut self, event: &system::Event, total_rate: PerSecond, chosen_event_rate: f64, energy_change: f64, energy: Energy, n_tiles: NumTiles) {
-        self.tracker.record_single_event(event, self.time, total_rate, chosen_event_rate, energy_change, energy, n_tiles);
+    fn record_event(
+        &mut self,
+        event: &system::Event,
+        total_rate: PerSecond,
+        chosen_event_rate: f64,
+        energy_change: f64,
+        energy: Energy,
+        n_tiles: NumTiles,
+    ) {
+        self.tracker.record_single_event(
+            event,
+            self.time,
+            total_rate,
+            chosen_event_rate,
+            energy_change,
+            energy,
+            n_tiles,
+        );
     }
 
     fn reset_tracking_assuming_empty_state(&mut self) {
@@ -640,7 +664,16 @@ pub trait StateTracker: Clone + Debug + Sync + Send {
     fn default(canvas: &dyn Canvas) -> Self;
 
     #[allow(clippy::too_many_arguments)]
-    fn record_single_event(&mut self, event: &system::Event, time: Second, total_rate: PerSecond, chosen_event_rate: f64, energy_change: f64, energy: Energy, n_tiles: NumTiles) -> &mut Self;
+    fn record_single_event(
+        &mut self,
+        event: &system::Event,
+        time: Second,
+        total_rate: PerSecond,
+        chosen_event_rate: f64,
+        energy_change: f64,
+        energy: Energy,
+        n_tiles: NumTiles,
+    ) -> &mut Self;
 
     fn get_tracker_data(&self) -> RustAny;
 
@@ -659,7 +692,16 @@ impl StateTracker for NullStateTracker {
         Self
     }
 
-    fn record_single_event(&mut self, _event: &system::Event, _time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64, _energy: Energy, _n_tiles: NumTiles) -> &mut Self {
+    fn record_single_event(
+        &mut self,
+        _event: &system::Event,
+        _time: Second,
+        _total_rate: PerSecond,
+        _chosen_event_rate: f64,
+        _energy_change: f64,
+        _energy: Energy,
+        _n_tiles: NumTiles,
+    ) -> &mut Self {
         self
     }
 
@@ -693,7 +735,16 @@ impl StateTracker for OrderTracker {
         self.order = 1;
     }
 
-    fn record_single_event(&mut self, event: &system::Event, _time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64, _energy: Energy, _n_tiles: NumTiles) -> &mut Self {
+    fn record_single_event(
+        &mut self,
+        event: &system::Event,
+        _time: Second,
+        _total_rate: PerSecond,
+        _chosen_event_rate: f64,
+        _energy_change: f64,
+        _energy: Energy,
+        _n_tiles: NumTiles,
+    ) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -759,7 +810,16 @@ impl StateTracker for LastAttachTimeTracker {
 
     fn reset_assuming_empty_state(&mut self) {}
 
-    fn record_single_event(&mut self, event: &system::Event, time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64, _energy: Energy, _n_tiles: NumTiles) -> &mut Self {
+    fn record_single_event(
+        &mut self,
+        event: &system::Event,
+        time: Second,
+        _total_rate: PerSecond,
+        _chosen_event_rate: f64,
+        _energy_change: f64,
+        _energy: Energy,
+        _n_tiles: NumTiles,
+    ) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, _t) => {
@@ -812,7 +872,16 @@ impl StateTracker for PrintEventTracker {
         // Default is to do nothing
     }
 
-    fn record_single_event(&mut self, event: &system::Event, time: Second, _total_rate: PerSecond, _chosen_event_rate: f64, _energy_change: f64, _energy: Energy, _n_tiles: NumTiles) -> &mut Self {
+    fn record_single_event(
+        &mut self,
+        event: &system::Event,
+        time: Second,
+        _total_rate: PerSecond,
+        _chosen_event_rate: f64,
+        _energy_change: f64,
+        _energy: Energy,
+        _n_tiles: NumTiles,
+    ) -> &mut Self {
         println!("{time}: {event:?}");
         self
     }
@@ -838,7 +907,6 @@ pub struct MovieTracker {
 
 impl StateTracker for MovieTracker {
     fn default(state: &dyn Canvas) -> Self {
-
         let mut movie_tracker = MovieTracker {
             event_id: Vec::new(),
             time: Vec::new(),
@@ -855,7 +923,7 @@ impl StateTracker for MovieTracker {
         for i in 0..state.nrows() {
             for j in 0..state.ncols() {
                 if state.inbounds((i, j)) {
-                    let tile =  state.tile_at_point(PointSafe2((i, j)));
+                    let tile = state.tile_at_point(PointSafe2((i, j)));
                     if tile > 0 {
                         movie_tracker.event_id.push(0);
                         movie_tracker.time.push(Second::new(f64::NAN));
@@ -865,7 +933,9 @@ impl StateTracker for MovieTracker {
                         movie_tracker.chosen_event_rate.push(f64::NAN);
                         movie_tracker.energy_change.push(0.);
                         movie_tracker.energy.push(0.);
-                        movie_tracker.n_tiles.push(movie_tracker.n_tiles.last().unwrap_or(&0)+1);
+                        movie_tracker
+                            .n_tiles
+                            .push(movie_tracker.n_tiles.last().unwrap_or(&0) + 1);
                         had_init = true;
                     }
                 }
@@ -890,7 +960,16 @@ impl StateTracker for MovieTracker {
         self.current_event_id = 0;
     }
 
-    fn record_single_event(&mut self, event: &system::Event, time: Second, total_rate: PerSecond, chosen_event_rate: f64, energy_change: f64, energy: Energy, n_tiles: NumTiles) -> &mut Self {
+    fn record_single_event(
+        &mut self,
+        event: &system::Event,
+        time: Second,
+        total_rate: PerSecond,
+        chosen_event_rate: f64,
+        energy_change: f64,
+        energy: Energy,
+        n_tiles: NumTiles,
+    ) -> &mut Self {
         match event {
             system::Event::None => self,
             system::Event::MonomerAttachment(p, t) => {
@@ -979,7 +1058,7 @@ impl StateTracker for MovieTracker {
             }
         }
     }
-    
+
     fn get_tracker_data(&self) -> RustAny {
         // Convert time and rates to f64 for DataFrame
         let time_f64: Vec<f64> = self.time.iter().map(|&t| t.into()).collect();
@@ -1000,7 +1079,8 @@ impl StateTracker for MovieTracker {
             "energy" => &self.energy,
             "n_tiles" => &self.n_tiles,
             "energy_change" => &self.energy_change,
-        }.expect("Failed to create DataFrame from MovieTracker data");
+        }
+        .expect("Failed to create DataFrame from MovieTracker data");
 
         RustAny(Box::new(df))
     }

@@ -33,7 +33,6 @@ import attr
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     List,
     Optional,
     Sequence,

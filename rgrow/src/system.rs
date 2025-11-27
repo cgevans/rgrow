@@ -291,7 +291,14 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         self.update_after_event(state, &event);
         state.add_time(time_step);
         state.add_events(1);
-        state.record_event(&event, total_rate, chosen_event_rate, energy_change, state.energy(), state.n_tiles());
+        state.record_event(
+            &event,
+            total_rate,
+            chosen_event_rate,
+            energy_change,
+            state.energy(),
+            state.n_tiles(),
+        );
         StepOutcome::HadEventAt(time_step)
     }
 
@@ -419,7 +426,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     /// For kTAM, placing a "real" tile (left/top part of double tile) will also place the
     /// corresponding "fake" tile (right/bottom part). Attempting to place a "fake" tile
     /// directly will place the corresponding "real" tile instead.
-    /// 
+    ///
     /// Returns energy change caused by placement, or NaN if energy is not calculated.
     fn place_tile<St: State>(
         &self,
@@ -471,7 +478,12 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
     /// Given a point, and an accumulated random rate choice `acc` (which should be less than the total rate at the point),
     /// return the event that should take place, and the rate of that particular event.
-    fn choose_event_at_point<St: State>(&self, state: &St, p: PointSafe2, acc: PerSecond) -> (Event, f64);
+    fn choose_event_at_point<St: State>(
+        &self,
+        state: &St,
+        p: PointSafe2,
+        acc: PerSecond,
+    ) -> (Event, f64);
 
     /// Returns a vector of (point, tile number) tuples for the seed tiles, useful for populating an initial state.
     fn seed_locs(&self) -> Vec<(PointSafe2, Tile)>;
@@ -841,7 +853,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     ///     false,   // return_on_max_trials
     ///     None,    // ci_confidence_level (no CI returned)
     /// )?;
-    /// 
+    ///
     /// println!("Probability {} threshold 0.5", if is_above { "above" } else { "below" });
     /// println!("Estimate: {:.4}, Trials: {}", prob, trials);
     /// assert!(ci.is_none());
@@ -871,6 +883,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     ///
     /// The confidence interval returned (if requested) uses the `ci_confidence_level` parameter,
     /// which can be different from the `confidence_level` used for the threshold test.
+    #[allow(clippy::too_many_arguments)]
     fn calc_committer_threshold_test(
         &self,
         initial_state: &StateEnum,
@@ -1049,8 +1062,6 @@ where
         Ok((successes as f64 / num_trials as f64, num_trials as usize))
     }
 
-    
-
     fn calc_committers_adaptive(
         &self,
         initial_states: &[&StateEnum],
@@ -1186,7 +1197,6 @@ where
         Ok((successes as f64 / num_trials as f64, num_trials as usize))
     }
 
-
     fn calc_forward_probabilities_adaptive(
         &self,
         initial_states: &[&StateEnum],
@@ -1263,7 +1273,7 @@ where
                 x if x >= 0.95 => 1.960,  // 95% confidence
                 x if x >= 0.90 => 1.645,  // 90% confidence
                 x if x >= 0.80 => 1.282,  // 80% confidence
-                _ => 1.960, // Default to 95% confidence
+                _ => 1.960,               // Default to 95% confidence
             }
         };
 
@@ -1286,16 +1296,17 @@ where
 
         // Helper function to calculate confidence interval if requested.
         // Returns None if ci_confidence_level is None, otherwise calculates Wilson Score interval.
-        let calculate_confidence_interval = |successes: u32, num_trials: u32| -> Option<(f64, f64)> {
-            ci_confidence_level.map(|ci_level| {
-                let ci_z_score = confidence_to_z_score(ci_level);
-                let sample = NSuccessesSample::new(num_trials, successes).unwrap();
-                let wilson = sample.wilson_score(ci_z_score);
-                let lower_bound = wilson.mean - wilson.margin;
-                let upper_bound = wilson.mean + wilson.margin;
-                (lower_bound, upper_bound)
-            })
-        };
+        let calculate_confidence_interval =
+            |successes: u32, num_trials: u32| -> Option<(f64, f64)> {
+                ci_confidence_level.map(|ci_level| {
+                    let ci_z_score = confidence_to_z_score(ci_level);
+                    let sample = NSuccessesSample::new(num_trials, successes).unwrap();
+                    let wilson = sample.wilson_score(ci_z_score);
+                    let lower_bound = wilson.mean - wilson.margin;
+                    let upper_bound = wilson.mean + wilson.margin;
+                    (lower_bound, upper_bound)
+                })
+            };
 
         // Continue sampling until we can determine with confidence whether
         // the probability is above or below the threshold
@@ -1327,7 +1338,7 @@ where
             // This uses the test confidence level to determine if we can make a decision
             let sample = NSuccessesSample::new(num_trials, successes).unwrap();
             let test_wilson = sample.wilson_score(test_z_score);
-            
+
             let test_lower_bound = test_wilson.mean - test_wilson.margin;
             let test_upper_bound = test_wilson.mean + test_wilson.margin;
 
@@ -1336,29 +1347,48 @@ where
                 // We're confident the probability is below the threshold
                 let probability_estimate = successes as f64 / num_trials as f64;
                 let confidence_interval = calculate_confidence_interval(successes, num_trials);
-                return Ok((false, probability_estimate, confidence_interval, num_trials as usize, false));
+                return Ok((
+                    false,
+                    probability_estimate,
+                    confidence_interval,
+                    num_trials as usize,
+                    false,
+                ));
             } else if test_lower_bound > threshold {
                 // We're confident the probability is above the threshold
                 let probability_estimate = successes as f64 / num_trials as f64;
                 let confidence_interval = calculate_confidence_interval(successes, num_trials);
-                return Ok((true, probability_estimate, confidence_interval, num_trials as usize, false));
+                return Ok((
+                    true,
+                    probability_estimate,
+                    confidence_interval,
+                    num_trials as usize,
+                    false,
+                ));
             }
 
             // Check if we've exceeded the maximum number of trials without reaching a decision
             if num_trials >= max_trials as u32 {
                 let probability_estimate = successes as f64 / num_trials as f64;
                 let confidence_interval = calculate_confidence_interval(successes, num_trials);
-                
+
                 if return_on_max_trials {
                     // Return current best estimate with warning flag set
                     // Use simple point estimate comparison since we couldn't reach statistical confidence
                     let is_above_threshold = probability_estimate > threshold;
-                    return Ok((is_above_threshold, probability_estimate, confidence_interval, num_trials as usize, true));
+                    return Ok((
+                        is_above_threshold,
+                        probability_estimate,
+                        confidence_interval,
+                        num_trials as usize,
+                        true,
+                    ));
                 } else {
                     // Raise error when max trials exceeded and user doesn't want fallback result
-                    return Err(GrowError::NotSupported(
-                        format!("Maximum number of trials ({}) exceeded without reaching confidence", max_trials),
-                    ));
+                    return Err(GrowError::NotSupported(format!(
+                        "Maximum number of trials ({}) exceeded without reaching confidence",
+                        max_trials
+                    )));
                 }
             }
         }

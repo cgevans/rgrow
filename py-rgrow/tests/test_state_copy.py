@@ -157,7 +157,7 @@ def test_state_copy_return_type():
     copied_state = state.copy()
     
     # Should be the same type
-    assert type(copied_state) == type(state)
+    assert type(copied_state) is type(state)
     assert isinstance(copied_state, State)
 
 
