@@ -33,6 +33,7 @@ import attr
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     List,
     Optional,
     Sequence,
@@ -40,14 +41,15 @@ from typing import (
     TypeAlias,
 )
 
-System: TypeAlias = ATAM | KTAM | OldKTAM
-SYSTEMS = (ATAM, KTAM, OldKTAM)
-
 if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt
     import matplotlib.colors
+    import matplotlib.axes
     from numpy.typing import NDArray
     from .kblock import KBlock
+    from .rgrow import SDC
+System: TypeAlias = "ATAM | KTAM | OldKTAM | KBlock | SDC"
+SYSTEMS = (ATAM, KTAM, OldKTAM)
 
 
 def _system_name_canvas(self: "System", state: State | FFSStateRef) -> np.ndarray:
@@ -79,9 +81,6 @@ def _system_color_canvas(
     else:
         cv = state
 
-    if isinstance(self, KBlock):
-        cv = cv >> 4 # type: ignore
-
     return self.tile_colors[cv]
 
 
@@ -103,9 +102,6 @@ def _system_plot_canvas(
         cv = state.canvas_view
     else:
         cv = state
-
-    if isinstance(sys, KBlock):
-        cv = cv >> 4 # type: ignore
 
     rows, cols = cv.shape
 
@@ -338,7 +334,7 @@ class TileSet:
             system = self.create_system()
         return self._to_rg_tileset().create_state(system=system)
 
-    def run_window(self) -> EvolveOutcome:
+    def run_window(self) -> State:
         return self._to_rg_tileset().run_window()
 
     @classmethod

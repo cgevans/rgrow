@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Sequence
-from ._rgrow import KBlock
+from rgrow.rgrow import KBlock
 from rgrow import _system_color_canvas, _system_name_canvas, _system_plot_canvas
 
 @dataclass

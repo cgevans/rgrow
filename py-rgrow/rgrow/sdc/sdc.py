@@ -122,10 +122,9 @@ class SDC(rg.rgrow.SDC):
     """
 
     params: SDCParams
-    # Name of the system -- Used for plotting
     name: str | None = None
 
-    def __new__(cls, params, name: str | None = None):
+    def __new__(cls, params: SDCParams, name: str | None = None) -> "SDC":
         self = super().__new__(cls, params)
         self.params = params
         self.name = name
@@ -180,7 +179,7 @@ class SDC(rg.rgrow.SDC):
             self.evolve(state, for_time=anneal.timestep)
             canvas_arr[i, :, :] = state.canvas_view
 
-        return AnnealOutputs(self, canvas_arr, anneal, state)
+        return AnnealOutputs(self, canvas_arr, anneal, state)  # type: ignore[arg-type]
 
 SDC.plot_canvas = _system_plot_canvas  # type: ignore
 SDC.color_canvas = _system_color_canvas  # type: ignore

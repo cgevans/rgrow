@@ -82,13 +82,10 @@ jobs:
         run: |
           uv venv
           uv pip install -U pip setuptools wheel
-      - name: Install mypy
-        run: |
-          uv pip install --upgrade mypy
-      - name: Run mypy
+      - name: Run ty
         continue-on-error: true
         run: |
-          uv run -- mypy --cache-dir .mypy_cache/ --install-types --ignore-missing-imports --non-interactive --show-traceback py-rgrow/rgrow/
+          uvx ty check py-rgrow/rgrow/
       - name: Run Ruff on Python code
         uses: astral-sh/ruff-action@v3
         with:

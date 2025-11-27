@@ -11,7 +11,9 @@ class ATAM:
     @property
     def tile_names(self) -> list[str]: ...
     @property
-    def tile_colors(self) -> NDArray[np.uint]: ...
+    def tile_colors(self) -> NDArray[np.uint8]: ...
+    @property
+    def bond_names(self) -> list[str]: ...
     def calc_dimers(self) -> List[DimerInfo]:
         """
         Calculate information about the dimers the system is able to form.
@@ -145,10 +147,10 @@ class ATAM:
          The outcome (stopping condition) of the evolution.  If evolving a single state, returns a single outcome.
         """
 
-    def get_param(self, param_name): ...
-    def print_debug(self): ...
+    def get_param(self, param_name: str) -> Any: ...
+    def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> None:
+    def read_json(filename: str) -> Self:
         """
         Read a system from a JSON file.
 
@@ -208,7 +210,7 @@ class ATAM:
           The color of the tile, as a list of 4 integers (RGBA).
         """
 
-    def tile_number_from_name(self, tile_name: str) -> int:
+    def tile_number_from_name(self, tile_name: str) -> int | None:
         """
         Given a tile name, return the tile number.
 
@@ -219,12 +221,12 @@ class ATAM:
 
         Returns
         -------
-        int
-         The tile number.
+        int | None
+         The tile number, or None if not found.
         """
 
-    def update_all(self, state, needed=...): ...
-    def update_state(self, state: State, needed: NeededUpdate | None = ...) -> None:
+    def update_all(self, state: State, needed: NeededUpdate = ...) -> None: ...
+    def update_state(self, state: State, needed: NeededUpdate = ...) -> None:
         """
         Recalculate a state's rates.
 
@@ -239,6 +241,8 @@ class ATAM:
           The type of update needed.  If not provided, all locations
           will be recalculated.
         """
+
+    def setup_state(self, state: State) -> None: ...
 
     def write_json(self, filename: str) -> None:
         """
@@ -257,7 +261,249 @@ class ATAM:
         self, state: State | FFSStateRef | NDArray[np.uint]
     ) -> NDArray[np.str_]: ...
 
+    def calc_committer(
+        self,
+        state: State,
+        cutoff_size: int,
+        num_trials: int,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> float:
+        """
+        Calculate the committer function for a state.
+
+        Parameters
+        ----------
+        state : State
+            The state to analyze
+        cutoff_size : int
+            Size threshold for commitment
+        num_trials : int
+            Number of trials to run
+        max_time : float, optional
+            Maximum simulation time per trial
+        max_events : int, optional
+            Maximum events per trial
+
+        Returns
+        -------
+        float
+            Probability of reaching cutoff_size (between 0.0 and 1.0)
+        """
+
+    def calc_committer_adaptive(
+        self,
+        state: State,
+        cutoff_size: int,
+        conf_interval_margin: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[float, int]:
+        """
+        Calculate the committer function for a state using adaptive sampling.
+
+        Parameters
+        ----------
+        state : State
+            The state to analyze
+        cutoff_size : int
+            Size threshold for commitment
+        conf_interval_margin : float
+            Confidence interval margin (e.g., 0.05 for 5%)
+        max_time : float, optional
+            Maximum simulation time per trial
+        max_events : int, optional
+            Maximum events per trial
+
+        Returns
+        -------
+        tuple[float, int]
+            Tuple of (probability of reaching cutoff_size, number of trials run)
+        """
+
+    def calc_committers_adaptive(
+        self,
+        states: list[State],
+        cutoff_size: int,
+        conf_interval_margin: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]:
+        """
+        Calculate the committer function for multiple states using adaptive sampling.
+
+        Parameters
+        ----------
+        states : List[State]
+            The states to analyze
+        cutoff_size : int
+            Size threshold for commitment
+        conf_interval_margin : float
+            Confidence interval margin (e.g., 0.05 for 5%)
+        max_time : float, optional
+            Maximum simulation time per trial
+        max_events : int, optional
+            Maximum events per trial
+
+        Returns
+        -------
+        tuple[NDArray[float64], NDArray[usize]]
+            Tuple of (committer probabilities, number of trials for each state)
+        """
+
+    def calc_committer_threshold_test(
+        self,
+        state: State,
+        cutoff_size: int,
+        threshold: float,
+        confidence_level: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+        max_trials: int | None = None,
+        return_on_max_trials: bool = False,
+        ci_confidence_level: float | None = None,
+    ) -> tuple[bool, float, tuple[float, float] | None, int, bool]:
+        """
+        Determine whether the committer probability is above or below a threshold.
+
+        Parameters
+        ----------
+        state : State
+            The state to analyze
+        cutoff_size : int
+            Size threshold for commitment
+        threshold : float
+            The probability threshold to compare against
+        confidence_level : float
+            Confidence level for the threshold test
+        max_time : float, optional
+            Maximum simulation time per trial
+        max_events : int, optional
+            Maximum events per trial
+        max_trials : int, optional
+            Maximum number of trials to run
+        return_on_max_trials : bool, optional
+            If True, return results even when max_trials is exceeded
+        ci_confidence_level : float, optional
+            Confidence level for the returned confidence interval
+
+        Returns
+        -------
+        tuple[bool, float, tuple[float, float] | None, int, bool]
+            Tuple of (is_above_threshold, probability_estimate, confidence_interval, num_trials, exceeded_max_trials)
+        """
+
+    def calc_forward_probability(
+        self,
+        state: State,
+        num_trials: int,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> float:
+        """
+        Calculate forward probability for a given state.
+
+        Parameters
+        ----------
+        state : State
+            The initial state to analyze
+        num_trials : int
+            Number of simulation trials to run
+        forward_step : int, optional
+            Number of tiles to grow beyond current size (default: 1)
+        max_time : float, optional
+            Maximum simulation time per trial
+        max_events : int, optional
+            Maximum number of events per trial
+
+        Returns
+        -------
+        float
+            Probability of reaching forward_step additional tiles
+        """
+
+    def calc_forward_probability_adaptive(
+        self,
+        state: State,
+        conf_interval_margin: float,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[float, int]:
+        """
+        Calculate forward probability adaptively for a given state.
+
+        Parameters
+        ----------
+        state : State
+            The initial state to analyze
+        conf_interval_margin : float
+            Desired confidence interval margin
+        forward_step : int, optional
+            Number of tiles to grow beyond current size (default: 1)
+        max_time : float, optional
+            Maximum simulation time per trial
+        max_events : int, optional
+            Maximum number of events per trial
+
+        Returns
+        -------
+        tuple[float, int]
+            Tuple of (forward probability, number of trials run)
+        """
+
+    def calc_forward_probabilities_adaptive(
+        self,
+        states: list[State],
+        conf_interval_margin: float,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]:
+        """
+        Calculate forward probabilities adaptively for multiple states.
+
+        Parameters
+        ----------
+        states : list[State]
+            List of initial states to analyze
+        conf_interval_margin : float
+            Desired confidence interval margin
+        forward_step : int, optional
+            Number of tiles to grow beyond current size (default: 1)
+        max_time : float, optional
+            Maximum simulation time per trial
+        max_events : int, optional
+            Maximum number of events per trial
+
+        Returns
+        -------
+        tuple[NDArray[float64], NDArray[usize]]
+            Tuple of (forward probabilities, number of trials for each state)
+        """
+
+    def place_tile(self, state: State, point: tuple[int, int], tile: int) -> float:
+        """
+        Place a tile at a point in the given state.
+
+        Parameters
+        ----------
+        state : State
+            The state to modify.
+        point : tuple of int
+            The coordinates at which to place the tile (i, j).
+        tile : int
+            The tile number to place.
+
+        Returns
+        -------
+        float
+            The energy change from placing the tile.
+        """
+
 class SDC:
+    def __init__(self, params: Any) -> None: ...
     def mfe_config(self) -> tuple[list[int], float]:
         """
         Calculate the minimum free energy configuration.
@@ -272,7 +518,26 @@ class SDC:
     @property
     def tile_names(self) -> list[str]: ...
     @property
-    def tile_colors(self) -> NDArray[np.uint]: ...
+    def tile_colors(self) -> NDArray[np.uint8]: ...
+    @property
+    def bond_names(self) -> list[str]: ...
+
+    @property
+    def temperature(self) -> float:
+        """Temperature in degrees Celsius."""
+
+    @temperature.setter
+    def temperature(self, value: float) -> None: ...
+
+    @property
+    def scaffold_energy_bonds(self) -> NDArray[np.float64]: ...
+    @property
+    def strand_energy_bonds(self) -> NDArray[np.float64]: ...
+    @property
+    def tile_concs(self) -> NDArray[np.float64]: ...
+    @tile_concs.setter
+    def tile_concs(self, value: list[float]) -> None: ...
+
     def calc_dimers(self) -> List[DimerInfo]:
         """
         Calculate information about the dimers the system is able to form.
@@ -406,10 +671,10 @@ class SDC:
          The outcome (stopping condition) of the evolution.  If evolving a single state, returns a single outcome.
         """
 
-    def get_param(self, param_name): ...
-    def print_debug(self): ...
+    def get_param(self, param_name: str) -> Any: ...
+    def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> None:
+    def read_json(filename: str) -> Self:
         """
         Read a system from a JSON file.
 
@@ -469,7 +734,7 @@ class SDC:
           The color of the tile, as a list of 4 integers (RGBA).
         """
 
-    def tile_number_from_name(self, tile_name: str) -> int:
+    def tile_number_from_name(self, tile_name: str) -> int | None:
         """
         Given a tile name, return the tile number.
 
@@ -480,12 +745,12 @@ class SDC:
 
         Returns
         -------
-        int
-         The tile number.
+        int | None
+         The tile number, or None if not found.
         """
 
-    def update_all(self, state, needed=...): ...
-    def update_state(self, state: State, needed: NeededUpdate | None = ...) -> None:
+    def update_all(self, state: State, needed: NeededUpdate = ...) -> None: ...
+    def update_state(self, state: State, needed: NeededUpdate = ...) -> None:
         """
         Recalculate a state's rates.
 
@@ -500,6 +765,8 @@ class SDC:
           The type of update needed.  If not provided, all locations
           will be recalculated.
         """
+
+    def setup_state(self, state: State) -> None: ...
 
     def write_json(self, filename: str) -> None:
         """
@@ -520,50 +787,113 @@ class SDC:
 
     @property
     def entropy_matrix(self) -> NDArray[np.float64]:
-        """
-        Get the ΔS matrix for glue interactions.
-
-        Returns
-        -------
-        NDArray[np.float64]
-            The ΔS matrix in kcal/mol/K units.
-        """
+        """The ΔS matrix for glue interactions in kcal/mol/K units."""
 
     @entropy_matrix.setter
-    def entropy_matrix(self, value: NDArray[np.float64]) -> None:
-        """
-        Set the ΔS matrix for glue interactions.
-
-        Parameters
-        ----------
-        value : NDArray[np.float64]
-            The ΔS matrix in kcal/mol/K units.
-        """
+    def entropy_matrix(self, value: NDArray[np.float64]) -> None: ...
 
     @property
     def delta_g_matrix(self) -> NDArray[np.float64]:
-        """
-        Get the ΔG(T=37°C) matrix for glue interactions.
-
-        Returns
-        -------
-        NDArray[np.float64]
-            The ΔG(T=37°C) matrix in kcal/mol units.
-        """
+        """The ΔG(T=37°C) matrix for glue interactions in kcal/mol units."""
 
     @delta_g_matrix.setter
-    def delta_g_matrix(self, value: NDArray[np.float64]) -> None:
-        """
-        Set the ΔG(T=37°C) matrix for glue interactions.
+    def delta_g_matrix(self, value: NDArray[np.float64]) -> None: ...
 
-        Parameters
-        ----------
-        value : NDArray[np.float64]
-            The ΔG(T=37°C) matrix in kcal/mol units.
-        """
+    def partition(self) -> float: ...
+    def partition_function(self) -> float: ...
+    def partition_function_full(self) -> float: ...
+    def log_big_partition_function(self) -> float: ...
+    def distribution(self) -> list[float]: ...
+    def set_tmp_c(self, tmp: float) -> None: ...
+    def get_all_probs(self) -> list[tuple[list[int], float, float]]: ...
+    def quencher_rates(self) -> str: ...
+    def fluorophore_rates(self) -> str: ...
+    def probability_of_state(self, state: list[int]) -> float: ...
+    def state_g(self, state: list[int]) -> float: ...
+    def rtval(self) -> float: ...
+    def mfe_matrix(self) -> list[list[tuple[int, float, int]]]: ...
+    def all_scaffolds_slow(self) -> list[list[int]]: ...
+
+    def calc_committer(
+        self,
+        state: State,
+        cutoff_size: int,
+        num_trials: int,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> float: ...
+
+    def calc_committer_adaptive(
+        self,
+        state: State,
+        cutoff_size: int,
+        conf_interval_margin: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[float, int]: ...
+
+    def calc_committers_adaptive(
+        self,
+        states: list[State],
+        cutoff_size: int,
+        conf_interval_margin: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
+
+    def calc_committer_threshold_test(
+        self,
+        state: State,
+        cutoff_size: int,
+        threshold: float,
+        confidence_level: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+        max_trials: int | None = None,
+        return_on_max_trials: bool = False,
+        ci_confidence_level: float | None = None,
+    ) -> tuple[bool, float, tuple[float, float] | None, int, bool]: ...
+
+    def calc_forward_probability(
+        self,
+        state: State,
+        num_trials: int,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> float: ...
+
+    def calc_forward_probability_adaptive(
+        self,
+        state: State,
+        conf_interval_margin: float,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[float, int]: ...
+
+    def calc_forward_probabilities_adaptive(
+        self,
+        states: list[State],
+        conf_interval_margin: float,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
+
+    def place_tile(self, state: State, point: tuple[int, int], tile: int) -> float: ...
 
 class EvolveBounds:
-    def __init__(self, for_time: float | None = None): ...
+    def __init__(
+        self,
+        for_events: int | None = None,
+        total_events: int | None = None,
+        for_time: float | None = None,
+        total_time: float | None = None,
+        size_min: int | None = None,
+        size_max: int | None = None,
+        for_wall_time: float | None = None,
+    ) -> None: ...
     def is_strongly_bounded(self) -> bool: ...
     def is_weakly_bounded(self) -> bool:
         """
@@ -698,7 +1028,7 @@ class FFSRunConfig:
         target_size: int | None = None,
         store_ffs_config: bool | None = None,
         store_system: bool | None = None,
-    ): ...
+    ) -> None: ...
 
 class FFSLevelRef:
     @property
@@ -937,7 +1267,38 @@ class KTAM:
     @property
     def tile_names(self) -> list[str]: ...
     @property
-    def tile_colors(self) -> NDArray[np.uint]: ...
+    def tile_colors(self) -> NDArray[np.uint8]: ...
+    @property
+    def bond_names(self) -> list[str]: ...
+
+    @property
+    def alpha(self) -> float: ...
+    @alpha.setter
+    def alpha(self, value: float) -> None: ...
+
+    @property
+    def g_se(self) -> float: ...
+    @g_se.setter
+    def g_se(self, value: float) -> None: ...
+
+    @property
+    def kf(self) -> float: ...
+    @kf.setter
+    def kf(self, value: float) -> None: ...
+
+    @property
+    def energy_we(self) -> NDArray[np.float64]: ...
+    @property
+    def energy_ns(self) -> NDArray[np.float64]: ...
+    @property
+    def tile_concs(self) -> NDArray[np.float64]: ...
+    @property
+    def tile_edges(self) -> NDArray[np.uint]: ...
+    @tile_edges.setter
+    def tile_edges(self, value: NDArray[np.uint]) -> None: ...
+    @property
+    def has_duples(self) -> bool: ...
+
     def calc_dimers(self) -> List[DimerInfo]:
         """
         Calculate information about the dimers the system is able to form.
@@ -1071,11 +1432,12 @@ class KTAM:
          The outcome (stopping condition) of the evolution.  If evolving a single state, returns a single outcome.
         """
 
-    def from_tileset(tileset): ...
-    def get_param(self, param_name): ...
-    def print_debug(self): ...
     @staticmethod
-    def read_json(filename: str) -> None:
+    def from_tileset(tileset: Any) -> Self: ...
+    def get_param(self, param_name: str) -> Any: ...
+    def print_debug(self) -> None: ...
+    @staticmethod
+    def read_json(filename: str) -> Self:
         """
         Read a system from a JSON file.
 
@@ -1085,7 +1447,7 @@ class KTAM:
             The name of the file to read from.
         """
 
-    def run_ffs(self, config: FFSRunConfig = ..., **kwargs) -> FFSRunResult:
+    def run_ffs(self, config: FFSRunConfig = ..., **kwargs: Any) -> FFSRunResult:
         """
         Run FFS.
 
@@ -1135,7 +1497,7 @@ class KTAM:
           The color of the tile, as a list of 4 integers (RGBA).
         """
 
-    def tile_number_from_name(self, tile_name: str) -> int:
+    def tile_number_from_name(self, tile_name: str) -> int | None:
         """
         Given a tile name, return the tile number.
 
@@ -1146,12 +1508,12 @@ class KTAM:
 
         Returns
         -------
-        int
-         The tile number.
+        int | None
+         The tile number, or None if not found.
         """
 
-    def update_all(self, state, needed=...): ...
-    def update_state(self, state: State, needed: NeededUpdate | None = ...) -> None:
+    def update_all(self, state: State, needed: NeededUpdate = ...) -> None: ...
+    def update_state(self, state: State, needed: NeededUpdate = ...) -> None:
         """
         Recalculate a state's rates.
 
@@ -1166,6 +1528,8 @@ class KTAM:
           The type of update needed.  If not provided, all locations
           will be recalculated.
         """
+
+    def setup_state(self, state: State) -> None: ...
 
     def write_json(self, filename: str) -> None:
         """
@@ -1230,11 +1594,82 @@ class KTAM:
             The total energy of the state.
         """
 
+    def calc_committer(
+        self,
+        state: State,
+        cutoff_size: int,
+        num_trials: int,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> float: ...
+
+    def calc_committer_adaptive(
+        self,
+        state: State,
+        cutoff_size: int,
+        conf_interval_margin: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[float, int]: ...
+
+    def calc_committers_adaptive(
+        self,
+        states: list[State],
+        cutoff_size: int,
+        conf_interval_margin: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
+
+    def calc_committer_threshold_test(
+        self,
+        state: State,
+        cutoff_size: int,
+        threshold: float,
+        confidence_level: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+        max_trials: int | None = None,
+        return_on_max_trials: bool = False,
+        ci_confidence_level: float | None = None,
+    ) -> tuple[bool, float, tuple[float, float] | None, int, bool]: ...
+
+    def calc_forward_probability(
+        self,
+        state: State,
+        num_trials: int,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> float: ...
+
+    def calc_forward_probability_adaptive(
+        self,
+        state: State,
+        conf_interval_margin: float,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[float, int]: ...
+
+    def calc_forward_probabilities_adaptive(
+        self,
+        states: list[State],
+        conf_interval_margin: float,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
+
+    def place_tile(self, state: State, point: tuple[int, int], tile: int) -> float: ...
+
 class OldKTAM:
     @property
     def tile_names(self) -> list[str]: ...
     @property
-    def tile_colors(self) -> NDArray[np.uint]: ...
+    def tile_colors(self) -> NDArray[np.uint8]: ...
+    @property
+    def bond_names(self) -> list[str]: ...
     def color_canvas(
         self, state: State | FFSStateRef | NDArray[np.uint]
     ) -> NDArray[np.uint8]: ...
@@ -1374,10 +1809,10 @@ class OldKTAM:
          The outcome (stopping condition) of the evolution.  If evolving a single state, returns a single outcome.
         """
 
-    def get_param(self, param_name): ...
-    def print_debug(self): ...
+    def get_param(self, param_name: str) -> Any: ...
+    def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> None:
+    def read_json(filename: str) -> Self:
         """
         Read a system from a JSON file.
 
@@ -1387,7 +1822,7 @@ class OldKTAM:
             The name of the file to read from.
         """
 
-    def run_ffs(self, config: FFSRunConfig = ..., **kwargs) -> FFSRunResult:
+    def run_ffs(self, config: FFSRunConfig = ..., **kwargs: Any) -> FFSRunResult:
         """
         Run FFS.
 
@@ -1437,7 +1872,7 @@ class OldKTAM:
           The color of the tile, as a list of 4 integers (RGBA).
         """
 
-    def tile_number_from_name(self, tile_name: str) -> int:
+    def tile_number_from_name(self, tile_name: str) -> int | None:
         """
         Given a tile name, return the tile number.
 
@@ -1448,12 +1883,12 @@ class OldKTAM:
 
         Returns
         -------
-        int
-         The tile number.
+        int | None
+         The tile number, or None if not found.
         """
 
-    def update_all(self, state, needed=...): ...
-    def update_state(self, state: State, needed: NeededUpdate | None = ...) -> None:
+    def update_all(self, state: State, needed: NeededUpdate = ...) -> None: ...
+    def update_state(self, state: State, needed: NeededUpdate = ...) -> None:
         """
         Recalculate a state's rates.
 
@@ -1469,6 +1904,8 @@ class OldKTAM:
           will be recalculated.
         """
 
+    def setup_state(self, state: State) -> None: ...
+
     def write_json(self, filename: str) -> None:
         """
         Write the system to a JSON file.
@@ -1479,11 +1916,98 @@ class OldKTAM:
             The name of the file to write to.
         """
 
+    def calc_committer(
+        self,
+        state: State,
+        cutoff_size: int,
+        num_trials: int,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> float: ...
+
+    def calc_committer_adaptive(
+        self,
+        state: State,
+        cutoff_size: int,
+        conf_interval_margin: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[float, int]: ...
+
+    def calc_committers_adaptive(
+        self,
+        states: list[State],
+        cutoff_size: int,
+        conf_interval_margin: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
+
+    def calc_committer_threshold_test(
+        self,
+        state: State,
+        cutoff_size: int,
+        threshold: float,
+        confidence_level: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+        max_trials: int | None = None,
+        return_on_max_trials: bool = False,
+        ci_confidence_level: float | None = None,
+    ) -> tuple[bool, float, tuple[float, float] | None, int, bool]: ...
+
+    def calc_forward_probability(
+        self,
+        state: State,
+        num_trials: int,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> float: ...
+
+    def calc_forward_probability_adaptive(
+        self,
+        state: State,
+        conf_interval_margin: float,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[float, int]: ...
+
+    def calc_forward_probabilities_adaptive(
+        self,
+        states: list[State],
+        conf_interval_margin: float,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
+
+    def place_tile(self, state: State, point: tuple[int, int], tile: int) -> float: ...
+
 class KBlock:
     @property
     def tile_names(self) -> list[str]: ...
     @property
-    def tile_colors(self) -> NDArray[np.uint]: ...
+    def tile_colors(self) -> NDArray[np.uint8]: ...
+    @property
+    def bond_names(self) -> list[str]: ...
+
+    @property
+    def seed(self) -> dict[tuple[int, int], int]: ...
+    @seed.setter
+    def seed(self, value: dict[tuple[int, int], int]) -> None: ...
+
+    @property
+    def glue_links(self) -> NDArray[np.float64]: ...
+    @glue_links.setter
+    def glue_links(self, value: NDArray[np.float64]) -> None: ...
+
+    @property
+    def cover_concentrations(self) -> list[float]: ...
+    @cover_concentrations.setter
+    def cover_concentrations(self, value: list[float]) -> None: ...
+
     def calc_dimers(self) -> List[DimerInfo]:
         """
         Calculate information about the dimers the system is able to form.
@@ -1619,12 +2143,12 @@ class KBlock:
          The outcome (stopping condition) of the evolution.  If evolving a single state, returns a single outcome.
         """
 
-    def get_param(self, param_name): ...
+    def get_param(self, param_name: str) -> Any: ...
 
-    def print_debug(self): ...
+    def print_debug(self) -> None: ...
 
     @staticmethod
-    def read_json(filename: str) -> None:
+    def read_json(filename: str) -> Self:
         """
         Read a system from a JSON file.
 
@@ -1684,7 +2208,7 @@ class KBlock:
           The color of the tile, as a list of 4 integers (RGBA).
         """
 
-    def tile_number_from_name(self, tile_name: str) -> int:
+    def tile_number_from_name(self, tile_name: str) -> int | None:
         """
         Given a tile name, return the tile number.
 
@@ -1695,13 +2219,13 @@ class KBlock:
 
         Returns
         -------
-        int
-         The tile number.
+        int | None
+         The tile number, or None if not found.
         """
 
-    def update_all(self, state, needed=...): ...
+    def update_all(self, state: State, needed: NeededUpdate = ...) -> None: ...
 
-    def update_state(self, state: State, needed: NeededUpdate | None = ...) -> None:
+    def update_state(self, state: State, needed: NeededUpdate = ...) -> None:
         """
         Recalculate a state's rates.
 
@@ -1716,6 +2240,8 @@ class KBlock:
           The type of update needed.  If not provided, all locations
           will be recalculated.
         """
+
+    def setup_state(self, state: State) -> None: ...
 
     def write_json(self, filename: str) -> None:
         """
@@ -1735,8 +2261,77 @@ class KBlock:
         self, state: State | FFSStateRef | NDArray[np.uint]
     ) -> NDArray[np.str_]: ...
 
+    def calc_committer(
+        self,
+        state: State,
+        cutoff_size: int,
+        num_trials: int,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> float: ...
 
-System: TypeAlias = ATAM | KTAM | OldKTAM | KBlock
+    def calc_committer_adaptive(
+        self,
+        state: State,
+        cutoff_size: int,
+        conf_interval_margin: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[float, int]: ...
+
+    def calc_committers_adaptive(
+        self,
+        states: list[State],
+        cutoff_size: int,
+        conf_interval_margin: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
+
+    def calc_committer_threshold_test(
+        self,
+        state: State,
+        cutoff_size: int,
+        threshold: float,
+        confidence_level: float,
+        max_time: float | None = None,
+        max_events: int | None = None,
+        max_trials: int | None = None,
+        return_on_max_trials: bool = False,
+        ci_confidence_level: float | None = None,
+    ) -> tuple[bool, float, tuple[float, float] | None, int, bool]: ...
+
+    def calc_forward_probability(
+        self,
+        state: State,
+        num_trials: int,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> float: ...
+
+    def calc_forward_probability_adaptive(
+        self,
+        state: State,
+        conf_interval_margin: float,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[float, int]: ...
+
+    def calc_forward_probabilities_adaptive(
+        self,
+        states: list[State],
+        conf_interval_margin: float,
+        forward_step: int = 1,
+        max_time: float | None = None,
+        max_events: int | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
+
+    def place_tile(self, state: State, point: tuple[int, int], tile: int) -> float: ...
+
+
+System: TypeAlias = ATAM | KTAM | OldKTAM | KBlock | SDC
 
 class State:
     def __init__(
@@ -1745,13 +2340,30 @@ class State:
         kind: str = "Square",
         tracking: str = "None",
         n_tile_types: int | None = None,
-    ): ...
+    ) -> None: ...
+
+    @staticmethod
+    def from_array(
+        array: NDArray[np.uint],
+        kind: str = "Square",
+        tracking: str = "None",
+        n_tile_types: int | None = None,
+    ) -> State:
+        """Create a state from an existing numpy array."""
+
     @property
     def canvas_view(self) -> NDArray[np.uint]:
         """A view of the state's canvas.  This is fast but unsafe."""
 
     def canvas_copy(self) -> ndarray:
         """A copy of the state's canvas.  This is safe, but can't be modified and is slower than `canvas_view`."""
+
+    def rate_array(self) -> NDArray[np.float64]:
+        """Return a cloned copy of an array with the total possible next event rate for each point in the canvas."""
+
+    @property
+    def total_rate(self) -> float:
+        """The total rate of possible next events for the state."""
 
     def print_debug(self) -> None: ...
     def rate_at_point(self, point: tuple[int, int]) -> float: ...
@@ -1780,14 +2392,27 @@ class State:
         >>> assert copied_state.total_events == original_state.total_events
         """
     @property
-    def ntiles(self) -> int: ...
+    def n_tiles(self) -> int:
+        """The number of tiles in the state."""
+
     @property
-    def total_events(self) -> int: ...
+    def ntiles(self) -> int:
+        """The number of tiles in the state (deprecated, use `n_tiles` instead)."""
+
     @property
-    def time(self) -> float: ...
+    def total_events(self) -> int:
+        """The total number of events that have occurred in the state."""
+
+    @property
+    def time(self) -> float:
+        """The total time the state has simulated, in seconds."""
+
+    @property
+    def tile_counts(self) -> NDArray[np.uint32]:
+        """Counts of each tile type in the state."""
 
 class TileSet:
-    def __init__(self, **kwargs: Any): ...
+    def __init__(self, **kwargs: Any) -> None: ...
     def create_state(self, system: System | None = None) -> State: ...
     def create_state_from_canvas(self, canvas: NDArray[np.uint]) -> State: ...
     def create_state_empty(self, system: System | None = None) -> State: ...
@@ -1801,24 +2426,82 @@ class TileSet:
         """
 
     @classmethod
-    def from_file(cls, path) -> Self:
+    def from_file(cls, path: str) -> Self:
         """Parses a file (JSON, YAML, etc) into a TileSet"""
 
     @classmethod
-    def from_json(cls, data) -> Self:
+    def from_json(cls, data: str) -> Self:
         """Parses a JSON string into a TileSet."""
 
     def run_ffs(self, config: FFSRunConfig = ..., **kwargs: Any) -> FFSRunResult:
         """Runs FFS."""
 
-    def run_window(self) -> EvolveOutcome:
+    def run_window(self) -> State:
         """
-        Creates a simulation, and runs it in a UI.  Returns the :any:`Simulation` when
+        Creates a simulation, and runs it in a UI.  Returns the State when
         finished.
         """
 
 class TileShape: ...
-class DimerInfo: ...
+
+class Orientation:
+    """Orientation of a dimer (NS = North-South, WE = West-East)."""
+    NS: Orientation
+    WE: Orientation
+
+class DimerInfo:
+    """Information about a dimer that can form in the system."""
+    @property
+    def t1(self) -> int:
+        """First tile number in the dimer."""
+    @t1.setter
+    def t1(self, value: int) -> None: ...
+
+    @property
+    def t2(self) -> int:
+        """Second tile number in the dimer."""
+    @t2.setter
+    def t2(self, value: int) -> None: ...
+
+    @property
+    def orientation(self) -> Orientation:
+        """Orientation of the dimer (NS or WE)."""
+    @orientation.setter
+    def orientation(self, value: Orientation) -> None: ...
+
+    @property
+    def formation_rate(self) -> float:
+        """Formation rate in M/s."""
+    @formation_rate.setter
+    def formation_rate(self, value: float) -> None: ...
+
+    @property
+    def equilibrium_conc(self) -> float:
+        """Equilibrium concentration in M."""
+    @equilibrium_conc.setter
+    def equilibrium_conc(self, value: float) -> None: ...
+
 class NeededUpdate: ...
 
+class AnnealProtocol:
+    """Protocol for running annealing simulations."""
+    def __init__(
+        self,
+        from_tmp: float,
+        to_tmp: float,
+        initial_hold: float,
+        final_hold: float,
+        delta_time: float,
+        scaffold_count: int,
+        seconds_per_step: float,
+    ) -> None: ...
+
+    def run_one_system(self, sdc: SDC) -> AnnealOutput | None: ...
+    def run_many_systems(self, sdcs: list[SDC]) -> list[AnnealOutput | None]: ...
+
+class AnnealOutput: ...
+
 def string_dna_dg_ds(dna_sequence: str) -> tuple[float, float]: ...
+def get_color(color_name: str) -> list[int]: ...
+def get_color_or_random(color_name: str | None) -> list[int]: ...
+def loop_penalty(loop_length: int) -> float: ...
