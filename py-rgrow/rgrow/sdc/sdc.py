@@ -11,7 +11,7 @@ import json
 from .strand import SDCStrand
 from .reporter_methods import ReportingMethod  # noqa: F401
 
-from rgrow import _system_color_canvas, _system_name_canvas, _system_plot_canvas
+from rgrow import _system_plot_canvas
 
 @dataclasses.dataclass
 class SDCParams:
@@ -182,7 +182,5 @@ class SDC(rg.rgrow.SDC):
         return AnnealOutputs(self, canvas_arr, anneal, state)  # type: ignore[arg-type]
 
 SDC.plot_canvas = _system_plot_canvas  # type: ignore
-SDC.color_canvas = _system_color_canvas  # type: ignore
-SDC.name_canvas = _system_name_canvas  # type: ignore
 
 __all__ = ["SDC", "SDCParams"]

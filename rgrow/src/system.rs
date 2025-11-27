@@ -884,6 +884,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     /// The confidence interval returned (if requested) uses the `ci_confidence_level` parameter,
     /// which can be different from the `confidence_level` used for the threshold test.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::type_complexity)]
     fn calc_committer_threshold_test(
         &self,
         initial_state: &StateEnum,

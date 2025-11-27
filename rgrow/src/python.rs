@@ -17,7 +17,9 @@ use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, System, TileBondInfo,
 };
 use ndarray::Array2;
-use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
+use numpy::{
+    IntoPyArray, PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray2, ToPyArray,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -239,10 +241,17 @@ pub enum PyStateOrStates<'py> {
 
 #[cfg(feature = "python")]
 #[derive(FromPyObject)]
-
 pub enum PyStateOrRef<'py> {
     State(Bound<'py, PyState>),
     Ref(Bound<'py, FFSStateRef>),
+}
+
+#[cfg(feature = "python")]
+#[derive(FromPyObject)]
+pub enum PyStateOrCanvasRef<'py> {
+    State(Bound<'py, PyState>),
+    Ref(Bound<'py, FFSStateRef>),
+    Array(Bound<'py, PyArray2<Tile>>),
 }
 
 impl From<FFSStateRef> for PyState {
@@ -253,6 +262,9 @@ impl From<FFSStateRef> for PyState {
 
 macro_rules! create_py_system {
     ($name: ident) => {
+        create_py_system!($name, |tile: u32| tile as usize);
+    };
+    ($name: ident, $tile_index_fn: expr) => {
         #[cfg(feature = "python")]
         #[pymethods]
         impl $name {
@@ -549,6 +561,68 @@ macro_rules! create_py_system {
                 arr.into_pyarray(py)
             }
 
+            /// Returns the current canvas for state as an array of tile names.
+            /// 'empty' indicates empty locations.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State or FFSStateRef
+            ///   The state to return.
+            ///
+            /// Returns
+            /// -------
+            /// NDArray[str]
+            ///   The current canvas for the state, as an array of tile names.
+            fn name_canvas<'py>(&self, state: PyStateOrRef<'py>, py: Python<'py>) -> PyResult<Py<PyArray2<Py<PyAny>>>> {
+                let tile_names = TileBondInfo::tile_names(self);
+                let canvas = match &state {
+                    PyStateOrRef::State(s) => s.borrow().0.raw_array().to_owned(),
+                    PyStateOrRef::Ref(s) => s.borrow().clone_state().0.raw_array().to_owned(),
+                };
+                let tile_index_fn = $tile_index_fn;
+                let name_array = canvas.mapv(|tile| {
+                    let tile_index: usize = tile_index_fn(tile);
+                    tile_names[tile_index].clone().into_pyobject(py).unwrap().unbind().into()
+                });
+                Ok(name_array.into_pyarray(py).unbind())
+            }
+
+            /// Returns the current canvas for state as an array of tile colors.
+            ///
+            /// Parameters
+            /// ----------
+            /// state : State, FFSStateRef, or NDArray
+            ///   The state or canvas array to colorize.
+            ///
+            /// Returns
+            /// -------
+            /// NDArray[uint8]
+            ///   The current canvas for the state, as an array of RGBA colors with shape (rows, cols, 4).
+            fn color_canvas<'py>(
+                &self,
+                state: PyStateOrCanvasRef<'py>,
+                py: Python<'py>,
+            ) -> PyResult<Bound<'py, PyArray3<u8>>> {
+                let colors = TileBondInfo::tile_colors(self);
+                let canvas = match &state {
+                    PyStateOrCanvasRef::State(s) => s.borrow().0.raw_array().to_owned(),
+                    PyStateOrCanvasRef::Ref(s) => s.borrow().clone_state().0.raw_array().to_owned(),
+                    PyStateOrCanvasRef::Array(arr) => arr.readonly().as_array().to_owned(),
+                };
+                let tile_index_fn = $tile_index_fn;
+                let (rows, cols) = canvas.dim();
+                let mut color_array = ndarray::Array3::<u8>::zeros((rows, cols, 4));
+                for ((i, j), &tile) in canvas.indexed_iter() {
+                    let tile_index: usize = tile_index_fn(tile);
+                    let c = colors[tile_index];
+                    color_array[[i, j, 0]] = c[0];
+                    color_array[[i, j, 1]] = c[1];
+                    color_array[[i, j, 2]] = c[2];
+                    color_array[[i, j, 3]] = c[3];
+                }
+                Ok(color_array.into_pyarray(py))
+            }
+
             fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
                 Ok(RustAny(System::get_param(self, param_name)?))
             }
@@ -747,6 +821,7 @@ macro_rules! create_py_system {
             ///     - confidence_interval: Tuple of (lower_bound, upper_bound) or None if ci_confidence_level not provided
             ///     - num_trials: Number of trials performed
             ///     - exceeded_max_trials: True if max_trials was exceeded (warning flag)
+            #[allow(clippy::too_many_arguments)]
             #[pyo3(name = "calc_committer_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false, ci_confidence_level=None))]
             fn py_calc_committer_threshold_test(
                 &self,
@@ -1005,7 +1080,7 @@ create_py_system!(KTAM);
 create_py_system!(ATAM);
 create_py_system!(OldKTAM);
 create_py_system!(SDC);
-create_py_system!(KBlock);
+create_py_system!(KBlock, |tile: u32| (tile >> 4) as usize);
 
 #[pymethods]
 impl KBlock {

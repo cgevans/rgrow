@@ -164,8 +164,6 @@ use rand::{rng, Rng};
 
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
-#[cfg(feature = "python")]
-use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
 use self::base::RustAny;
@@ -636,7 +634,7 @@ fn extract_dataframe_data<St: ClonableState>(
 }
 
 /// Extract dataframe data from a StateEnum.
-fn extract_dataframe_data_from_state_enum(
+fn _extract_dataframe_data_from_state_enum(
     state: &StateEnum,
     surface_index: u64,
     config_index: u64,
