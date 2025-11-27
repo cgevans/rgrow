@@ -902,7 +902,14 @@ class EvolveBounds:
         never be reached.
         """
 
-class EvolveOutcome: ...
+class EvolveOutcome:
+    """Outcome of an evolve operation."""
+    ReachedEventsMax: EvolveOutcome
+    ReachedTimeMax: EvolveOutcome
+    ReachedWallTimeMax: EvolveOutcome
+    ReachedSizeMin: EvolveOutcome
+    ReachedSizeMax: EvolveOutcome
+    ReachedZeroRate: EvolveOutcome
 
 class FFSRunConfig:
     """

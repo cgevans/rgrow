@@ -8,7 +8,7 @@ use std::{
     ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign},
 };
 
-const R_VAL: KcalPerMolKelvin = KcalPerMolKelvin(1.98720425864083 / 1000.0); // in kcal/mol/K
+const R_VAL: KcalPerMolKelvin = KcalPerMolKelvin(1.98720425864083e-3); // in kcal/mol/K
 
 // ===================
 // Temperature
