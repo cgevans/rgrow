@@ -68,7 +68,7 @@ class Fluorescence(ReportingMethod):
 
     @staticmethod
     def _percentage_acc(
-        anneal_outp: AnnealOutputs, scaffold_position: int, expected_name: int
+        anneal_outp: AnnealOutputs, scaffold_position: int, expected_name: str
     ):
         scaffold_len = len(anneal_outp.canvas_arr[0]) - 4
         rgrows = anneal_outp.system.rgrow_system

@@ -3,7 +3,7 @@ import pytest
 
 
 @pytest.mark.parametrize("canvas_type", ["square", "periodic"])
-def test_full_simulation(canvas_type):
+def test_full_simulation(canvas_type: str):
     # Make a simple sierpinski set:
     tiles = [  # noqa: F841
         Tile([0, "h", "v", 0]),
@@ -28,7 +28,7 @@ def test_full_simulation(canvas_type):
         "size": (64, 128),
     }
 
-    ts = TileSet(tiles, bonds, **options)  # noqa: F841
+    ts = TileSet(tiles, bonds, **options)  # type: ignore
 
     sim, state = ts.create_system_and_state()
 
@@ -38,7 +38,7 @@ def test_full_simulation(canvas_type):
 
 
 @pytest.mark.parametrize("canvas_type", ["square", "periodic"])
-def test_atam(canvas_type):
+def test_atam(canvas_type: str):
     # Make a simple sierpinski set:
     tiles = [
         Tile([0, "h", "v", 0]),
@@ -62,7 +62,7 @@ def test_atam(canvas_type):
         "size": 100,
     }
 
-    ts = TileSet(tiles, bonds, **options)
+    ts = TileSet(tiles, bonds, **options)  # type: ignore
 
     sim, state = ts.create_system_and_state()
 

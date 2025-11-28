@@ -321,7 +321,12 @@ impl System for KTAM {
         }
     }
 
-    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: PerSecond) -> (Event, f64) {
+    fn choose_event_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        acc: PerSecond,
+    ) -> (Event, f64) {
         match self.choose_detachment_at_point(state, p, Rate64::from_per_second(acc)) {
             (true, _, event, rate) => (event, rate),
             (false, acc, _, _) => match self.choose_attachment_at_point(state, p, acc) {
@@ -1263,7 +1268,6 @@ impl KTAM {
         v
     }
 
-
     /// Given an accumulated rate, choose a detachment event at the point, or return false if no event should take place.
     /// Returns the event, the remaining accumulated rate, and the rate of the chosen event.
     pub fn choose_detachment_at_point<S: State>(
@@ -1310,7 +1314,9 @@ impl KTAM {
                         //println!("Fission handling {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", p, tile, possible_starts, now_empty, tn, te, ts, tw, canvas.calc_ntiles(), g.map.len());
                         match self.fission_handling {
                             FissionHandling::NoFission => (true, acc, Event::None, rate),
-                            FissionHandling::JustDetach => (true, acc, Event::MonomerDetachment(p), rate),
+                            FissionHandling::JustDetach => {
+                                (true, acc, Event::MonomerDetachment(p), rate)
+                            }
                             FissionHandling::KeepSeeded => {
                                 let sl = self._seed_locs();
                                 (
@@ -1982,7 +1988,6 @@ impl KTAM {
         FissionResult::FissionGroups(groupinfo)
     }
 
-
     /// Get the non-redundant energy contribution from a point, here defined as the energy of bonds the tile makes
     /// to the N and W, and the entropic cost of mixing for the tile.  When summed over a canvas, this will result
     /// in the total free energy of the state.
@@ -2012,9 +2017,19 @@ impl KTAM {
         }
     }
 
-    pub fn energy_change_from_point_change<S: State>(&self, state: &S, p: PointSafe2, new_tile: Tile) -> Energy {
+    pub fn energy_change_from_point_change<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        new_tile: Tile,
+    ) -> Energy {
         let old_tile = state.tile_at_point(p);
-        let (tn, te, ts, tw) = (state.tile_to_n(p), state.tile_to_e(p), state.tile_to_s(p), state.tile_to_w(p));
+        let (tn, te, ts, tw) = (
+            state.tile_to_n(p),
+            state.tile_to_e(p),
+            state.tile_to_s(p),
+            state.tile_to_w(p),
+        );
 
         let mut old_energy = 0.;
 
@@ -2443,7 +2458,8 @@ mod tests {
 
         // Also check that the state's ntiles count is correct
         assert_eq!(
-            state.n_tiles(), expected_tile_count,
+            state.n_tiles(),
+            expected_tile_count,
             "State's ntiles count should be correct"
         );
 

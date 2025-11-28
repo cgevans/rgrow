@@ -158,7 +158,12 @@ impl System for ATAM {
         }
     }
 
-    fn choose_event_at_point<S: State>(&self, state: &S, p: PointSafe2, acc: PerSecond) -> (Event, f64) {
+    fn choose_event_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        acc: PerSecond,
+    ) -> (Event, f64) {
         match self.choose_attachment_at_point(state, p, f64::from_per_second(acc)) {
             (true, _, event, rate) => {
                 // println!("{:?} {:?}", acc, event);
@@ -529,7 +534,7 @@ impl ATAM {
                 return (true, acc, Event::MonomerAttachment(p, t), rate);
             }
         }
-        (false, acc, Event::None, f64::NAN  )
+        (false, acc, Event::None, f64::NAN)
     }
 
     pub fn bond_energy_of_tile_type_at_point_hypothetical<S: State>(

@@ -143,13 +143,14 @@ class AnnealOutputs:
         0.
     anneal : Anneal
         The annealing protocol that was executed.
-    state : State
+    state : State | None
         Final simulation state (e.g., to resume or analyze thermodynamic properties).
+        May be None when loading from saved data.
     """
     system: "SDC"
     canvas_arr: "np.ndarray"
     anneal: "Anneal"
-    state: "State"
+    state: "State | None"
 
     def save_data(self, ident: str, app_dir: Path):
         """

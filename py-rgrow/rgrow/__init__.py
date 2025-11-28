@@ -40,49 +40,15 @@ from typing import (
     TypeAlias,
 )
 
-System: TypeAlias = ATAM | KTAM | OldKTAM
-SYSTEMS = (ATAM, KTAM, OldKTAM)
-
 if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt
     import matplotlib.colors
+    import matplotlib.axes
     from numpy.typing import NDArray
     from .kblock import KBlock
-
-
-def _system_name_canvas(self: "System", state: State | FFSStateRef) -> np.ndarray:
-    """Returns the current canvas for state, as an array of tile names.
-    'empty' indicates empty locations; numbers are translated to strings.
-
-    Parameters
-    ----------
-    state : State
-      The state to return.
-
-    Returns
-    -------
-
-    numpy.ndarray[str]
-      The current canvas for the state, as an array of tile names.
-    """
-    a = np.array(self.tile_names)
-    return a[state.canvas_view]
-
-
-def _system_color_canvas(
-    self: System, state: State | np.ndarray | FFSStateRef
-) -> np.ndarray:
-    """Returns the current canvas for state, as an array of tile colors."""
-
-    if isinstance(state, (State, FFSStateRef)):
-        cv = state.canvas_view
-    else:
-        cv = state
-
-    if isinstance(self, KBlock):
-        cv = cv >> 4 # type: ignore
-
-    return self.tile_colors[cv]
+    from .rgrow import SDC
+System: TypeAlias = "ATAM | KTAM | OldKTAM | KBlock | SDC"
+SYSTEMS = (ATAM, KTAM, OldKTAM)
 
 
 def _system_plot_canvas(
@@ -103,9 +69,6 @@ def _system_plot_canvas(
         cv = state.canvas_view
     else:
         cv = state
-
-    if isinstance(sys, KBlock):
-        cv = cv >> 4 # type: ignore
 
     rows, cols = cv.shape
 
@@ -162,26 +125,26 @@ def _system_plot_canvas(
         # Put light gray grid lines in the background
         ax.grid(True, color="lightgray", zorder=1)
 
-        names = sys.tile_names
-        tile_colors = sys.tile_colors / 255
+        names = sys.name_canvas(state)
+        # colors is already cropped if crop=True, so compute luminance on cropped colors
+        tile_colors = colors / 255.0
         lumcolors = np.where(
-            (tile_colors) <= 0.03928,
+            tile_colors <= 0.03928,
             tile_colors / 12.92,
             ((tile_colors + 0.055) / 1.055) ** 2.4,
         )
         lum = (
-            0.2126 * lumcolors[:, 0]
-            + 0.7152 * lumcolors[:, 1]
-            + 0.0722 * lumcolors[:, 2]
+            0.2126 * lumcolors[:, :, 0]
+            + 0.7152 * lumcolors[:, :, 1]
+            + 0.0722 * lumcolors[:, :, 2]
         )
         for i in range(i_min, i_max + 1):
             for j in range(j_min, j_max + 1):
                 if cv[i, j] == 0:
                     continue
-                n = names[cv[i, j]]
-                # Get relative luminance of the color:
-
-                if lum[cv[i, j]] > 0.2:
+                n = names[i, j]
+                # Use relative indices for cropped lum array
+                if lum[i - i_min, j - j_min] > 0.2:
                     ax.text(j, i, n, ha="center", va="center", color="black")
                 else:
                     ax.text(j, i, n, ha="center", va="center", color="white")
@@ -224,8 +187,6 @@ def _system_plot_canvas(
 
 for sys in SYSTEMS:
     sys.plot_canvas = _system_plot_canvas  # type: ignore
-    sys.color_canvas = _system_color_canvas  # type: ignore
-    sys.name_canvas = _system_name_canvas  # type: ignore
 
 
 @attr.define(auto_attribs=True)
@@ -338,7 +299,7 @@ class TileSet:
             system = self.create_system()
         return self._to_rg_tileset().create_state(system=system)
 
-    def run_window(self) -> EvolveOutcome:
+    def run_window(self) -> State:
         return self._to_rg_tileset().run_window()
 
     @classmethod

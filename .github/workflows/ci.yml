@@ -82,13 +82,6 @@ jobs:
         run: |
           uv venv
           uv pip install -U pip setuptools wheel
-      - name: Install mypy
-        run: |
-          uv pip install --upgrade mypy
-      - name: Run mypy
-        continue-on-error: true
-        run: |
-          uv run -- mypy --cache-dir .mypy_cache/ --install-types --ignore-missing-imports --non-interactive --show-traceback py-rgrow/rgrow/
       - name: Run Ruff on Python code
         uses: astral-sh/ruff-action@v3
         with:
@@ -107,11 +100,15 @@ jobs:
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
           uv run -- maturin develop --uv
-          uv run -- pytest -vvv --debug --cov=rgrow --cov-report xml
+          uv run -- pytest -vvv --debug --cov=py-rgrow/rgrow --cov-report xml
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
+      - name: Run ty
+        continue-on-error: true
+        run: |
+          uvx ty check py-rgrow/rgrow/
       - uses: codecov/codecov-action@v5
         with:
-          files: coverage.xml
+          files: coverage.xml,coverage.lcov
           name: python-linux # ${{ matrix.os }}
           token: ${{ secrets.CODECOV_TOKEN }}
   linux:

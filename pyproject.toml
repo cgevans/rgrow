@@ -1,30 +1,29 @@
 [project]
 name = "rgrow"
 dependencies = ["numpy ~= 2.0", "attrs ~= 23.2", "matplotlib ~= 3.9", "typing_extensions", "tqdm", "pyyaml", "platformdirs"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dynamic = ["version"]
 
-[project.optional-dependencies]
-
-testing = [
-    "pytest",
-    "hypothesis"
-]
 
 [build-system]
-requires = ["maturin~=1.4"]
+requires = ["maturin~=1.10"]
 build-backend = "maturin"
 
-[tool.pytest.ini_options]
+[tool.pytest]
+minversion = "9.0"
 testpaths = ["py-rgrow/tests"]
 
 [tool.maturin]
 bindings = "pyo3"
 python-source = "py-rgrow"
 manifest-path = "py-rgrow/Cargo.toml"
+profile = "release"
 
 [dependency-groups]
 dev = [
     "ipykernel>=6.31.0",
     "ipywidgets>=8.1.8",
+    "pytest~=9.0",
+    "hypothesis",
+    "pytest-cov",
 ]
