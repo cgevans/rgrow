@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/github/cgevans/rgrow/graph/badge.svg?token=GZLWKMQ2GZ)](https://codecov.io/github/cgevans/rgrow)
+
 # Introduction
 
 rgrow (which may change name in the future) is a fast, extensible simulator for Tile Assembly Models, primarily focused on kinetic models that require fast simulations of attachment and detachment events.  It is inspired by Xgrow, but seeks to be more extensible and easier and faster to use programmably.  It has Rust and Python interfaces, and a command line and UI interface similar to Xgrow.  It includes an implementation of forward flux sampling for nucleation rate calculations.
