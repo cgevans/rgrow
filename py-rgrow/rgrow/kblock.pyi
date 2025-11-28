@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Any, Sequence
 from numpy.typing import NDArray
 import numpy as np
 from matplotlib.axes import Axes
-from rgrow import State, FFSStateRef, EvolveOutcome
+from rgrow import State, FFSStateRef, EvolveOutcome, FFSRunConfig, FFSRunResult
 
 
 @dataclass
@@ -72,6 +72,8 @@ class KBlock:
         annotate_mismatches: bool = False,
         crop: bool = False,
     ) -> Axes: ...
+    
+    def run_ffs(self, config: FFSRunConfig = ..., **kwargs: Any) -> FFSRunResult: ...
 
 __all__ = ["KBlock", "KBlockParams", "KBlockTile"]
 

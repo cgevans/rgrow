@@ -2449,7 +2449,11 @@ class TileSet:
         finished.
         """
 
-class TileShape: ...
+class TileShape:
+    """Shape of a tile (Single, Horizontal, or Vertical)."""
+    Single: TileShape
+    Horizontal: TileShape
+    Vertical: TileShape
 
 class Orientation:
     """Orientation of a dimer (NS = North-South, WE = West-East)."""
