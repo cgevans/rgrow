@@ -82,10 +82,6 @@ jobs:
         run: |
           uv venv
           uv pip install -U pip setuptools wheel
-      - name: Run ty
-        continue-on-error: true
-        run: |
-          uvx ty check py-rgrow/rgrow/
       - name: Run Ruff on Python code
         uses: astral-sh/ruff-action@v3
         with:
@@ -106,6 +102,10 @@ jobs:
           uv run -- maturin develop --uv
           uv run -- pytest -vvv --debug --cov=rgrow --cov-report xml
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov
+      - name: Run ty
+        continue-on-error: true
+        run: |
+          uvx ty check py-rgrow/rgrow/
       - uses: codecov/codecov-action@v5
         with:
           files: coverage.xml,coverage.lcov
