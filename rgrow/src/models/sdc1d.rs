@@ -2264,25 +2264,27 @@ mod test_sdc_model {
         // doesn't matter
         let mut sdc = SDC {
             anchor_tiles: Vec::new(),
-            strand_names: Vec::new(),
+            strand_names: vec!["null".to_string(); 11],
             glue_names: Vec::new(),
             quencher_id: None,
             quencher_concentration: Molar::zero(),
             reporter_id: None,
             fluorophore_concentration: Molar::zero(),
             scaffold: Array2::<usize>::zeros((5, 5)),
-            strand_concentration: Array1::<Molar>::zeros(5),
+            strand_concentration: Array1::<Molar>::zeros(11),
             scaffold_concentration: Molar::zero(),
             glues: array![
-                [0, 0, 0], // Null glue
-                [0, 0, 0], // Fluorophore
-                [0, 0, 0], // Quencher
-                [1, 3, 12],
-                [6, 2, 12],
-                [31, 3, 45],
-                [8, 4, 2],
-                [1, 1, 78],
-                [4, 4, 1],
+                [0, 0, 0],   // Null glue
+                [1, 3, 12],  // Normal strand 1
+                [6, 2, 12],  // Normal strand 2
+                [31, 3, 45], // Normal strand 3
+                [8, 4, 2],   // Normal strand 4
+                [1, 1, 78],  // Normal strand 5
+                [4, 4, 1],   // Normal strand 6
+                [0, 0, 0],   // Normal strand 7 (placeholder)
+                [0, 0, 0],   // Normal strand 8 (placeholder)
+                [0, 0, 0],   // Quencher (last - 2)
+                [0, 0, 0],   // Fluorophore (last - 1)
             ],
             colors: Vec::new(),
             kf: PerMolarSecond::zero(),
@@ -2292,8 +2294,8 @@ mod test_sdc_model {
             delta_g_matrix: (array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]])
                 .mapv(KcalPerMol),
             temperature: Celsius(5.0).into(),
-            strand_energy_bonds: Array2::default((5, 5)),
-            scaffold_energy_bonds: Array1::default(5),
+            strand_energy_bonds: Array2::default((11, 11)),
+            scaffold_energy_bonds: Array1::default(11),
         };
 
         sdc.update_system();
@@ -2309,12 +2311,15 @@ mod test_sdc_model {
         // TODO Check that the energy bonds are being generated as expected
 
         // Check that the friends hashmap is being generated as expected
+        // In new system: quencher and fluorophore are at last two indices (9 and 10), so they're skipped
+        // Normal strands are at indices 1-6 (old indices 3-8 shifted by -2)
+        // Old indices 3,4,5,6,7,8 -> New indices 1,2,3,4,5,6
         let expected_friends = vec![
             vec![],     // 0
-            vec![4],    // 1 -> Tiles with 2 in the bottom
-            vec![7],    // 2 -> Tiles with 1 in the bottom
-            vec![6, 8], // 3
-            vec![3, 5], // 4
+            vec![2],    // 1 -> Tiles with 2 in the bottom (old index 4 -> new index 2)
+            vec![5],    // 2 -> Tiles with 1 in the bottom (old index 7 -> new index 5)
+            vec![4, 6], // 3 (old indices 6,8 -> new indices 4,6)
+            vec![1, 3], // 4 (old indices 3,5 -> new indices 1,3)
         ];
         assert_eq!(expected_friends, sdc.friends_btm);
     }
@@ -2350,24 +2355,26 @@ mod test_sdc_model {
 
         let mut sdc = SDC {
             anchor_tiles: Vec::new(),
-            strand_names: Vec::new(),
+            strand_names: vec!["null".to_string(); 11],
             glue_names: Vec::new(),
             quencher_id: None,
             quencher_concentration: Molar::zero(),
             reporter_id: None,
             fluorophore_concentration: Molar::zero(),
             scaffold,
-            strand_concentration: Array1::<Molar>::zeros(5),
+            strand_concentration: Array1::<Molar>::zeros(11),
             glues: array![
-                [0, 0, 0],
-                [0, 0, 0],
-                [0, 0, 0],
-                [1, 3, 12],
-                [11, 2, 12],
-                [29, 3, 45],
-                [8, 4, 2],
-                [11, 1, 30],
-                [4, 4, 1],
+                [0, 0, 0],   // Null
+                [1, 3, 12],  // Normal strand 1
+                [11, 2, 12], // Normal strand 2
+                [29, 3, 45], // Normal strand 3
+                [8, 4, 2],   // Normal strand 4
+                [11, 1, 30], // Normal strand 5
+                [4, 4, 1],   // Normal strand 6
+                [0, 0, 0],   // Normal strand 7 (placeholder)
+                [0, 0, 0],   // Normal strand 8 (placeholder)
+                [0, 0, 0],   // Quencher (last - 2)
+                [0, 0, 0],   // Fluorophore (last - 1)
             ],
             scaffold_concentration: Molar::zero(),
             colors: Vec::new(),
@@ -2378,8 +2385,8 @@ mod test_sdc_model {
             delta_g_matrix: array![[4., 1., -8.], [6., 1., 14.], [12., 21., -13.,]]
                 .mapv(KcalPerMol),
             temperature: Celsius(50.0).into(),
-            strand_energy_bonds: Array2::default((5, 5)),
-            scaffold_energy_bonds: Array1::default(5),
+            strand_energy_bonds: Array2::default((11, 11)),
+            scaffold_energy_bonds: Array1::default(11),
         };
         // We need to fill the friends map
         sdc.update_system();
@@ -2393,17 +2400,19 @@ mod test_sdc_model {
         assert_eq!(sdc.scaffold(), vec![0, 0, 1, 1, 2, 4, 0, 0]);
         let x = sdc.system_states();
 
+        // In new system: normal strands shifted from indices 3-8 to 1-6 (subtract 2)
+        // Old indices 4,7,3 -> New indices 2,5,1
         assert_all!(
-            x.contains(&vec![0, 0, 4, 4, 7, 3, 0, 0]),
-            x.contains(&vec![0, 0, 4, 4, 7, 3, 0, 0]),
-            x.contains(&vec![0, 0, 0, 4, 7, 3, 0, 0]),
-            x.contains(&vec![0, 0, 4, 0, 7, 3, 0, 0]),
-            x.contains(&vec![0, 0, 4, 4, 0, 3, 0, 0]),
-            x.contains(&vec![0, 0, 4, 4, 7, 0, 0, 0]),
-            x.contains(&vec![0, 0, 0, 0, 7, 3, 0, 0]),
-            x.contains(&vec![0, 0, 0, 0, 7, 3, 0, 0]),
-            x.contains(&vec![0, 0, 0, 4, 0, 3, 0, 0]),
-            x.contains(&vec![0, 0, 0, 4, 7, 0, 0, 0])
+            x.contains(&vec![0, 0, 2, 2, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 2, 2, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 0, 2, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 2, 0, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 2, 2, 0, 1, 0, 0]),
+            x.contains(&vec![0, 0, 2, 2, 5, 0, 0, 0]),
+            x.contains(&vec![0, 0, 0, 0, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 0, 0, 5, 1, 0, 0]),
+            x.contains(&vec![0, 0, 0, 2, 0, 1, 0, 0]),
+            x.contains(&vec![0, 0, 0, 2, 5, 0, 0, 0])
         );
 
         // Note: One is added to each since the 0 state is not in friends
@@ -2553,7 +2562,9 @@ mod test_sdc_model {
         //     println!("Probability of {} for {:?}", p, s);
         // });
 
-        assert_eq!(probs[0].0, vec![0, 0, 3, 5, 7, 9, 4, 0, 0]);
+        // In new system: normal strands start at index 1 (was index 3 in old system)
+        // Old indices 3,5,7,9,4 -> New indices 1,3,5,7,2 (subtract 2)
+        assert_eq!(probs[0].0, vec![0, 0, 1, 3, 5, 7, 2, 0, 0]);
     }
 
     #[test]
@@ -2583,7 +2594,9 @@ mod test_sdc_model {
             assert!(s_energy < f_energy);
         }
 
-        let mfe_config = [0, 0, 3, 5, 7, 9, 4, 0, 0];
+        // In new system: normal strands start at index 1 (was index 3 in old system)
+        // Old indices 3,5,7,9,4 -> New indices 1,3,5,7,2 (subtract 2)
+        let mfe_config = [0, 0, 1, 3, 5, 7, 2, 0, 0];
         let (acc, _) = sdc.mfe_configuration();
         assert_eq!(mfe_config.to_vec(), acc);
     }
