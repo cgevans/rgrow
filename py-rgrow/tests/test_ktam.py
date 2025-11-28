@@ -162,4 +162,240 @@ def test_ktam_vduples():
     # We should run out of events, hopefully.
     assert out == EvolveOutcome.ReachedSizeMax
 
+
+def test_ktam_fission_no_fission():
+    """Test that NoFission prevents fission events from occurring.  This uses a temperature-1 system with a single tile growing
+    a 1D line.  Since there is no fission, growth will be favorable from the seed."""
+    tube_ts = TileSet(
+        [
+            Tile([0, 1, 0, 1]),
+        ],
+        [Bond("1", 1)],
+        canvas_type="square",
+        size=(8, 1024),
+        alpha=-7.1,
+        gse=10.2,
+        gmc=10.0,
+        fission="no-fission",
+        seed=[(4, 2, 1)]
+    )
+
+    sys, state = cast(tuple[KTAM, State], tube_ts.create_system_and_state())
+    sys.update_all(state)
+
+    assert sys.calc_mismatches(state) == 0
+
+    out = sys.evolve(state, for_events=100_000, size_min=0, size_max=1000)
+
+    assert out == EvolveOutcome.ReachedSizeMax
+    assert state.n_tiles > 800
+
+
+
+def test_ktam_fission_keep_seeded():
+    """Test that KeepSeeded keeps the seeded tile when fission occurs.  This cheats, using a system of two structures bound by
+    a weak tile that is almost certain to detach."""
+    ts = TileSet(
+        [
+            Tile([1, 1, 1, 1], name="tile1"),
+            Tile([0, 2, 0, 2], name="tile2")
+        ],
+        glues=[(1,2,0.1)],
+        canvas_type="square",
+        size=(128, 128),
+        alpha=-7.1,
+        gse=10.1,
+        gmc=20.0,
+        fission="keep-seeded",
+        seed=(4, 2, "tile1"),
+    )
+
+    sys, state = cast(tuple[KTAM, State], ts.create_system_and_state())
+    state.canvas_view[3:13, 3:13] = 1
+    state.canvas_view[3:13, 14:23] = 1
+    state.canvas_view[8, 13] = 2
+    sys.update_all(state)
+
+    assert sys.calc_mismatches(state) == 0
     
+    sys.evolve(state, for_events=100, size_min=0, size_max=1000)
+
+    assert state.canvas_view[5, 20] == 0
+    assert state.n_tiles < 150
+    assert state.canvas_view[5, 10] == 1
+
+def test_ktam_fission_keep_largest():
+    """Test that KeepSeeded keeps the seeded tile when fission occurs.  This cheats, using a system of two structures bound by
+    a weak tile that is almost certain to detach."""
+    ts = TileSet(
+        [
+            Tile([1, 1, 1, 1], name="tile1"),
+            Tile([0, 2, 0, 2], name="tile2")
+        ],
+        glues=[(1,2,0.1)],
+        canvas_type="square",
+        size=(128, 128),
+        alpha=-7.1,
+        gse=5.1,
+        gmc=10.0,
+        fission="keep-largest",
+        seed=(4, 2, "tile1"),
+    )
+
+    sys, state = cast(tuple[KTAM, State], ts.create_system_and_state())
+    state.canvas_view[3:13, 3:13] = 1
+    state.canvas_view[3:13, 14:64] = 1
+    state.canvas_view[8, 13] = 2
+    sys.update_all(state)
+
+    assert sys.calc_mismatches(state) == 0
+
+    assert state.n_tiles > 600
+    sys.evolve(state, for_events=100, size_min=0, size_max=1000)
+
+    assert state.canvas_view[5, 20] == 1
+    assert state.n_tiles < 550
+    assert state.canvas_view[5, 10] == 0
+
+def test_ktam_fission_keep_weighted():
+    """Test that KeepWeighted uses weighted selection when fission occurs."""
+    """Test that KeepSeeded keeps the seeded tile when fission occurs.  This cheats, using a system of two structures bound by
+    a weak tile that is almost certain to detach."""
+    def make_ts() -> tuple[KTAM, State]: 
+        ts = TileSet(
+            [
+                Tile([1, 1, 1, 1], name="tile1"),
+                Tile([0, 2, 0, 2], name="tile2")
+            ],
+            glues=[(1,2,0.001)],
+            canvas_type="square",
+            size=(128, 128),
+            alpha=-7.1,
+            gse=10.1,
+            gmc=20.0,
+            fission="keep-weighted"
+        )
+
+        sys, state = cast(tuple[KTAM, State], ts.create_system_and_state())
+        state.canvas_view[3:13, 3:13] = 1
+        state.canvas_view[3:13, 14:34] = 1
+        state.canvas_view[8, 13] = 2
+        sys.update_all(state)
+        return sys, state
+
+    keep_left = 0
+    keep_right = 0
+    for i in range(500):
+        sys, state = make_ts()
+        sys.evolve(state, for_events=10, size_min=0, size_max=1000)
+        if state.canvas_view[5, 20] == 1 and state.canvas_view[5, 10] == 0:
+            keep_right += 1
+        elif state.canvas_view[5, 20] == 0 and state.canvas_view[5, 10] == 1:
+            keep_left += 1
+        else:
+            raise ValueError("No fission")
+        
+    assert keep_right > 1.5 * keep_left
+    assert keep_right < 2.5 * keep_left
+
+def test_ktam_fission_just_detach():
+    """Test that JustDetach allows detachment without special fission handling."""
+    ts = TileSet(
+        [
+            Tile([1, 1, 1, 1], name="tile1"),
+            Tile([0, 2, 0, 2], name="tile2")
+        ],
+        glues=[(1,2,0.01)],
+        canvas_type="square",
+        size=(128, 128),
+        alpha=-7.1,
+        gse=20.1,
+        gmc=40.0,
+        fission="just-detach",
+        seed=(4, 2, "tile1"),
+    )
+
+    sys, state = cast(tuple[KTAM, State], ts.create_system_and_state())
+    state.canvas_view[3:13, 3:13] = 1
+    state.canvas_view[3:13, 14:64] = 1
+    state.canvas_view[8, 13] = 2
+    sys.update_all(state)
+
+    assert state.n_tiles > 600
+    sys.evolve(state, for_events=100, size_min=0, size_max=1000)
+
+    assert state.canvas_view[8, 13] == 0
+    assert state.canvas_view[5, 20] == 1
+    assert state.canvas_view[5, 10] == 1
+
+
+def test_ktam_dimer_detach_off():
+    """Test that JustDetach allows detachment without special fission handling."""
+    ts = TileSet(
+        [
+            Tile([1, 1, 1, 1], name="tile1"),
+            Tile([0, 2, "e3", 2], name="tile2"),
+            Tile(["e3", 2, 0, 2], name="tile3"),
+        ],
+        bonds=[Bond("e3", 100 )],
+        glues=[(1,2,0.01)],
+        canvas_type="square",
+        size=(128, 128),
+        alpha=-7.1,
+        gse=10.1,
+        gmc=20.0,
+        fission="keep-seeded",
+        seed=(4, 2, "tile1"),
+    )
+
+    sys, state = cast(tuple[KTAM, State], ts.create_system_and_state())
+    state.canvas_view[3:13, 3:13] = 1
+    state.canvas_view[3:13, 14:64] = 1
+    state.canvas_view[8, 13] = 2
+    state.canvas_view[9, 13] = 3
+    sys.update_all(state)
+
+    assert state.n_tiles > 600
+    sys.evolve(state, for_events=10, size_min=0, size_max=1000)
+
+    assert state.canvas_view[8, 13] == 2
+    assert state.canvas_view[9, 13] == 3
+    assert state.canvas_view[5, 20] == 1
+    assert state.canvas_view[5, 10] == 1
+
+def test_ktam_dimer_detach_on():
+    """Test that JustDetach allows detachment without special fission handling."""
+    ts = TileSet(
+        [
+            Tile([1, 1, 1, 1], name="tile1"),
+            Tile([0, 2, "e3", 2], name="tile2"),
+            Tile(["e3", 2, 0, 2], name="tile3"),
+        ],
+        bonds=[Bond("e3", 100 )],
+        glues=[(1,2,0.01)],
+        canvas_type="square",
+        size=(128, 128),
+        alpha=-7.1,
+        gse=10.1,
+        gmc=20.0,
+        fission="keep-seeded",
+        chunk_handling="detach",
+        chunk_size="dimer",
+        seed=(4, 2, "tile1"),
+    )
+
+    sys, state = cast(tuple[KTAM, State], ts.create_system_and_state())
+    state.canvas_view[3:13, 3:13] = 1
+    state.canvas_view[3:13, 14:64] = 1
+    state.canvas_view[8, 13] = 2
+    state.canvas_view[9, 13] = 3
+    sys.update_all(state)
+
+    assert state.n_tiles > 600
+    sys.evolve(state, for_events=10, size_min=0, size_max=1000)
+
+    assert state.canvas_view[8, 13] == 0
+    assert state.canvas_view[9, 13] == 0
+    assert state.canvas_view[5, 20] == 0
+    assert state.canvas_view[5, 10] == 1
+
