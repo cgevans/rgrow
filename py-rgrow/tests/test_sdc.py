@@ -64,14 +64,19 @@ def test_bitcopy_const_temp():
 
     assert state.n_tiles < 10
 
+
 def test_basic_on_rates():
     N = 8
     sys = make_bitcopy(N)
     state = State((1024, N+4), kind="Square", tracking="None", n_tile_types=len(sys.tile_names))
     sys.update_state(state)
 
-    # TODO: get kf directly
-    kf = 1e6
+    kf = sys.get_param("kf")
 
     assert state.rate_at_point((5, 2)) == kf * 1e-7
     assert state.rate_at_point((5, 3)) == 2 * kf * 1e-7
+
+    sys.set_param("kf", 1e7)
+    sys.update_state(state)
+    assert state.rate_at_point((5, 2)) == 1e7 * 1e-7
+    assert state.rate_at_point((5, 3)) == 2 * 1e7 * 1e-7

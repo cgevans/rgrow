@@ -1195,9 +1195,9 @@ impl System for SDC {
         match name {
             "kf" => {
                 let kf = value
-                    .downcast_ref::<PerMolarSecond>()
+                    .downcast_ref::<f64>()
                     .ok_or(GrowError::WrongParameterType(name.to_string()))?;
-                self.kf = *kf;
+                self.kf = PerMolarSecond::from(*kf);
                 self.update_system();
                 Ok(NeededUpdate::NonZero)
             }
@@ -1222,10 +1222,10 @@ impl System for SDC {
 
     fn get_param(&self, name: &str) -> Result<Box<dyn std::any::Any>, crate::base::GrowError> {
         match name {
-            "kf" => Ok(Box::new(self.kf)),
+            "kf" => Ok(Box::new(f64::from(self.kf))),
             "strand_concentrations" => Ok(Box::new(self.strand_concentration.clone())),
             "energy_bonds" => Ok(Box::new(self.strand_energy_bonds.clone())),
-            "temperature" => Ok(Box::new(self.temperature)),
+            "temperature" => Ok(Box::new(f64::from(self.temperature))),
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }
