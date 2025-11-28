@@ -48,9 +48,6 @@ const EAST_GLUE_INDEX: usize = 2;
 const R: f64 = 1.98720425864083 / 1000.0; // in kcal/mol/K
 const U0: Molar = Molar(1.0);
 
-const QUENCHER_STRAND: Tile = 1;
-const REPORTER_STRAND: Tile = 2;
-
 fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     let mut big_float = big_float.clone();
     big_float.set_precision(64, rounding_mode).unwrap();
@@ -185,6 +182,14 @@ impl SDC {
         })
     }
 
+    fn quencher_strand(&self) -> Tile {
+        (self.strand_names.len() - 2) as Tile
+    }
+
+    fn reporter_strand(&self) -> Tile {
+        (self.strand_names.len() - 1) as Tile
+    }
+
     fn update_system(&mut self) {
         self.empty_cache();
         self.generate_friends();
@@ -206,6 +211,8 @@ impl SDC {
             .unwrap();
         let max_glue = max_glue_scaffold.max(max_glue_strands);
         let mut friends_btm: Vec<Vec<Tile>> = vec![Vec::new(); max_glue + 1];
+        let quencher_index = self.quencher_strand() as usize;
+        let reporter_index = self.reporter_strand() as usize;
         for (t, &b) in self
             .glues
             .index_axis(ndarray::Axis(1), BOTTOM_GLUE_INDEX)
@@ -217,7 +224,7 @@ impl SDC {
             // ...
 
             // Ignore the ones that have the wrong glue, and also the null tile, and the quencher / fluo
-            if b == 0 || t <= 2 {
+            if b == 0 || t == quencher_index || t == reporter_index {
                 continue;
             }
 
@@ -406,7 +413,7 @@ impl SDC {
         let random = rand::random_range(0.0..1.0);
         let prb = self.quencher_probability();
         if random < prb {
-            QUENCHER_STRAND
+            self.quencher_strand()
         } else {
             qid
         }
@@ -418,7 +425,7 @@ impl SDC {
         let random = rand::random_range(0.0..1.0);
         let prb = self.fluorophore_probability();
         if random < prb {
-            REPORTER_STRAND
+            self.reporter_strand()
         } else {
             rid
         }
@@ -430,15 +437,17 @@ impl SDC {
         scaffold_point: PointSafe2,
     ) -> PerSecond {
         let strand = state.tile_at_point(scaffold_point);
+        let quencher_strand = self.quencher_strand();
+        let reporter_strand = self.reporter_strand();
         match Some(strand) {
             // The quencher can attach to the strand
             q if q == self.quencher_id => self.quencher_att_rate(),
             // The fluorophore can attach to the strand
             r if r == self.reporter_id => self.fluorophore_att_rate(),
             // The quencher can detach from the strand
-            Some(1) => self.quencher_det_rate(),
+            s if s == Some(quencher_strand) => self.quencher_det_rate(),
             // The fluorophore can detach from the strand
-            Some(2) => self.fluorophore_det_rate(),
+            s if s == Some(reporter_strand) => self.fluorophore_det_rate(),
             _ => PerSecond::zero(),
         }
     }
@@ -450,6 +459,8 @@ impl SDC {
         mut acc: PerSecond,
     ) -> (bool, PerSecond, Event, f64) {
         let strand = state.tile_at_point(point);
+        let quencher_strand = self.quencher_strand();
+        let reporter_strand = self.reporter_strand();
         match Some(strand) {
             q if q == self.quencher_id => {
                 let rate = self.quencher_att_rate();
@@ -457,7 +468,12 @@ impl SDC {
                 if acc > PerSecond::zero() {
                     (true, acc, Event::None, f64::NAN)
                 } else {
-                    (true, acc, Event::MonomerAttachment(point, 1), rate.into())
+                    (
+                        true,
+                        acc,
+                        Event::MonomerAttachment(point, quencher_strand),
+                        rate.into(),
+                    )
                 }
             }
             r if r == self.reporter_id => {
@@ -466,11 +482,16 @@ impl SDC {
                 if acc > PerSecond::zero() {
                     (true, acc, Event::None, f64::NAN)
                 } else {
-                    (true, acc, Event::MonomerAttachment(point, 2), rate.into())
+                    (
+                        true,
+                        acc,
+                        Event::MonomerAttachment(point, reporter_strand),
+                        rate.into(),
+                    )
                 }
             }
             // The quencher is currently attached
-            Some(1) => {
+            s if s == Some(quencher_strand) => {
                 let rate = self.quencher_det_rate();
                 acc -= rate;
                 if acc > PerSecond::zero() {
@@ -484,7 +505,7 @@ impl SDC {
                     )
                 }
             }
-            Some(2) => {
+            s if s == Some(reporter_strand) => {
                 let rate = self.fluorophore_det_rate();
                 acc -= rate;
                 if acc > PerSecond::zero() {
@@ -1506,31 +1527,24 @@ impl SDC {
 
         let mut glue_name_map: HashMap<String, usize> = HashMap::new();
 
-        // Add one to account for the empty strand
+        // Add one to account for the empty strand, plus quencher and fluorophore
         let strand_count = params.strands.len() + 3;
+        let quencher_index = strand_count - 2;
+        let reporter_index = strand_count - 1;
 
         let mut strand_names: Vec<String> = Vec::with_capacity(strand_count);
         let mut strand_colors: Vec<[u8; 4]> = Vec::with_capacity(strand_count);
         let mut strand_concentration = Array1::<f64>::zeros(strand_count);
 
-        // Add the "standard" strands
-        strand_names.append(
-            &mut vec!["null", "quencher", "fluorophore"]
-                .into_iter()
-                .map(String::from)
-                .collect(),
-        );
-        strand_colors.push([0, 0, 0, 0]);
-        // FIXME: Add colors
-        strand_colors.push([0, 0, 0, 0]);
+        // Add null at index 0
+        strand_names.push("null".to_string());
         strand_colors.push([0, 0, 0, 0]);
         strand_concentration[0] = 0.0;
-        strand_concentration[1] = params.quencher_concentration;
-        strand_concentration[2] = params.fluorophore_concentration;
 
         let mut glues = Array2::<usize>::zeros((strand_count + 3, 3));
         let mut gluenum = 1;
 
+        // Add normal strands starting at index 1
         for (
             id,
             SDCStrand {
@@ -1543,6 +1557,7 @@ impl SDC {
             },
         ) in params.strands.into_iter().enumerate()
         {
+            let strand_index = id + 1;
             // Add the name and the color
             strand_names.push(name.unwrap_or(id.to_string()));
 
@@ -1550,18 +1565,25 @@ impl SDC {
             let color_or_rand = get_color_or_random(color_as_str).unwrap();
             strand_colors.push(color_or_rand);
 
-            // Add the glues, note that we want to leave index (0, _) empty (for the empty tile),
-            // as well as (1, _) and (2, _) for the quencher and fluorophore
-            glues[(id + 3, WEST_GLUE_INDEX)] =
+            // Add the glues, note that we want to leave index (0, _) empty (for the empty tile)
+            glues[(strand_index, WEST_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, left_glue);
-            glues[(id + 3, BOTTOM_GLUE_INDEX)] =
+            glues[(strand_index, BOTTOM_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, btm_glue);
-            glues[(id + 3, EAST_GLUE_INDEX)] =
+            glues[(strand_index, EAST_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, right_glue);
 
             // Add the concentrations
-            strand_concentration[id + 3] = concentration;
+            strand_concentration[strand_index] = concentration;
         }
+
+        // Add quencher and fluorophore at the last two indices
+        strand_names.push("quencher".to_string());
+        strand_names.push("fluorophore".to_string());
+        strand_colors.push([0, 0, 0, 0]);
+        strand_colors.push([0, 0, 0, 0]);
+        strand_concentration[quencher_index] = params.quencher_concentration;
+        strand_concentration[reporter_index] = params.fluorophore_concentration;
 
         let quencher_id: Option<Tile> = params
             .quencher_name
@@ -1579,16 +1601,16 @@ impl SDC {
 
         if let Some(q_id) = quencher_id {
             let q_id = q_id as usize;
-            glues[(1, WEST_GLUE_INDEX)] = glues[(q_id, WEST_GLUE_INDEX)];
-            glues[(1, BOTTOM_GLUE_INDEX)] = glues[(q_id, BOTTOM_GLUE_INDEX)];
-            glues[(1, EAST_GLUE_INDEX)] = 0;
+            glues[(quencher_index, WEST_GLUE_INDEX)] = glues[(q_id, WEST_GLUE_INDEX)];
+            glues[(quencher_index, BOTTOM_GLUE_INDEX)] = glues[(q_id, BOTTOM_GLUE_INDEX)];
+            glues[(quencher_index, EAST_GLUE_INDEX)] = 0;
         }
 
         if let Some(r_id) = reporter_id {
             let r_id = r_id as usize;
-            glues[(2, WEST_GLUE_INDEX)] = 0;
-            glues[(2, BOTTOM_GLUE_INDEX)] = glues[(r_id, BOTTOM_GLUE_INDEX)];
-            glues[(2, EAST_GLUE_INDEX)] = glues[(r_id, EAST_GLUE_INDEX)];
+            glues[(reporter_index, WEST_GLUE_INDEX)] = 0;
+            glues[(reporter_index, BOTTOM_GLUE_INDEX)] = glues[(r_id, BOTTOM_GLUE_INDEX)];
+            glues[(reporter_index, EAST_GLUE_INDEX)] = glues[(r_id, EAST_GLUE_INDEX)];
         }
 
         // Delta G at 37 degrees C

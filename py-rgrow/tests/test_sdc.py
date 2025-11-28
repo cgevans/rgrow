@@ -11,7 +11,17 @@ def mean_energies(strand_length: int = 10) -> tuple[float, float]:
 def make_bitcopy(N, input="0", conc=1e-7, cdl=10, sdl=20):
     strands = []
 
-    strands.append(SDCStrand(conc, f"c{input}", "sc0", f"c{input}*", f"input{input}"))
+    match input:
+        case "0":
+            conc0 = 1e-7
+            conc1 = 0
+        case "1":
+            conc0 = 0
+            conc1 = 1e-7
+
+
+    strands.append(SDCStrand(conc0, "c0", "sc0", "c0*", "input0"))
+    strands.append(SDCStrand(conc1, "c1", "sc0", "c1*", "input1"))
 
     for i in range(1,N):
         strands.append(SDCStrand(conc, "c0", f"sc{i}", "c0*", f"{i}_0"))
@@ -63,6 +73,44 @@ def test_bitcopy_const_temp():
     sys.evolve(state, for_events=10000000)
 
     assert state.n_tiles < 10
+
+def test_bitcopy_sane_temps():
+    N = 8
+    sys = make_bitcopy(N)
+
+    # At 30, MFE config should be the target state.
+    sys.temperature = 30
+    target_config = sys.mfe_config()[0]
+
+    known_zero_target = [0,0,1] + [2*i+1 for i in range(1, N)] + [0,0]
+    # known_one_target = [0,0,2] + [2*i+2 for i in range(1, N)] + [0,0]
+    assert target_config == known_zero_target
+
+    # Our probability should be high:
+    prob = sys.probability_of_state(target_config)
+    assert prob > 0.95
+
+    sys.temperature = 90
+
+    prob = sys.probability_of_state(target_config)
+    assert prob < 0.05
+
+    # Our MFE should be empty:
+    mfe_config = sys.mfe_config()[0]
+    assert np.all(mfe_config == [0,0] + [0]*N + [0,0])
+
+    # As we decrease temperature, the probability of the target config should monotonically increase
+    for temp in range(85, 20, -10):
+        sys.temperature = temp
+        new_prob = sys.probability_of_state(target_config)
+        assert new_prob > prob
+        assert np.allclose(np.exp(-sys.state_g(target_config) / sys.rtval())/sys.partition_function(), new_prob)
+        prob = new_prob
+
+    sys.temperature = 30
+    pf = sys.partition_function()
+    _, en = sys.mfe_config()
+    assert np.allclose(np.exp(-en / sys.rtval()), pf)
 
 
 def test_basic_on_rates():
