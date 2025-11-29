@@ -798,9 +798,13 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             std::thread::sleep(Duration::from_millis(16));
 
             // Only break on terminal conditions if not paused
+            // Continue running for: wall time limit, time limit, events limit, zero rate
+            // These are all normal "frame complete" conditions
             if !paused && remaining_step_events.is_none() {
                 match evres {
                     EvolveOutcome::ReachedWallTimeMax => {}
+                    EvolveOutcome::ReachedTimeMax => {}
+                    EvolveOutcome::ReachedEventsMax => {}
                     EvolveOutcome::ReachedZeroRate => {}
                     _ => {
                         break;
