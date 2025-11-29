@@ -45,7 +45,7 @@ path = "src/gui_main.rs"
 
 [features]
 default = []
-ui = ["iced", "iced_wgpu", "tokio", "bincode", "interprocess", "image"]
+ui = ["iced", "tokio", "bincode", "interprocess", "image"]
 python = ["pyo3", "numpy", "pyo3-polars"]
 
 [dependencies]
@@ -55,8 +55,7 @@ bimap = "0.6"
 serde_yaml = "0.9"
 serde_json = "1"
 serde = { workspace = true }
-iced = { version = "0.12", features = ["canvas"], optional = true }
-iced_wgpu = { version = "0.12", optional = true }
+iced = { version = "0.13", features = ["wgpu", "image"], optional = true }
 tokio = { version = "1", features = ["full"], optional = true }
 bincode = { version = "1.3", optional = true }
 interprocess = { version = "1.2", optional = true }
