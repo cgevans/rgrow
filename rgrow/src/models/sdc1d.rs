@@ -1246,7 +1246,7 @@ impl System for SDC {
             "kf" => Ok(Box::new(f64::from(self.kf))),
             "strand_concentrations" => Ok(Box::new(self.strand_concentration.clone())),
             "energy_bonds" => Ok(Box::new(self.strand_energy_bonds.clone())),
-            "temperature" => Ok(Box::new(f64::from(self.temperature))),
+            "temperature" => Ok(Box::new(self.temperature.to_celsius().0)),
             _ => Err(GrowError::NoParameter(name.to_string())),
         }
     }
@@ -1261,7 +1261,7 @@ impl System for SDC {
                 min_value: Some(0.0),
                 max_value: Some(100.0),
                 description: Some("Simulation temperature".to_string()),
-                current_value: f64::from(self.temperature),
+                current_value: self.temperature.to_celsius().0,
             },
             ParameterInfo {
                 name: "kf".to_string(),
