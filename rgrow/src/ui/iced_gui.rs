@@ -55,8 +55,12 @@ impl RgrowGui {
     fn new(
         receiver: Arc<Mutex<mpsc::Receiver<GuiMessage>>>,
         control_sender: mpsc::Sender<ControlMessage>,
-        _init: InitMessage,
+        init: InitMessage,
     ) -> Self {
+        let paused = init.start_paused;
+        if paused {
+            let _ = control_sender.send(ControlMessage::Pause);
+        }
         RgrowGui {
             current_image: None,
             stats_text: format!(
@@ -65,7 +69,7 @@ impl RgrowGui {
             ),
             receiver,
             control_sender,
-            paused: false,
+            paused,
             events_per_step: "1000".to_string(),
             max_events_per_sec: "".to_string(),
             timescale: "".to_string(),

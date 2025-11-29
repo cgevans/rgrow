@@ -253,3 +253,4 @@ xgrowargs:
   - [17,2,17]
   size: [32, 128]
   model: KTAM
+  start_paused: true

@@ -17,6 +17,7 @@ pub struct InitMessage {
     pub block: Option<usize>,
     pub shm_path: String,
     pub shm_size: usize,
+    pub start_paused: bool,
 }
 
 /// Notification that new frame data is available in shared memory.

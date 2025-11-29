@@ -530,6 +530,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         &self,
         _state: &mut St,
         _block: Option<usize>,
+        _start_paused: bool,
         _bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError> {
         Err(RgrowError::NoUI)
@@ -540,6 +541,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         &self,
         state: &mut St,
         block: Option<usize>,
+        start_paused: bool,
         mut bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError> {
         use crate::ui::ipc::{ControlMessage, InitMessage, UpdateNotification};
@@ -620,6 +622,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             block,
             shm_path: shm_path.clone(),
             shm_size,
+            start_paused,
         };
 
         ipc_client.send_init(&init_msg).map_err(|e| {
@@ -640,7 +643,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             })?;
 
         // Control state
-        let mut paused = false;
+        let mut paused = start_paused;
         let mut remaining_step_events: Option<u64> = None;
         let mut max_events_per_sec: Option<u64> = None;
         let mut timescale: Option<f64> = None;
@@ -867,6 +870,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         &self,
         state: &mut StateEnum,
         block: Option<usize>,
+        start_paused: bool,
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError>;
 
@@ -1077,9 +1081,10 @@ where
         &self,
         state: &mut StateEnum,
         block: Option<usize>,
+        start_paused: bool,
         bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError> {
-        self.evolve_in_window(state, block, bounds)
+        self.evolve_in_window(state, block, start_paused, bounds)
     }
 
     fn calc_mismatches(&self, state: &StateEnum) -> usize {

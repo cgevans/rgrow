@@ -364,7 +364,7 @@ macro_rules! create_py_system {
                         if show_window {
                             py
                                 .detach(|| {
-                                    System::evolve_in_window(self, state, None, bounds)
+                                    System::evolve_in_window(self, state, None, false, bounds)
                                 })?
                                 .into_py_any(py)
                         } else {

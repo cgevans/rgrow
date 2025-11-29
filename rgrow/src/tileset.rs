@@ -238,6 +238,8 @@ struct SerdeTileSet {
     pub(self) hdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
     pub(self) vdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
     pub(self) model: Option<Model>,
+    #[serde(default)]
+    pub(self) start_paused: bool,
     #[serde(alias = "xgrowargs", alias = "params")]
     pub(self) options: Option<Box<SerdeTileSet>>,
 }
@@ -271,6 +273,8 @@ pub struct TileSet {
     pub hdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
     pub vdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
     pub model: Option<Model>,
+    #[serde(default)]
+    pub start_paused: bool,
 }
 
 impl From<SerdeTileSet> for TileSet {
@@ -298,6 +302,7 @@ impl From<SerdeTileSet> for TileSet {
             hdoubletiles,
             vdoubletiles,
             model,
+            start_paused,
             options,
         } = serde_tile_set;
 
@@ -324,6 +329,7 @@ impl From<SerdeTileSet> for TileSet {
             hdoubletiles,
             vdoubletiles,
             model,
+            start_paused,
         };
 
         if let Some(options) = options {
@@ -349,6 +355,7 @@ impl From<SerdeTileSet> for TileSet {
             tile_set.hdoubletiles = options.hdoubletiles.or(tile_set.hdoubletiles);
             tile_set.vdoubletiles = options.vdoubletiles.or(tile_set.vdoubletiles);
             tile_set.model = options.model.or(tile_set.model);
+            tile_set.start_paused = options.start_paused || tile_set.start_paused;
         }
 
         tile_set
@@ -647,7 +654,7 @@ impl TileSet {
     #[cfg(feature = "ui")]
     pub fn run_window(&self) -> Result<StateEnum, RgrowError> {
         let (sys, mut state) = self.create_system_and_state()?;
-        sys.evolve_in_window(&mut state, self.block, self.get_bounds())?;
+        sys.evolve_in_window(&mut state, self.block, self.start_paused, self.get_bounds())?;
         Ok(state)
     }
 
