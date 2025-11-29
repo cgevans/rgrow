@@ -1146,6 +1146,82 @@ impl System for KBlock {
 
         Ok(dvec)
     }
+
+    fn set_param(
+        &mut self,
+        name: &str,
+        value: Box<dyn std::any::Any>,
+    ) -> Result<crate::system::NeededUpdate, crate::base::GrowError> {
+        match name {
+            "temperature" => {
+                let temp = value
+                    .downcast_ref::<f64>()
+                    .ok_or(crate::base::GrowError::WrongParameterType(name.to_string()))?;
+                self.temperature = Celsius(*temp);
+                self.update();
+                Ok(crate::system::NeededUpdate::NonZero)
+            }
+            "kf" => {
+                let kf = value
+                    .downcast_ref::<f64>()
+                    .ok_or(crate::base::GrowError::WrongParameterType(name.to_string()))?;
+                self.kf = PerMolarSecond::from(*kf);
+                self.update();
+                Ok(crate::system::NeededUpdate::NonZero)
+            }
+            "ds_lat" => {
+                let ds_lat = value
+                    .downcast_ref::<f64>()
+                    .ok_or(crate::base::GrowError::WrongParameterType(name.to_string()))?;
+                self.ds_lat = KcalPerMolKelvin::from(*ds_lat);
+                self.update();
+                Ok(crate::system::NeededUpdate::NonZero)
+            }
+            _ => Err(crate::base::GrowError::NoParameter(name.to_string())),
+        }
+    }
+
+    fn get_param(&self, name: &str) -> Result<Box<dyn std::any::Any>, crate::base::GrowError> {
+        match name {
+            "temperature" => Ok(Box::new(f64::from(self.temperature))),
+            "kf" => Ok(Box::new(f64::from(self.kf))),
+            "ds_lat" => Ok(Box::new(f64::from(self.ds_lat))),
+            _ => Err(crate::base::GrowError::NoParameter(name.to_string())),
+        }
+    }
+
+    fn list_parameters(&self) -> Vec<crate::system::ParameterInfo> {
+        use crate::system::ParameterInfo;
+        vec![
+            ParameterInfo {
+                name: "temperature".to_string(),
+                units: "°C".to_string(),
+                default_increment: 5.0,
+                min_value: Some(0.0),
+                max_value: Some(100.0),
+                description: Some("Simulation temperature".to_string()),
+                current_value: f64::from(self.temperature),
+            },
+            ParameterInfo {
+                name: "kf".to_string(),
+                units: "M/s".to_string(),
+                default_increment: 1e5,
+                min_value: Some(0.0),
+                max_value: None,
+                description: Some("Rate constant for monomer attachment events".to_string()),
+                current_value: f64::from(self.kf),
+            },
+            ParameterInfo {
+                name: "ds_lat".to_string(),
+                units: "kcal/(mol·K)".to_string(),
+                default_increment: 1.0,
+                min_value: None,
+                max_value: None,
+                description: Some("Lateral entropy change".to_string()),
+                current_value: f64::from(self.ds_lat),
+            },
+        ]
+    }
 }
 
 #[cfg(test)]

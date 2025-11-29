@@ -88,6 +88,17 @@ pub struct EvolveBounds {
     pub for_wall_time: Option<Duration>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParameterInfo {
+    pub name: String,
+    pub units: String,
+    pub default_increment: f64,
+    pub min_value: Option<f64>,
+    pub max_value: Option<f64>,
+    pub description: Option<String>,
+    pub current_value: f64,
+}
+
 #[cfg(feature = "python")]
 #[pymethods]
 impl EvolveBounds {
@@ -525,6 +536,10 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         todo!();
     }
 
+    fn list_parameters(&self) -> Vec<ParameterInfo> {
+        Vec::new()
+    }
+
     #[cfg(not(feature = "ui"))]
     fn evolve_in_window<St: State>(
         &self,
@@ -620,6 +635,15 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             None
         };
 
+        let mut parameters = self.list_parameters();
+        for param in &mut parameters {
+            if let Ok(value) = self.get_param(&param.name) {
+                if let Some(f64_value) = value.downcast_ref::<f64>() {
+                    param.current_value = *f64_value;
+                }
+            }
+        }
+
         let init_msg = InitMessage {
             width,
             height,
@@ -631,6 +655,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             model_name,
             has_temperature,
             initial_temperature,
+            parameters,
         };
 
         ipc_client.send_init(&init_msg).map_err(|e| {
@@ -689,6 +714,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                     }
                     ControlMessage::SetTemperature(temp) => {
                         if let Ok(needed) = self.set_param("temperature", Box::new(temp)) {
+                            self.update_state(state, &needed);
+                        }
+                    }
+                    ControlMessage::SetParameter { name, value } => {
+                        if let Ok(needed) = self.set_param(&name, Box::new(value)) {
                             self.update_state(state, &needed);
                         }
                     }

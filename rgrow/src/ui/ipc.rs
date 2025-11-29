@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::system::ParameterInfo;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IpcMessage {
     Init(InitMessage),
@@ -21,6 +23,7 @@ pub struct InitMessage {
     pub model_name: String,
     pub has_temperature: bool,
     pub initial_temperature: Option<f64>,
+    pub parameters: Vec<ParameterInfo>,
 }
 
 /// Notification that new frame data is available in shared memory.
@@ -51,5 +54,6 @@ pub enum ControlMessage {
     Step { events: u64 },
     SetMaxEventsPerSec(Option<u64>), // None = unlimited
     SetTimescale(Option<f64>),       // None = unlimited, else sim_time/real_time
-    SetTemperature(f64),
+    SetTemperature(f64),             // Deprecated, use SetParameter instead
+    SetParameter { name: String, value: f64 },
 }

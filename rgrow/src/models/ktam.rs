@@ -852,6 +852,39 @@ impl System for KTAM {
         }
     }
 
+    fn list_parameters(&self) -> Vec<crate::system::ParameterInfo> {
+        use crate::system::ParameterInfo;
+        vec![
+            ParameterInfo {
+                name: "g_se".to_string(),
+                units: "unitless".to_string(),
+                default_increment: 0.5,
+                min_value: None,
+                max_value: None,
+                description: Some("kTAM G_se value (positive is favorable)".to_string()),
+                current_value: self.g_se,
+            },
+            ParameterInfo {
+                name: "alpha".to_string(),
+                units: "unitless".to_string(),
+                default_increment: 0.5,
+                min_value: None,
+                max_value: None,
+                description: Some("kTAM α value (positive is favorable)".to_string()),
+                current_value: self.alpha,
+            },
+            ParameterInfo {
+                name: "kf".to_string(),
+                units: "M/s".to_string(),
+                default_increment: 1e5,
+                min_value: Some(0.0),
+                max_value: None,
+                description: Some("Rate constant for monomer attachment events".to_string()),
+                current_value: self.kf,
+            },
+        ]
+    }
+
     fn system_info(&self) -> String {
         format!(
             "kTAM with {} tiles and {} glues, G_se = {}, α = {}",

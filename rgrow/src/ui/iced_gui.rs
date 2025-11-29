@@ -1,10 +1,12 @@
 use iced::widget::{button, column, container, image, row, text, text_input};
 use iced::{window, Color, Element, Length, Size, Subscription, Task, Theme};
+use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use crate::system::ParameterInfo;
 use crate::ui::ipc::{ControlMessage, InitMessage};
 
 fn debug_enabled() -> bool {
@@ -26,6 +28,14 @@ pub enum GuiMessage {
     Close,
 }
 
+#[derive(Clone)]
+struct ParameterState {
+    input_value: String,
+    current_value: f64,
+    increment: f64,
+    info: ParameterInfo,
+}
+
 pub struct RgrowGui {
     current_image: Option<image::Handle>,
     stats_text: String,
@@ -36,9 +46,7 @@ pub struct RgrowGui {
     max_events_per_sec: String,
     timescale: String,
     model_name: String,
-    has_temperature: bool,
-    temperature_input: String,
-    current_temperature: f64,
+    parameters: HashMap<String, ParameterState>,
 }
 
 #[derive(Debug, Clone)]
@@ -53,10 +61,11 @@ pub enum Message {
     UpdateTimescale(String),
     ApplyMaxEventsPerSec,
     ApplyTimescale,
-    UpdateTemperature(String),
-    ApplyTemperature,
-    Heat,
-    Cool,
+    UpdateParameter { name: String, value: String },
+    ApplyParameter { name: String },
+    IncrementParameter { name: String },
+    DecrementParameter { name: String },
+    UpdateIncrement { name: String, increment: String },
 }
 
 impl RgrowGui {
@@ -68,6 +77,19 @@ impl RgrowGui {
         let paused = init.start_paused;
         if paused {
             let _ = control_sender.send(ControlMessage::Pause);
+        }
+        let mut parameters = HashMap::new();
+        for param_info in init.parameters {
+            let input_value = format!("{:.3}", param_info.current_value);
+            parameters.insert(
+                param_info.name.clone(),
+                ParameterState {
+                    input_value,
+                    current_value: param_info.current_value,
+                    increment: param_info.default_increment,
+                    info: param_info,
+                },
+            );
         }
         RgrowGui {
             current_image: None,
@@ -82,12 +104,7 @@ impl RgrowGui {
             max_events_per_sec: "".to_string(),
             timescale: "".to_string(),
             model_name: init.model_name,
-            has_temperature: init.has_temperature,
-            temperature_input: init
-                .initial_temperature
-                .map(|t| format!("{:.1}", t))
-                .unwrap_or_default(),
-            current_temperature: init.initial_temperature.unwrap_or(0.0),
+            parameters,
         }
     }
 
@@ -198,26 +215,71 @@ impl RgrowGui {
                 };
                 self.send_control(ControlMessage::SetTimescale(value));
             }
-            Message::UpdateTemperature(s) => {
-                self.temperature_input = s;
-            }
-            Message::ApplyTemperature => {
-                if let Ok(temp) = self.temperature_input.parse::<f64>() {
-                    self.current_temperature = temp;
-                    self.send_control(ControlMessage::SetTemperature(temp));
+            Message::UpdateParameter { name, value } => {
+                if let Some(param) = self.parameters.get_mut(&name) {
+                    param.input_value = value;
                 }
             }
-            Message::Heat => {
-                let new_temp = self.current_temperature + 5.0;
-                self.current_temperature = new_temp;
-                self.temperature_input = format!("{:.1}", new_temp);
-                self.send_control(ControlMessage::SetTemperature(new_temp));
+            Message::ApplyParameter { name } => {
+                if let Some(param) = self.parameters.get_mut(&name) {
+                    if let Ok(new_value) = param.input_value.parse::<f64>() {
+                        let clamped_value = if let Some(min) = param.info.min_value {
+                            new_value.max(min)
+                        } else {
+                            new_value
+                        };
+                        let clamped_value = if let Some(max) = param.info.max_value {
+                            clamped_value.min(max)
+                        } else {
+                            clamped_value
+                        };
+                        param.current_value = clamped_value;
+                        param.input_value = format!("{:.3}", clamped_value);
+                        self.send_control(ControlMessage::SetParameter {
+                            name: name.clone(),
+                            value: clamped_value,
+                        });
+                    }
+                }
             }
-            Message::Cool => {
-                let new_temp = (self.current_temperature - 5.0).max(0.0);
-                self.current_temperature = new_temp;
-                self.temperature_input = format!("{:.1}", new_temp);
-                self.send_control(ControlMessage::SetTemperature(new_temp));
+            Message::IncrementParameter { name } => {
+                if let Some(param) = self.parameters.get_mut(&name) {
+                    let new_value = param.current_value + param.increment;
+                    let clamped_value = if let Some(max) = param.info.max_value {
+                        new_value.min(max)
+                    } else {
+                        new_value
+                    };
+                    param.current_value = clamped_value;
+                    param.input_value = format!("{:.3}", clamped_value);
+                    self.send_control(ControlMessage::SetParameter {
+                        name: name.clone(),
+                        value: clamped_value,
+                    });
+                }
+            }
+            Message::DecrementParameter { name } => {
+                if let Some(param) = self.parameters.get_mut(&name) {
+                    let new_value = param.current_value - param.increment;
+                    let clamped_value = if let Some(min) = param.info.min_value {
+                        new_value.max(min)
+                    } else {
+                        new_value
+                    };
+                    param.current_value = clamped_value;
+                    param.input_value = format!("{:.3}", clamped_value);
+                    self.send_control(ControlMessage::SetParameter {
+                        name: name.clone(),
+                        value: clamped_value,
+                    });
+                }
+            }
+            Message::UpdateIncrement { name, increment } => {
+                if let Some(param) = self.parameters.get_mut(&name) {
+                    if let Ok(inc) = increment.parse::<f64>() {
+                        param.increment = inc.max(0.0);
+                    }
+                }
             }
         }
 
@@ -295,36 +357,75 @@ impl RgrowGui {
 
         let mut controls = vec![image_widget, control_row1.into(), control_row2.into()];
 
-        if self.has_temperature {
-            let temp_input = text_input("Temperature", &self.temperature_input)
-                .on_input(Message::UpdateTemperature)
-                .on_submit(Message::ApplyTemperature)
-                .width(100)
-                .size(14);
+        let mut param_names: Vec<String> = self.parameters.keys().cloned().collect();
+        param_names.sort();
 
-            let apply_temp_button = button(text("Apply").size(12))
-                .on_press(Message::ApplyTemperature)
-                .padding([3, 8]);
+        for param_name in param_names {
+            if let Some(param) = self.parameters.get(&param_name) {
+                let name_clone1 = param_name.clone();
+                let name_clone2 = param_name.clone();
+                let name_clone3 = param_name.clone();
+                let name_clone4 = param_name.clone();
+                let name_clone5 = param_name.clone();
+                let name_clone6 = param_name.clone();
 
-            let heat_button = button(text("Heat").size(12))
-                .on_press(Message::Heat)
-                .padding([3, 8]);
+                let label_text = if param.info.units.is_empty() {
+                    format!("{}:", param.info.name)
+                } else {
+                    format!("{} ({}):", param.info.name, param.info.units)
+                };
 
-            let cool_button = button(text("Cool").size(12))
-                .on_press(Message::Cool)
-                .padding([3, 8]);
+                let value_input = text_input("Value", &param.input_value)
+                    .on_input(move |s| Message::UpdateParameter {
+                        name: name_clone1.clone(),
+                        value: s,
+                    })
+                    .on_submit(Message::ApplyParameter {
+                        name: name_clone2.clone(),
+                    })
+                    .width(100)
+                    .size(14);
 
-            let control_row3 = row![
-                text("Temperature (°C):").size(14),
-                temp_input,
-                heat_button,
-                cool_button,
-                apply_temp_button,
-            ]
-            .spacing(10)
-            .align_y(iced::Alignment::Center);
+                let increment_input = text_input("Increment", &format!("{:.3}", param.increment))
+                    .on_input(move |s| Message::UpdateIncrement {
+                        name: name_clone3.clone(),
+                        increment: s,
+                    })
+                    .width(80)
+                    .size(12);
 
-            controls.push(control_row3.into());
+                let apply_button = button(text("Apply").size(12))
+                    .on_press(Message::ApplyParameter {
+                        name: name_clone4.clone(),
+                    })
+                    .padding([3, 8]);
+
+                let inc_button = button(text("+").size(12))
+                    .on_press(Message::IncrementParameter {
+                        name: name_clone5.clone(),
+                    })
+                    .padding([3, 8]);
+
+                let dec_button = button(text("-").size(12))
+                    .on_press(Message::DecrementParameter {
+                        name: name_clone6.clone(),
+                    })
+                    .padding([3, 8]);
+
+                let param_row = row![
+                    text(label_text).size(14),
+                    value_input,
+                    inc_button,
+                    dec_button,
+                    text("Increment:").size(12),
+                    increment_input,
+                    apply_button,
+                ]
+                .spacing(10)
+                .align_y(iced::Alignment::Center);
+
+                controls.push(param_row.into());
+            }
         }
 
         let stats = text(&self.stats_text)

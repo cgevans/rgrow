@@ -1251,6 +1251,30 @@ impl System for SDC {
         }
     }
 
+    fn list_parameters(&self) -> Vec<crate::system::ParameterInfo> {
+        use crate::system::ParameterInfo;
+        vec![
+            ParameterInfo {
+                name: "temperature".to_string(),
+                units: "°C".to_string(),
+                default_increment: 5.0,
+                min_value: Some(0.0),
+                max_value: Some(100.0),
+                description: Some("Simulation temperature".to_string()),
+                current_value: f64::from(self.temperature),
+            },
+            ParameterInfo {
+                name: "kf".to_string(),
+                units: "M/s".to_string(),
+                default_increment: 1e5,
+                min_value: Some(0.0),
+                max_value: None,
+                description: Some("Forward reaction rate constant".to_string()),
+                current_value: f64::from(self.kf),
+            },
+        ]
+    }
+
     fn system_info(&self) -> String {
         format!(
             "1 dimensional SDC with scaffold of length {} and {} strands",
