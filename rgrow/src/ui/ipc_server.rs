@@ -164,8 +164,10 @@ impl IpcClient {
         let len = u64::from_le_bytes(len_bytes) as usize;
         let mut buffer = vec![0u8; len];
 
-        // Once we have the length, we need to read the full message
-        // Switch to blocking briefly to ensure we get the complete message
+        // Once we've read the length, we must read the data to avoid corrupting the stream.
+        // For Unix sockets, the data should be available immediately, but we use blocking
+        // read here to ensure we get it all. This is safe because we've already committed
+        // to reading this message by reading the length.
         let _ = self.stream.set_nonblocking(false);
         if self.stream.read_exact(&mut buffer).is_err() {
             return None;

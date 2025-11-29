@@ -180,33 +180,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             thread::spawn(move || {
                 let debug = std::env::var("RGROW_DEBUG_PERF").is_ok();
                 loop {
-                    let control_recv = control_receiver_clone.lock().unwrap();
-                    match control_recv.recv_timeout(Duration::from_millis(100)) {
-                        Ok(control_msg) => {
-                            drop(control_recv);
-                            if debug {
-                                eprintln!(
-                                    "[Control-thread] Sending control message: {:?}",
-                                    control_msg
-                                );
+                    let control_msg = {
+                        let control_recv = control_receiver_clone.lock().unwrap();
+                        match control_recv.try_recv() {
+                            Ok(msg) => Some(msg),
+                            Err(mpsc::TryRecvError::Empty) => {
+                                drop(control_recv);
+                                std::thread::sleep(Duration::from_millis(10));
+                                continue;
                             }
-                            if let Ok(serialized) = bincode::serialize(&control_msg) {
-                                let len = serialized.len() as u64;
-                                let mut stream_guard = stream_for_control.lock().unwrap();
-                                if stream_guard.write_all(&len.to_le_bytes()).is_err() {
-                                    break;
-                                }
-                                if stream_guard.write_all(&serialized).is_err() {
-                                    break;
-                                }
-                                let _ = stream_guard.flush();
+                            Err(mpsc::TryRecvError::Disconnected) => {
+                                break;
                             }
                         }
-                        Err(mpsc::RecvTimeoutError::Timeout) => {
-                            drop(control_recv);
+                    };
+
+                    if let Some(control_msg) = control_msg {
+                        if debug {
+                            eprintln!(
+                                "[Control-thread] Sending control message: {:?}",
+                                control_msg
+                            );
                         }
-                        Err(mpsc::RecvTimeoutError::Disconnected) => {
-                            break;
+                        if let Ok(serialized) = bincode::serialize(&control_msg) {
+                            let len = serialized.len() as u64;
+                            let mut stream_guard = stream_for_control.lock().unwrap();
+                            if stream_guard.write_all(&len.to_le_bytes()).is_err() {
+                                break;
+                            }
+                            if stream_guard.write_all(&serialized).is_err() {
+                                break;
+                            }
+                            let _ = stream_guard.flush();
                         }
                     }
                 }
