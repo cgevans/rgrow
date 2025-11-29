@@ -1,7 +1,7 @@
 #[cfg(feature = "ui")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use rgrow::ui::iced_gui;
-    use rgrow::ui::ipc::IpcMessage;
+    use rgrow::ui::ipc::{ControlMessage, IpcMessage};
     use rgrow::ui::ipc_server::ShmReader;
     use std::env;
     use std::io::{Read, Write};
@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
     use std::thread;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -20,8 +20,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let socket_path = &args[1];
     let listener = UnixListener::bind(socket_path)?;
 
-    let (sender, receiver) = mpsc::channel();
-    let receiver = Arc::new(Mutex::new(receiver));
+    // Channel for GUI updates (IPC -> GUI)
+    let (update_sender, update_receiver) = mpsc::channel();
+    let update_receiver = Arc::new(Mutex::new(update_receiver));
+
+    // Channel for control messages (GUI -> IPC)
+    let (control_sender, control_receiver) = mpsc::channel::<ControlMessage>();
+    let control_receiver = Arc::new(Mutex::new(control_receiver));
 
     let socket_path_clone = socket_path.to_string();
 
@@ -49,7 +54,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let shm_size = init.shm_size;
 
             // Send Ready signal immediately - before spawning reader thread
-            // This avoids deadlock where reader holds lock while blocking on read
             {
                 let msg = IpcMessage::Ready;
                 let serialized = bincode::serialize(&msg)?;
@@ -60,9 +64,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 stream_guard.flush()?;
             }
 
-            let stream_clone = stream.clone();
-            let sender_clone = sender.clone();
+            let stream_for_read = stream.clone();
+            let stream_for_control = stream.clone();
+            let update_sender_clone = update_sender.clone();
+            let control_receiver_clone = control_receiver.clone();
 
+            // Thread to read updates from simulation
             thread::spawn(move || {
                 let debug = std::env::var("RGROW_DEBUG_PERF").is_ok();
                 if debug {
@@ -89,7 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 loop {
                     let t0 = Instant::now();
                     let mut len_bytes = [0u8; 8];
-                    let mut stream_guard = stream_clone.lock().unwrap();
+                    let mut stream_guard = stream_for_read.lock().unwrap();
                     if stream_guard.read_exact(&mut len_bytes).is_err() {
                         break;
                     }
@@ -144,7 +151,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     is_close
                                 );
                             }
-                            if sender_clone.send(msg_to_send).is_err() {
+                            if update_sender_clone.send(msg_to_send).is_err() {
                                 if debug {
                                     eprintln!("[IPC-thread] Failed to send to channel");
                                 }
@@ -165,7 +172,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _ = std::fs::remove_file(&socket_path_clone);
             });
 
-            iced_gui::run_gui(receiver, init)?;
+            // Thread to forward control messages from GUI to simulation
+            thread::spawn(move || {
+                let debug = std::env::var("RGROW_DEBUG_PERF").is_ok();
+                loop {
+                    let control_recv = control_receiver_clone.lock().unwrap();
+                    match control_recv.recv_timeout(Duration::from_millis(100)) {
+                        Ok(control_msg) => {
+                            drop(control_recv);
+                            if debug {
+                                eprintln!(
+                                    "[Control-thread] Sending control message: {:?}",
+                                    control_msg
+                                );
+                            }
+                            if let Ok(serialized) = bincode::serialize(&control_msg) {
+                                let len = serialized.len() as u64;
+                                let mut stream_guard = stream_for_control.lock().unwrap();
+                                if stream_guard.write_all(&len.to_le_bytes()).is_err() {
+                                    break;
+                                }
+                                if stream_guard.write_all(&serialized).is_err() {
+                                    break;
+                                }
+                                let _ = stream_guard.flush();
+                            }
+                        }
+                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                            drop(control_recv);
+                        }
+                        Err(mpsc::RecvTimeoutError::Disconnected) => {
+                            break;
+                        }
+                    }
+                }
+            });
+
+            iced_gui::run_gui(update_receiver, control_sender, init)?;
         }
     }
 

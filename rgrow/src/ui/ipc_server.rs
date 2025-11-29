@@ -1,5 +1,5 @@
 #[cfg(feature = "ui")]
-use crate::ui::ipc::{InitMessage, IpcMessage, UpdateNotification};
+use crate::ui::ipc::{ControlMessage, InitMessage, IpcMessage, UpdateNotification};
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
@@ -142,6 +142,36 @@ impl IpcClient {
         self.stream.write_all(&serialized)?;
         self.stream.flush()?;
         Ok(())
+    }
+
+    /// Non-blocking receive of control messages from GUI
+    pub fn try_recv_control(&mut self) -> Option<ControlMessage> {
+        self.stream.set_nonblocking(true).ok()?;
+
+        let mut len_bytes = [0u8; 8];
+        match self.stream.read_exact(&mut len_bytes) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                let _ = self.stream.set_nonblocking(false);
+                return None;
+            }
+            Err(_) => {
+                let _ = self.stream.set_nonblocking(false);
+                return None;
+            }
+        }
+
+        let len = u64::from_le_bytes(len_bytes) as usize;
+        let mut buffer = vec![0u8; len];
+
+        // Once we have the length, we need to read the full message
+        // Switch to blocking briefly to ensure we get the complete message
+        let _ = self.stream.set_nonblocking(false);
+        if self.stream.read_exact(&mut buffer).is_err() {
+            return None;
+        }
+
+        bincode::deserialize(&buffer).ok()
     }
 }
 

@@ -542,7 +542,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         block: Option<usize>,
         mut bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError> {
-        use crate::ui::ipc::{InitMessage, UpdateNotification};
+        use crate::ui::ipc::{ControlMessage, InitMessage, UpdateNotification};
         use crate::ui::ipc_server::IpcClient;
         use std::env;
         use std::process::{Command, Stdio};
@@ -639,14 +639,113 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 ))
             })?;
 
-        bounds.for_wall_time = Some(Duration::from_millis(16));
+        // Control state
+        let mut paused = false;
+        let mut remaining_step_events: Option<u64> = None;
+        let mut max_events_per_sec: Option<u64> = None;
+        let mut timescale: Option<f64> = None;
 
         let mut evres: EvolveOutcome = EvolveOutcome::ReachedZeroRate;
         let mut frame_buffer = vec![0u8; shm_size];
+        let mut last_frame_time = Instant::now();
+        let mut events_this_second: u64 = 0;
+        let mut second_start = Instant::now();
 
         loop {
-            evres = self.evolve(state, bounds)?;
+            // Process control messages
+            while let Some(ctrl) = ipc_client.try_recv_control() {
+                if debug_perf {
+                    eprintln!("[Sim] Received control message: {:?}", ctrl);
+                }
+                match ctrl {
+                    ControlMessage::Pause => {
+                        paused = true;
+                        remaining_step_events = None;
+                    }
+                    ControlMessage::Resume => {
+                        paused = false;
+                        remaining_step_events = None;
+                    }
+                    ControlMessage::Step { events } => {
+                        paused = false;
+                        remaining_step_events = Some(events);
+                    }
+                    ControlMessage::SetMaxEventsPerSec(max) => {
+                        max_events_per_sec = max;
+                    }
+                    ControlMessage::SetTimescale(ts) => {
+                        timescale = ts;
+                    }
+                }
+            }
 
+            // Reset events counter each second
+            if second_start.elapsed() >= Duration::from_secs(1) {
+                events_this_second = 0;
+                second_start = Instant::now();
+            }
+
+            // Determine if we should run simulation this frame
+            let should_run = !paused || remaining_step_events.is_some();
+
+            if should_run {
+                // Calculate bounds based on speed settings
+                let events_before = state.total_events();
+
+                if let Some(ts) = timescale {
+                    // Timescale mode: run for (real_elapsed * timescale) simulation time
+                    let real_elapsed = last_frame_time.elapsed().as_secs_f64();
+                    let target_sim_time = real_elapsed * ts;
+                    bounds.for_time = Some(target_sim_time.into());
+                    bounds.for_wall_time = None;
+                    bounds.for_events = remaining_step_events;
+                } else if let Some(ref mut step_events) = remaining_step_events {
+                    // Step mode: run for specified events
+                    bounds.for_events = Some(*step_events);
+                    bounds.for_wall_time = Some(Duration::from_millis(16));
+                    bounds.for_time = None;
+                } else {
+                    // Normal mode
+                    bounds.for_wall_time = Some(Duration::from_millis(16));
+                    bounds.for_events = None;
+                    bounds.for_time = None;
+                }
+
+                // Check events per second limit
+                if let Some(max_eps) = max_events_per_sec {
+                    if events_this_second >= max_eps {
+                        // Already hit limit this second, skip evolution
+                        std::thread::sleep(Duration::from_millis(10));
+                    } else {
+                        let remaining_allowed = max_eps - events_this_second;
+                        if let Some(ref mut be) = bounds.for_events {
+                            *be = (*be).min(remaining_allowed);
+                        } else {
+                            bounds.for_events = Some(remaining_allowed);
+                        }
+                        evres = self.evolve(state, bounds)?;
+                    }
+                } else {
+                    evres = self.evolve(state, bounds)?;
+                }
+
+                let events_this_frame = state.total_events() - events_before;
+                events_this_second += events_this_frame;
+
+                // Update step counter
+                if let Some(ref mut step_events) = remaining_step_events {
+                    if events_this_frame >= *step_events {
+                        remaining_step_events = None;
+                        paused = true;
+                    } else {
+                        *step_events -= events_this_frame;
+                    }
+                }
+            }
+
+            last_frame_time = Instant::now();
+
+            // Draw frame
             let edge_size = scale / 10;
             let tile_size = scale - 2 * edge_size;
             let frame_width = (width * scale as u32) as usize;
@@ -698,11 +797,14 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
             std::thread::sleep(Duration::from_millis(16));
 
-            match evres {
-                EvolveOutcome::ReachedWallTimeMax => {}
-                EvolveOutcome::ReachedZeroRate => {}
-                _ => {
-                    break;
+            // Only break on terminal conditions if not paused
+            if !paused && remaining_step_events.is_none() {
+                match evres {
+                    EvolveOutcome::ReachedWallTimeMax => {}
+                    EvolveOutcome::ReachedZeroRate => {}
+                    _ => {
+                        break;
+                    }
                 }
             }
         }

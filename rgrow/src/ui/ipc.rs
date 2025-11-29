@@ -38,3 +38,13 @@ pub struct ResizeMessage {
     pub width: u32,
     pub height: u32,
 }
+
+/// Control messages sent from GUI to simulation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ControlMessage {
+    Pause,
+    Resume,
+    Step { events: u64 },
+    SetMaxEventsPerSec(Option<u64>), // None = unlimited
+    SetTimescale(Option<f64>),       // None = unlimited, else sim_time/real_time
+}
