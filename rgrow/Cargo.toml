@@ -45,7 +45,7 @@ path = "src/gui_main.rs"
 
 [features]
 default = ["ui"]
-ui = ["iced", "tokio", "bincode", "interprocess", "image", "memmap2"]
+ui = ["iced", "tokio", "bincode", "interprocess", "image", "memmap2", "which"]
 python = ["pyo3", "numpy", "pyo3-polars"]
 
 [dependencies]
@@ -92,6 +92,10 @@ default-features = false
 
 [dependencies.num-traits]
 version = "^0.2"
+
+[dependencies.which]
+version = "6"
+optional = true
 
 [package.metadata.docs.rs]
 no-default-features = true

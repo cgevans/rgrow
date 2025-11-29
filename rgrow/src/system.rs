@@ -579,7 +579,10 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         let gui_exe = find_gui_binary().ok_or_else(|| {
             RgrowError::IO(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "GUI binary (rgrow-gui) not found. Please ensure rgrow is installed with the GUI feature, or build with: cargo build --features ui --bin rgrow-gui"
+                format!(
+                    "rgrow-gui binary (version {}) not found on PATH. Please install it with:\n  cargo install rgrow --features ui\nOr update your existing installation with:\n  cargo install --force rgrow --features ui",
+                    env!("CARGO_PKG_VERSION")
+                )
             ))
         })?;
 
@@ -860,17 +863,23 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
 #[cfg(feature = "ui")]
 pub(crate) fn find_gui_binary() -> Option<std::path::PathBuf> {
-    use std::path::PathBuf;
+    use std::process::Command;
 
-    // 1. Check environment variable (set by Python if available)
-    if let Ok(package_dir) = std::env::var("RGROW_PACKAGE_DIR") {
-        let gui_exe = PathBuf::from(&package_dir).join("rgrow-gui");
-        if gui_exe.exists() {
-            return Some(gui_exe);
+    const EXPECTED_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    // Helper to check version
+    let check_version = |path: &std::path::Path| -> bool {
+        if let Ok(output) = Command::new(path).arg("--version").output() {
+            if let Ok(version_str) = String::from_utf8(output.stdout) {
+                // Extract version from output (format: "rgrow-gui 0.20.0" or similar)
+                let version = version_str.split_whitespace().last().unwrap_or("");
+                return version == EXPECTED_VERSION;
+            }
         }
-    }
+        false
+    };
 
-    // 2. Try to get package directory from Python if we're in a Python context
+    // 1. Check package directory (for Python installations where binary might be bundled)
     #[cfg(feature = "python")]
     {
         if let Ok(package_dir) = Python::attach(|py| -> PyResult<String> {
@@ -885,7 +894,7 @@ pub(crate) fn find_gui_binary() -> Option<std::path::PathBuf> {
             }
 
             let origin_str = origin.extract::<String>()?;
-            let path = PathBuf::from(origin_str);
+            let path = std::path::PathBuf::from(origin_str);
 
             if let Some(parent) = path.parent() {
                 Ok(parent.to_string_lossy().to_string())
@@ -895,31 +904,47 @@ pub(crate) fn find_gui_binary() -> Option<std::path::PathBuf> {
                 ))
             }
         }) {
-            let gui_exe = PathBuf::from(&package_dir).join("rgrow-gui");
-            if gui_exe.exists() {
+            let gui_exe = std::path::PathBuf::from(&package_dir).join("rgrow-gui");
+            #[cfg(windows)]
+            let gui_exe = std::path::PathBuf::from(&package_dir).join("rgrow-gui.exe");
+
+            if gui_exe.exists() && check_version(&gui_exe) {
                 return Some(gui_exe);
             }
         }
     }
 
-    // 3. Check in the same directory as the current executable (for Rust-only installations)
+    // 2. Check environment variable (set by Python if available)
+    if let Ok(package_dir) = std::env::var("RGROW_PACKAGE_DIR") {
+        let gui_exe = std::path::PathBuf::from(&package_dir).join("rgrow-gui");
+        #[cfg(windows)]
+        let gui_exe = std::path::PathBuf::from(&package_dir).join("rgrow-gui.exe");
+
+        if gui_exe.exists() && check_version(&gui_exe) {
+            return Some(gui_exe);
+        }
+    }
+
+    // 3. Check PATH for rgrow-gui
+    if let Ok(path) = which::which("rgrow-gui") {
+        if check_version(&path) {
+            return Some(path);
+        } else {
+            eprintln!(
+                "Warning: Found rgrow-gui but version mismatch. Please update: cargo install --force rgrow --features ui"
+            );
+        }
+    }
+
+    // 4. Check in the same directory as the current executable (for Rust-only installations)
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             let gui_exe = exe_dir.join("rgrow-gui");
-            if gui_exe.exists() {
-                return Some(gui_exe);
-            }
-        }
-    }
+            #[cfg(windows)]
+            let gui_exe = exe_dir.join("rgrow-gui.exe");
 
-    // 4. Check common installation locations (for system-wide installs)
-    #[cfg(unix)]
-    {
-        let common_paths = ["/usr/local/bin/rgrow-gui", "/usr/bin/rgrow-gui"];
-        for path_str in &common_paths {
-            let path = PathBuf::from(path_str);
-            if path.exists() {
-                return Some(path);
+            if gui_exe.exists() && check_version(&gui_exe) {
+                return Some(gui_exe);
             }
         }
     }

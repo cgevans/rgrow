@@ -12,6 +12,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::time::{Duration, Instant};
 
     let args: Vec<String> = env::args().collect();
+    if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
+        println!("rgrow-gui {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     if args.len() < 2 {
         eprintln!("Usage: rgrow-gui <socket_path>");
         std::process::exit(1);
