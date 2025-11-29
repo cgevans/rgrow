@@ -536,9 +536,25 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         Err(RgrowError::NoUI)
     }
 
+    fn extract_model_name(info: &str) -> String {
+        if info.starts_with("kTAM") {
+            "kTAM".to_string()
+        } else if info.starts_with("aTAM") {
+            "aTAM".to_string()
+        } else if info.starts_with("Old kTAM") || info.starts_with("OldkTAM") {
+            "Old kTAM".to_string()
+        } else if info.starts_with("SDC") || info.contains("SDC") {
+            "SDC".to_string()
+        } else if info.starts_with("KBlock") {
+            "KBlock".to_string()
+        } else {
+            "Unknown".to_string()
+        }
+    }
+
     #[cfg(feature = "ui")]
     fn evolve_in_window<St: State>(
-        &self,
+        &mut self,
         state: &mut St,
         block: Option<usize>,
         start_paused: bool,
@@ -555,29 +571,20 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         let (width, height) = state.draw_size();
         let tile_colors_vec = self.tile_colors().clone();
 
-        let scale = match block {
-            Some(i) => i,
-            None => {
-                let default_scale = 8;
-                default_scale
-            }
-        };
+        let scale = block.unwrap_or(8);
 
         let socket_path =
             std::env::temp_dir().join(format!("rgrow-gui-{}.sock", std::process::id()));
         let socket_path_str = socket_path.to_string_lossy().to_string();
 
         let exe_path = env::current_exe().map_err(|e| {
-            RgrowError::IO(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to get executable path: {}", e),
-            ))
+            RgrowError::IO(std::io::Error::other(format!(
+                "Failed to get executable path: {}",
+                e
+            )))
         })?;
         let exe_dir = exe_path.parent().ok_or_else(|| {
-            RgrowError::IO(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to get executable directory",
-            ))
+            RgrowError::IO(std::io::Error::other("Failed to get executable directory"))
         })?;
         let gui_exe = exe_dir.join("rgrow-gui");
 
@@ -594,26 +601,33 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             .stderr(Stdio::inherit())
             .spawn()
             .map_err(|e| {
-                RgrowError::IO(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Failed to spawn GUI process: {}. Make sure rgrow-gui is built.",
-                        e
-                    ),
-                ))
+                RgrowError::IO(std::io::Error::other(format!(
+                    "Failed to spawn GUI process: {}. Make sure rgrow-gui is built.",
+                    e
+                )))
             })?;
 
         std::thread::sleep(Duration::from_millis(100));
 
         let mut ipc_client = IpcClient::connect(&socket_path).map_err(|e| {
-            RgrowError::IO(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to connect to GUI: {}", e),
-            ))
+            RgrowError::IO(std::io::Error::other(format!(
+                "Failed to connect to GUI: {}",
+                e
+            )))
         })?;
 
         let shm_size = (width * height * scale as u32 * scale as u32 * 4) as usize;
         let shm_path = format!("/dev/shm/rgrow-frame-{}", std::process::id());
+
+        let has_temperature = self.get_param("temperature").is_ok();
+        let model_name = Self::extract_model_name(&self.system_info());
+        let initial_temperature = if has_temperature {
+            self.get_param("temperature")
+                .ok()
+                .and_then(|v| v.downcast_ref::<f64>().copied())
+        } else {
+            None
+        };
 
         let init_msg = InitMessage {
             width,
@@ -623,23 +637,26 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             shm_path: shm_path.clone(),
             shm_size,
             start_paused,
+            model_name,
+            has_temperature,
+            initial_temperature,
         };
 
         ipc_client.send_init(&init_msg).map_err(|e| {
-            RgrowError::IO(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to send init message: {}", e),
-            ))
+            RgrowError::IO(std::io::Error::other(format!(
+                "Failed to send init message: {}",
+                e
+            )))
         })?;
 
         // Wait for GUI to signal it's ready (up to 10 seconds)
         ipc_client
             .wait_for_ready(Duration::from_secs(10))
             .map_err(|e| {
-                RgrowError::IO(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("GUI failed to become ready: {}", e),
-                ))
+                RgrowError::IO(std::io::Error::other(format!(
+                    "GUI failed to become ready: {}",
+                    e
+                )))
             })?;
 
         // Control state
@@ -679,6 +696,11 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                     ControlMessage::SetTimescale(ts) => {
                         timescale = ts;
                     }
+                    ControlMessage::SetTemperature(temp) => {
+                        if let Ok(needed) = self.set_param("temperature", Box::new(temp)) {
+                            self.update_state(state, &needed);
+                        }
+                    }
                 }
             }
 
@@ -699,7 +721,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                     // Timescale mode: run for (real_elapsed * timescale) simulation time
                     let real_elapsed = last_frame_time.elapsed().as_secs_f64();
                     let target_sim_time = real_elapsed * ts;
-                    bounds.for_time = Some(target_sim_time.into());
+                    bounds.for_time = Some(target_sim_time);
                     bounds.for_wall_time = None;
                     bounds.for_events = remaining_step_events;
                 } else if let Some(ref mut step_events) = remaining_step_events {
@@ -867,7 +889,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     fn setup_state(&self, state: &mut StateEnum) -> Result<(), GrowError>;
 
     fn evolve_in_window(
-        &self,
+        &mut self,
         state: &mut StateEnum,
         block: Option<usize>,
         start_paused: bool,
@@ -1077,8 +1099,9 @@ where
         self.configure_empty_state(state)
     }
 
+    #[cfg(feature = "ui")]
     fn evolve_in_window(
-        &self,
+        &mut self,
         state: &mut StateEnum,
         block: Option<usize>,
         start_paused: bool,

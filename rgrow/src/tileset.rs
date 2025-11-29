@@ -653,7 +653,7 @@ impl TileSet {
 
     #[cfg(feature = "ui")]
     pub fn run_window(&self) -> Result<StateEnum, RgrowError> {
-        let (sys, mut state) = self.create_system_and_state()?;
+        let (mut sys, mut state) = self.create_system_and_state()?;
         sys.evolve_in_window(&mut state, self.block, self.start_paused, self.get_bounds())?;
         Ok(state)
     }

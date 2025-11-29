@@ -44,7 +44,7 @@ name = "rgrow-gui"
 path = "src/gui_main.rs"
 
 [features]
-default = []
+default = ["ui"]
 ui = ["iced", "tokio", "bincode", "interprocess", "image", "memmap2"]
 python = ["pyo3", "numpy", "pyo3-polars"]
 

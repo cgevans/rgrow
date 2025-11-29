@@ -18,6 +18,9 @@ pub struct InitMessage {
     pub shm_path: String,
     pub shm_size: usize,
     pub start_paused: bool,
+    pub model_name: String,
+    pub has_temperature: bool,
+    pub initial_temperature: Option<f64>,
 }
 
 /// Notification that new frame data is available in shared memory.
@@ -48,4 +51,5 @@ pub enum ControlMessage {
     Step { events: u64 },
     SetMaxEventsPerSec(Option<u64>), // None = unlimited
     SetTimescale(Option<f64>),       // None = unlimited, else sim_time/real_time
+    SetTemperature(f64),
 }

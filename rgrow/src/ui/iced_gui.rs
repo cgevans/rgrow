@@ -35,6 +35,10 @@ pub struct RgrowGui {
     events_per_step: String,
     max_events_per_sec: String,
     timescale: String,
+    model_name: String,
+    has_temperature: bool,
+    temperature_input: String,
+    current_temperature: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +53,10 @@ pub enum Message {
     UpdateTimescale(String),
     ApplyMaxEventsPerSec,
     ApplyTimescale,
+    UpdateTemperature(String),
+    ApplyTemperature,
+    Heat,
+    Cool,
 }
 
 impl RgrowGui {
@@ -73,11 +81,18 @@ impl RgrowGui {
             events_per_step: "1000".to_string(),
             max_events_per_sec: "".to_string(),
             timescale: "".to_string(),
+            model_name: init.model_name,
+            has_temperature: init.has_temperature,
+            temperature_input: init
+                .initial_temperature
+                .map(|t| format!("{:.1}", t))
+                .unwrap_or_default(),
+            current_temperature: init.initial_temperature.unwrap_or(0.0),
         }
     }
 
     fn title(&self) -> String {
-        "rgrow".to_string()
+        format!("rgrow - {}", self.model_name)
     }
 
     fn send_control(&self, msg: ControlMessage) {
@@ -183,6 +198,27 @@ impl RgrowGui {
                 };
                 self.send_control(ControlMessage::SetTimescale(value));
             }
+            Message::UpdateTemperature(s) => {
+                self.temperature_input = s;
+            }
+            Message::ApplyTemperature => {
+                if let Ok(temp) = self.temperature_input.parse::<f64>() {
+                    self.current_temperature = temp;
+                    self.send_control(ControlMessage::SetTemperature(temp));
+                }
+            }
+            Message::Heat => {
+                let new_temp = self.current_temperature + 5.0;
+                self.current_temperature = new_temp;
+                self.temperature_input = format!("{:.1}", new_temp);
+                self.send_control(ControlMessage::SetTemperature(new_temp));
+            }
+            Message::Cool => {
+                let new_temp = (self.current_temperature - 5.0).max(0.0);
+                self.current_temperature = new_temp;
+                self.temperature_input = format!("{:.1}", new_temp);
+                self.send_control(ControlMessage::SetTemperature(new_temp));
+            }
         }
 
         Task::none()
@@ -257,14 +293,47 @@ impl RgrowGui {
         .spacing(10)
         .align_y(iced::Alignment::Center);
 
+        let mut controls = vec![image_widget, control_row1.into(), control_row2.into()];
+
+        if self.has_temperature {
+            let temp_input = text_input("Temperature", &self.temperature_input)
+                .on_input(Message::UpdateTemperature)
+                .on_submit(Message::ApplyTemperature)
+                .width(100)
+                .size(14);
+
+            let apply_temp_button = button(text("Apply").size(12))
+                .on_press(Message::ApplyTemperature)
+                .padding([3, 8]);
+
+            let heat_button = button(text("Heat").size(12))
+                .on_press(Message::Heat)
+                .padding([3, 8]);
+
+            let cool_button = button(text("Cool").size(12))
+                .on_press(Message::Cool)
+                .padding([3, 8]);
+
+            let control_row3 = row![
+                text("Temperature (°C):").size(14),
+                temp_input,
+                heat_button,
+                cool_button,
+                apply_temp_button,
+            ]
+            .spacing(10)
+            .align_y(iced::Alignment::Center);
+
+            controls.push(control_row3.into());
+        }
+
         let stats = text(&self.stats_text)
             .size(14)
             .color(Color::from_rgb(0.7, 0.7, 0.7));
 
-        column![image_widget, control_row1, control_row2, stats]
-            .spacing(8)
-            .padding(10)
-            .into()
+        controls.push(stats.into());
+
+        column(controls).spacing(8).padding(10).into()
     }
 
     fn subscription(&self) -> Subscription<Message> {
