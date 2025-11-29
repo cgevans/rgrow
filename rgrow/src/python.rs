@@ -283,6 +283,7 @@ macro_rules! create_py_system {
                                                                     for_wall_time=None,
                                                                     require_strong_bound=true,
                                                                     show_window=false,
+                                                                    start_window_paused=true,
                                                                     parallel=true)
                                                     )]
             /// Evolve a state (or states), with some bounds on the simulation.
@@ -314,6 +315,8 @@ macro_rules! create_py_system {
             ///   satisfied under normal conditions.
             /// show_window : bool
             ///   Show a graphical UI window while evolving (requires ui feature, and a single state).
+            /// start_window_paused : bool
+            ///   If show_window is True, start the GUI window in a paused state. Defaults to True.
             /// parallel : bool
             ///   Use multiple threads.
             ///
@@ -333,6 +336,7 @@ macro_rules! create_py_system {
                 for_wall_time: Option<f64>,
                 require_strong_bound: bool,
                 show_window: bool,
+                start_window_paused: bool,
                 parallel: bool,
                 py: Python<'py>,
             ) -> PyResult<Py<PyAny>> {
@@ -364,7 +368,7 @@ macro_rules! create_py_system {
                         if show_window {
                             py
                                 .detach(|| {
-                                    System::evolve_in_window(self, state, None, false, bounds)
+                                    System::evolve_in_window(self, state, None, start_window_paused, bounds)
                                 })?
                                 .into_py_any(py)
                         } else {

@@ -76,6 +76,7 @@ class ATAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> EvolveOutcome: ...
     @overload
@@ -91,6 +92,7 @@ class ATAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> List[EvolveOutcome]: ...
     @overload
@@ -106,6 +108,7 @@ class ATAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
@@ -138,6 +141,8 @@ class ATAM:
           satisfied under normal conditions.
         show_window : bool
           Show a graphical UI window while evolving (requires ui feature, and a single state).
+        start_window_paused : bool
+          If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
 
@@ -600,6 +605,7 @@ class SDC:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> EvolveOutcome: ...
     @overload
@@ -615,6 +621,7 @@ class SDC:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> List[EvolveOutcome]: ...
     @overload
@@ -630,6 +637,7 @@ class SDC:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
@@ -662,6 +670,8 @@ class SDC:
           satisfied under normal conditions.
         show_window : bool
           Show a graphical UI window while evolving (requires ui feature, and a single state).
+        start_window_paused : bool
+          If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
 
@@ -1368,6 +1378,7 @@ class KTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> EvolveOutcome: ...
     @overload
@@ -1383,6 +1394,7 @@ class KTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> List[EvolveOutcome]: ...
     @overload
@@ -1398,6 +1410,7 @@ class KTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
@@ -1430,6 +1443,8 @@ class KTAM:
           satisfied under normal conditions.
         show_window : bool
           Show a graphical UI window while evolving (requires ui feature, and a single state).
+        start_window_paused : bool
+          If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
 
@@ -1745,6 +1760,7 @@ class OldKTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> EvolveOutcome: ...
     @overload
@@ -1760,6 +1776,7 @@ class OldKTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> List[EvolveOutcome]: ...
     @overload
@@ -1775,6 +1792,7 @@ class OldKTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
@@ -1807,6 +1825,8 @@ class OldKTAM:
           satisfied under normal conditions.
         show_window : bool
           Show a graphical UI window while evolving (requires ui feature, and a single state).
+        start_window_paused : bool
+          If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
 
@@ -2077,6 +2097,7 @@ class KBlock:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> EvolveOutcome: ...
 
@@ -2093,6 +2114,7 @@ class KBlock:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> List[EvolveOutcome]: ...
 
@@ -2109,6 +2131,7 @@ class KBlock:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
@@ -2141,6 +2164,8 @@ class KBlock:
           satisfied under normal conditions.
         show_window : bool
           Show a graphical UI window while evolving (requires ui feature, and a single state).
+        start_window_paused : bool
+          If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
 
