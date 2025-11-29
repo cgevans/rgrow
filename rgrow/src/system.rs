@@ -34,9 +34,6 @@ use std::fmt::Debug;
 
 use std::time::Duration;
 
-#[cfg(feature = "ui")]
-use crate::ui::ipc::{InitMessage, IpcMessage, UpdateMessage};
-
 use rayon::prelude::*;
 
 #[cfg(feature = "python")]
@@ -545,10 +542,13 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         block: Option<usize>,
         mut bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError> {
+        use crate::ui::ipc::{InitMessage, UpdateNotification};
         use crate::ui::ipc_server::IpcClient;
         use std::env;
         use std::process::{Command, Stdio};
-        use std::time::Duration;
+        use std::time::{Duration, Instant};
+
+        let debug_perf = std::env::var("RGROW_DEBUG_PERF").is_ok();
 
         let (width, height) = state.draw_size();
         let tile_colors_vec = self.tile_colors().clone();
@@ -589,7 +589,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         let mut gui_process = Command::new(&gui_exe)
             .arg(&socket_path_str)
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::inherit())
             .spawn()
             .map_err(|e| {
                 RgrowError::IO(std::io::Error::new(
@@ -610,14 +610,19 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             ))
         })?;
 
+        let shm_size = (width * height * scale as u32 * scale as u32 * 4) as usize;
+        let shm_path = format!("/dev/shm/rgrow-frame-{}", std::process::id());
+
         let init_msg = InitMessage {
             width,
             height,
             tile_colors: tile_colors_vec.clone(),
             block,
+            shm_path: shm_path.clone(),
+            shm_size,
         };
 
-        ipc_client.send(&IpcMessage::Init(init_msg)).map_err(|e| {
+        ipc_client.send_init(&init_msg).map_err(|e| {
             RgrowError::IO(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Failed to send init message: {}", e),
@@ -627,8 +632,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         bounds.for_wall_time = Some(Duration::from_millis(16));
 
         let mut evres: EvolveOutcome = EvolveOutcome::ReachedZeroRate;
-        let mut frame_buffer =
-            vec![0u8; (width * height * scale as u32 * scale as u32 * 4) as usize];
+        let mut frame_buffer = vec![0u8; shm_size];
 
         loop {
             evres = self.evolve(state, bounds)?;
@@ -657,17 +661,29 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 state.draw(pixel_frame, &tile_colors_vec);
             }
 
-            let update_msg = UpdateMessage {
-                frame_data: pixel_frame.to_vec(),
+            let notification = UpdateNotification {
+                frame_width: frame_width as u32,
+                frame_height: frame_height as u32,
                 time: state.time().into(),
                 total_events: state.total_events(),
                 n_tiles: state.n_tiles(),
                 mismatches: self.calc_mismatches(state) as u32,
                 scale,
+                data_len: pixel_frame.len(),
             };
 
-            if ipc_client.send(&IpcMessage::Update(update_msg)).is_err() {
+            let t_send = Instant::now();
+            if ipc_client.send_frame(pixel_frame, notification).is_err() {
                 break;
+            }
+            let t_send_elapsed = t_send.elapsed();
+
+            if debug_perf {
+                eprintln!(
+                    "[IPC-send] shm write + notify: {:?}, size: {} bytes",
+                    t_send_elapsed,
+                    frame_buffer.len()
+                );
             }
 
             std::thread::sleep(Duration::from_millis(16));
@@ -681,7 +697,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             }
         }
 
-        let _ = ipc_client.send(&IpcMessage::Close);
+        let _ = ipc_client.send_close();
         let _ = gui_process.wait();
         let _ = std::fs::remove_file(&socket_path);
 

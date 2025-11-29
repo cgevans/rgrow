@@ -45,7 +45,7 @@ path = "src/gui_main.rs"
 
 [features]
 default = []
-ui = ["iced", "tokio", "bincode", "interprocess", "image"]
+ui = ["iced", "tokio", "bincode", "interprocess", "image", "memmap2"]
 python = ["pyo3", "numpy", "pyo3-polars"]
 
 [dependencies]
@@ -55,11 +55,12 @@ bimap = "0.6"
 serde_yaml = "0.9"
 serde_json = "1"
 serde = { workspace = true }
-iced = { version = "0.13", features = ["wgpu", "image"], optional = true }
+iced = { version = "0.13", features = ["wgpu", "image", "tokio"], optional = true }
 tokio = { version = "1", features = ["full"], optional = true }
 bincode = { version = "1.3", optional = true }
 interprocess = { version = "1.2", optional = true }
 image = { version = "0.25", optional = true }
+memmap2 = { version = "0.9", optional = true }
 phf = { version = "^0", features = ["macros"] }
 nom = { version = "7", optional = false }
 # winit = { version = "^0", optional = true }

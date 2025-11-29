@@ -3,37 +3,50 @@ use iced::{window, Element, Length, Size, Subscription, Task, Theme};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crate::ui::ipc::{InitMessage, IpcMessage};
+use crate::ui::ipc::InitMessage;
+
+fn debug_enabled() -> bool {
+    std::env::var("RGROW_DEBUG_PERF").is_ok()
+}
+
+/// Message type for GUI updates (with frame data already read from shared memory)
+#[derive(Debug, Clone)]
+pub enum GuiMessage {
+    Update {
+        frame_data: Vec<u8>,
+        frame_width: u32,
+        frame_height: u32,
+        time: f64,
+        total_events: u64,
+        n_tiles: u32,
+        mismatches: u32,
+    },
+    Close,
+}
 
 pub struct RgrowGui {
     current_image: Option<image::Handle>,
     stats_text: String,
-    width: u32,
-    height: u32,
-    scale: usize,
-    receiver: Arc<Mutex<mpsc::Receiver<IpcMessage>>>,
+    receiver: Arc<Mutex<mpsc::Receiver<GuiMessage>>>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    IpcMessage(IpcMessage),
+    GuiMessage(GuiMessage),
     Tick,
     CloseWindow,
 }
 
 impl RgrowGui {
-    fn new(receiver: Arc<Mutex<mpsc::Receiver<IpcMessage>>>, init: InitMessage) -> Self {
+    fn new(receiver: Arc<Mutex<mpsc::Receiver<GuiMessage>>>, _init: InitMessage) -> Self {
         RgrowGui {
             current_image: None,
             stats_text: format!(
                 "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}\t Mismatches: {}",
                 0.0, 0, 0, 0
             ),
-            width: init.width,
-            height: init.height,
-            scale: init.block.unwrap_or(1),
             receiver,
         }
     }
@@ -44,42 +57,58 @@ impl RgrowGui {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::IpcMessage(msg) => match msg {
-                IpcMessage::Init(init) => {
-                    self.width = init.width;
-                    self.height = init.height;
-                    self.scale = init.block.unwrap_or(1);
-                }
-                IpcMessage::Update(update) => {
-                    self.scale = update.scale;
-                    let pixel_count = update.frame_data.len() / 4;
-                    let frame_width = (self.width * update.scale as u32) as usize;
-                    let frame_height = if frame_width > 0 {
-                        pixel_count / frame_width
-                    } else {
-                        (self.height * update.scale as u32) as usize
-                    };
-                    if pixel_count == frame_width * frame_height {
-                        self.current_image = Some(image::Handle::from_rgba(
-                            frame_width as u32,
-                            frame_height as u32,
-                            update.frame_data,
-                        ));
+            Message::GuiMessage(msg) => match msg {
+                GuiMessage::Update {
+                    frame_data,
+                    frame_width,
+                    frame_height,
+                    time,
+                    total_events,
+                    n_tiles,
+                    mismatches,
+                } => {
+                    let t0 = Instant::now();
+                    let t1 = Instant::now();
+                    self.current_image = Some(image::Handle::from_rgba(
+                        frame_width,
+                        frame_height,
+                        frame_data,
+                    ));
+                    if debug_enabled() {
+                        eprintln!(
+                            "[GUI] image handle creation: {:?} ({}x{} = {} bytes)",
+                            t1.elapsed(),
+                            frame_width,
+                            frame_height,
+                            frame_width * frame_height * 4
+                        );
                     }
                     self.stats_text = format!(
                         "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}\t Mismatches: {}",
-                        update.time, update.total_events, update.n_tiles, update.mismatches
+                        time, total_events, n_tiles, mismatches
                     );
+                    if debug_enabled() {
+                        eprintln!("[GUI] total update processing: {:?}", t0.elapsed());
+                    }
                 }
-                IpcMessage::Close => {
+                GuiMessage::Close => {
                     return window::get_latest().and_then(window::close);
                 }
-                _ => {}
             },
             Message::Tick => {
+                let t0 = Instant::now();
                 let receiver = self.receiver.lock().unwrap();
-                if let Ok(msg) = receiver.try_recv() {
-                    return Task::done(Message::IpcMessage(msg));
+                match receiver.try_recv() {
+                    Ok(msg) => {
+                        eprintln!("[GUI] recv from channel: {:?}", t0.elapsed());
+                        return Task::done(Message::GuiMessage(msg));
+                    }
+                    Err(mpsc::TryRecvError::Empty) => {
+                        // No message yet, that's fine
+                    }
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        eprintln!("[GUI] Channel disconnected!");
+                    }
                 }
             }
             Message::CloseWindow => {
@@ -129,7 +158,7 @@ impl RgrowGui {
 }
 
 pub fn run_gui(
-    receiver: Arc<Mutex<mpsc::Receiver<IpcMessage>>>,
+    receiver: Arc<Mutex<mpsc::Receiver<GuiMessage>>>,
     init: InitMessage,
 ) -> iced::Result {
     let window_width = (init.width * init.block.unwrap_or(1) as u32) as f32;
