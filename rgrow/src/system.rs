@@ -40,7 +40,7 @@ use rayon::prelude::*;
 use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
-use pyo3::IntoPyObjectExt;
+use pyo3::{types::PyModule, IntoPyObjectExt};
 
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -551,7 +551,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             "Unknown".to_string()
         }
     }
-
     #[cfg(feature = "ui")]
     fn evolve_in_window<St: State>(
         &mut self,
@@ -562,7 +561,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     ) -> Result<EvolveOutcome, RgrowError> {
         use crate::ui::ipc::{ControlMessage, InitMessage, UpdateNotification};
         use crate::ui::ipc_server::IpcClient;
-        use std::env;
         use std::process::{Command, Stdio};
         use std::time::{Duration, Instant};
 
@@ -577,23 +575,13 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             std::env::temp_dir().join(format!("rgrow-gui-{}.sock", std::process::id()));
         let socket_path_str = socket_path.to_string_lossy().to_string();
 
-        let exe_path = env::current_exe().map_err(|e| {
-            RgrowError::IO(std::io::Error::other(format!(
-                "Failed to get executable path: {}",
-                e
-            )))
-        })?;
-        let exe_dir = exe_path.parent().ok_or_else(|| {
-            RgrowError::IO(std::io::Error::other("Failed to get executable directory"))
-        })?;
-        let gui_exe = exe_dir.join("rgrow-gui");
-
-        if !gui_exe.exists() {
-            return Err(RgrowError::IO(std::io::Error::new(
+        // Try to find rgrow-gui binary in multiple locations
+        let gui_exe = find_gui_binary().ok_or_else(|| {
+            RgrowError::IO(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("GUI binary not found at {}. Please build with: cargo build --features ui --bin rgrow-gui", gui_exe.display())
-            )));
-        }
+                "GUI binary (rgrow-gui) not found. Please ensure rgrow is installed with the GUI feature, or build with: cargo build --features ui --bin rgrow-gui"
+            ))
+        })?;
 
         let mut gui_process = Command::new(&gui_exe)
             .arg(&socket_path_str)
@@ -868,6 +856,75 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     ) {
         self.clone_state_into_state(initial_state, target);
     }
+}
+
+#[cfg(feature = "ui")]
+pub(crate) fn find_gui_binary() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+
+    // 1. Check environment variable (set by Python if available)
+    if let Ok(package_dir) = std::env::var("RGROW_PACKAGE_DIR") {
+        let gui_exe = PathBuf::from(&package_dir).join("rgrow-gui");
+        if gui_exe.exists() {
+            return Some(gui_exe);
+        }
+    }
+
+    // 2. Try to get package directory from Python if we're in a Python context
+    #[cfg(feature = "python")]
+    {
+        if let Ok(package_dir) = Python::attach(|py| -> PyResult<String> {
+            let importlib = PyModule::import(py, "importlib.util")?;
+            let spec = importlib.call_method1("find_spec", ("rgrow",))?;
+            let origin = spec.getattr("origin")?;
+
+            if origin.is_none() {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "Could not find rgrow package",
+                ));
+            }
+
+            let origin_str = origin.extract::<String>()?;
+            let path = PathBuf::from(origin_str);
+
+            if let Some(parent) = path.parent() {
+                Ok(parent.to_string_lossy().to_string())
+            } else {
+                Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "Could not determine package directory",
+                ))
+            }
+        }) {
+            let gui_exe = PathBuf::from(&package_dir).join("rgrow-gui");
+            if gui_exe.exists() {
+                return Some(gui_exe);
+            }
+        }
+    }
+
+    // 3. Check in the same directory as the current executable (for Rust-only installations)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let gui_exe = exe_dir.join("rgrow-gui");
+            if gui_exe.exists() {
+                return Some(gui_exe);
+            }
+        }
+    }
+
+    // 4. Check common installation locations (for system-wide installs)
+    #[cfg(unix)]
+    {
+        let common_paths = ["/usr/local/bin/rgrow-gui", "/usr/bin/rgrow-gui"];
+        for path_str in &common_paths {
+            let path = PathBuf::from(path_str);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+
+    None
 }
 
 #[enum_dispatch]
