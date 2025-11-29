@@ -71,9 +71,6 @@ pub enum RgrowError {
     Grow(#[from] GrowError),
     #[error(transparent)]
     ModelError(#[from] ModelError),
-    #[cfg(feature = "ui")]
-    #[error(transparent)]
-    Pixel(#[from] pixels::Error),
     #[error(transparent)]
     IO(#[from] std::io::Error),
     #[error("No UI is available.")]

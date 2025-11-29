@@ -35,10 +35,7 @@ use std::fmt::Debug;
 use std::time::Duration;
 
 #[cfg(feature = "ui")]
-use fltk::{app, prelude::*, window::Window};
-
-#[cfg(feature = "ui")]
-use pixels::{Pixels, SurfaceTexture};
+use crate::ui::ipc::{InitMessage, IpcMessage, UpdateMessage};
 
 use rayon::prelude::*;
 
@@ -73,11 +70,6 @@ pub enum NeededUpdate {
     None,
     NonZero,
     All,
-}
-
-#[cfg(feature = "ui")]
-thread_local! {
-    pub static APP: fltk::app::App = app::App::default()
 }
 
 #[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
@@ -553,110 +545,132 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         block: Option<usize>,
         mut bounds: EvolveBounds,
     ) -> Result<EvolveOutcome, RgrowError> {
-        let (width, height) = state.draw_size();
+        use crate::ui::ipc_server::IpcClient;
+        use std::env;
+        use std::process::{Command, Stdio};
+        use std::time::Duration;
 
-        let mut scale = match block {
+        let (width, height) = state.draw_size();
+        let tile_colors_vec = self.tile_colors().clone();
+
+        let scale = match block {
             Some(i) => i,
             None => {
-                let (w, h) = app::screen_size();
-                ((w - 50.) / (width as f64))
-                    .min((h - 50.) / (height as f64))
-                    .floor() as usize
+                let default_scale = 8;
+                default_scale
             }
         };
-        app::screen_size();
 
-        // let sr = state.read().unwrap();
-        let mut win = Window::default()
-            .with_size(
-                (scale * (width as usize)) as i32,
-                ((scale * (height as usize)) + 30) as i32,
-            )
-            .with_label("rgrow");
+        let socket_path =
+            std::env::temp_dir().join(format!("rgrow-gui-{}.sock", std::process::id()));
+        let socket_path_str = socket_path.to_string_lossy().to_string();
 
-        win.make_resizable(true);
+        let exe_path = env::current_exe().map_err(|e| {
+            RgrowError::IO(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to get executable path: {}", e),
+            ))
+        })?;
+        let exe_dir = exe_path.parent().ok_or_else(|| {
+            RgrowError::IO(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to get executable directory",
+            ))
+        })?;
+        let gui_exe = exe_dir.join("rgrow-gui");
 
-        // add a frame with a label at the bottom of the window
-        let mut frame = fltk::frame::Frame::default()
-            .with_size(win.pixel_w(), 30)
-            .with_pos(0, win.pixel_h() - 30)
-            .with_label("Hello");
-        win.end();
-        win.show();
+        if !gui_exe.exists() {
+            return Err(RgrowError::IO(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("GUI binary not found at {}. Please build with: cargo build --features ui --bin rgrow-gui", gui_exe.display())
+            )));
+        }
 
-        let mut win_width = win.pixel_w() as u32;
-        let mut win_height = win.pixel_h() as u32;
+        let mut gui_process = Command::new(&gui_exe)
+            .arg(&socket_path_str)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| {
+                RgrowError::IO(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "Failed to spawn GUI process: {}. Make sure rgrow-gui is built.",
+                        e
+                    ),
+                ))
+            })?;
 
-        let surface_texture = SurfaceTexture::new(win_width, win_height - 30, &win);
+        std::thread::sleep(Duration::from_millis(100));
 
-        let mut pixels = {
-            Pixels::new(
-                width * (scale as u32),
-                height * (scale as u32),
-                surface_texture,
-            )?
+        let mut ipc_client = IpcClient::connect(&socket_path).map_err(|e| {
+            RgrowError::IO(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to connect to GUI: {}", e),
+            ))
+        })?;
+
+        let init_msg = InitMessage {
+            width,
+            height,
+            tile_colors: tile_colors_vec.clone(),
+            block,
         };
+
+        ipc_client.send(&IpcMessage::Init(init_msg)).map_err(|e| {
+            RgrowError::IO(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to send init message: {}", e),
+            ))
+        })?;
 
         bounds.for_wall_time = Some(Duration::from_millis(16));
 
         let mut evres: EvolveOutcome = EvolveOutcome::ReachedZeroRate;
+        let mut frame_buffer =
+            vec![0u8; (width * height * scale as u32 * scale as u32 * 4) as usize];
 
-        let tile_colors = self.tile_colors();
-
-        while app::wait() {
-            // Check if window was resized
-            if win.w() != win_width as i32 || win.h() != win_height as i32 {
-                win_width = win.pixel_w() as u32;
-                win_height = win.pixel_h() as u32;
-                pixels.resize_surface(win_width, win_height - 30).unwrap();
-                if block.is_none() {
-                    scale = (win_width / width).min((win_height - 30) / (height)) as usize;
-                    if scale >= 10 {
-                        scale = 10
-                    } else {
-                        scale = 1;
-                    } // (scale - 10) % 10 + 10;
-                    pixels
-                        .resize_buffer(width * (scale as u32), height * (scale as u32))
-                        .unwrap();
-                }
-                frame.set_pos(0, (win_height - 30) as i32);
-                frame.set_size(win_width as i32, 30);
-            }
-
+        loop {
             evres = self.evolve(state, bounds)?;
+
             let edge_size = scale / 10;
             let tile_size = scale - 2 * edge_size;
-            let pixel_frame = pixels.frame_mut();
+            let frame_width = (width * scale as u32) as usize;
+            let frame_height = (height * scale as u32) as usize;
+            frame_buffer.resize(frame_width * frame_height * 4, 0);
+
+            let pixel_frame = &mut frame_buffer[..];
 
             if scale != 1 {
                 if edge_size == 0 {
-                    state.draw_scaled(pixel_frame, tile_colors, tile_size, edge_size);
+                    state.draw_scaled(pixel_frame, &tile_colors_vec, tile_size, edge_size);
                 } else {
                     state.draw_scaled_with_mm(
                         pixel_frame,
-                        tile_colors,
+                        &tile_colors_vec,
                         self.calc_mismatch_locations(state),
                         tile_size,
                         edge_size,
                     );
                 }
             } else {
-                state.draw(pixel_frame, tile_colors);
+                state.draw(pixel_frame, &tile_colors_vec);
             }
-            pixels.render()?;
 
-            // Update text with the simulation time, events, and tiles
-            frame.set_label(&format!(
-                "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}\t Mismatches: {}",
-                state.time(),
-                state.total_events(),
-                state.n_tiles(),
-                self.calc_mismatches(state) // FIXME: should not recalculate
-            ));
+            let update_msg = UpdateMessage {
+                frame_data: pixel_frame.to_vec(),
+                time: state.time().into(),
+                total_events: state.total_events(),
+                n_tiles: state.n_tiles(),
+                mismatches: self.calc_mismatches(state) as u32,
+                scale,
+            };
 
-            app::flush();
-            app::awake();
+            if ipc_client.send(&IpcMessage::Update(update_msg)).is_err() {
+                break;
+            }
+
+            std::thread::sleep(Duration::from_millis(16));
 
             match evres {
                 EvolveOutcome::ReachedWallTimeMax => {}
@@ -667,8 +681,9 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             }
         }
 
-        // Close window.
-        win.hide();
+        let _ = ipc_client.send(&IpcMessage::Close);
+        let _ = gui_process.wait();
+        let _ = std::fs::remove_file(&socket_path);
 
         Ok(evres)
     }
