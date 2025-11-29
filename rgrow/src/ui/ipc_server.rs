@@ -2,9 +2,10 @@
 use crate::ui::ipc::{InitMessage, IpcMessage, UpdateNotification};
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::time::Duration;
 
 pub struct IpcClient {
     stream: UnixStream,
@@ -20,6 +21,72 @@ impl IpcClient {
             shm: None,
             shm_path: String::new(),
         })
+    }
+
+    pub fn wait_for_ready(&mut self, timeout: Duration) -> Result<(), Box<dyn std::error::Error>> {
+        use std::time::Instant;
+
+        let start = Instant::now();
+        self.stream.set_nonblocking(true)?;
+
+        let mut len_bytes = [0u8; 8];
+        let mut len_read = 0;
+
+        // Poll for the length bytes
+        while len_read < 8 {
+            if start.elapsed() > timeout {
+                self.stream.set_nonblocking(false)?;
+                return Err("Timeout waiting for GUI ready signal".into());
+            }
+            match self.stream.read(&mut len_bytes[len_read..]) {
+                Ok(0) => {
+                    self.stream.set_nonblocking(false)?;
+                    return Err("Connection closed while waiting for ready".into());
+                }
+                Ok(n) => len_read += n,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(e) => {
+                    self.stream.set_nonblocking(false)?;
+                    return Err(e.into());
+                }
+            }
+        }
+
+        let len = u64::from_le_bytes(len_bytes) as usize;
+        let mut buffer = vec![0u8; len];
+        let mut data_read = 0;
+
+        // Poll for the message data
+        while data_read < len {
+            if start.elapsed() > timeout {
+                self.stream.set_nonblocking(false)?;
+                return Err("Timeout waiting for GUI ready signal".into());
+            }
+            match self.stream.read(&mut buffer[data_read..]) {
+                Ok(0) => {
+                    self.stream.set_nonblocking(false)?;
+                    return Err("Connection closed while waiting for ready".into());
+                }
+                Ok(n) => data_read += n,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(e) => {
+                    self.stream.set_nonblocking(false)?;
+                    return Err(e.into());
+                }
+            }
+        }
+
+        self.stream.set_nonblocking(false)?;
+
+        let msg: IpcMessage = bincode::deserialize(&buffer)?;
+        match msg {
+            IpcMessage::Ready => Ok(()),
+            _ => Err("Expected Ready message".into()),
+        }
     }
 
     pub fn setup_shm(&mut self, shm_path: &str, size: usize) -> Result<(), std::io::Error> {

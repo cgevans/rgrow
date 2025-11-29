@@ -100,14 +100,18 @@ impl RgrowGui {
                 let receiver = self.receiver.lock().unwrap();
                 match receiver.try_recv() {
                     Ok(msg) => {
-                        eprintln!("[GUI] recv from channel: {:?}", t0.elapsed());
+                        if debug_enabled() {
+                            eprintln!("[GUI] recv from channel: {:?}", t0.elapsed());
+                        }
                         return Task::done(Message::GuiMessage(msg));
                     }
                     Err(mpsc::TryRecvError::Empty) => {
                         // No message yet, that's fine
                     }
                     Err(mpsc::TryRecvError::Disconnected) => {
-                        eprintln!("[GUI] Channel disconnected!");
+                        if debug_enabled() {
+                            eprintln!("[GUI] Channel disconnected!");
+                        }
                     }
                 }
             }
@@ -163,6 +167,10 @@ pub fn run_gui(
 ) -> iced::Result {
     let window_width = (init.width * init.block.unwrap_or(1) as u32) as f32;
     let window_height = ((init.height * init.block.unwrap_or(1) as u32) + 30) as f32;
+
+    // Ensure minimum window size of 800x600
+    let window_width = window_width.max(800.0);
+    let window_height = window_height.max(600.0);
 
     iced::application(RgrowGui::title, RgrowGui::update, RgrowGui::view)
         .subscription(RgrowGui::subscription)

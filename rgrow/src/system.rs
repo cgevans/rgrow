@@ -629,6 +629,16 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             ))
         })?;
 
+        // Wait for GUI to signal it's ready (up to 10 seconds)
+        ipc_client
+            .wait_for_ready(Duration::from_secs(10))
+            .map_err(|e| {
+                RgrowError::IO(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("GUI failed to become ready: {}", e),
+                ))
+            })?;
+
         bounds.for_wall_time = Some(Duration::from_millis(16));
 
         let mut evres: EvolveOutcome = EvolveOutcome::ReachedZeroRate;

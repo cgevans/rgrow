@@ -4,7 +4,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use rgrow::ui::ipc::IpcMessage;
     use rgrow::ui::ipc_server::ShmReader;
     use std::env;
-    use std::io::Read;
+    use std::io::{Read, Write};
     use std::os::unix::net::UnixListener;
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
@@ -48,20 +48,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let shm_path = init.shm_path.clone();
             let shm_size = init.shm_size;
 
+            // Send Ready signal immediately - before spawning reader thread
+            // This avoids deadlock where reader holds lock while blocking on read
+            {
+                let msg = IpcMessage::Ready;
+                let serialized = bincode::serialize(&msg)?;
+                let len = serialized.len() as u64;
+                let mut stream_guard = stream.lock().unwrap();
+                stream_guard.write_all(&len.to_le_bytes())?;
+                stream_guard.write_all(&serialized)?;
+                stream_guard.flush()?;
+            }
+
             let stream_clone = stream.clone();
             let sender_clone = sender.clone();
 
             thread::spawn(move || {
                 let debug = std::env::var("RGROW_DEBUG_PERF").is_ok();
-                eprintln!(
-                    "[IPC-thread] Starting, shm_path={}, shm_size={}",
-                    shm_path, shm_size
-                );
-                let mut buffer = vec![0u8; 1024 * 64]; // Small buffer for notifications only
+                if debug {
+                    eprintln!(
+                        "[IPC-thread] Starting, shm_path={}, shm_size={}",
+                        shm_path, shm_size
+                    );
+                }
+                let mut buffer = vec![0u8; 1024 * 64];
 
                 let shm_reader = match ShmReader::open(&shm_path, shm_size) {
                     Ok(r) => {
-                        eprintln!("[IPC-thread] Shared memory opened successfully");
+                        if debug {
+                            eprintln!("[IPC-thread] Shared memory opened successfully");
+                        }
                         r
                     }
                     Err(e) => {
@@ -118,15 +134,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 IpcMessage::Close => iced_gui::GuiMessage::Close,
                                 IpcMessage::Init(_) => continue,
                                 IpcMessage::Resize(_) => continue,
+                                IpcMessage::Ready => continue,
                             };
 
                             let is_close = matches!(&msg, IpcMessage::Close);
-                            eprintln!(
-                                "[IPC-thread] Sending message to GUI channel, is_close={}",
-                                is_close
-                            );
+                            if debug {
+                                eprintln!(
+                                    "[IPC-thread] Sending message to GUI channel, is_close={}",
+                                    is_close
+                                );
+                            }
                             if sender_clone.send(msg_to_send).is_err() {
-                                eprintln!("[IPC-thread] Failed to send to channel");
+                                if debug {
+                                    eprintln!("[IPC-thread] Failed to send to channel");
+                                }
                                 break;
                             }
                             if is_close {
@@ -134,7 +155,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         Err(e) => {
-                            eprintln!("[IPC-thread] Deserialize error: {}", e);
+                            if debug {
+                                eprintln!("[IPC-thread] Deserialize error: {}", e);
+                            }
                             break;
                         }
                     }
