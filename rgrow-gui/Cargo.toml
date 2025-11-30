@@ -17,7 +17,7 @@ name = "rgrow-gui"
 path = "src/main.rs"
 
 [dependencies]
-rgrow = { path = "../rgrow" }
+rgrow-ipc = { path = "../rgrow-ipc" }
 iced = { version = "0.13", features = ["wgpu", "image", "tokio"] }
 tokio = { version = "1", features = ["full"] }
 bincode = "1.3"

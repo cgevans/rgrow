@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use crate::ui::shm_reader::ShmReader;
     #[cfg(windows)]
     use named_pipe::PipeServer;
-    use rgrow::ui::ipc::{ControlMessage, IpcMessage};
+    use rgrow_ipc::{ControlMessage, IpcMessage};
     use std::env;
     use std::io::{Read, Write};
     #[cfg(unix)]

@@ -6,8 +6,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use rgrow::system::ParameterInfo;
-use rgrow::ui::ipc::{ControlMessage, InitMessage};
+use rgrow_ipc::{ControlMessage, InitMessage, ParameterInfo};
 
 fn debug_enabled() -> bool {
     std::env::var("RGROW_DEBUG_PERF").is_ok()

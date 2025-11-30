@@ -88,16 +88,7 @@ pub struct EvolveBounds {
     pub for_wall_time: Option<Duration>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ParameterInfo {
-    pub name: String,
-    pub units: String,
-    pub default_increment: f64,
-    pub min_value: Option<f64>,
-    pub max_value: Option<f64>,
-    pub description: Option<String>,
-    pub current_value: f64,
-}
+pub use rgrow_ipc::ParameterInfo;
 
 #[cfg(feature = "python")]
 #[pymethods]

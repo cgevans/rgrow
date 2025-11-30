@@ -119,13 +119,14 @@ jobs:
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
+          cargo test -p rgrow
           uv run -- maturin develop --uv
           uv run -- pytest -vvv --debug --cov=py-rgrow/rgrow --cov-report xml
       - name: Compile cargo coverage
         run: |
           source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
-          cargo llvm-cov --no-run --lcov --output-path coverage.lcov
+          cargo llvm-cov report --lcov --output-path coverage.lcov
         continue-on-error: true
       - name: Run ty
         continue-on-error: true
@@ -159,7 +160,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --uv
+          args: --release --out dist 
           sccache: "true"
           manylinux: "auto"
       - name: Upload wheels

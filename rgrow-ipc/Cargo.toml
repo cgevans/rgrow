@@ -1,0 +1,17 @@
+[package]
+name = "rgrow-ipc"
+description = "IPC types for communication between rgrow and rgrow-gui"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+
+[lib]
+name = "rgrow_ipc"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+

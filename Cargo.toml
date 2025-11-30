@@ -1,5 +1,5 @@
 [workspace]
-members = ["rgrow", "rgrow-gui", "py-rgrow"]
+members = ["rgrow", "rgrow-gui", "py-rgrow", "rgrow-ipc"]
 default-members = ["rgrow", "rgrow-gui"]
 resolver = "2"
 

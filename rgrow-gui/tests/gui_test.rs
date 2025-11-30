@@ -1,8 +1,7 @@
 extern crate rgrow_gui;
 
-use rgrow::system::ParameterInfo;
-use rgrow::ui::ipc::{ControlMessage, InitMessage};
 use rgrow_gui::ui::iced_gui::{GuiMessage, Message, RgrowGui};
+use rgrow_ipc::{ControlMessage, InitMessage, ParameterInfo};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
