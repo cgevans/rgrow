@@ -887,6 +887,112 @@ impl SDC {
         z_sum
     }
 
+    /// This calculates a partial partition for the system.  At each location, it takes a Vec.
+    /// If the Vec is empty, then no constraints are applied.  If the Vec is not empty, then the
+    /// partition function is only calculated for the tiles in the Vec.  0 corresponds to the site
+    /// being empty.
+    pub fn partial_partition_function(&self, constrain_at_loc: Vec<Vec<Tile>>) -> BigFloat {
+        let scaffold = self.scaffold();
+
+        let prec = 64;
+        let rm = astro_float::RoundingMode::None;
+        let mut cc =
+            astro_float::Consts::new().expect("An error occured when initializing constants");
+        // let ctx = astro_float::ctx::Context::new(PREC, RM, cc, -100000, 100000);
+
+        let max_competition = scaffold
+            .iter()
+            .map(|x| self.friends_btm.get(*x).map(|y| y.len()).unwrap_or(0))
+            .max()
+            .unwrap();
+
+        let mut z_curr = Array1::from_elem(max_competition, BigFloat::from_i32(0, prec));
+        let mut z_prev = Array1::from_elem(max_competition, BigFloat::from_i32(0, prec));
+        let mut z_sum = BigFloat::from_i64(1, prec);
+        let mut sum_a = BigFloat::from_i64(0, prec);
+        let mut no_prior_non_empty_constraints = true;
+
+        for (i, b) in scaffold.iter().enumerate() {
+            // This is the partial partition function assuming that the previous site is empty:
+            // it sums previous, previous partition functions (location i-2).
+            for v in z_prev.iter() {
+                sum_a = sum_a.add(v, prec, rm);
+            }
+
+            // We now move the previous (location i-1) location partial partition functions to the previous
+            // array, and reset the current arry.
+            z_prev.assign(&z_curr);
+            z_curr.fill(BigFloat::from_i32(0, prec));
+
+            let friends = match self.friends_btm.get(*b) {
+                Some(f) => f,
+                None => continue,
+            };
+
+            // Iterating through each possible attachment at the current location.
+            for (j, &f) in friends.iter().enumerate() {
+                // This is only allowed if the current site is not constrained, or the tile is allowed in the constrained set.
+                if !constrain_at_loc[i].is_empty() && !constrain_at_loc[i].contains(&f) {
+                    continue;
+                }
+
+                let attachment_beta_dg =
+                    self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln();
+
+                let t1 = BigFloat::from_f64(-attachment_beta_dg, prec).exp(prec, rm, &mut cc);
+
+                if i == 0 {
+                    // First scaffold site.
+                    // The partition function, given f attached at j, is all we need to calculate.
+                    // z_sum has 1 in it right now, which covers the case where nothing is attached.
+                    // sum_a has 0, because it is not being used yet.
+                    z_curr[j] = t1;
+                } else {
+                    // Every other scaffold site
+                    // t2 will hold the different cases where side i-1 has tile g in it.
+                    let mut t2 = BigFloat::from_f64(0., prec);
+
+                    if let Some(ff) = self.friends_btm.get(scaffold[i - 1]) {
+                        for (k, &g) in ff.iter().enumerate() {
+                            let left_beta_dg = self.bond_between_strands(g, f);
+                            t2 = t2.add(
+                                &BigFloat::from_f64(-left_beta_dg, prec)
+                                    .exp(prec, rm, &mut cc)
+                                    .mul(&z_prev[k], prec, rm),
+                                prec,
+                                rm,
+                            );
+                        }
+                    }
+
+                    // 1.0 -> *only* tile f is attached at position i.
+                    // sum_a -> tile f is at position i, no tile is at position i-1.
+                    // t2 -> tile f is at position i, another tile is at position i-1.
+                    let mut val = t2;
+
+                    // sum_a -> tile f is at position i, no tile is at position i-1.
+                    if constrain_at_loc[i - 1].is_empty() || constrain_at_loc[i - 1].contains(&0) {
+                        val = val.add(&sum_a, prec, rm);
+                    } else {
+                        no_prior_non_empty_constraints = false;
+                    }
+
+                    // 1.0 -> *only* tile f is attached at position i, which means there were no prior non-empty constraints
+                    if no_prior_non_empty_constraints {
+                        val = val.add(&BigFloat::from_i64(1, prec), prec, rm);
+                    }
+                    z_curr[j] = t1.mul(&val, prec, rm);
+                }
+                z_sum = z_sum.add(&z_curr[j], prec, rm);
+            }
+        }
+        // If there was a non-empty constraint, then we need to remove the entirely-empty case:
+        if !no_prior_non_empty_constraints {
+            z_sum = z_sum.sub(&BigFloat::from_i64(1, prec), prec, rm);
+        }
+        z_sum
+    }
+
     pub fn log_big_partition_function_fast(&self) -> f64 {
         let prec = 64;
         let rm = astro_float::RoundingMode::None;
@@ -898,14 +1004,30 @@ impl SDC {
         )
     }
 
+    pub fn log_partial_partition_function(&self, constrain_at_loc: Vec<Vec<Tile>>) -> f64 {
+        let prec = 64;
+        let rm = astro_float::RoundingMode::None;
+        let mut cc =
+            astro_float::Consts::new().expect("An error occured when initializing constants");
+        bigfloat_to_f64(
+            &self
+                .partial_partition_function(constrain_at_loc)
+                .ln(prec, rm, &mut cc),
+            rm,
+        )
+    }
+
     pub fn partition_function(&self) -> f64 {
         self.partition_function_fast()
     }
 
-    pub fn probability_of_state_full(&self, system: &[u32]) -> f64 {
-        let sum_z = self.partition_function_fast();
-        let this_system = self.boltzman_function(system);
-        this_system / sum_z
+    pub fn probability_of_constrained_configurations(
+        &self,
+        constrain_at_loc: Vec<Vec<Tile>>,
+    ) -> f64 {
+        (self.log_partial_partition_function(constrain_at_loc)
+            - self.log_big_partition_function_fast())
+        .exp()
     }
 
     pub fn probability_of_state(&self, system: &[u32]) -> f64 {
@@ -2082,6 +2204,15 @@ impl SDC {
     #[pyo3(name = "all_scaffolds_slow")]
     fn py_all_scaffolds(&self) -> Vec<Vec<Tile>> {
         self.system_states()
+    }
+
+    #[pyo3(name = "probability_of_constrained_configurations")]
+    fn py_probability_of_constrained_configurations(&self, constrain_at_loc: Vec<Vec<u32>>) -> f64 {
+        let constrain_at_loc: Vec<Vec<Tile>> = constrain_at_loc
+            .into_iter()
+            .map(|v| v.into_iter().map(|t| t as Tile).collect())
+            .collect();
+        self.probability_of_constrained_configurations(constrain_at_loc)
     }
 
     #[getter]

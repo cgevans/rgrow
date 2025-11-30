@@ -839,6 +839,22 @@ class SDC:
     def quencher_rates(self) -> str: ...
     def fluorophore_rates(self) -> str: ...
     def probability_of_state(self, state: list[int]) -> float: ...
+    def probability_of_constrained_configurations(self, constrain_at_loc: list[list[int]]) -> float:
+        """
+        Calculate the probability of configurations that satisfy the given constraints.
+
+        Parameters
+        ----------
+        constrain_at_loc : list[list[int]]
+            A list of lists, where each inner list specifies which tiles are allowed at that
+            scaffold position. An empty list means no constraints (all tiles allowed).
+            Tile ID 0 corresponds to an empty site.
+
+        Returns
+        -------
+        float
+            The probability of configurations satisfying the constraints.
+        """
     def state_g(self, state: list[int]) -> float: ...
     def rtval(self) -> float: ...
     def mfe_matrix(self) -> list[list[tuple[int, float, int]]]: ...
