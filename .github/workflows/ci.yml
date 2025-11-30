@@ -29,6 +29,11 @@ jobs:
       # RUSTFLAGS: "-Dwarnings"
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout tiny-xlib fork
+        uses: actions/checkout@v4
+        with:
+          repository: cgevans/tiny-xlib
+          path: ./tiny-xlib
       - uses: dtolnay/rust-toolchain@master
         with:
           components: clippy,llvm-tools
@@ -42,6 +47,13 @@ jobs:
         run: cargo install cargo-llvm-cov
       - name: Install X components
         run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
+      - name: Add tiny-xlib patch for coverage
+        run: |
+          cat >> Cargo.toml << 'EOF'
+
+          [patch.crates-io]
+          tiny-xlib = { path = "./tiny-xlib" }
+          EOF
       - name: Run Clippy
         run: cargo clippy -p rgrow
       - name: Run tests and coverage
@@ -64,6 +76,11 @@ jobs:
       # RUSTFLAGS: "-Dwarnings"
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout tiny-xlib fork
+        uses: actions/checkout@v4
+        with:
+          repository: cgevans/tiny-xlib
+          path: ./tiny-xlib
       - uses: dtolnay/rust-toolchain@master
         with:
           components: clippy,llvm-tools
@@ -93,6 +110,13 @@ jobs:
           uv pip install maturin pytest pytest-cov hypothesis
       - name: Install X components
         run: sudo apt-get install -y gdb libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
+      - name: Add tiny-xlib patch for coverage
+        run: |
+          cat >> Cargo.toml << 'EOF'
+
+          [patch.crates-io]
+          tiny-xlib = { path = "./tiny-xlib" }
+          EOF
       - name: Run coverage
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
