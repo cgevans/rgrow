@@ -1,4 +1,3 @@
-#[cfg(feature = "ui")]
 use crate::ui::ipc::{ControlMessage, InitMessage, IpcMessage, UpdateNotification};
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
@@ -182,24 +181,5 @@ impl Drop for IpcClient {
         if !self.shm_path.is_empty() {
             let _ = std::fs::remove_file(&self.shm_path);
         }
-    }
-}
-
-pub struct ShmReader {
-    mmap: MmapMut,
-}
-
-impl ShmReader {
-    pub fn open<P: AsRef<Path>>(path: P, size: usize) -> Result<Self, std::io::Error> {
-        let file = OpenOptions::new().read(true).write(true).open(path)?;
-        if file.metadata()?.len() < size as u64 {
-            file.set_len(size as u64)?;
-        }
-        let mmap = unsafe { MmapMut::map_mut(&file)? };
-        Ok(ShmReader { mmap })
-    }
-
-    pub fn read(&self, len: usize) -> &[u8] {
-        &self.mmap[..len]
     }
 }

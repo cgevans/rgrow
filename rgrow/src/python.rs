@@ -314,7 +314,7 @@ macro_rules! create_py_system {
             ///   Require that the stopping conditions are strong, i.e., they are guaranteed to be eventually
             ///   satisfied under normal conditions.
             /// show_window : bool
-            ///   Show a graphical UI window while evolving (requires ui feature, and a single state).
+            ///   Show a graphical UI window while evolving (requires rgrow-gui to be installed, and a single state).
             /// start_window_paused : bool
             ///   If show_window is True, start the GUI window in a paused state. Defaults to True.
             /// parallel : bool

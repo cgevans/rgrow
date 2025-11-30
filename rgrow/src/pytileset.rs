@@ -166,7 +166,6 @@ impl TileSet {
 
     /// Creates a simulation, and runs it in a UI.  Returns the :any:`Simulation` when
     /// finished.
-    #[cfg(feature = "ui")]
     #[pyo3(name = "run_window")]
     fn py_run_window(&self) -> PyResult<PyState> {
         use pyo3::PyErr;

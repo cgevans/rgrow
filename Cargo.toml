@@ -1,6 +1,6 @@
 [workspace]
-members = ["rgrow", "py-rgrow"]
-default-members = ["rgrow"]
+members = ["rgrow", "rgrow-gui", "py-rgrow"]
+default-members = ["rgrow", "rgrow-gui"]
 resolver = "2"
 
 [workspace.dependencies]

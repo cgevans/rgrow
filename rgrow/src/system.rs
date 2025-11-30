@@ -540,17 +540,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         Vec::new()
     }
 
-    #[cfg(not(feature = "ui"))]
-    fn evolve_in_window<St: State>(
-        &self,
-        _state: &mut St,
-        _block: Option<usize>,
-        _start_paused: bool,
-        _bounds: EvolveBounds,
-    ) -> Result<EvolveOutcome, RgrowError> {
-        Err(RgrowError::NoUI)
-    }
-
     fn extract_model_name(info: &str) -> String {
         if info.starts_with("kTAM") {
             "kTAM".to_string()
@@ -566,7 +555,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             "Unknown".to_string()
         }
     }
-    #[cfg(feature = "ui")]
     fn evolve_in_window<St: State>(
         &mut self,
         state: &mut St,
@@ -595,7 +583,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             RgrowError::IO(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!(
-                    "rgrow-gui binary (version {}) not found on PATH. Please install it with:\n  cargo install rgrow --features ui\nOr update your existing installation with:\n  cargo install --force rgrow --features ui",
+                    "rgrow-gui binary (version {}) not found. The GUI functionality requires the rgrow-gui package to be installed.\n\nFor Python installations, ensure rgrow-gui is installed:\n  pip install rgrow-gui\n\nFor Rust installations, ensure rgrow-gui is built and available on PATH:\n  cargo build --package rgrow-gui\n\nNote: GUI support may be optional in future versions.",
                     env!("CARGO_PKG_VERSION")
                 )
             ))
@@ -892,7 +880,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 }
 
-#[cfg(feature = "ui")]
 pub(crate) fn find_gui_binary() -> Option<std::path::PathBuf> {
     use std::process::Command;
 
@@ -962,7 +949,8 @@ pub(crate) fn find_gui_binary() -> Option<std::path::PathBuf> {
             return Some(path);
         } else {
             eprintln!(
-                "Warning: Found rgrow-gui but version mismatch. Please update: cargo install --force rgrow --features ui"
+                "Warning: Found rgrow-gui but version mismatch. Please update rgrow-gui to match rgrow version {}",
+                env!("CARGO_PKG_VERSION")
             );
         }
     }
@@ -1212,7 +1200,6 @@ where
         self.configure_empty_state(state)
     }
 
-    #[cfg(feature = "ui")]
     fn evolve_in_window(
         &mut self,
         state: &mut StateEnum,

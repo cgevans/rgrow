@@ -1,0 +1,15 @@
+[project]
+name = "rgrow-gui"
+description = "GUI subprocess client for rgrow"
+requires-python = ">=3.10"
+dynamic = ["version"]
+
+[build-system]
+requires = ["maturin~=1.10"]
+build-backend = "maturin"
+
+[tool.maturin]
+bindings = "bin"
+manifest-path = "Cargo.toml"
+profile = "release"
+

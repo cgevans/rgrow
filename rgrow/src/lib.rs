@@ -26,7 +26,6 @@ pub mod ratestore;
 
 pub mod models;
 
-#[cfg(feature = "ui")]
 pub mod ui;
 
 #[cfg(feature = "python")]
