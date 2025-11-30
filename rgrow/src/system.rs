@@ -880,7 +880,9 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 }
 
-pub(crate) fn find_gui_binary() -> Option<std::path::PathBuf> {
+#[cfg_attr(test, allow(dead_code))]
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn find_gui_binary() -> Option<std::path::PathBuf> {
     use std::process::Command;
 
     const EXPECTED_VERSION: &str = env!("CARGO_PKG_VERSION");

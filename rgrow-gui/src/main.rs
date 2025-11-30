@@ -1,4 +1,5 @@
-mod ui;
+// UI module is now in lib.rs for testing
+use rgrow_gui::ui;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use crate::ui::iced_gui;

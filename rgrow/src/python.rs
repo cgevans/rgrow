@@ -350,13 +350,13 @@ macro_rules! create_py_system {
                     for_wall_time: for_wall_time.map(Duration::from_secs_f64),
                 };
 
-                if require_strong_bound & !bounds.is_strongly_bounded() {
+                if require_strong_bound && !show_window && !bounds.is_strongly_bounded() {
                     return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "No strong bounds specified.",
                     ));
                 }
 
-                if !bounds.is_weakly_bounded() {
+                if !show_window && !bounds.is_weakly_bounded() {
                     return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "No weak bounds specified.",
                     ));

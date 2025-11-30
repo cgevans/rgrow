@@ -30,11 +30,11 @@ pub enum GuiMessage {
 }
 
 #[derive(Clone)]
-struct ParameterState {
-    input_value: String,
-    current_value: f64,
-    increment: f64,
-    info: ParameterInfo,
+pub struct ParameterState {
+    pub input_value: String,
+    pub current_value: f64,
+    pub increment: f64,
+    pub info: ParameterInfo,
 }
 
 pub struct RgrowGui {
@@ -42,12 +42,13 @@ pub struct RgrowGui {
     stats_text: String,
     receiver: Arc<Mutex<mpsc::Receiver<GuiMessage>>>,
     control_sender: mpsc::Sender<ControlMessage>,
-    paused: bool,
-    events_per_step: String,
-    max_events_per_sec: String,
-    timescale: String,
-    model_name: String,
-    parameters: HashMap<String, ParameterState>,
+    #[cfg_attr(test, allow(dead_code))]
+    pub paused: bool,
+    pub events_per_step: String,
+    pub max_events_per_sec: String,
+    pub timescale: String,
+    pub model_name: String,
+    pub parameters: HashMap<String, ParameterState>,
 }
 
 #[derive(Debug, Clone)]
@@ -70,7 +71,7 @@ pub enum Message {
 }
 
 impl RgrowGui {
-    fn new(
+    pub fn new(
         receiver: Arc<Mutex<mpsc::Receiver<GuiMessage>>>,
         control_sender: mpsc::Sender<ControlMessage>,
         init: InitMessage,
@@ -117,7 +118,7 @@ impl RgrowGui {
         let _ = self.control_sender.send(msg);
     }
 
-    fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::GuiMessage(msg) => match msg {
                 GuiMessage::Update {
