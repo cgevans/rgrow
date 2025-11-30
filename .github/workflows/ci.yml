@@ -126,7 +126,10 @@ jobs:
           uv run -- maturin develop --uv
           uv run -- pytest -vvv --debug --cov=py-rgrow/rgrow --cov-report xml
       - name: Compile cargo coverage
-        run: cargo llvm-cov --no-run --lcov --output-path coverage.lcov
+        run: |
+          source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
+          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+          cargo llvm-cov --no-run --lcov --output-path coverage.lcov -p rgrow -p py-rgrow
         continue-on-error: true
       - name: Run ty
         continue-on-error: true
