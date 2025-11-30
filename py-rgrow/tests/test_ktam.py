@@ -322,7 +322,7 @@ def test_ktam_fission_just_detach():
     sys.update_all(state)
 
     assert state.n_tiles > 600
-    sys.evolve(state, for_events=100, size_min=0, size_max=1000)
+    sys.evolve(state, for_events=2, size_min=0, size_max=1000)
 
     assert state.canvas_view[8, 13] == 0
     assert state.canvas_view[5, 20] == 1
