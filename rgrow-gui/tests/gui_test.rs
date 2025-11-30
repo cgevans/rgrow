@@ -26,6 +26,8 @@ fn create_test_init() -> InitMessage {
             units: "kcal/mol".to_string(),
             description: Some("Seed energy".to_string()),
         }],
+        initial_timescale: None,
+        initial_max_events_per_sec: None,
     }
 }
 

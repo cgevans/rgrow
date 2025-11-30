@@ -151,6 +151,8 @@ fn test_ipc_init_ready_handshake() {
         has_temperature: false,
         initial_temperature: None,
         parameters: vec![],
+        initial_timescale: None,
+        initial_max_events_per_sec: None,
     };
 
     client.send_init(&init).expect("Failed to send init");
@@ -332,6 +334,8 @@ fn test_ipc_control_message() {
         has_temperature: false,
         initial_temperature: None,
         parameters: vec![],
+        initial_timescale: None,
+        initial_max_events_per_sec: None,
     };
 
     client.send_init(&init).expect("Failed to send init");

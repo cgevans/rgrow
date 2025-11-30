@@ -552,6 +552,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         block: Option<usize>,
         start_paused: bool,
         mut bounds: EvolveBounds,
+        initial_timescale: Option<f64>,
+        initial_max_events_per_sec: Option<u64>,
     ) -> Result<EvolveOutcome, RgrowError> {
         use crate::ui::ipc::{ControlMessage, InitMessage, UpdateNotification};
         use crate::ui::ipc_server::IpcClient;
@@ -635,6 +637,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             has_temperature,
             initial_temperature,
             parameters,
+            initial_timescale,
+            initial_max_events_per_sec,
         };
 
         ipc_client.send_init(&init_msg).map_err(|e| {
@@ -657,8 +661,8 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         // Control state
         let mut paused = start_paused;
         let mut remaining_step_events: Option<u64> = None;
-        let mut max_events_per_sec: Option<u64> = None;
-        let mut timescale: Option<f64> = None;
+        let mut max_events_per_sec: Option<u64> = initial_max_events_per_sec;
+        let mut timescale: Option<f64> = initial_timescale;
 
         let mut evres: EvolveOutcome = EvolveOutcome::ReachedZeroRate;
         let mut frame_buffer = vec![0u8; shm_size];
@@ -988,6 +992,8 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         block: Option<usize>,
         start_paused: bool,
         bounds: EvolveBounds,
+        initial_timescale: Option<f64>,
+        initial_max_events_per_sec: Option<u64>,
     ) -> Result<EvolveOutcome, RgrowError>;
 
     fn calc_mismatches(&self, state: &StateEnum) -> usize;
@@ -1199,8 +1205,17 @@ where
         block: Option<usize>,
         start_paused: bool,
         bounds: EvolveBounds,
+        initial_timescale: Option<f64>,
+        initial_max_events_per_sec: Option<u64>,
     ) -> Result<EvolveOutcome, RgrowError> {
-        self.evolve_in_window(state, block, start_paused, bounds)
+        self.evolve_in_window(
+            state,
+            block,
+            start_paused,
+            bounds,
+            initial_timescale,
+            initial_max_events_per_sec,
+        )
     }
 
     fn calc_mismatches(&self, state: &StateEnum) -> usize {

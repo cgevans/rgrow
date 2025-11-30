@@ -78,6 +78,8 @@ class ATAM:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome: ...
     @overload
     def evolve(
@@ -94,6 +96,8 @@ class ATAM:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> List[EvolveOutcome]: ...
     @overload
     def evolve(
@@ -110,6 +114,8 @@ class ATAM:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve a state (or states), with some bounds on the simulation.
@@ -145,6 +151,10 @@ class ATAM:
           If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
+        initial_timescale : float, optional
+          If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+        initial_max_events_per_sec : int, optional
+          If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
 
         Returns
         -------
@@ -607,6 +617,8 @@ class SDC:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome: ...
     @overload
     def evolve(
@@ -623,6 +635,8 @@ class SDC:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> List[EvolveOutcome]: ...
     @overload
     def evolve(
@@ -639,6 +653,8 @@ class SDC:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve a state (or states), with some bounds on the simulation.
@@ -674,6 +690,10 @@ class SDC:
           If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
+        initial_timescale : float, optional
+          If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+        initial_max_events_per_sec : int, optional
+          If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
 
         Returns
         -------
@@ -1380,6 +1400,8 @@ class KTAM:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome: ...
     @overload
     def evolve(
@@ -1396,6 +1418,8 @@ class KTAM:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> List[EvolveOutcome]: ...
     @overload
     def evolve(
@@ -1412,6 +1436,8 @@ class KTAM:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve a state (or states), with some bounds on the simulation.
@@ -1447,6 +1473,10 @@ class KTAM:
           If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
+        initial_timescale : float, optional
+          If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+        initial_max_events_per_sec : int, optional
+          If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
 
         Returns
         -------
@@ -1762,6 +1792,8 @@ class OldKTAM:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome: ...
     @overload
     def evolve(
@@ -1778,6 +1810,8 @@ class OldKTAM:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> List[EvolveOutcome]: ...
     @overload
     def evolve(
@@ -1794,6 +1828,8 @@ class OldKTAM:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve a state (or states), with some bounds on the simulation.
@@ -1829,6 +1865,10 @@ class OldKTAM:
           If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
+        initial_timescale : float, optional
+          If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+        initial_max_events_per_sec : int, optional
+          If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
 
         Returns
         -------
@@ -2099,6 +2139,8 @@ class KBlock:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome: ...
 
     @overload
@@ -2116,6 +2158,8 @@ class KBlock:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> List[EvolveOutcome]: ...
 
     @overload
@@ -2133,6 +2177,8 @@ class KBlock:
         show_window: bool = False,
         start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve a state (or states), with some bounds on the simulation.
@@ -2168,6 +2214,10 @@ class KBlock:
           If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
+        initial_timescale : float, optional
+          If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+        initial_max_events_per_sec : int, optional
+          If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
 
         Returns
         -------

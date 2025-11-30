@@ -284,7 +284,9 @@ macro_rules! create_py_system {
                                                                     require_strong_bound=true,
                                                                     show_window=false,
                                                                     start_window_paused=true,
-                                                                    parallel=true)
+                                                                    parallel=true,
+                                                                    initial_timescale=None,
+                                                                    initial_max_events_per_sec=None)
                                                     )]
             /// Evolve a state (or states), with some bounds on the simulation.
             ///
@@ -319,6 +321,10 @@ macro_rules! create_py_system {
             ///   If show_window is True, start the GUI window in a paused state. Defaults to True.
             /// parallel : bool
             ///   Use multiple threads.
+            /// initial_timescale : float, optional
+            ///   If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+            /// initial_max_events_per_sec : int, optional
+            ///   If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
             ///
             /// Returns
             /// -------
@@ -338,6 +344,8 @@ macro_rules! create_py_system {
                 show_window: bool,
                 start_window_paused: bool,
                 parallel: bool,
+                initial_timescale: Option<f64>,
+                initial_max_events_per_sec: Option<u64>,
                 py: Python<'py>,
             ) -> PyResult<Py<PyAny>> {
                 let bounds = EvolveBounds {
@@ -368,7 +376,7 @@ macro_rules! create_py_system {
                         if show_window {
                             py
                                 .detach(|| {
-                                    System::evolve_in_window(self, state, None, start_window_paused, bounds)
+                                    System::evolve_in_window(self, state, None, start_window_paused, bounds, initial_timescale, initial_max_events_per_sec)
                                 })?
                                 .into_py_any(py)
                         } else {

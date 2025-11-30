@@ -1196,7 +1196,7 @@ impl System for KBlock {
             ParameterInfo {
                 name: "temperature".to_string(),
                 units: "°C".to_string(),
-                default_increment: 5.0,
+                default_increment: 1.0,
                 min_value: Some(0.0),
                 max_value: Some(100.0),
                 description: Some("Simulation temperature".to_string()),

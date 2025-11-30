@@ -92,6 +92,21 @@ impl RgrowGui {
                 },
             );
         }
+        let max_events_per_sec = init
+            .initial_max_events_per_sec
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        let timescale = init
+            .initial_timescale
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+
+        if let Some(max_eps) = init.initial_max_events_per_sec {
+            let _ = control_sender.send(ControlMessage::SetMaxEventsPerSec(Some(max_eps)));
+        }
+        if let Some(ts) = init.initial_timescale {
+            let _ = control_sender.send(ControlMessage::SetTimescale(Some(ts)));
+        }
         RgrowGui {
             current_image: None,
             stats_text: format!(
@@ -102,8 +117,8 @@ impl RgrowGui {
             control_sender,
             paused,
             events_per_step: "1000".to_string(),
-            max_events_per_sec: "".to_string(),
-            timescale: "".to_string(),
+            max_events_per_sec,
+            timescale,
             model_name: init.model_name,
             parameters,
         }

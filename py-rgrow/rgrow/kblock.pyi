@@ -61,7 +61,10 @@ class KBlock:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> "EvolveOutcome": ...
     
     def plot_canvas(

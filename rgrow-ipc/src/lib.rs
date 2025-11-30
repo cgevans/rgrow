@@ -33,6 +33,8 @@ pub struct InitMessage {
     pub has_temperature: bool,
     pub initial_temperature: Option<f64>,
     pub parameters: Vec<ParameterInfo>,
+    pub initial_timescale: Option<f64>,
+    pub initial_max_events_per_sec: Option<u64>,
 }
 
 /// Notification that new frame data is available in shared memory.

@@ -21,6 +21,8 @@ fn test_ipc_message_serialization() {
             has_temperature: true,
             initial_temperature: Some(25.0),
             parameters: vec![],
+            initial_timescale: None,
+            initial_max_events_per_sec: None,
         }),
         IpcMessage::Update(UpdateNotification {
             frame_width: 100,
@@ -105,6 +107,8 @@ fn test_init_message_with_parameters() {
                 description: None,
             },
         ],
+        initial_timescale: None,
+        initial_max_events_per_sec: None,
     };
 
     let serialized = bincode::serialize(&init).expect("Failed to serialize");
