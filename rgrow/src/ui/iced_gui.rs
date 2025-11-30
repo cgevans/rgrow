@@ -24,6 +24,7 @@ pub enum GuiMessage {
         total_events: u64,
         n_tiles: u32,
         mismatches: u32,
+        energy: f64,
     },
     Close,
 }
@@ -94,8 +95,8 @@ impl RgrowGui {
         RgrowGui {
             current_image: None,
             stats_text: format!(
-                "Time: {:0.4e}  Events: {:0.4e}  Tiles: {}  Mismatches: {}",
-                0.0, 0, 0, 0
+                "Time: {:0.4e}  Events: {:0.4e}  Tiles: {}  Mismatches: {}  Energy: {:0.4e}",
+                0.0, 0, 0, 0, 0.0
             ),
             receiver,
             control_sender,
@@ -127,6 +128,7 @@ impl RgrowGui {
                     total_events,
                     n_tiles,
                     mismatches,
+                    energy,
                 } => {
                     let t0 = Instant::now();
                     let t1 = Instant::now();
@@ -145,8 +147,8 @@ impl RgrowGui {
                         );
                     }
                     self.stats_text = format!(
-                        "Time: {:0.4e}  Events: {:0.4e}  Tiles: {}  Mismatches: {}",
-                        time, total_events, n_tiles, mismatches
+                        "Time: {:0.4e}  Events: {:0.4e}  Tiles: {}  Mismatches: {}  Energy: {:0.4e}",
+                        time, total_events, n_tiles, mismatches, energy
                     );
                     if debug_enabled() {
                         eprintln!("[GUI] total update processing: {:?}", t0.elapsed());

@@ -36,6 +36,7 @@ pub struct UpdateNotification {
     pub total_events: u64,
     pub n_tiles: u32,
     pub mismatches: u32,
+    pub energy: f64,
     pub scale: usize,
     pub data_len: usize,
 }

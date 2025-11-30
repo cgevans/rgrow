@@ -140,6 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         total_events: notif.total_events,
                                         n_tiles: notif.n_tiles,
                                         mismatches: notif.mismatches,
+                                        energy: notif.energy,
                                     }
                                 }
                                 IpcMessage::Close => iced_gui::GuiMessage::Close,

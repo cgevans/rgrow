@@ -823,6 +823,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
                 total_events: state.total_events(),
                 n_tiles: state.n_tiles(),
                 mismatches: self.calc_mismatches(state) as u32,
+                energy: state.energy(),
                 scale,
                 data_len: pixel_frame.len(),
             };
