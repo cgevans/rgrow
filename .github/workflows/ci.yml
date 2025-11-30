@@ -32,7 +32,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           components: clippy,llvm-tools
-          toolchain: nightly
+          toolchain: stable
       - name: Set up cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -67,7 +67,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           components: clippy,llvm-tools
-          toolchain: nightly
+          toolchain: stable
       - name: Set up cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -174,7 +174,7 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: "true"
           working-directory: py-rgrow
-          rust-toolchain: nightly
+          rust-toolchain: stable
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -200,7 +200,7 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: "true"
           working-directory: py-rgrow
-          rust-toolchain: nightly
+          rust-toolchain: stable
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -250,7 +250,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly
+          toolchain: stable
       - name: Install X components
         run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0  
       - name: Publish to crates.io
