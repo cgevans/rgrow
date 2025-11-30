@@ -4,9 +4,12 @@ use rgrow_gui::ui;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use crate::ui::iced_gui;
     use crate::ui::shm_reader::ShmReader;
+    #[cfg(windows)]
+    use named_pipe::PipeServer;
     use rgrow::ui::ipc::{ControlMessage, IpcMessage};
     use std::env;
     use std::io::{Read, Write};
+    #[cfg(unix)]
     use std::os::unix::net::UnixListener;
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
@@ -24,7 +27,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let socket_path = &args[1];
+
+    #[cfg(unix)]
     let listener = UnixListener::bind(socket_path)?;
+
+    #[cfg(windows)]
+    let listener = {
+        let pipe_name = format!(
+            r"\\.\pipe\{}",
+            socket_path.replace('/', "_").replace('\\', "_")
+        );
+        PipeServer::new(pipe_name.as_str())?
+    };
 
     // Channel for GUI updates (IPC -> GUI)
     let (update_sender, update_receiver) = mpsc::channel();
@@ -36,9 +50,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let socket_path_clone = socket_path.to_string();
 
-    if let Ok((stream, _)) = listener.accept() {
-        let stream = Arc::new(Mutex::new(stream));
+    #[cfg(unix)]
+    let stream = {
+        if let Ok((stream, _)) = listener.accept() {
+            Some(Arc::new(Mutex::new(stream)))
+        } else {
+            None
+        }
+    };
 
+    #[cfg(windows)]
+    let stream = {
+        match listener.wait() {
+            Ok(stream) => Some(Arc::new(Mutex::new(stream))),
+            Err(_) => None,
+        }
+    };
+
+    if let Some(stream) = stream {
         let mut init_buffer = vec![0u8; 1024 * 1024];
         let mut len_bytes = [0u8; 8];
         {
@@ -176,7 +205,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                let _ = std::fs::remove_file(&socket_path_clone);
+                #[cfg(unix)]
+                {
+                    let _ = std::fs::remove_file(&socket_path_clone);
+                }
             });
 
             // Thread to forward control messages from GUI to simulation

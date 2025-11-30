@@ -75,6 +75,9 @@ astro-float = "0.9.4"
 paste="1.0.15"
 bpci = "0.1.0"
 
+[target.'cfg(windows)'.dependencies]
+named_pipe = "0.4"
+
 [dependencies.clap]
 version = "4"
 features = ["derive"]

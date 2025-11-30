@@ -25,6 +25,9 @@ image = "0.25"
 memmap2 = "0.9"
 serde = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+named_pipe = "0.4"
+
 [dev-dependencies]
 iced_test = "0.0.0"
 

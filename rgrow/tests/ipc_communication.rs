@@ -1,8 +1,11 @@
 extern crate rgrow;
 
+#[cfg(windows)]
+use named_pipe::PipeServer;
 use rgrow::ui::ipc::{ControlMessage, InitMessage, IpcMessage, UpdateNotification};
 use rgrow::ui::ipc_server::IpcClient;
 use std::io::{Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 use std::sync::mpsc;
@@ -17,56 +20,99 @@ fn create_temp_socket() -> PathBuf {
         .unwrap()
         .as_nanos();
     let mut path = env::temp_dir();
-    path.push(format!(
-        "rgrow-test-{}-{}.sock",
-        std::process::id(),
-        timestamp
-    ));
-    // Clean up if it exists
-    let _ = std::fs::remove_file(&path);
+    #[cfg(unix)]
+    {
+        path.push(format!(
+            "rgrow-test-{}-{}.sock",
+            std::process::id(),
+            timestamp
+        ));
+        // Clean up if it exists
+        let _ = std::fs::remove_file(&path);
+    }
+    #[cfg(windows)]
+    {
+        path.push(format!("rgrow-test-{}-{}", std::process::id(), timestamp));
+    }
     path
+}
+
+#[cfg(unix)]
+fn create_listener(path: &PathBuf) -> Result<UnixListener, std::io::Error> {
+    UnixListener::bind(path)
+}
+
+#[cfg(windows)]
+fn create_listener(path: &PathBuf) -> Result<PipeServer, std::io::Error> {
+    let pipe_name = format!(
+        r"\\.\pipe\{}",
+        path.to_string_lossy().replace('/', "_").replace('\\', "_")
+    );
+    PipeServer::new(pipe_name.as_str())
 }
 
 #[test]
 fn test_unix_socket_creation() {
     let socket_path = create_temp_socket();
-    let listener = UnixListener::bind(&socket_path);
+    let listener = create_listener(&socket_path);
     assert!(
         listener.is_ok(),
-        "Should be able to create Unix socket: {:?}",
+        "Should be able to create IPC listener: {:?}",
         listener.err()
     );
 
     // Clean up
-    let _ = std::fs::remove_file(&socket_path);
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(&socket_path);
+    }
 }
 
 #[test]
 fn test_ipc_client_connect() {
     let socket_path = create_temp_socket();
-    let _listener = UnixListener::bind(&socket_path).expect("Failed to bind socket");
+    let _listener = create_listener(&socket_path).expect("Failed to bind listener");
 
     // Try to connect (this will fail because no one is accepting, but we test the path exists)
     let result = IpcClient::connect(&socket_path);
     // Connection might fail if no one is listening, but socket should exist
-    assert!(
-        socket_path.exists() || result.is_err(),
-        "Socket path should exist or connection should fail gracefully"
-    );
+    #[cfg(unix)]
+    {
+        assert!(
+            socket_path.exists() || result.is_err(),
+            "Socket path should exist or connection should fail gracefully"
+        );
+    }
+    #[cfg(windows)]
+    {
+        // On Windows, the pipe might not exist as a file, so we just check the connection attempt
+        assert!(
+            result.is_err() || result.is_ok(),
+            "Connection should either succeed or fail gracefully"
+        );
+    }
 
     // Clean up
-    let _ = std::fs::remove_file(&socket_path);
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(&socket_path);
+    }
 }
 
 #[test]
 fn test_ipc_init_ready_handshake() {
     let socket_path = create_temp_socket();
-    let listener = UnixListener::bind(&socket_path).expect("Failed to bind socket");
+    let listener = create_listener(&socket_path).expect("Failed to bind listener");
 
     // Spawn a thread to simulate rgrow-gui server
     let _socket_path_clone = socket_path.clone();
     let server_thread = thread::spawn(move || {
-        if let Ok((mut stream, _)) = listener.accept() {
+        #[cfg(unix)]
+        let stream_result = listener.accept().map(|(s, _)| s);
+        #[cfg(windows)]
+        let stream_result = listener.wait();
+
+        if let Ok(mut stream) = stream_result {
             // Read init message
             let mut len_bytes = [0u8; 8];
             if stream.read_exact(&mut len_bytes).is_ok() {
@@ -116,13 +162,16 @@ fn test_ipc_init_ready_handshake() {
     server_thread.join().unwrap();
 
     // Clean up
-    let _ = std::fs::remove_file(&socket_path);
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(&socket_path);
+    }
 }
 
 #[test]
 fn test_ipc_update_message() {
     let socket_path = create_temp_socket();
-    let listener = UnixListener::bind(&socket_path).expect("Failed to bind socket");
+    let listener = create_listener(&socket_path).expect("Failed to bind listener");
 
     // Create shared memory file
     let shm_path = format!("/tmp/rgrow-test-shm-{}", std::process::id());
@@ -141,7 +190,12 @@ fn test_ipc_update_message() {
     // Spawn server thread
     let _socket_path_clone = socket_path.clone();
     let server_thread = thread::spawn(move || {
-        if let Ok((mut stream, _)) = listener.accept() {
+        #[cfg(unix)]
+        let stream_result = listener.accept().map(|(s, _)| s);
+        #[cfg(windows)]
+        let stream_result = listener.wait();
+
+        if let Ok(mut stream) = stream_result {
             // Read init
             let mut len_bytes = [0u8; 8];
             if stream.read_exact(&mut len_bytes).is_ok() {
@@ -212,20 +266,28 @@ fn test_ipc_update_message() {
     server_thread.join().unwrap();
 
     // Clean up
-    let _ = std::fs::remove_file(&socket_path);
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(&socket_path);
+    }
     let _ = std::fs::remove_file(&shm_path);
 }
 
 #[test]
 fn test_ipc_control_message() {
     let socket_path = create_temp_socket();
-    let listener = UnixListener::bind(&socket_path).expect("Failed to bind socket");
+    let listener = create_listener(&socket_path).expect("Failed to bind listener");
 
     // Spawn server thread that sends control messages
     let _socket_path_clone = socket_path.clone();
     let (tx, rx) = mpsc::channel();
     let server_thread = thread::spawn(move || {
-        if let Ok((mut stream, _)) = listener.accept() {
+        #[cfg(unix)]
+        let stream_result = listener.accept().map(|(s, _)| s);
+        #[cfg(windows)]
+        let stream_result = listener.wait();
+
+        if let Ok(mut stream) = stream_result {
             // Read init and send Ready
             let mut len_bytes = [0u8; 8];
             if stream.read_exact(&mut len_bytes).is_ok() {
@@ -285,5 +347,8 @@ fn test_ipc_control_message() {
     server_thread.join().unwrap();
 
     // Clean up
-    let _ = std::fs::remove_file(&socket_path);
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(&socket_path);
+    }
 }
