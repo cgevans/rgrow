@@ -22,6 +22,10 @@ harness = false
 name = "committer"
 harness = false
 
+[[bench]]
+name = "canvas_bounds"
+harness = false
+
 # [[bench]]
 # name = "ratestore"
 # harness = false
