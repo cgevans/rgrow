@@ -40,7 +40,7 @@ profile = "release"
 manifest-path = "py-rgrow/Cargo.toml"
 
 [tool.uv.workspace]
-members = ["py-rgrow", "rgrow-gui"]
+members = [".", "rgrow-gui"]
 
 [tool.uv]
 dev-dependencies = [
