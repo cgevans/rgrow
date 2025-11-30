@@ -32,12 +32,14 @@ norecursedirs = [
     "build",
     ".tox",
 ]
-testpaths = ["tests"]
+testpaths = ["py-rgrow/tests"]
 
 [tool.maturin]
 bindings = "pyo3"
 profile = "release"
 manifest-path = "py-rgrow/Cargo.toml"
+python-source = "py-rgrow"
+
 
 [tool.uv.workspace]
 members = [".", "rgrow-gui"]
