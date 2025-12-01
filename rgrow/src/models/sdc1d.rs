@@ -2783,4 +2783,90 @@ mod test_sdc_model {
             "partial_partition_function with no constraints should equal partition_function_full. partial_pf={}, full_pf={}, relative_error={}",
             partial_pf, full_pf, relative_error);
     }
+
+    #[test]
+    fn test_partial_partition_function_fully_constrained() {
+        let sdc = scaffold_for_tests();
+        let scaffold_len = sdc.scaffold().len();
+
+        // Pick a specific state to fully constrain (using a valid state from the system)
+        let test_state = vec![0, 0, 1, 3, 5, 7, 2, 0, 0];
+        assert_eq!(test_state.len(), scaffold_len);
+
+        // Create constraints: each position can only have the value from test_state
+        let full_constraints: Vec<Vec<Tile>> = test_state.iter().map(|&tile| vec![tile]).collect();
+
+        let partial_pf = bigfloat_to_f64(
+            &sdc.partial_partition_function(full_constraints),
+            astro_float::RoundingMode::None,
+        );
+
+        // When fully constrained, partial partition function should equal Boltzmann function
+        let g_system = sdc.g_system(&test_state);
+        let boltzmann = sdc.boltzman_function(&test_state);
+        let expected_pf = (-g_system / sdc.rtval()).exp();
+
+        let relative_error = ((partial_pf - expected_pf) / expected_pf).abs();
+        assert!(
+            relative_error < 1e-10,
+            "partial_partition_function when fully constrained should equal Boltzmann function. partial_pf={}, expected_pf={}, relative_error={}",
+            partial_pf, expected_pf, relative_error
+        );
+        let boltzmann_relative_error = ((partial_pf - boltzmann) / boltzmann).abs();
+        assert!(
+            boltzmann_relative_error < 1e-10,
+            "partial_partition_function when fully constrained should equal boltzman_function. partial_pf={}, boltzmann={}, relative_error={}",
+            partial_pf, boltzmann, boltzmann_relative_error
+        );
+    }
+
+    #[test]
+    fn test_partial_partition_function_few_states() {
+        let sdc = scaffold_for_tests();
+        let scaffold_len = sdc.scaffold().len();
+
+        // Pick a few specific states to test (using valid states from the system)
+        let test_states = vec![
+            vec![0, 0, 1, 3, 5, 7, 2, 0, 0],
+            vec![0, 0, 0, 3, 5, 7, 2, 0, 0],
+            vec![0, 0, 1, 0, 5, 7, 2, 0, 0],
+        ];
+
+        // Verify all states have correct length
+        for state in &test_states {
+            assert_eq!(state.len(), scaffold_len);
+        }
+
+        // Create constraints that allow only these states
+        // We need to find which positions have different values across states
+        let mut constraints: Vec<Vec<Tile>> = vec![Vec::new(); scaffold_len];
+
+        for pos in 0..scaffold_len {
+            let mut allowed_tiles = Vec::new();
+            for state in &test_states {
+                if !allowed_tiles.contains(&state[pos]) {
+                    allowed_tiles.push(state[pos]);
+                }
+            }
+            constraints[pos] = allowed_tiles;
+        }
+
+        let partial_pf = bigfloat_to_f64(
+            &sdc.partial_partition_function(constraints),
+            astro_float::RoundingMode::None,
+        );
+
+        // Partial partition function should equal sum of Boltzmann functions of allowed states
+        let expected_pf: f64 = test_states
+            .iter()
+            .map(|state| sdc.boltzman_function(state))
+            .sum();
+
+        let relative_error = ((partial_pf - expected_pf) / expected_pf).abs();
+        assert!(
+            relative_error < 1e-10,
+            "partial_partition_function constrained to few states should equal sum of their Boltzmann functions. partial_pf={}, expected_pf={}, relative_error={}",
+            partial_pf, expected_pf, relative_error
+        );
+    }
 }
