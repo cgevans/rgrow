@@ -48,7 +48,7 @@ impl IpcClient {
                     pipe_name.replace('/', "_").replace('\\', "_")
                 )
             };
-            let stream = PipeClient::connect(pipe_name.as_ref())?;
+            let stream = PipeClient::connect(pipe_name.as_str())?;
             Ok(IpcClient {
                 stream,
                 shm: None,
