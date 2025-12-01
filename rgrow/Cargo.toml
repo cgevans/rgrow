@@ -47,7 +47,7 @@ path = "src/main.rs"
 python = ["pyo3", "numpy", "pyo3-polars"]
 
 [dependencies]
-rgrow-ipc = { path = "../rgrow-ipc" }
+rgrow-ipc = { path = "../rgrow-ipc", version = "0.21.0" }
 num-format = "0.4"
 fnv = "1.0"
 bimap = "0.6"
