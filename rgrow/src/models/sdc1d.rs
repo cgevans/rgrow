@@ -2749,4 +2749,38 @@ mod test_sdc_model {
         let (acc, _) = sdc.mfe_configuration();
         assert_eq!(mfe_config.to_vec(), acc);
     }
+
+    #[test]
+    fn test_partition_function() {
+        let sdc = scaffold_for_tests();
+
+        let pf_full = sdc.partition_function_full();
+        let pf = bigfloat_to_f64(&sdc.partition_function(), astro_float::RoundingMode::None);
+
+        let rel_diff =
+            ((pf - pf_full).abs() / pf_full.abs()).max(((pf - pf_full).abs() / pf.abs()));
+        assert!(rel_diff < 0.0001,
+            "Relative difference between partition_function ({}) and partition_function_full ({}) should be less than 0.01%, got {}", 
+            pf, pf_full, rel_diff);
+        assert!(pf > 0.0, "Partition function should be positive");
+        assert!(pf_full > 0.0, "Partition function full should be positive");
+    }
+
+    #[test]
+    fn test_partial_partition_function_no_constraints() {
+        let sdc = scaffold_for_tests();
+        let scaffold_len = sdc.scaffold().len();
+
+        let empty_constraints: Vec<Vec<Tile>> = vec![Vec::new(); scaffold_len];
+        let partial_pf = bigfloat_to_f64(
+            &sdc.partial_partition_function(empty_constraints),
+            astro_float::RoundingMode::None,
+        );
+        let full_pf = sdc.partition_function_full();
+
+        let relative_error = ((partial_pf - full_pf) / full_pf).abs();
+        assert!(relative_error < 1e-10,
+            "partial_partition_function with no constraints should equal partition_function_full. partial_pf={}, full_pf={}, relative_error={}",
+            partial_pf, full_pf, relative_error);
+    }
 }
