@@ -1,7 +1,7 @@
 extern crate rgrow;
 
 #[cfg(windows)]
-use named_pipe::PipeServer;
+use named_pipe::{PipeOptions, PipeServer};
 use rgrow::ui::ipc::{ControlMessage, InitMessage, IpcMessage, UpdateNotification};
 use rgrow::ui::ipc_server::IpcClient;
 use std::io::{Read, Write};
@@ -48,7 +48,7 @@ fn create_listener(path: &PathBuf) -> Result<PipeServer, std::io::Error> {
         r"\\.\pipe\{}",
         path.to_string_lossy().replace('/', "_").replace('\\', "_")
     );
-    PipeServer::new(pipe_name.as_str())
+    PipeOptions::new(pipe_name.as_str())?.single()
 }
 
 #[test]
