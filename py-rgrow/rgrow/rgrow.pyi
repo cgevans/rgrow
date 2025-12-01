@@ -76,7 +76,10 @@ class ATAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome: ...
     @overload
     def evolve(
@@ -91,7 +94,10 @@ class ATAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> List[EvolveOutcome]: ...
     @overload
     def evolve(
@@ -106,7 +112,10 @@ class ATAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve a state (or states), with some bounds on the simulation.
@@ -138,8 +147,14 @@ class ATAM:
           satisfied under normal conditions.
         show_window : bool
           Show a graphical UI window while evolving (requires ui feature, and a single state).
+        start_window_paused : bool
+          If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
+        initial_timescale : float, optional
+          If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+        initial_max_events_per_sec : int, optional
+          If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
 
         Returns
         -------
@@ -600,7 +615,10 @@ class SDC:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome: ...
     @overload
     def evolve(
@@ -615,7 +633,10 @@ class SDC:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> List[EvolveOutcome]: ...
     @overload
     def evolve(
@@ -630,7 +651,10 @@ class SDC:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve a state (or states), with some bounds on the simulation.
@@ -662,8 +686,14 @@ class SDC:
           satisfied under normal conditions.
         show_window : bool
           Show a graphical UI window while evolving (requires ui feature, and a single state).
+        start_window_paused : bool
+          If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
+        initial_timescale : float, optional
+          If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+        initial_max_events_per_sec : int, optional
+          If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
 
         Returns
         -------
@@ -802,13 +832,61 @@ class SDC:
     def partition(self) -> float: ...
     def partition_function(self) -> float: ...
     def partition_function_full(self) -> float: ...
-    def log_big_partition_function(self) -> float: ...
+    def log_partition_function(self) -> float: ...
+    def partial_partition_function(self, constrain_at_loc: list[list[int]]) -> float:
+        """
+        Calculate the partial partition function with constraints at each location.
+
+        Parameters
+        ----------
+        constrain_at_loc : list[list[int]]
+            A list of lists, where each inner list specifies which tiles are allowed at that
+            scaffold position. An empty list means no constraints (all tiles allowed).
+            Tile ID 0 corresponds to an empty site.
+
+        Returns
+        -------
+        float
+            The partial partition function value.
+        """
+    def log_partial_partition_function(self, constrain_at_loc: list[list[int]]) -> float:
+        """
+        Calculate the log of the partial partition function with constraints at each location.
+
+        Parameters
+        ----------
+        constrain_at_loc : list[list[int]]
+            A list of lists, where each inner list specifies which tiles are allowed at that
+            scaffold position. An empty list means no constraints (all tiles allowed).
+            Tile ID 0 corresponds to an empty site.
+
+        Returns
+        -------
+        float
+            The log of the partial partition function value.
+        """
     def distribution(self) -> list[float]: ...
     def set_tmp_c(self, tmp: float) -> None: ...
     def get_all_probs(self) -> list[tuple[list[int], float, float]]: ...
     def quencher_rates(self) -> str: ...
     def fluorophore_rates(self) -> str: ...
     def probability_of_state(self, state: list[int]) -> float: ...
+    def probability_of_constrained_configurations(self, constrain_at_loc: list[list[int]]) -> float:
+        """
+        Calculate the probability of configurations that satisfy the given constraints.
+
+        Parameters
+        ----------
+        constrain_at_loc : list[list[int]]
+            A list of lists, where each inner list specifies which tiles are allowed at that
+            scaffold position. An empty list means no constraints (all tiles allowed).
+            Tile ID 0 corresponds to an empty site.
+
+        Returns
+        -------
+        float
+            The probability of configurations satisfying the constraints.
+        """
     def state_g(self, state: list[int]) -> float: ...
     def rtval(self) -> float: ...
     def mfe_matrix(self) -> list[list[tuple[int, float, int]]]: ...
@@ -1368,7 +1446,10 @@ class KTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome: ...
     @overload
     def evolve(
@@ -1383,7 +1464,10 @@ class KTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> List[EvolveOutcome]: ...
     @overload
     def evolve(
@@ -1398,7 +1482,10 @@ class KTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve a state (or states), with some bounds on the simulation.
@@ -1430,8 +1517,14 @@ class KTAM:
           satisfied under normal conditions.
         show_window : bool
           Show a graphical UI window while evolving (requires ui feature, and a single state).
+        start_window_paused : bool
+          If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
+        initial_timescale : float, optional
+          If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+        initial_max_events_per_sec : int, optional
+          If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
 
         Returns
         -------
@@ -1745,7 +1838,10 @@ class OldKTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome: ...
     @overload
     def evolve(
@@ -1760,7 +1856,10 @@ class OldKTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> List[EvolveOutcome]: ...
     @overload
     def evolve(
@@ -1775,7 +1874,10 @@ class OldKTAM:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve a state (or states), with some bounds on the simulation.
@@ -1807,8 +1909,14 @@ class OldKTAM:
           satisfied under normal conditions.
         show_window : bool
           Show a graphical UI window while evolving (requires ui feature, and a single state).
+        start_window_paused : bool
+          If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
+        initial_timescale : float, optional
+          If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+        initial_max_events_per_sec : int, optional
+          If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
 
         Returns
         -------
@@ -2077,7 +2185,10 @@ class KBlock:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome: ...
 
     @overload
@@ -2093,7 +2204,10 @@ class KBlock:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> List[EvolveOutcome]: ...
 
     @overload
@@ -2109,7 +2223,10 @@ class KBlock:
         for_wall_time: float | None = None,
         require_strong_bound: bool = True,
         show_window: bool = False,
+        start_window_paused: bool = True,
         parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
     ) -> EvolveOutcome | List[EvolveOutcome]:
         """
         Evolve a state (or states), with some bounds on the simulation.
@@ -2141,8 +2258,14 @@ class KBlock:
           satisfied under normal conditions.
         show_window : bool
           Show a graphical UI window while evolving (requires ui feature, and a single state).
+        start_window_paused : bool
+          If show_window is True, start the GUI window in a paused state. Defaults to True.
         parallel : bool
           Use multiple threads.
+        initial_timescale : float, optional
+          If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+        initial_max_events_per_sec : int, optional
+          If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
 
         Returns
         -------

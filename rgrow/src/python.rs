@@ -283,7 +283,10 @@ macro_rules! create_py_system {
                                                                     for_wall_time=None,
                                                                     require_strong_bound=true,
                                                                     show_window=false,
-                                                                    parallel=true)
+                                                                    start_window_paused=true,
+                                                                    parallel=true,
+                                                                    initial_timescale=None,
+                                                                    initial_max_events_per_sec=None)
                                                     )]
             /// Evolve a state (or states), with some bounds on the simulation.
             ///
@@ -313,9 +316,15 @@ macro_rules! create_py_system {
             ///   Require that the stopping conditions are strong, i.e., they are guaranteed to be eventually
             ///   satisfied under normal conditions.
             /// show_window : bool
-            ///   Show a graphical UI window while evolving (requires ui feature, and a single state).
+            ///   Show a graphical UI window while evolving (requires rgrow-gui to be installed, and a single state).
+            /// start_window_paused : bool
+            ///   If show_window is True, start the GUI window in a paused state. Defaults to True.
             /// parallel : bool
             ///   Use multiple threads.
+            /// initial_timescale : float, optional
+            ///   If show_window is True, set the initial timescale (sim_time/real_time) in the GUI. None means unlimited.
+            /// initial_max_events_per_sec : int, optional
+            ///   If show_window is True, set the initial max events per second limit in the GUI. None means unlimited.
             ///
             /// Returns
             /// -------
@@ -333,7 +342,10 @@ macro_rules! create_py_system {
                 for_wall_time: Option<f64>,
                 require_strong_bound: bool,
                 show_window: bool,
+                start_window_paused: bool,
                 parallel: bool,
+                initial_timescale: Option<f64>,
+                initial_max_events_per_sec: Option<u64>,
                 py: Python<'py>,
             ) -> PyResult<Py<PyAny>> {
                 let bounds = EvolveBounds {
@@ -346,13 +358,13 @@ macro_rules! create_py_system {
                     for_wall_time: for_wall_time.map(Duration::from_secs_f64),
                 };
 
-                if require_strong_bound & !bounds.is_strongly_bounded() {
+                if require_strong_bound && !show_window && !bounds.is_strongly_bounded() {
                     return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "No strong bounds specified.",
                     ));
                 }
 
-                if !bounds.is_weakly_bounded() {
+                if !show_window && !bounds.is_weakly_bounded() {
                     return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "No weak bounds specified.",
                     ));
@@ -364,7 +376,7 @@ macro_rules! create_py_system {
                         if show_window {
                             py
                                 .detach(|| {
-                                    System::evolve_in_window(self, state, None, bounds)
+                                    System::evolve_in_window(self, state, None, start_window_paused, bounds, initial_timescale, initial_max_events_per_sec)
                                 })?
                                 .into_py_any(py)
                         } else {

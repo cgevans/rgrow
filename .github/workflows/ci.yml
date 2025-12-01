@@ -29,29 +29,38 @@ jobs:
       # RUSTFLAGS: "-Dwarnings"
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout tiny-xlib fork
+        uses: actions/checkout@v4
+        with:
+          repository: cgevans/tiny-xlib
+          path: ./tiny-xlib
       - uses: dtolnay/rust-toolchain@master
         with:
           components: clippy,llvm-tools
-          toolchain: nightly
+          toolchain: stable
       - name: Set up cache
         uses: Swatinem/rust-cache@v2
-        with:
-          key: coverage-cargo-python-linux # ${{ matrix.os }}
-        continue-on-error: true
       - name: Install carge llvm-cov
         run: cargo install cargo-llvm-cov
-      #- name: Install X components
-      #  run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
+      - name: Install X components
+        run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
+      # - name: Add tiny-xlib patch for coverage
+      #   run: |
+      #     cat >> Cargo.toml << 'EOF'
+
+      #     [patch.crates-io]
+      #     tiny-xlib = { path = "./tiny-xlib" }
+      #     EOF
       - name: Run Clippy
-        run: cargo clippy
+        run: cargo clippy -p rgrow
       - name: Run tests and coverage
         run: |
-          source <(cargo llvm-cov show-env --export-prefix)
+          source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
-          cargo test
-          cargo llvm-cov --no-run --lcov --output-path coverage.lcov
+          cargo test -p rgrow
+          cargo llvm-cov --no-run --lcov --output-path coverage.lcov -p rgrow -p py-rgrow
       - uses: codecov/codecov-action@v5
         with:
           files: coverage.lcov
@@ -64,20 +73,24 @@ jobs:
       # RUSTFLAGS: "-Dwarnings"
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout tiny-xlib fork
+        uses: actions/checkout@v4
+        with:
+          repository: cgevans/tiny-xlib
+          path: ./tiny-xlib
       - uses: dtolnay/rust-toolchain@master
         with:
           components: clippy,llvm-tools
-          toolchain: nightly
+          toolchain: stable
       - name: Set up cache
         uses: Swatinem/rust-cache@v2
-        with:
-          key: coverage-cargo-python-linux # ${{ matrix.os }}
-        continue-on-error: true
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: setup uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       - name: Setup virtual environment
         run: |
           uv venv
@@ -91,17 +104,30 @@ jobs:
       - name: Install maturin and pytest
         run: |
           uv pip install maturin pytest pytest-cov hypothesis
-      # - name: Install X components
-      #   run: sudo apt-get install -y gdb libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
+      - name: Install X components
+        run: sudo apt-get install -y gdb libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
+      # - name: Add tiny-xlib patch for coverage
+      #   run: |
+      #     cat >> Cargo.toml << 'EOF'
+
+      #     [patch.crates-io]
+      #     tiny-xlib = { path = "./tiny-xlib" }
+      #     EOF
       - name: Run coverage
         run: |
-          source <(cargo llvm-cov show-env --export-prefix)
+          source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
+          cargo test -p rgrow
           uv run -- maturin develop --uv
           uv run -- pytest -vvv --debug --cov=py-rgrow/rgrow --cov-report xml
-          cargo llvm-cov --no-run --lcov --output-path coverage.lcov
+      - name: Compile cargo coverage
+        run: |
+          source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
+          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+          cargo llvm-cov report --lcov --output-path coverage.lcov
+        continue-on-error: true
       - name: Run ty
         continue-on-error: true
         run: |
@@ -111,6 +137,7 @@ jobs:
           files: coverage.xml,coverage.lcov
           name: python-linux # ${{ matrix.os }}
           token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
   linux:
     name: Python Linux builds
     needs: [python_checks]
@@ -122,20 +149,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.14"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist 
           sccache: "true"
           manylinux: "auto"
-          working-directory: py-rgrow
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-${{ matrix.target }}
-          path: py-rgrow/dist
+          path: dist
   # deploy-docs:
   #   runs-on: ubuntu-latest
   #   needs: [python_checks]
@@ -167,19 +199,23 @@ jobs:
         with:
           python-version: "3.10"
           architecture: ${{ matrix.target }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
           sccache: "true"
-          working-directory: py-rgrow
-          rust-toolchain: nightly
+          rust-toolchain: stable
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-${{ matrix.target }}
-          path: py-rgrow/dist
+          path: dist
 
   macos:
     name: Python MacOS builds
@@ -193,30 +229,38 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
           sccache: "true"
-          working-directory: py-rgrow
-          rust-toolchain: nightly
+          rust-toolchain: stable
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-${{ matrix.target }}
-          path: py-rgrow/dist
+          path: dist
 
   sdist:
     needs: [python_checks]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          working-directory: py-rgrow
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
@@ -250,7 +294,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly
+          toolchain: stable
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
       - name: Install X components
         run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0  
       - name: Publish to crates.io

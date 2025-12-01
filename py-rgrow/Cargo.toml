@@ -10,8 +10,7 @@ categories = { workspace = true }
 
 
 [features]
-default = [] # , "ui"]         # "ui"
-ui = ["rgrow/ui"]
+default = []
 
 [lib]
 name = "rgrow"

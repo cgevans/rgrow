@@ -31,3 +31,4 @@ coverage.lcov
 **/.hypothesis/*
 **/.cargo/config.toml
 
+uv.lock

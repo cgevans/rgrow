@@ -1,6 +1,6 @@
 [workspace]
-members = ["rgrow", "py-rgrow"]
-default-members = ["rgrow"]
+members = ["rgrow", "rgrow-gui", "py-rgrow", "rgrow-ipc"]
+default-members = ["rgrow", "rgrow-gui"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -15,7 +15,7 @@ pyo3-polars = "^0.25"
 polars = {version = "^0.52", features = ["lazy", "parquet", "product", "timezones"]}
 
 [workspace.package]
-version = "0.20.0"
+version = "0.21.0-pre1"
 authors = ["Constantine Evans <const@costi.net>"]
 edition = "2021"
 repository = "https://github.com/cgevans/rgrow"

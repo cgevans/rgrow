@@ -34,19 +34,13 @@ use std::fmt::Debug;
 
 use std::time::Duration;
 
-#[cfg(feature = "ui")]
-use fltk::{app, prelude::*, window::Window};
-
-#[cfg(feature = "ui")]
-use pixels::{Pixels, SurfaceTexture};
-
 use rayon::prelude::*;
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
-use pyo3::IntoPyObjectExt;
+use pyo3::{types::PyModule, IntoPyObjectExt};
 
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -75,11 +69,6 @@ pub enum NeededUpdate {
     All,
 }
 
-#[cfg(feature = "ui")]
-thread_local! {
-    pub static APP: fltk::app::App = app::App::default()
-}
-
 #[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 pub struct EvolveBounds {
@@ -98,6 +87,8 @@ pub struct EvolveBounds {
     /// Stop after this amount of (real) time has passed.
     pub for_wall_time: Option<Duration>,
 }
+
+pub use rgrow_ipc::ParameterInfo;
 
 #[cfg(feature = "python")]
 #[pymethods]
@@ -536,139 +527,325 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         todo!();
     }
 
-    #[cfg(not(feature = "ui"))]
-    fn evolve_in_window<St: State>(
-        &self,
-        _state: &mut St,
-        _block: Option<usize>,
-        _bounds: EvolveBounds,
-    ) -> Result<EvolveOutcome, RgrowError> {
-        Err(RgrowError::NoUI)
+    fn list_parameters(&self) -> Vec<ParameterInfo> {
+        Vec::new()
     }
 
-    #[cfg(feature = "ui")]
+    fn extract_model_name(info: &str) -> String {
+        if info.starts_with("kTAM") {
+            "kTAM".to_string()
+        } else if info.starts_with("aTAM") {
+            "aTAM".to_string()
+        } else if info.starts_with("Old kTAM") || info.starts_with("OldkTAM") {
+            "Old kTAM".to_string()
+        } else if info.starts_with("SDC") || info.contains("SDC") {
+            "SDC".to_string()
+        } else if info.starts_with("KBlock") {
+            "KBlock".to_string()
+        } else {
+            "Unknown".to_string()
+        }
+    }
     fn evolve_in_window<St: State>(
-        &self,
+        &mut self,
         state: &mut St,
         block: Option<usize>,
+        start_paused: bool,
         mut bounds: EvolveBounds,
+        initial_timescale: Option<f64>,
+        initial_max_events_per_sec: Option<u64>,
     ) -> Result<EvolveOutcome, RgrowError> {
+        use crate::ui::ipc::{ControlMessage, InitMessage, UpdateNotification};
+        use crate::ui::ipc_server::IpcClient;
+        use std::process::{Command, Stdio};
+        use std::time::{Duration, Instant};
+
+        let debug_perf = std::env::var("RGROW_DEBUG_PERF").is_ok();
+
         let (width, height) = state.draw_size();
+        let tile_colors_vec = self.tile_colors().clone();
 
-        let mut scale = match block {
-            Some(i) => i,
-            None => {
-                let (w, h) = app::screen_size();
-                ((w - 50.) / (width as f64))
-                    .min((h - 50.) / (height as f64))
-                    .floor() as usize
+        let scale = block.unwrap_or(8);
+
+        let socket_path =
+            std::env::temp_dir().join(format!("rgrow-gui-{}.sock", std::process::id()));
+        let socket_path_str = socket_path.to_string_lossy().to_string();
+
+        // Try to find rgrow-gui binary in multiple locations
+        let gui_exe = find_gui_binary().ok_or_else(|| {
+            RgrowError::IO(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!(
+                    "rgrow-gui binary (version {}) not found. The GUI functionality requires the rgrow-gui package to be installed.\n\nFor Python installations, ensure rgrow-gui is installed:\n  pip install rgrow-gui\n\nFor Rust installations, ensure rgrow-gui is built and available on PATH:\n  cargo build --package rgrow-gui\n\nNote: GUI support may be optional in future versions.",
+                    env!("CARGO_PKG_VERSION")
+                )
+            ))
+        })?;
+
+        let mut gui_process = Command::new(&gui_exe)
+            .arg(&socket_path_str)
+            .stdout(Stdio::null())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|e| {
+                RgrowError::IO(std::io::Error::other(format!(
+                    "Failed to spawn GUI process: {}. Make sure rgrow-gui is built.",
+                    e
+                )))
+            })?;
+
+        std::thread::sleep(Duration::from_millis(100));
+
+        let mut ipc_client = IpcClient::connect(&socket_path).map_err(|e| {
+            RgrowError::IO(std::io::Error::other(format!(
+                "Failed to connect to GUI: {}",
+                e
+            )))
+        })?;
+
+        let shm_size = (width * height * scale as u32 * scale as u32 * 4) as usize;
+        let shm_path = format!("/dev/shm/rgrow-frame-{}", std::process::id());
+
+        let has_temperature = self.get_param("temperature").is_ok();
+        let model_name = Self::extract_model_name(&self.system_info());
+        let initial_temperature = if has_temperature {
+            self.get_param("temperature")
+                .ok()
+                .and_then(|v| v.downcast_ref::<f64>().copied())
+        } else {
+            None
+        };
+
+        let mut parameters = self.list_parameters();
+        for param in &mut parameters {
+            if let Ok(value) = self.get_param(&param.name) {
+                if let Some(f64_value) = value.downcast_ref::<f64>() {
+                    param.current_value = *f64_value;
+                }
             }
-        };
-        app::screen_size();
+        }
 
-        // let sr = state.read().unwrap();
-        let mut win = Window::default()
-            .with_size(
-                (scale * (width as usize)) as i32,
-                ((scale * (height as usize)) + 30) as i32,
-            )
-            .with_label("rgrow");
-
-        win.make_resizable(true);
-
-        // add a frame with a label at the bottom of the window
-        let mut frame = fltk::frame::Frame::default()
-            .with_size(win.pixel_w(), 30)
-            .with_pos(0, win.pixel_h() - 30)
-            .with_label("Hello");
-        win.end();
-        win.show();
-
-        let mut win_width = win.pixel_w() as u32;
-        let mut win_height = win.pixel_h() as u32;
-
-        let surface_texture = SurfaceTexture::new(win_width, win_height - 30, &win);
-
-        let mut pixels = {
-            Pixels::new(
-                width * (scale as u32),
-                height * (scale as u32),
-                surface_texture,
-            )?
+        let init_msg = InitMessage {
+            width,
+            height,
+            tile_colors: tile_colors_vec.clone(),
+            block,
+            shm_path: shm_path.clone(),
+            shm_size,
+            start_paused,
+            model_name,
+            has_temperature,
+            initial_temperature,
+            parameters,
+            initial_timescale,
+            initial_max_events_per_sec,
         };
 
-        bounds.for_wall_time = Some(Duration::from_millis(16));
+        ipc_client.send_init(&init_msg).map_err(|e| {
+            RgrowError::IO(std::io::Error::other(format!(
+                "Failed to send init message: {}",
+                e
+            )))
+        })?;
+
+        // Wait for GUI to signal it's ready (up to 10 seconds)
+        ipc_client
+            .wait_for_ready(Duration::from_secs(10))
+            .map_err(|e| {
+                RgrowError::IO(std::io::Error::other(format!(
+                    "GUI failed to become ready: {}",
+                    e
+                )))
+            })?;
+
+        // Control state
+        let mut paused = start_paused;
+        let mut remaining_step_events: Option<u64> = None;
+        let mut max_events_per_sec: Option<u64> = initial_max_events_per_sec;
+        let mut timescale: Option<f64> = initial_timescale;
 
         let mut evres: EvolveOutcome = EvolveOutcome::ReachedZeroRate;
+        let mut frame_buffer = vec![0u8; shm_size];
+        let mut last_frame_time = Instant::now();
+        let mut events_this_second: u64 = 0;
+        let mut second_start = Instant::now();
 
-        let tile_colors = self.tile_colors();
-
-        while app::wait() {
-            // Check if window was resized
-            if win.w() != win_width as i32 || win.h() != win_height as i32 {
-                win_width = win.pixel_w() as u32;
-                win_height = win.pixel_h() as u32;
-                pixels.resize_surface(win_width, win_height - 30).unwrap();
-                if block.is_none() {
-                    scale = (win_width / width).min((win_height - 30) / (height)) as usize;
-                    if scale >= 10 {
-                        scale = 10
-                    } else {
-                        scale = 1;
-                    } // (scale - 10) % 10 + 10;
-                    pixels
-                        .resize_buffer(width * (scale as u32), height * (scale as u32))
-                        .unwrap();
+        loop {
+            // Process control messages
+            while let Some(ctrl) = ipc_client.try_recv_control() {
+                if debug_perf {
+                    eprintln!("[Sim] Received control message: {:?}", ctrl);
                 }
-                frame.set_pos(0, (win_height - 30) as i32);
-                frame.set_size(win_width as i32, 30);
+                match ctrl {
+                    ControlMessage::Pause => {
+                        paused = true;
+                        remaining_step_events = None;
+                    }
+                    ControlMessage::Resume => {
+                        paused = false;
+                        remaining_step_events = None;
+                    }
+                    ControlMessage::Step { events } => {
+                        paused = false;
+                        remaining_step_events = Some(events);
+                    }
+                    ControlMessage::SetMaxEventsPerSec(max) => {
+                        max_events_per_sec = max;
+                    }
+                    ControlMessage::SetTimescale(ts) => {
+                        timescale = ts;
+                    }
+                    ControlMessage::SetTemperature(temp) => {
+                        if let Ok(needed) = self.set_param("temperature", Box::new(temp)) {
+                            self.update_state(state, &needed);
+                        }
+                    }
+                    ControlMessage::SetParameter { name, value } => {
+                        if let Ok(needed) = self.set_param(&name, Box::new(value)) {
+                            self.update_state(state, &needed);
+                        }
+                    }
+                }
             }
 
-            evres = self.evolve(state, bounds)?;
+            // Reset events counter each second
+            if second_start.elapsed() >= Duration::from_secs(1) {
+                events_this_second = 0;
+                second_start = Instant::now();
+            }
+
+            // Determine if we should run simulation this frame
+            let should_run = !paused || remaining_step_events.is_some();
+
+            if should_run {
+                // Calculate bounds based on speed settings
+                let events_before = state.total_events();
+
+                if let Some(ts) = timescale {
+                    // Timescale mode: run for (real_elapsed * timescale) simulation time
+                    let real_elapsed = last_frame_time.elapsed().as_secs_f64();
+                    let target_sim_time = real_elapsed * ts;
+                    bounds.for_time = Some(target_sim_time);
+                    bounds.for_wall_time = None;
+                    bounds.for_events = remaining_step_events;
+                } else if let Some(ref mut step_events) = remaining_step_events {
+                    // Step mode: run for specified events
+                    bounds.for_events = Some(*step_events);
+                    bounds.for_wall_time = Some(Duration::from_millis(16));
+                    bounds.for_time = None;
+                } else {
+                    // Normal mode
+                    bounds.for_wall_time = Some(Duration::from_millis(16));
+                    bounds.for_events = None;
+                    bounds.for_time = None;
+                }
+
+                // Check events per second limit
+                if let Some(max_eps) = max_events_per_sec {
+                    if events_this_second >= max_eps {
+                        // Already hit limit this second, skip evolution
+                        std::thread::sleep(Duration::from_millis(10));
+                    } else {
+                        let remaining_allowed = max_eps - events_this_second;
+                        if let Some(ref mut be) = bounds.for_events {
+                            *be = (*be).min(remaining_allowed);
+                        } else {
+                            bounds.for_events = Some(remaining_allowed);
+                        }
+                        evres = self.evolve(state, bounds)?;
+                    }
+                } else {
+                    evres = self.evolve(state, bounds)?;
+                }
+
+                let events_this_frame = state.total_events() - events_before;
+                events_this_second += events_this_frame;
+
+                // Update step counter
+                if let Some(ref mut step_events) = remaining_step_events {
+                    if events_this_frame >= *step_events {
+                        remaining_step_events = None;
+                        paused = true;
+                    } else {
+                        *step_events -= events_this_frame;
+                    }
+                }
+            }
+
+            last_frame_time = Instant::now();
+
+            // Draw frame
             let edge_size = scale / 10;
             let tile_size = scale - 2 * edge_size;
-            let pixel_frame = pixels.frame_mut();
+            let frame_width = (width * scale as u32) as usize;
+            let frame_height = (height * scale as u32) as usize;
+            frame_buffer.resize(frame_width * frame_height * 4, 0);
+
+            let pixel_frame = &mut frame_buffer[..];
 
             if scale != 1 {
                 if edge_size == 0 {
-                    state.draw_scaled(pixel_frame, tile_colors, tile_size, edge_size);
+                    state.draw_scaled(pixel_frame, &tile_colors_vec, tile_size, edge_size);
                 } else {
                     state.draw_scaled_with_mm(
                         pixel_frame,
-                        tile_colors,
+                        &tile_colors_vec,
                         self.calc_mismatch_locations(state),
                         tile_size,
                         edge_size,
                     );
                 }
             } else {
-                state.draw(pixel_frame, tile_colors);
+                state.draw(pixel_frame, &tile_colors_vec);
             }
-            pixels.render()?;
 
-            // Update text with the simulation time, events, and tiles
-            frame.set_label(&format!(
-                "Time: {:0.4e}\tEvents: {:0.4e}\tTiles: {}\t Mismatches: {}",
-                state.time(),
-                state.total_events(),
-                state.n_tiles(),
-                self.calc_mismatches(state) // FIXME: should not recalculate
-            ));
+            let notification = UpdateNotification {
+                frame_width: frame_width as u32,
+                frame_height: frame_height as u32,
+                time: state.time().into(),
+                total_events: state.total_events(),
+                n_tiles: state.n_tiles(),
+                mismatches: self.calc_mismatches(state) as u32,
+                energy: state.energy(),
+                scale,
+                data_len: pixel_frame.len(),
+            };
 
-            app::flush();
-            app::awake();
+            let t_send = Instant::now();
+            if ipc_client.send_frame(pixel_frame, notification).is_err() {
+                break;
+            }
+            let t_send_elapsed = t_send.elapsed();
 
-            match evres {
-                EvolveOutcome::ReachedWallTimeMax => {}
-                EvolveOutcome::ReachedZeroRate => {}
-                _ => {
-                    break;
+            if debug_perf {
+                eprintln!(
+                    "[IPC-send] shm write + notify: {:?}, size: {} bytes",
+                    t_send_elapsed,
+                    frame_buffer.len()
+                );
+            }
+
+            std::thread::sleep(Duration::from_millis(16));
+
+            // Only break on terminal conditions if not paused
+            // Continue running for: wall time limit, time limit, events limit, zero rate
+            // These are all normal "frame complete" conditions
+            if !paused && remaining_step_events.is_none() {
+                match evres {
+                    EvolveOutcome::ReachedWallTimeMax => {}
+                    EvolveOutcome::ReachedTimeMax => {}
+                    EvolveOutcome::ReachedEventsMax => {}
+                    EvolveOutcome::ReachedZeroRate => {}
+                    _ => {
+                        break;
+                    }
                 }
             }
         }
 
-        // Close window.
-        win.hide();
+        let _ = ipc_client.send_close();
+        let _ = gui_process.wait();
+        let _ = std::fs::remove_file(&socket_path);
 
         Ok(evres)
     }
@@ -698,6 +875,99 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 }
 
+#[cfg_attr(test, allow(dead_code))]
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn find_gui_binary() -> Option<std::path::PathBuf> {
+    use std::process::Command;
+
+    const EXPECTED_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    // Helper to check version
+    let check_version = |path: &std::path::Path| -> bool {
+        if let Ok(output) = Command::new(path).arg("--version").output() {
+            if let Ok(version_str) = String::from_utf8(output.stdout) {
+                // Extract version from output (format: "rgrow-gui 0.20.0" or similar)
+                let version = version_str.split_whitespace().last().unwrap_or("");
+                return version == EXPECTED_VERSION;
+            }
+        }
+        false
+    };
+
+    // 1. Check package directory (for Python installations where binary might be bundled)
+    #[cfg(feature = "python")]
+    {
+        if let Ok(package_dir) = Python::attach(|py| -> PyResult<String> {
+            let importlib = PyModule::import(py, "importlib.util")?;
+            let spec = importlib.call_method1("find_spec", ("rgrow",))?;
+            let origin = spec.getattr("origin")?;
+
+            if origin.is_none() {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "Could not find rgrow package",
+                ));
+            }
+
+            let origin_str = origin.extract::<String>()?;
+            let path = std::path::PathBuf::from(origin_str);
+
+            if let Some(parent) = path.parent() {
+                Ok(parent.to_string_lossy().to_string())
+            } else {
+                Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "Could not determine package directory",
+                ))
+            }
+        }) {
+            let gui_exe = std::path::PathBuf::from(&package_dir).join("rgrow-gui");
+            #[cfg(windows)]
+            let gui_exe = std::path::PathBuf::from(&package_dir).join("rgrow-gui.exe");
+
+            if gui_exe.exists() && check_version(&gui_exe) {
+                return Some(gui_exe);
+            }
+        }
+    }
+
+    // 2. Check environment variable (set by Python if available)
+    if let Ok(package_dir) = std::env::var("RGROW_PACKAGE_DIR") {
+        let gui_exe = std::path::PathBuf::from(&package_dir).join("rgrow-gui");
+        #[cfg(windows)]
+        let gui_exe = std::path::PathBuf::from(&package_dir).join("rgrow-gui.exe");
+
+        if gui_exe.exists() && check_version(&gui_exe) {
+            return Some(gui_exe);
+        }
+    }
+
+    // 3. Check PATH for rgrow-gui
+    if let Ok(path) = which::which("rgrow-gui") {
+        if check_version(&path) {
+            return Some(path);
+        } else {
+            eprintln!(
+                "Warning: Found rgrow-gui but version mismatch. Please update rgrow-gui to match rgrow version {}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+    }
+
+    // 4. Check in the same directory as the current executable (for Rust-only installations)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let gui_exe = exe_dir.join("rgrow-gui");
+            #[cfg(windows)]
+            let gui_exe = exe_dir.join("rgrow-gui.exe");
+
+            if gui_exe.exists() && check_version(&gui_exe) {
+                return Some(gui_exe);
+            }
+        }
+    }
+
+    None
+}
+
 #[enum_dispatch]
 pub trait DynSystem: Sync + Send + TileBondInfo {
     /// Simulate a single state, until reaching specified stopping conditions.
@@ -717,10 +987,13 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     fn setup_state(&self, state: &mut StateEnum) -> Result<(), GrowError>;
 
     fn evolve_in_window(
-        &self,
+        &mut self,
         state: &mut StateEnum,
         block: Option<usize>,
+        start_paused: bool,
         bounds: EvolveBounds,
+        initial_timescale: Option<f64>,
+        initial_max_events_per_sec: Option<u64>,
     ) -> Result<EvolveOutcome, RgrowError>;
 
     fn calc_mismatches(&self, state: &StateEnum) -> usize;
@@ -927,12 +1200,22 @@ where
     }
 
     fn evolve_in_window(
-        &self,
+        &mut self,
         state: &mut StateEnum,
         block: Option<usize>,
+        start_paused: bool,
         bounds: EvolveBounds,
+        initial_timescale: Option<f64>,
+        initial_max_events_per_sec: Option<u64>,
     ) -> Result<EvolveOutcome, RgrowError> {
-        self.evolve_in_window(state, block, bounds)
+        self.evolve_in_window(
+            state,
+            block,
+            start_paused,
+            bounds,
+            initial_timescale,
+            initial_max_events_per_sec,
+        )
     }
 
     fn calc_mismatches(&self, state: &StateEnum) -> usize {
