@@ -832,7 +832,39 @@ class SDC:
     def partition(self) -> float: ...
     def partition_function(self) -> float: ...
     def partition_function_full(self) -> float: ...
-    def log_big_partition_function(self) -> float: ...
+    def log_partition_function(self) -> float: ...
+    def partial_partition_function(self, constrain_at_loc: list[list[int]]) -> float:
+        """
+        Calculate the partial partition function with constraints at each location.
+
+        Parameters
+        ----------
+        constrain_at_loc : list[list[int]]
+            A list of lists, where each inner list specifies which tiles are allowed at that
+            scaffold position. An empty list means no constraints (all tiles allowed).
+            Tile ID 0 corresponds to an empty site.
+
+        Returns
+        -------
+        float
+            The partial partition function value.
+        """
+    def log_partial_partition_function(self, constrain_at_loc: list[list[int]]) -> float:
+        """
+        Calculate the log of the partial partition function with constraints at each location.
+
+        Parameters
+        ----------
+        constrain_at_loc : list[list[int]]
+            A list of lists, where each inner list specifies which tiles are allowed at that
+            scaffold position. An empty list means no constraints (all tiles allowed).
+            Tile ID 0 corresponds to an empty site.
+
+        Returns
+        -------
+        float
+            The log of the partial partition function value.
+        """
     def distribution(self) -> list[float]: ...
     def set_tmp_c(self, tmp: float) -> None: ...
     def get_all_probs(self) -> list[tuple[list[int], float, float]]: ...

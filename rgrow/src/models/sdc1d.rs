@@ -731,79 +731,79 @@ impl SDC {
             .sum()
     }
 
+    // ///
+    // /// Notes:
+    // /// - This only works for a single scaffold type.
+    // pub fn partition_function_fast(&self) -> f64 {
+    //     let scaffold = self.scaffold();
+
+    //     let max_competition = scaffold
+    //         .iter()
+    //         .map(|x| self.friends_btm.get(*x).map(|y| y.len()).unwrap_or(0))
+    //         .max()
+    //         .unwrap();
+
+    //     let mut z_curr = Array1::zeros(max_competition);
+    //     let mut z_prev = Array1::zeros(max_competition);
+    //     let mut z_sum = 1.0;
+    //     let mut sum_a = 0.0;
+
+    //     for (i, b) in scaffold.iter().enumerate() {
+    //         // This is the partial partition function assuming that the previous site is empty:
+    //         // it sums previous, previous partition functions (location i-2).
+    //         sum_a += z_prev.sum();
+
+    //         // We now move the previous (location i-1) location partial partition functions to the previous
+    //         // array, and reset the current arry.
+    //         z_prev.assign(&z_curr);
+    //         z_curr.fill(0.);
+
+    //         let friends = match self.friends_btm.get(*b) {
+    //             Some(f) => f,
+    //             None => continue,
+    //         };
+
+    //         // Iterating through each possible attachment at the current location.
+    //         for (j, &f) in friends.iter().enumerate() {
+    //             let attachment_beta_dg =
+    //                 self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln();
+
+    //             let t1 = (-attachment_beta_dg).exp();
+
+    //             if i == 0 {
+    //                 // First scaffold site.
+    //                 // The partition function, given f attached at j, is all we need to calculate.
+    //                 // z_sum has 1 in it right now, which covers the case where nothing is attached.
+    //                 // sum_a has 0, because it is not being used yet.
+    //                 z_curr[j] = t1;
+    //             } else {
+    //                 // Every other scaffold site
+    //                 // t2 will hold the different cases where side i-1 has tile g in it.
+    //                 let mut t2 = 0.;
+
+    //                 if let Some(ff) = self.friends_btm.get(scaffold[i - 1]) {
+    //                     for (k, &g) in ff.iter().enumerate() {
+    //                         let left_beta_dg = self.bond_between_strands(g, f);
+    //                         t2 += z_prev[k] * (-left_beta_dg).exp();
+    //                     }
+    //                 }
+
+    //                 // 1.0 -> *only* tile f is attached at position i.
+    //                 // sum_a -> tile f is at position i, no tile is at position i-1.
+    //                 // t2 -> tile f is at position i, another tile is at position i-1.
+    //                 z_curr[j] = t1 * (1.0 + t2 + sum_a);
+    //             }
+    //             z_sum += z_curr[j];
+    //         }
+    //     }
+
+    //     z_sum
+    // }
+
     ///
     /// Notes:
     /// - This only works for a single scaffold type.
-    pub fn partition_function_fast(&self) -> f64 {
-        let scaffold = self.scaffold();
-
-        let max_competition = scaffold
-            .iter()
-            .map(|x| self.friends_btm.get(*x).map(|y| y.len()).unwrap_or(0))
-            .max()
-            .unwrap();
-
-        let mut z_curr = Array1::zeros(max_competition);
-        let mut z_prev = Array1::zeros(max_competition);
-        let mut z_sum = 1.0;
-        let mut sum_a = 0.0;
-
-        for (i, b) in scaffold.iter().enumerate() {
-            // This is the partial partition function assuming that the previous site is empty:
-            // it sums previous, previous partition functions (location i-2).
-            sum_a += z_prev.sum();
-
-            // We now move the previous (location i-1) location partial partition functions to the previous
-            // array, and reset the current arry.
-            z_prev.assign(&z_curr);
-            z_curr.fill(0.);
-
-            let friends = match self.friends_btm.get(*b) {
-                Some(f) => f,
-                None => continue,
-            };
-
-            // Iterating through each possible attachment at the current location.
-            for (j, &f) in friends.iter().enumerate() {
-                let attachment_beta_dg =
-                    self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln();
-
-                let t1 = (-attachment_beta_dg).exp();
-
-                if i == 0 {
-                    // First scaffold site.
-                    // The partition function, given f attached at j, is all we need to calculate.
-                    // z_sum has 1 in it right now, which covers the case where nothing is attached.
-                    // sum_a has 0, because it is not being used yet.
-                    z_curr[j] = t1;
-                } else {
-                    // Every other scaffold site
-                    // t2 will hold the different cases where side i-1 has tile g in it.
-                    let mut t2 = 0.;
-
-                    if let Some(ff) = self.friends_btm.get(scaffold[i - 1]) {
-                        for (k, &g) in ff.iter().enumerate() {
-                            let left_beta_dg = self.bond_between_strands(g, f);
-                            t2 += z_prev[k] * (-left_beta_dg).exp();
-                        }
-                    }
-
-                    // 1.0 -> *only* tile f is attached at position i.
-                    // sum_a -> tile f is at position i, no tile is at position i-1.
-                    // t2 -> tile f is at position i, another tile is at position i-1.
-                    z_curr[j] = t1 * (1.0 + t2 + sum_a);
-                }
-                z_sum += z_curr[j];
-            }
-        }
-
-        z_sum
-    }
-
-    ///
-    /// Notes:
-    /// - This only works for a single scaffold type.
-    pub fn big_partition_function_fast(&self) -> BigFloat {
+    pub fn partition_function(&self) -> BigFloat {
         let scaffold = self.scaffold();
 
         let prec = 64;
@@ -904,41 +904,43 @@ impl SDC {
             .iter()
             .map(|x| self.friends_btm.get(*x).map(|y| y.len()).unwrap_or(0))
             .max()
-            .unwrap();
+            .unwrap()
+            + 1; // +1 for the empty case
 
         let mut z_curr = Array1::from_elem(max_competition, BigFloat::from_i32(0, prec));
         let mut z_prev = Array1::from_elem(max_competition, BigFloat::from_i32(0, prec));
-        let mut z_sum = BigFloat::from_i64(1, prec);
-        let mut sum_a = BigFloat::from_i64(0, prec);
-        let mut no_prior_non_empty_constraints = true;
+        let mut z_sum = BigFloat::from_i64(0, prec);
+        let mut prev_friends: Vec<u32> = Vec::new();
 
         for (i, b) in scaffold.iter().enumerate() {
-            // This is the partial partition function assuming that the previous site is empty:
-            // it sums previous, previous partition functions (location i-2).
-            for v in z_prev.iter() {
-                sum_a = sum_a.add(v, prec, rm);
-            }
-
             // We now move the previous (location i-1) location partial partition functions to the previous
             // array, and reset the current arry.
             z_prev.assign(&z_curr);
             z_curr.fill(BigFloat::from_i32(0, prec));
 
-            let friends = match self.friends_btm.get(*b) {
-                Some(f) => f,
-                None => continue,
+            let mut friends = vec![0];
+            if let Some(f) = self.friends_btm.get(*b) {
+                friends.extend(f.iter().map(|x| *x as u32));
             };
+
+            // println!("loc: {}, friends: {:?}", i, friends);
+            // Filter by constraints, if constraints are nonempty
+            if !constrain_at_loc[i].is_empty() {
+                friends = friends
+                    .into_iter()
+                    .filter(|x| constrain_at_loc[i].contains(x))
+                    .collect();
+            }
+            // println!("loc: {} after filter, friends: {:?}", i, friends);
 
             // Iterating through each possible attachment at the current location.
             for (j, &f) in friends.iter().enumerate() {
-                // This is only allowed if the current site is not constrained, or the tile is allowed in the constrained set.
-                if !constrain_at_loc[i].is_empty() && !constrain_at_loc[i].contains(&f) {
-                    continue;
-                }
-
-                let attachment_beta_dg =
-                    self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln();
-
+                // println!("loc: {}, f: {}", i, f);
+                let attachment_beta_dg = if f != 0 {
+                    self.bond_with_scaffold(f) - (self.strand_concentration[f as usize] / U0).ln()
+                } else {
+                    0.0
+                };
                 let t1 = BigFloat::from_f64(-attachment_beta_dg, prec).exp(prec, rm, &mut cc);
 
                 if i == 0 {
@@ -949,59 +951,35 @@ impl SDC {
                     z_curr[j] = t1;
                 } else {
                     // Every other scaffold site
-                    // t2 will hold the different cases where side i-1 has tile g in it.
                     let mut t2 = BigFloat::from_f64(0., prec);
-
-                    if let Some(ff) = self.friends_btm.get(scaffold[i - 1]) {
-                        for (k, &g) in ff.iter().enumerate() {
-                            let left_beta_dg = self.bond_between_strands(g, f);
-                            t2 = t2.add(
-                                &BigFloat::from_f64(-left_beta_dg, prec)
-                                    .exp(prec, rm, &mut cc)
-                                    .mul(&z_prev[k], prec, rm),
-                                prec,
-                                rm,
-                            );
-                        }
+                    for (k, &g) in prev_friends.iter().enumerate() {
+                        let left_beta_dg = self.bond_between_strands(g, f);
+                        t2 = t2.add(
+                            &BigFloat::from_f64(-left_beta_dg, prec)
+                                .exp(prec, rm, &mut cc)
+                                .mul(&z_prev[k], prec, rm),
+                            prec,
+                            rm,
+                        );
                     }
-
-                    // 1.0 -> *only* tile f is attached at position i.
-                    // sum_a -> tile f is at position i, no tile is at position i-1.
-                    // t2 -> tile f is at position i, another tile is at position i-1.
-                    let mut val = t2;
-
-                    // sum_a -> tile f is at position i, no tile is at position i-1.
-                    if constrain_at_loc[i - 1].is_empty() || constrain_at_loc[i - 1].contains(&0) {
-                        val = val.add(&sum_a, prec, rm);
-                    } else {
-                        no_prior_non_empty_constraints = false;
-                    }
-
-                    // 1.0 -> *only* tile f is attached at position i, which means there were no prior non-empty constraints
-                    if no_prior_non_empty_constraints {
-                        val = val.add(&BigFloat::from_i64(1, prec), prec, rm);
-                    }
-                    z_curr[j] = t1.mul(&val, prec, rm);
+                    z_curr[j] = t1.mul(&t2, prec, rm);
                 }
-                z_sum = z_sum.add(&z_curr[j], prec, rm);
             }
+            // println!("loc: {} z_curr: {}", i, z_curr);
+            prev_friends = friends;
         }
-        // If there was a non-empty constraint, then we need to remove the entirely-empty case:
-        if !no_prior_non_empty_constraints {
-            z_sum = z_sum.sub(&BigFloat::from_i64(1, prec), prec, rm);
+        for (j, z) in z_curr.iter().enumerate() {
+            z_sum = z_sum.add(z, prec, rm);
         }
         z_sum
     }
 
-    pub fn log_big_partition_function_fast(&self) -> f64 {
+    pub fn log_partition_function(&self) -> f64 {
         let prec = 64;
         let rm = astro_float::RoundingMode::None;
         let mut cc =
             astro_float::Consts::new().expect("An error occured when initializing constants"); // FIXME: don't keep making this
-        bigfloat_to_f64(
-            &self.big_partition_function_fast().ln(prec, rm, &mut cc),
-            rm,
-        )
+        bigfloat_to_f64(&self.partition_function().ln(prec, rm, &mut cc), rm)
     }
 
     pub fn log_partial_partition_function(&self, constrain_at_loc: Vec<Vec<Tile>>) -> f64 {
@@ -1017,21 +995,16 @@ impl SDC {
         )
     }
 
-    pub fn partition_function(&self) -> f64 {
-        self.partition_function_fast()
-    }
-
     pub fn probability_of_constrained_configurations(
         &self,
         constrain_at_loc: Vec<Vec<Tile>>,
     ) -> f64 {
-        (self.log_partial_partition_function(constrain_at_loc)
-            - self.log_big_partition_function_fast())
-        .exp()
+        (self.log_partial_partition_function(constrain_at_loc) - self.log_partition_function())
+            .exp()
     }
 
     pub fn probability_of_state(&self, system: &[u32]) -> f64 {
-        (-self.g_system(system) / self.rtval() - self.log_big_partition_function_fast()).exp()
+        (-self.g_system(system) / self.rtval() - self.log_partition_function()).exp()
     }
 }
 
@@ -2152,7 +2125,7 @@ impl SDC {
 
     #[pyo3(name = "partition_function")]
     fn py_partition_function(&self) -> f64 {
-        self.partition_function_fast()
+        bigfloat_to_f64(&self.partition_function(), astro_float::RoundingMode::None)
     }
 
     #[pyo3(name = "partition_function_full")]
@@ -2175,9 +2148,9 @@ impl SDC {
         self.rtval()
     }
 
-    #[pyo3(name = "log_big_partition_function")]
-    fn py_log_big_partition_function(&self) -> f64 {
-        self.log_big_partition_function_fast()
+    #[pyo3(name = "log_partition_function")]
+    fn py_log_partition_function(&self) -> f64 {
+        self.log_partition_function()
     }
 
     #[pyo3(name = "mfe_matrix")]
@@ -2213,6 +2186,27 @@ impl SDC {
             .map(|v| v.into_iter().map(|t| t as Tile).collect())
             .collect();
         self.probability_of_constrained_configurations(constrain_at_loc)
+    }
+
+    #[pyo3(name = "partial_partition_function")]
+    fn py_partial_partition_function(&self, constrain_at_loc: Vec<Vec<u32>>) -> f64 {
+        let constrain_at_loc: Vec<Vec<Tile>> = constrain_at_loc
+            .into_iter()
+            .map(|v| v.into_iter().map(|t| t as Tile).collect())
+            .collect();
+        bigfloat_to_f64(
+            &self.partial_partition_function(constrain_at_loc),
+            astro_float::RoundingMode::None,
+        )
+    }
+
+    #[pyo3(name = "log_partial_partition_function")]
+    fn py_log_partial_partition_function(&self, constrain_at_loc: Vec<Vec<u32>>) -> f64 {
+        let constrain_at_loc: Vec<Vec<Tile>> = constrain_at_loc
+            .into_iter()
+            .map(|v| v.into_iter().map(|t| t as Tile).collect())
+            .collect();
+        self.log_partial_partition_function(constrain_at_loc)
     }
 
     #[getter]
