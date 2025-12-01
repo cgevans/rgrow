@@ -1,20 +1,10 @@
-# Unreleased
+# 0.21.0
 
-- SDC1D Model:
-  - Added quencher and fluorophore simulation capabilities
-  - Added Python getter/setter methods for entropy_matrix and delta_g_matrix
-  - Added new parameters for fluorophore attachment probability
-- Improved error handling and validity checks
-- Refactored `SystemWithDimers` trait into `System` trait.
-- Updated `calc_dimers` to return `Result<Vec<DimerInfo>, GrowError>` instead of panicking for unsupported models.
-- Removed UI from default features (too many X dependencies)
-
-- **Internal Improvements**:
-  - Clippy fixes and code cleanup
-  - DynSystem refactoring for better maintainability
-  - Updated example notebooks and test paths
-  - Added test for CONNECTED_RING generation code
-  - Fixed Python 3.9 compatibility issues
+- Numerous SDC and kBlock improvements.
+- Several additional functions for FFS.
+- "Movie" tracking, which records each event.
+- A new, hopefully cross-platform UI.
+- Numerous tests, improvements, and fixes.
 
 # 0.20.0
 
