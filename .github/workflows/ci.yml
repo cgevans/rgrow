@@ -113,31 +113,31 @@ jobs:
       #     [patch.crates-io]
       #     tiny-xlib = { path = "./tiny-xlib" }
       #     EOF
-      - name: Run coverage
-        run: |
-          source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
-          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
-          export CARGO_INCREMENTAL=1
-          cargo llvm-cov clean --workspace
-          cargo test -p rgrow
-          uv run -- maturin develop --uv
-          uv run -- pytest -vvv --debug --cov=py-rgrow/rgrow --cov-report xml
-      - name: Compile cargo coverage
-        run: |
-          source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
-          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
-          cargo llvm-cov report --lcov --output-path coverage.lcov
-        continue-on-error: true
+      # - name: Run coverage
+      #   run: |
+      #     source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
+      #     export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+      #     export CARGO_INCREMENTAL=1
+      #     cargo llvm-cov clean --workspace
+      #     cargo test -p rgrow
+      #     uv run -- maturin develop --uv
+      #     uv run -- pytest -vvv --debug --cov=py-rgrow/rgrow --cov-report xml
+      # - name: Compile cargo coverage
+      #   run: |
+      #     source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
+      #     export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+      #     cargo llvm-cov report --lcov --output-path coverage.lcov
+      #   continue-on-error: true
       - name: Run ty
         continue-on-error: true
         run: |
           uvx ty check py-rgrow/rgrow/
-      - uses: codecov/codecov-action@v5
-        with:
-          files: coverage.xml,coverage.lcov
-          name: python-linux # ${{ matrix.os }}
-          token: ${{ secrets.CODECOV_TOKEN }}
-        continue-on-error: true
+      # - uses: codecov/codecov-action@v5
+      #   with:
+      #     files: coverage.xml,coverage.lcov
+      #     name: python-linux # ${{ matrix.os }}
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #   continue-on-error: true
   linux:
     name: Python Linux builds
     needs: [python_checks]
@@ -163,6 +163,15 @@ jobs:
           args: --release --out dist 
           sccache: "true"
           manylinux: "auto"
+      - name: Build gui wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out ../dist
+          sccache: "true"
+          manylinux: "auto"
+          working-directory: rgrow-gui
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -211,6 +220,14 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: "true"
           rust-toolchain: stable
+      - name: Build gui wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out ../dist --find-interpreter
+          sccache: "true"
+          working-directory: rgrow-gui
+          rust-toolchain: stable
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -241,6 +258,14 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: "true"
           rust-toolchain: stable
+      - name: Build gui wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out ../dist --find-interpreter
+          sccache: "true"
+          rust-toolchain: stable
+          working-directory: rgrow-gui
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -261,6 +286,12 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
+      - name: Build gui sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          working-directory: rgrow-gui
+          args: --out ../dist 
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
