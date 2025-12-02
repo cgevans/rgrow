@@ -48,7 +48,7 @@ fn create_listener(path: &PathBuf) -> Result<PipeServer, std::io::Error> {
         r"\\.\pipe\{}",
         path.to_string_lossy().replace('/', "_").replace('\\', "_")
     );
-    PipeOptions::new(pipe_name.as_str())?.single()
+    PipeOptions::new(pipe_name.as_str()).single()
 }
 
 #[test]

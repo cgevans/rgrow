@@ -604,7 +604,13 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         })?;
 
         let shm_size = (width * height * scale as u32 * scale as u32 * 4) as usize;
+        #[cfg(unix)]
         let shm_path = format!("/dev/shm/rgrow-frame-{}", std::process::id());
+        #[cfg(windows)]
+        let shm_path = std::env::temp_dir()
+            .join(format!("rgrow-frame-{}", std::process::id()))
+            .to_string_lossy()
+            .to_string();
 
         let has_temperature = self.get_param("temperature").is_ok();
         let model_name = Self::extract_model_name(&self.system_info());

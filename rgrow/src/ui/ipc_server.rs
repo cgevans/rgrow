@@ -11,12 +11,6 @@ use std::os::unix::net::UnixStream;
 #[cfg(windows)]
 use named_pipe::PipeClient;
 
-#[cfg(unix)]
-type IpcStream = UnixStream;
-
-#[cfg(windows)]
-type IpcStream = PipeClient;
-
 pub struct IpcClient {
     #[cfg(unix)]
     stream: UnixStream,
@@ -57,24 +51,24 @@ impl IpcClient {
         }
     }
 
+    #[cfg(unix)]
     pub fn wait_for_ready(&mut self, timeout: Duration) -> Result<(), Box<dyn std::error::Error>> {
         use std::time::Instant;
 
         let start = Instant::now();
-        self.set_nonblocking(true)?;
+        self.stream.set_nonblocking(true)?;
 
         let mut len_bytes = [0u8; 8];
         let mut len_read = 0;
 
-        // Poll for the length bytes
         while len_read < 8 {
             if start.elapsed() > timeout {
-                self.set_nonblocking(false)?;
+                self.stream.set_nonblocking(false)?;
                 return Err("Timeout waiting for GUI ready signal".into());
             }
             match self.stream.read(&mut len_bytes[len_read..]) {
                 Ok(0) => {
-                    self.set_nonblocking(false)?;
+                    self.stream.set_nonblocking(false)?;
                     return Err("Connection closed while waiting for ready".into());
                 }
                 Ok(n) => len_read += n,
@@ -82,7 +76,7 @@ impl IpcClient {
                     std::thread::sleep(Duration::from_millis(50));
                 }
                 Err(e) => {
-                    self.set_nonblocking(false)?;
+                    self.stream.set_nonblocking(false)?;
                     return Err(e.into());
                 }
             }
@@ -92,15 +86,14 @@ impl IpcClient {
         let mut buffer = vec![0u8; len];
         let mut data_read = 0;
 
-        // Poll for the message data
         while data_read < len {
             if start.elapsed() > timeout {
-                self.set_nonblocking(false)?;
+                self.stream.set_nonblocking(false)?;
                 return Err("Timeout waiting for GUI ready signal".into());
             }
             match self.stream.read(&mut buffer[data_read..]) {
                 Ok(0) => {
-                    self.set_nonblocking(false)?;
+                    self.stream.set_nonblocking(false)?;
                     return Err("Connection closed while waiting for ready".into());
                 }
                 Ok(n) => data_read += n,
@@ -108,13 +101,30 @@ impl IpcClient {
                     std::thread::sleep(Duration::from_millis(50));
                 }
                 Err(e) => {
-                    self.set_nonblocking(false)?;
+                    self.stream.set_nonblocking(false)?;
                     return Err(e.into());
                 }
             }
         }
 
-        self.set_nonblocking(false)?;
+        self.stream.set_nonblocking(false)?;
+
+        let msg: IpcMessage = bincode::deserialize(&buffer)?;
+        match msg {
+            IpcMessage::Ready => Ok(()),
+            _ => Err("Expected Ready message".into()),
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn wait_for_ready(&mut self, _timeout: Duration) -> Result<(), Box<dyn std::error::Error>> {
+        // On Windows, just do a blocking read - the GUI should send Ready quickly
+        let mut len_bytes = [0u8; 8];
+        self.stream.read_exact(&mut len_bytes)?;
+
+        let len = u64::from_le_bytes(len_bytes) as usize;
+        let mut buffer = vec![0u8; len];
+        self.stream.read_exact(&mut buffer)?;
 
         let msg: IpcMessage = bincode::deserialize(&buffer)?;
         match msg {
@@ -124,12 +134,26 @@ impl IpcClient {
     }
 
     pub fn setup_shm(&mut self, shm_path: &str, size: usize) -> Result<(), std::io::Error> {
+        #[cfg(unix)]
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .truncate(true)
             .open(shm_path)?;
+
+        #[cfg(windows)]
+        let file = {
+            use std::os::windows::fs::OpenOptionsExt;
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .share_mode(0x7) // FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+                .open(shm_path)?
+        };
+
         file.set_len(size as u64)?;
         let mmap = unsafe { MmapMut::map_mut(&file)? };
         self.shm = Some(mmap);
@@ -178,19 +202,19 @@ impl IpcClient {
         Ok(())
     }
 
-    /// Non-blocking receive of control messages from GUI
+    #[cfg(unix)]
     pub fn try_recv_control(&mut self) -> Option<ControlMessage> {
-        self.set_nonblocking(true).ok()?;
+        self.stream.set_nonblocking(true).ok()?;
 
         let mut len_bytes = [0u8; 8];
         match self.stream.read_exact(&mut len_bytes) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                let _ = self.set_nonblocking(false);
+                let _ = self.stream.set_nonblocking(false);
                 return None;
             }
             Err(_) => {
-                let _ = self.set_nonblocking(false);
+                let _ = self.stream.set_nonblocking(false);
                 return None;
             }
         }
@@ -198,11 +222,7 @@ impl IpcClient {
         let len = u64::from_le_bytes(len_bytes) as usize;
         let mut buffer = vec![0u8; len];
 
-        // Once we've read the length, we must read the data to avoid corrupting the stream.
-        // For Unix sockets, the data should be available immediately, but we use blocking
-        // read here to ensure we get it all. This is safe because we've already committed
-        // to reading this message by reading the length.
-        let _ = self.set_nonblocking(false);
+        let _ = self.stream.set_nonblocking(false);
         if self.stream.read_exact(&mut buffer).is_err() {
             return None;
         }
@@ -210,16 +230,12 @@ impl IpcClient {
         bincode::deserialize(&buffer).ok()
     }
 
-    #[cfg(unix)]
-    fn set_nonblocking(&mut self, nonblocking: bool) -> Result<(), std::io::Error> {
-        self.stream.set_nonblocking(nonblocking)
-    }
-
     #[cfg(windows)]
-    fn set_nonblocking(&mut self, _nonblocking: bool) -> Result<(), std::io::Error> {
-        // Named pipes on Windows use overlapped I/O instead of non-blocking mode
-        // For now, we'll just return Ok - the read operations will block
-        Ok(())
+    pub fn try_recv_control(&mut self) -> Option<ControlMessage> {
+        // Windows named pipes don't support non-blocking reads easily.
+        // For now, skip control message processing on Windows.
+        // TODO: implement proper async control message handling for Windows
+        None
     }
 }
 

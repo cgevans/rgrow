@@ -78,6 +78,7 @@ bpci = "0.1.0"
 
 [target.'cfg(windows)'.dependencies]
 named_pipe = "0.4"
+winapi = { version = "0.3", features = ["namedpipeapi"] }
 
 [dependencies.clap]
 version = "4"

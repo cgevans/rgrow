@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use crate::ui::iced_gui;
     use crate::ui::shm_reader::ShmReader;
     #[cfg(windows)]
-    use named_pipe::{PipeClient, PipeOptions, PipeServer};
+    use named_pipe::{PipeOptions, PipeServer};
     use rgrow_ipc::{ControlMessage, IpcMessage};
     use std::env;
     use std::io::{Read, Write};
@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             r"\\.\pipe\{}",
             socket_path.replace('/', "_").replace('\\', "_")
         );
-        PipeOptions::new(pipe_name.as_str())?.single()?
+        PipeOptions::new(pipe_name.as_str()).single()?
     };
 
     // Channel for GUI updates (IPC -> GUI)
@@ -62,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(windows)]
     let stream = {
         match listener.wait() {
-            Ok(stream) => Some(Arc::new(Mutex::<PipeClient>::new(stream))),
+            Ok(stream) => Some(Arc::new(Mutex::<PipeServer>::new(stream))),
             Err(_) => None,
         }
     };
