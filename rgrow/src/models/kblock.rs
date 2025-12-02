@@ -1578,7 +1578,18 @@ impl From<KBlockParams> for KBlock {
         tiles.append(&mut value.tiles);
         let tile_names: Vec<String> = tiles.iter().map(|tile| tile.name.clone()).collect();
         let tile_concentration: Vec<f64> = tiles.iter().map(|tile| tile.concentration).collect();
-        let tile_colors = tiles.iter().map(|tile| tile.color).collect();
+
+        // Fixme: this should not be hard-coded
+        let tile_colors = tiles
+            .iter()
+            .flat_map(|tile| {
+                let mut colors = Vec::with_capacity(16);
+                colors.push(tile.color);
+                // Gray color: [128, 128, 128, 255]
+                colors.extend(std::iter::repeat([128, 128, 128, 255]).take(15));
+                colors
+            })
+            .collect::<Vec<_>>();
 
         let mut glues = tiles
             .iter()
