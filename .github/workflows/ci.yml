@@ -42,8 +42,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Install carge llvm-cov
         run: cargo install cargo-llvm-cov
-      - name: Install X components
-        run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
+      # - name: Install X components
+        # run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
       # - name: Add tiny-xlib patch for coverage
       #   run: |
       #     cat >> Cargo.toml << 'EOF'
@@ -104,8 +104,8 @@ jobs:
       - name: Install maturin and pytest
         run: |
           uv pip install maturin pytest pytest-cov hypothesis
-      - name: Install X components
-        run: sudo apt-get install -y gdb libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
+      # - name: Install X components
+        # run: sudo apt-get install -y gdb libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0
       # - name: Add tiny-xlib patch for coverage
       #   run: |
       #     cat >> Cargo.toml << 'EOF'
@@ -328,8 +328,8 @@ jobs:
           toolchain: stable
       - name: Set up Rust cache
         uses: Swatinem/rust-cache@v2
-      - name: Install X components
-        run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0  
+      # - name: Install X components
+        # run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0  
       - name: Publish to crates.io
         run: cargo publish --allow-dirty -p rgrow
         env:
