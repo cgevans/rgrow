@@ -423,7 +423,7 @@ impl KBlock {
                     .sum::<Molar>();
                 let total_blocker_conc = self.blocker_concentrations[gi];
 
-                let cov_dg = self.glue_links[(gi, glue_inverse(gi))];
+                let cov_dg = self.glue_links[(gi, glue_inverse(gi))] + self.blocker_energy_adj; // TODO: better adj implementation
                 let cov_bdg = cov_dg.times_beta(self.temperature);
                 let ebdg = Molar::new(cov_bdg.exp());
 
@@ -777,7 +777,8 @@ impl KBlock {
         if self.blocker_concentrations[blocker_glue].is_zero() {
             return 0.0;
         }
-        let cov_dg = self.glue_links[(blocker_glue, glue_inverse(blocker_glue))];
+        let cov_dg =
+            self.glue_links[(blocker_glue, glue_inverse(blocker_glue))] + self.blocker_energy_adj; // TODO: better adj implementation
         let cov_bdg = cov_dg.times_beta(self.temperature);
         let embdg = (-cov_bdg).exp();
         let b = self.free_blocker_concentrations[blocker_glue];
@@ -1586,7 +1587,7 @@ impl From<KBlockParams> for KBlock {
                 let mut colors = Vec::with_capacity(16);
                 colors.push(tile.color);
                 // Gray color: [128, 128, 128, 255]
-                colors.extend(std::iter::repeat([128, 128, 128, 255]).take(15));
+                colors.extend(std::iter::repeat_n([128, 128, 128, 255], 15));
                 colors
             })
             .collect::<Vec<_>>();
