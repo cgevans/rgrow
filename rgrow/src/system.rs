@@ -1,3 +1,5 @@
+use bpci::Interval;
+use bpci::WilsonScore;
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
 use num_traits::Zero;
@@ -247,6 +249,165 @@ impl TryFrom<&str> for ChunkSize {
     }
 }
 
+/// Result of a critical state search.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+pub struct CriticalStateResult {
+    /// The critical state found.
+    pub state: StateEnum,
+    /// Energy at the critical state.
+    pub energy: f64,
+    /// Index in the trajectory where the critical state was found.
+    pub trajectory_index: usize,
+    /// Whether the state is above threshold.
+    pub is_above_threshold: bool,
+    /// Estimated committer probability.
+    pub probability: f64,
+    /// Number of trials used in the calculation.
+    pub num_trials: usize,
+    /// Whether max trials was exceeded.
+    pub max_trials_exceeded: bool,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl CriticalStateResult {
+    #[getter]
+    fn get_state(&self) -> crate::python::PyState {
+        crate::python::PyState(self.state.clone())
+    }
+
+    #[getter]
+    fn get_energy(&self) -> f64 {
+        self.energy
+    }
+
+    #[getter]
+    fn get_trajectory_index(&self) -> usize {
+        self.trajectory_index
+    }
+
+    #[getter]
+    fn get_is_above_threshold(&self) -> bool {
+        self.is_above_threshold
+    }
+
+    #[getter]
+    fn get_probability(&self) -> f64 {
+        self.probability
+    }
+
+    #[getter]
+    fn get_num_trials(&self) -> usize {
+        self.num_trials
+    }
+
+    #[getter]
+    fn get_max_trials_exceeded(&self) -> bool {
+        self.max_trials_exceeded
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "CriticalStateResult(energy={:.4}, trajectory_index={}, is_above={}, prob={:.4}, trials={})",
+            self.energy, self.trajectory_index, self.is_above_threshold, self.probability, self.num_trials
+        )
+    }
+}
+
+// ============================================================================
+// Critical State Finding
+// ============================================================================
+
+/// Configuration for critical state search algorithms.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
+pub struct CriticalStateConfig {
+    /// Cutoff size for committer calculation (tiles above which growth is considered successful).
+    pub cutoff_size: NumTiles,
+    /// Probability threshold for determining if state is "critical" (above/below this).
+    pub threshold: f64,
+    /// Confidence level for the threshold test.
+    pub confidence_level: f64,
+    /// Maximum number of trials for committer calculation.
+    pub max_trials: usize,
+    /// Confidence level for the confidence interval (if requested).
+    pub ci_confidence_level: f64,
+    /// Canvas size for state reconstruction.
+    pub canvas_size: (usize, usize),
+    /// Canvas type for state reconstruction.
+    pub canvas_type: crate::tileset::CanvasType,
+}
+
+impl Default for CriticalStateConfig {
+    fn default() -> Self {
+        Self {
+            cutoff_size: 100,
+            threshold: 0.5,
+            confidence_level: 0.98,
+            max_trials: 100000,
+            ci_confidence_level: 0.95,
+            canvas_size: (32, 32),
+            canvas_type: crate::tileset::CanvasType::Periodic,
+        }
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl CriticalStateConfig {
+    #[new]
+    #[pyo3(signature = (
+        cutoff_size=None,
+        threshold=None,
+        confidence_level=None,
+        max_trials=None,
+        ci_confidence_level=None,
+        canvas_size=None,
+        canvas_type=None,
+    ))]
+    fn new(
+        cutoff_size: Option<NumTiles>,
+        threshold: Option<f64>,
+        confidence_level: Option<f64>,
+        max_trials: Option<usize>,
+        ci_confidence_level: Option<f64>,
+        canvas_size: Option<(usize, usize)>,
+        canvas_type: Option<crate::tileset::CanvasType>,
+    ) -> Self {
+        let mut config = Self::default();
+        if let Some(x) = cutoff_size {
+            config.cutoff_size = x;
+        }
+        if let Some(x) = threshold {
+            config.threshold = x;
+        }
+        if let Some(x) = confidence_level {
+            config.confidence_level = x;
+        }
+        if let Some(x) = max_trials {
+            config.max_trials = x;
+        }
+        if let Some(x) = ci_confidence_level {
+            config.ci_confidence_level = x;
+        }
+        if let Some(x) = canvas_size {
+            config.canvas_size = x;
+        }
+        if let Some(x) = canvas_type {
+            config.canvas_type = x;
+        }
+        config
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "CriticalStateConfig(cutoff_size={}, threshold={}, confidence_level={}, max_trials={}, ci_confidence_level={}, canvas_size={:?}, canvas_type={:?})",
+            self.cutoff_size, self.threshold, self.confidence_level, self.max_trials, self.ci_confidence_level, self.canvas_size, self.canvas_type
+        )
+    }
+}
+
 pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     fn new_state<St: StateWithCreate + State>(&self, params: St::Params) -> Result<St, GrowError> {
         let mut new_state = St::empty(params)?;
@@ -434,6 +595,14 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         for (p, t) in self.seed_locs() {
             self.set_point(state, p.0, t)?;
         }
+        state.record_event(
+            &Event::PolymerAttachment(self.seed_locs()),
+            PerSecond::zero(),
+            0.,
+            0.,
+            0.,
+            self.seed_locs().len() as u32,
+        );
         Ok(())
     }
 
@@ -1165,17 +1334,30 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
     fn calc_committer_threshold_test(
-        &self,
+        &mut self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
         threshold: f64,
-        confidence_level: f64,
+        z_level: f64,
         max_time: Option<f64>,
         max_events: Option<NumEvents>,
         max_trials: Option<usize>,
         return_on_max_trials: bool,
-        ci_confidence_level: Option<f64>,
-    ) -> Result<(bool, f64, Option<(f64, f64)>, usize, bool), GrowError>;
+    ) -> Result<(bool, f64, usize, bool), GrowError>;
+
+    // /// Find the first state in a trajectory that is above the critical threshold.
+    fn find_first_critical_state(
+        &mut self,
+        end_state: &StateEnum,
+        config: &CriticalStateConfig,
+    ) -> Result<Option<CriticalStateResult>, GrowError>;
+
+    // /// Find the last state not above threshold, return the next state (first above threshold).
+    fn find_last_critical_state(
+        &mut self,
+        end_state: &StateEnum,
+        config: &CriticalStateConfig,
+    ) -> Result<Option<CriticalStateResult>, GrowError>;
 }
 
 impl<S: System> DynSystem for S
@@ -1521,18 +1703,19 @@ where
     /// See trait documentation for detailed parameter and return value descriptions.
     /// This implementation uses Wilson Score confidence intervals for robust statistical inference.
     fn calc_committer_threshold_test(
-        &self,
+        &mut self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
         threshold: f64,
-        confidence_level: f64,
+        z_level: f64,
         max_time: Option<f64>,
         max_events: Option<NumEvents>,
         max_trials: Option<usize>,
         return_on_max_trials: bool,
-        ci_confidence_level: Option<f64>,
-    ) -> Result<(bool, f64, Option<(f64, f64)>, usize, bool), GrowError> {
-        use bpci::{NSuccessesSample, WilsonScore};
+    ) -> Result<(bool, f64, usize, bool), GrowError> {
+        use bpci::NSuccessesSample;
+
+        let n_par = rayon::current_num_threads();
 
         if !(0.0..=1.0).contains(&threshold) {
             return Err(GrowError::NotSupported(
@@ -1540,41 +1723,14 @@ where
             ));
         }
 
-        if !(0.0..=1.0).contains(&confidence_level) {
-            return Err(GrowError::NotSupported(
-                "Confidence level must be between 0.0 and 1.0".to_string(),
-            ));
-        }
-
-        if let Some(ci_level) = ci_confidence_level {
-            if !(0.0..=1.0).contains(&ci_level) {
-                return Err(GrowError::NotSupported(
-                    "CI confidence level must be between 0.0 and 1.0".to_string(),
-                ));
-            }
-        }
-
-        // Helper function to convert confidence level to z-score for Wilson Score intervals.
-        // Uses standard normal distribution critical values for common confidence levels.
-        let confidence_to_z_score = |level: f64| -> f64 {
-            match level {
-                x if x >= 0.999 => 3.291, // 99.9% confidence
-                x if x >= 0.99 => 2.576,  // 99% confidence
-                x if x >= 0.95 => 1.960,  // 95% confidence
-                x if x >= 0.90 => 1.645,  // 90% confidence
-                x if x >= 0.80 => 1.282,  // 80% confidence
-                _ => 1.960,               // Default to 95% confidence
-            }
-        };
-
-        // Z-score for the threshold test
-        let test_z_score = confidence_to_z_score(confidence_level);
-
         let max_trials = max_trials.unwrap_or(100000);
         let mut successes = 0u32;
         let mut num_trials = 0u32;
 
-        let mut trial_state = initial_state.clone();
+        let mut trial_states = Vec::new();
+        for _ in 0..n_par {
+            trial_states.push(initial_state.clone());
+        }
 
         let bounds = EvolveBounds {
             size_min: Some(0),
@@ -1584,83 +1740,54 @@ where
             ..Default::default()
         };
 
-        // Helper function to calculate confidence interval if requested.
-        // Returns None if ci_confidence_level is None, otherwise calculates Wilson Score interval.
-        let calculate_confidence_interval =
-            |successes: u32, num_trials: u32| -> Option<(f64, f64)> {
-                ci_confidence_level.map(|ci_level| {
-                    let ci_z_score = confidence_to_z_score(ci_level);
-                    let sample = NSuccessesSample::new(num_trials, successes).unwrap();
-                    let wilson = sample.wilson_score(ci_z_score);
-                    let lower_bound = wilson.mean - wilson.margin;
-                    let upper_bound = wilson.mean + wilson.margin;
-                    (lower_bound, upper_bound)
-                })
-            };
-
         // Continue sampling until we can determine with confidence whether
         // the probability is above or below the threshold
         loop {
-            let outcome = self.evolve(&mut trial_state, bounds)?;
-            match outcome {
-                EvolveOutcome::ReachedSizeMax => {
-                    successes += 1;
-                    num_trials += 1;
-                    initial_state.clone_into(&mut trial_state);
-                }
-                EvolveOutcome::ReachedSizeMin => {
-                    num_trials += 1;
-                    initial_state.clone_into(&mut trial_state);
-                }
-                _ => {
-                    return Err(GrowError::NotSupported(
-                        "Evolve outcome not supported".to_string(),
-                    ));
+            let outcomes = self.evolve_states(&mut trial_states, bounds);
+            for outcome in outcomes {
+                match outcome? {
+                    EvolveOutcome::ReachedSizeMax => {
+                        successes += 1;
+                        num_trials += 1;
+                    }
+                    EvolveOutcome::ReachedSizeMin => {
+                        num_trials += 1;
+                    }
+                    _ => {
+                        return Err(GrowError::NotSupported(
+                            "Evolve outcome not supported".to_string(),
+                        ));
+                    }
                 }
             }
 
             // Need at least a few trials before we can make any statistical determination
-            if num_trials < 3 {
+            if num_trials < 10 {
                 continue;
             }
 
             // Calculate Wilson score confidence interval for the threshold test
             // This uses the test confidence level to determine if we can make a decision
             let sample = NSuccessesSample::new(num_trials, successes).unwrap();
-            let test_wilson = sample.wilson_score(test_z_score);
+            let test_wilson = sample.wilson_score_with_cc(z_level);
 
-            let test_lower_bound = test_wilson.mean - test_wilson.margin;
-            let test_upper_bound = test_wilson.mean + test_wilson.margin;
+            let test_lower_bound = test_wilson.lower();
+            let test_upper_bound = test_wilson.upper();
 
             // Check if the test confidence interval excludes the threshold (definitive determination)
             if test_upper_bound < threshold {
                 // We're confident the probability is below the threshold
                 let probability_estimate = successes as f64 / num_trials as f64;
-                let confidence_interval = calculate_confidence_interval(successes, num_trials);
-                return Ok((
-                    false,
-                    probability_estimate,
-                    confidence_interval,
-                    num_trials as usize,
-                    false,
-                ));
+                return Ok((false, probability_estimate, num_trials as usize, false));
             } else if test_lower_bound > threshold {
                 // We're confident the probability is above the threshold
                 let probability_estimate = successes as f64 / num_trials as f64;
-                let confidence_interval = calculate_confidence_interval(successes, num_trials);
-                return Ok((
-                    true,
-                    probability_estimate,
-                    confidence_interval,
-                    num_trials as usize,
-                    false,
-                ));
+                return Ok((true, probability_estimate, num_trials as usize, false));
             }
 
             // Check if we've exceeded the maximum number of trials without reaching a decision
             if num_trials >= max_trials as u32 {
                 let probability_estimate = successes as f64 / num_trials as f64;
-                let confidence_interval = calculate_confidence_interval(successes, num_trials);
 
                 if return_on_max_trials {
                     // Return current best estimate with warning flag set
@@ -1669,7 +1796,6 @@ where
                     return Ok((
                         is_above_threshold,
                         probability_estimate,
-                        confidence_interval,
                         num_trials as usize,
                         true,
                     ));
@@ -1681,7 +1807,114 @@ where
                     )));
                 }
             }
+            for state in trial_states.iter_mut() {
+                initial_state.clone_into(state);
+            }
         }
+    }
+
+    fn find_first_critical_state(
+        &mut self,
+        end_state: &StateEnum,
+        config: &CriticalStateConfig,
+    ) -> Result<Option<CriticalStateResult>, GrowError> {
+        let _tracker = if let Some(tracker) = end_state.get_movie_tracker() {
+            tracker
+        } else {
+            return Err(GrowError::NotSupported(
+                "State does not have a movie tracker".to_string(),
+            ));
+        };
+
+        let filtered_indices = end_state.filtered_movie_indices()?;
+
+        if filtered_indices.is_empty() {
+            return Ok(None);
+        }
+
+        for i in 0..filtered_indices.len() {
+            let state = end_state.replay(Some(filtered_indices[i] as u64))?;
+
+            let (is_above, prob, trials, exceeded) = self.calc_committer_threshold_test(
+                &state,
+                config.cutoff_size,
+                config.threshold,
+                config.confidence_level,
+                None, // max_time
+                None, // max_events
+                Some(config.max_trials),
+                true, // return_on_max_trials
+            )?;
+
+            if is_above {
+                let orig_idx = filtered_indices[i];
+                let energy = state.energy();
+
+                return Ok(Some(CriticalStateResult {
+                    state,
+                    energy,
+                    trajectory_index: orig_idx,
+                    is_above_threshold: is_above,
+                    probability: prob,
+                    num_trials: trials,
+                    max_trials_exceeded: exceeded,
+                }));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn find_last_critical_state(
+        &mut self,
+        end_state: &StateEnum,
+        config: &CriticalStateConfig,
+    ) -> Result<Option<CriticalStateResult>, GrowError> {
+        let _tracker = if let Some(tracker) = end_state.get_movie_tracker() {
+            tracker
+        } else {
+            return Err(GrowError::NotSupported(
+                "State does not have a movie tracker".to_string(),
+            ));
+        };
+
+        let filtered_indices = end_state.filtered_movie_indices()?;
+
+        if filtered_indices.is_empty() {
+            return Ok(None);
+        }
+
+        for i in (0..filtered_indices.len()).rev() {
+            let state = end_state.replay(Some(filtered_indices[i] as u64))?;
+
+            let (is_above, prob, trials, exceeded) = self.calc_committer_threshold_test(
+                &state,
+                config.cutoff_size,
+                config.threshold,
+                config.confidence_level,
+                None, // max_time
+                None, // max_events
+                Some(config.max_trials),
+                true, // return_on_max_trials
+            )?;
+
+            if !is_above {
+                let orig_idx = filtered_indices[i];
+                let energy = state.energy();
+
+                return Ok(Some(CriticalStateResult {
+                    state,
+                    energy,
+                    trajectory_index: orig_idx,
+                    is_above_threshold: is_above,
+                    probability: prob,
+                    num_trials: trials,
+                    max_trials_exceeded: exceeded,
+                }));
+            }
+        }
+
+        Ok(None)
     }
 }
 

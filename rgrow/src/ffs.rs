@@ -377,7 +377,16 @@ impl FFSRunConfig {
             "store_ffs_config" => self.store_ffs_config = v.extract()?,
             "store_system" => self.store_system = v.extract()?,
             "canvas_type" => self.canvas_type = v.extract()?,
-            "tracking" => self.tracking = v.extract()?,
+            "tracking" => {
+                // Handle both string and TrackingType enum
+                if let Ok(s) = v.extract::<&str>() {
+                    self.tracking = TrackingType::try_from(s).map_err(|e| {
+                        PyTypeError::new_err(format!("Invalid tracking type: {}", e.0))
+                    })?;
+                } else {
+                    self.tracking = v.extract()?;
+                }
+            }
             _ => {
                 return Err(PyTypeError::new_err(format!(
                     "Unknown FFSRunConfig setting: {k}"
@@ -408,6 +417,8 @@ impl FFSRunConfig {
         keep_configs=None,
         min_nuc_rate=None,
         canvas_size=None,
+        canvas_type=None,
+        tracking=None,
         target_size=None,
         store_ffs_config=None,
         store_system=None,
@@ -428,6 +439,8 @@ impl FFSRunConfig {
         keep_configs: Option<Bound<'_, PyAny>>, // bool (backward compatibility) or ConfigRetentionMode
         min_nuc_rate: Option<f64>,
         canvas_size: Option<(usize, usize)>,
+        canvas_type: Option<CanvasType>,
+        tracking: Option<Bound<'_, PyAny>>, // str or TrackingType
         target_size: Option<NumTiles>,
         store_ffs_config: Option<bool>,
         store_system: Option<bool>,
@@ -493,6 +506,20 @@ impl FFSRunConfig {
 
         if let Some(x) = canvas_size {
             rc.canvas_size = x;
+        }
+        if let Some(x) = canvas_type {
+            rc.canvas_type = x;
+        }
+        if let Some(x) = tracking {
+            // Handle both string and TrackingType enum
+            if let Ok(s) = x.extract::<&str>() {
+                rc.tracking = TrackingType::try_from(s)
+                    .map_err(|e| PyTypeError::new_err(format!("Invalid tracking type: {}", e.0)))?;
+            } else if let Ok(t) = x.extract::<TrackingType>() {
+                rc.tracking = t;
+            } else {
+                return Err(PyTypeError::new_err("tracking must be str or TrackingType"));
+            }
         }
         if let Some(x) = target_size {
             rc.target_size = x;

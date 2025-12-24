@@ -155,6 +155,140 @@ impl StateEnum {
             CanvasType::TubeDiagonals => match_tracking!(CanvasTubeDiagonals),
         })
     }
+
+    pub fn get_movie_tracker(&self) -> Option<&MovieTracker> {
+        match self {
+            StateEnum::SquareMovieTracking(state) => Some(&state.tracker),
+            StateEnum::PeriodicMovieTracking(state) => Some(&state.tracker),
+            StateEnum::TubeMovieTracking(state) => Some(&state.tracker),
+            StateEnum::TubeDiagonalsMovieTracking(state) => Some(&state.tracker),
+            _ => None,
+        }
+    }
+
+    pub fn clone_empty_no_tracker(&self) -> Result<StateEnum, GrowError> {
+        match self {
+            StateEnum::SquareMovieTracking(state) => Ok(StateEnum::SquareCanvasNullTracker(
+                state.clone_empty_no_tracker()?,
+            )),
+            StateEnum::PeriodicMovieTracking(state) => Ok(StateEnum::PeriodicCanvasNoTracker(
+                state.clone_empty_no_tracker()?,
+            )),
+            StateEnum::TubeMovieTracking(state) => {
+                Ok(StateEnum::TubeNoTracking(state.clone_empty_no_tracker()?))
+            }
+            StateEnum::TubeDiagonalsMovieTracking(state) => Ok(StateEnum::TubeDiagonalsNoTracking(
+                state.clone_empty_no_tracker()?,
+            )),
+            _ => Err(GrowError::NotSupported(
+                "State does not have a movie tracker".to_string(),
+            )),
+        }
+    }
+
+    pub fn replay(&self, up_to_event: Option<u64>) -> Result<StateEnum, GrowError> {
+        let movie_tracker = match self.get_movie_tracker() {
+            Some(tracker) => tracker,
+            None => {
+                return Err(GrowError::NotSupported(
+                    "State does not have a movie tracker".to_string(),
+                ))
+            }
+        };
+        let mut base_state = self.clone_empty_no_tracker()?;
+
+        base_state.replay_inplace(
+            &movie_tracker.coord,
+            &movie_tracker.new_tile,
+            &movie_tracker.event_id,
+            up_to_event.unwrap_or(u64::MAX),
+            Some(&movie_tracker.n_tiles),
+            Some(&movie_tracker.time),
+            Some(&movie_tracker.energy),
+        )?;
+        Ok(base_state)
+    }
+
+    pub fn replay_inplace(
+        &mut self,
+        coords: &[(usize, usize)],
+        new_tiles: &[Tile],
+        event_ids: &[u64],
+        up_to_event_id: u64,
+        n_tiles: Option<&[NumTiles]>,
+        total_time: Option<&[Second]>,
+        energy: Option<&[Energy]>,
+    ) -> Result<(), GrowError> {
+        let mut canvas = self.raw_array_mut();
+        let mut last_idx = 0;
+        for idx in 0..event_ids.len() {
+            if event_ids[idx] > up_to_event_id {
+                break;
+            }
+            canvas[(coords[idx].0, coords[idx].1)] = new_tiles[idx];
+            last_idx = idx;
+        }
+
+        if let Some(n_tiles) = n_tiles {
+            self.set_n_tiles(n_tiles[last_idx]);
+        }
+        if let Some(total_time) = total_time {
+            self.add_time(total_time[last_idx]);
+        }
+        if let Some(energy) = energy {
+            self.set_energy(energy[last_idx]);
+        }
+        self.add_events(event_ids[last_idx]);
+        Ok(())
+    }
+
+    /// Filter trajectory to remove redundant/transient events.
+    ///
+    /// Returns indices of events to keep. An event is kept if:
+    /// - The next event differs in (row, col, new_tile), AND
+    /// - The previous event differs in (row, col) OR current new_tile != 0
+    ///
+    /// This removes transient attach/detach pairs that don't contribute to the final state.
+    pub fn filtered_movie_indices(&self) -> Result<Vec<usize>, GrowError> {
+        let tracker = if let Some(tracker) = self.get_movie_tracker() {
+            tracker
+        } else {
+            return Err(GrowError::NotSupported(
+                "State does not have a movie tracker".to_string(),
+            ));
+        };
+        let n = tracker.coord.len();
+
+        let mut keep = Vec::with_capacity(n);
+
+        for i in 0..n {
+            // Check condition 1: next event differs in (row, col, new_tile)
+            // For the last element, there is no next, so we keep it if condition 2 is met
+            let next_differs = if i + 1 < n {
+                tracker.coord[i].0 != tracker.coord[i + 1].0
+                    || tracker.coord[i].1 != tracker.coord[i + 1].1
+                    || tracker.new_tile[i] != tracker.new_tile[i + 1]
+            } else {
+                true
+            };
+
+            // Check condition 2: previous event differs in (row, col) OR new_tile != 0
+            // For the first element, there is no previous, so we check only new_tile
+            let prev_condition = if i > 0 {
+                tracker.coord[i].0 != tracker.coord[i - 1].0
+                    || tracker.coord[i].1 != tracker.coord[i - 1].1
+                    || tracker.new_tile[i] != 0
+            } else {
+                tracker.new_tile[i] != 0
+            };
+
+            if next_differs && prev_condition {
+                keep.push(i);
+            }
+        }
+
+        Ok(keep)
+    }
 }
 
 #[enum_dispatch]
@@ -194,6 +328,7 @@ pub trait TileCounts {
 
 pub trait StateWithCreate: State + Sized + Clone {
     type Params;
+    type C: Canvas;
     // fn new_raw(canvas: Self::RawCanvas) -> Result<Self, GrowError>;
     fn empty(params: Self::Params) -> Result<Self, GrowError>;
     fn empty_with_types(params: Self::Params, n_tile_types: usize) -> Result<Self, GrowError>;
@@ -201,6 +336,9 @@ pub trait StateWithCreate: State + Sized + Clone {
     fn get_params(&self) -> Self::Params;
     fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self);
     fn reset_state(&mut self);
+    fn clone_empty(&self) -> Result<Self, GrowError>;
+    fn clone_empty_no_tracker(&self)
+        -> Result<QuadTreeState<Self::C, NullStateTracker>, GrowError>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -428,6 +566,7 @@ where
     T: StateTracker,
 {
     type Params = (usize, usize);
+    type C = C;
 
     fn empty(params: Self::Params) -> Result<Self, GrowError> {
         let rates: QuadTreeSquareArray<PerSecond> =
@@ -520,6 +659,19 @@ where
         self.time = Second::new(0.);
         self.tracker.reset();
         self.tile_counts.fill(0);
+    }
+
+    fn clone_empty(&self) -> Result<Self, GrowError> {
+        Self::empty_with_types(self.get_params(), self.tile_counts.len())
+    }
+
+    fn clone_empty_no_tracker(
+        &self,
+    ) -> Result<QuadTreeState<Self::C, NullStateTracker>, GrowError> {
+        QuadTreeState::<Self::C, NullStateTracker>::empty_with_types(
+            self.get_params(),
+            self.tile_counts.len(),
+        )
     }
 }
 
@@ -1085,3 +1237,81 @@ impl StateTracker for MovieTracker {
         RustAny(Box::new(df))
     }
 }
+
+// /// Reconstruct a state from a trajectory DataFrame up to a given index.
+// ///
+// /// # Arguments
+// /// * `sys` - The system to use for updating the state
+// /// * `base_state` - The base state to reconstruct from
+// /// * `trajectory` - DataFrame with columns: row, col, new_tile
+// /// * `up_to_event_id` - Event ID up to which to reconstruct (exclusive)
+// ///
+// /// # Returns
+// /// A reconstructed StateEnum with rates updated
+// pub fn reconstruct_state_from_trajectory_df(
+//     sys: &SystemEnum,
+//     base_state: &StateEnum,
+//     trajectory: &DataFrame,
+//     up_to_event_id: u64,
+// ) -> Result<StateEnum, GrowError> {
+//     let (rows, cols, new_tiles, event_ids, _energies) = extract_trajectory_data(trajectory)?;
+
+//     reconstruct_state_from_trajectory(
+//         sys,
+//         base_state,
+//         &rows,
+//         &cols,
+//         &new_tiles,
+//         &event_ids,
+//         up_to_event_id,
+//     )
+// }
+
+// /// Extract trajectory data from a DataFrame.
+// ///
+// /// Returns (rows, cols, new_tiles, energies) vectors.
+// fn extract_trajectory_data(
+//     trajectory: &DataFrame,
+// ) -> Result<(Vec<u64>, Vec<u64>, Vec<Tile>, Vec<u64>, Vec<f64>), GrowError> {
+//     let rows = trajectory
+//         .column("row")
+//         .map_err(|e| GrowError::NotSupported(format!("Missing 'row' column: {e}")))?
+//         .u64()
+//         .map_err(|e| GrowError::NotSupported(format!("'row' column not u64: {e}")))?
+//         .into_no_null_iter()
+//         .collect::<Vec<_>>();
+
+//     let cols = trajectory
+//         .column("col")
+//         .map_err(|e| GrowError::NotSupported(format!("Missing 'col' column: {e}")))?
+//         .u64()
+//         .map_err(|e| GrowError::NotSupported(format!("'col' column not u64: {e}")))?
+//         .into_no_null_iter()
+//         .collect::<Vec<_>>();
+
+//     let new_tiles = trajectory
+//         .column("new_tile")
+//         .map_err(|e| GrowError::NotSupported(format!("Missing 'new_tile' column: {e}")))?
+//         .u32()
+//         .map_err(|e| GrowError::NotSupported(format!("'new_tile' column not u32: {e}")))?
+//         .into_no_null_iter()
+//         .collect::<Vec<_>>();
+
+//     let event_ids = trajectory
+//         .column("event_id")
+//         .map_err(|e| GrowError::NotSupported(format!("Missing 'event_id' column: {e}")))?
+//         .u64()
+//         .map_err(|e| GrowError::NotSupported(format!("'event_id' column not u64: {e}")))?
+//         .into_no_null_iter()
+//         .collect::<Vec<_>>();
+
+//     let energies = trajectory
+//         .column("energy")
+//         .map_err(|e| GrowError::NotSupported(format!("Missing 'energy' column: {e}")))?
+//         .f64()
+//         .map_err(|e| GrowError::NotSupported(format!("'energy' column not f64: {e}")))?
+//         .into_no_null_iter()
+//         .collect::<Vec<_>>();
+
+//     Ok((rows, cols, new_tiles, event_ids, energies))
+// }

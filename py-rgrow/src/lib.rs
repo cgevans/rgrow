@@ -23,6 +23,10 @@ mod rgrow {
     #[pymodule_export]
     use rgrow::ffs::FFSRunConfig;
     #[pymodule_export]
+    use rgrow::system::CriticalStateConfig;
+    #[pymodule_export]
+    use rgrow::system::CriticalStateResult;
+    #[pymodule_export]
     use rgrow::system::EvolveBounds;
     #[pymodule_export]
     use rgrow::system::EvolveOutcome;

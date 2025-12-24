@@ -377,7 +377,7 @@ class ATAM:
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
         ci_confidence_level: float | None = None,
-    ) -> tuple[bool, float, tuple[float, float] | None, int, bool]:
+    ) -> tuple[bool, float, int, bool]:
         """
         Determine whether the committer probability is above or below a threshold.
 
@@ -400,12 +400,12 @@ class ATAM:
         return_on_max_trials : bool, optional
             If True, return results even when max_trials is exceeded
         ci_confidence_level : float, optional
-            Confidence level for the returned confidence interval
+            Confidence level for the returned confidence interval (unused)
 
         Returns
         -------
-        tuple[bool, float, tuple[float, float] | None, int, bool]
-            Tuple of (is_above_threshold, probability_estimate, confidence_interval, num_trials, exceeded_max_trials)
+        tuple[bool, float, int, bool]
+            Tuple of (is_above_threshold, probability_estimate, num_trials, exceeded_max_trials)
         """
 
     def calc_forward_probability(
@@ -515,6 +515,77 @@ class ATAM:
         -------
         float
             The energy change from placing the tile.
+        """
+
+    def find_first_critical_state(
+        self,
+        trajectory: pl.DataFrame,
+        config: CriticalStateConfig = ...,
+    ) -> CriticalStateResult | None:
+        """
+        Find the first state in a trajectory above the critical threshold.
+
+        Parameters
+        ----------
+        trajectory : pl.DataFrame
+            DataFrame with columns: row, col, new_tile, energy
+        config : CriticalStateConfig, optional
+            Configuration for the search
+
+        Returns
+        -------
+        CriticalStateResult | None
+            The first critical state found, or None if no state is above threshold.
+        """
+
+    def find_last_critical_state(
+        self,
+        trajectory: pl.DataFrame,
+        config: CriticalStateConfig = ...,
+    ) -> CriticalStateResult | None:
+        """
+        Find the last state not above threshold, return the next state.
+
+        Parameters
+        ----------
+        trajectory : pl.DataFrame
+            DataFrame with columns: row, col, new_tile, energy
+        config : CriticalStateConfig, optional
+            Configuration for the search
+
+        Returns
+        -------
+        CriticalStateResult | None
+            The first state above threshold (following the last subcritical state),
+            or None if no transition is found.
+        """
+
+    def reconstruct_state_from_trajectory(
+        self,
+        trajectory: pl.DataFrame,
+        up_to_index: int,
+        config: CriticalStateConfig = ...,
+        filter_trajectory: bool = True,
+    ) -> State:
+        """
+        Reconstruct a state from trajectory data up to a given index.
+
+        Parameters
+        ----------
+        trajectory : pl.DataFrame
+            DataFrame with columns: row, col, new_tile
+        up_to_index : int
+            Index up to which to reconstruct (exclusive)
+        config : CriticalStateConfig, optional
+            Configuration for state creation
+        filter_trajectory : bool, optional
+            Whether to filter the trajectory first to remove transient events.
+            Default is True.
+
+        Returns
+        -------
+        State
+            The reconstructed state with rates updated.
         """
 
 class SDC:
@@ -930,7 +1001,7 @@ class SDC:
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
         ci_confidence_level: float | None = None,
-    ) -> tuple[bool, float, tuple[float, float] | None, int, bool]: ...
+    ) -> tuple[bool, float, int, bool]: ...
 
     def calc_forward_probability(
         self,
@@ -960,6 +1031,26 @@ class SDC:
     ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
 
     def place_tile(self, state: State, point: tuple[int, int], tile: int) -> float: ...
+
+    def find_first_critical_state(
+        self,
+        trajectory: pl.DataFrame,
+        config: CriticalStateConfig = ...,
+    ) -> CriticalStateResult | None: ...
+
+    def find_last_critical_state(
+        self,
+        trajectory: pl.DataFrame,
+        config: CriticalStateConfig = ...,
+    ) -> CriticalStateResult | None: ...
+
+    def reconstruct_state_from_trajectory(
+        self,
+        trajectory: pl.DataFrame,
+        up_to_index: int,
+        config: CriticalStateConfig = ...,
+        filter_trajectory: bool = True,
+    ) -> State: ...
 
 class EvolveBounds:
     def __init__(
@@ -1074,15 +1165,16 @@ class FFSRunConfig:
         - Square: finite canvas with hard boundaries
         - Tube: periodic in one dimension, finite in the other
         Default is Periodic.
-    tracking : Any, optional
+    tracking : str, optional
         Type of additional data tracking during simulation.
-        Controls what extra information is recorded during evolution:
-        - None: no additional tracking (fastest, default)
-        - Order: track attachment order of tiles
-        - LastAttachTime: track when the tile at each location last attached
-        - PrintEvent: print events as they occur (debugging)
-        - Movie: record all events
-        Default is None.
+        Controls what extra information is recorded during evolution.
+        Accepts a string (case-insensitive):
+        - "None": no additional tracking (fastest, default)
+        - "Order": track attachment order of tiles
+        - "LastAttachTime": track when the tile at each location last attached
+        - "PrintEvent": print events as they occur (debugging)
+        - "Movie": record all events
+        Default is "None".
     target_size : int, optional
         Target structure size for FFS termination. Default is 100.
     store_ffs_config : bool, optional
@@ -1109,7 +1201,7 @@ class FFSRunConfig:
         min_nuc_rate: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: Any | None = None,
-        tracking: Any | None = None,
+        tracking: str | None = None,
         target_size: int | None = None,
         store_ffs_config: bool | None = None,
         store_system: bool | None = None,
@@ -1282,6 +1374,84 @@ class FFSRunResultDF:
            `{prefix}.surfaces.parquet`, `{prefix}.configurations.parquet`, and
            `{prefix}.ffs_result.json`.
         """
+
+class CriticalStateConfig:
+    """
+    Configuration for critical state search algorithms.
+    
+    Parameters
+    ----------
+    cutoff_size : int, optional
+        Cutoff size for committer calculation (tiles above which growth is considered successful).
+        Default is 100.
+    threshold : float, optional
+        Probability threshold for determining if state is "critical" (above/below this).
+        Default is 0.5.
+    confidence_level : float, optional
+        Confidence level for the threshold test. Default is 0.98.
+    max_trials : int, optional
+        Maximum number of trials for committer calculation. Default is 100000.
+    ci_confidence_level : float, optional
+        Confidence level for the confidence interval (if requested). Default is 0.95.
+    canvas_size : tuple[int, int], optional
+        Canvas size for state reconstruction. Default is (32, 32).
+    canvas_type : str, optional
+        Canvas type for state reconstruction. Default is "periodic".
+    """
+    cutoff_size: int
+    threshold: float
+    confidence_level: float
+    max_trials: int
+    ci_confidence_level: float
+    canvas_size: tuple[int, int]
+    canvas_type: str
+    
+    def __init__(
+        self,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+    ) -> None: ...
+
+class CriticalStateResult:
+    """
+    Result of a critical state search.
+
+    Properties
+    ----------
+    state : State
+        The critical state found.
+    energy : float
+        Energy at the critical state.
+    trajectory_index : int
+        Index in the trajectory where the critical state was found.
+    is_above_threshold : bool
+        Whether the state is above threshold.
+    probability : float
+        Estimated committer probability.
+    num_trials : int
+        Number of trials used in the calculation.
+    max_trials_exceeded : bool
+        Whether max trials was exceeded.
+    """
+    @property
+    def state(self) -> State: ...
+    @property
+    def energy(self) -> float: ...
+    @property
+    def trajectory_index(self) -> int: ...
+    @property
+    def is_above_threshold(self) -> bool: ...
+    @property
+    def probability(self) -> float: ...
+    @property
+    def num_trials(self) -> int: ...
+    @property
+    def max_trials_exceeded(self) -> bool: ...
 
 class FFSStateRef:
     @property
@@ -1732,7 +1902,7 @@ class KTAM:
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
         ci_confidence_level: float | None = None,
-    ) -> tuple[bool, float, tuple[float, float] | None, int, bool]: ...
+    ) -> tuple[bool, float, int, bool]: ...
 
     def calc_forward_probability(
         self,
@@ -1762,6 +1932,26 @@ class KTAM:
     ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
 
     def place_tile(self, state: State, point: tuple[int, int], tile: int) -> float: ...
+
+    def find_first_critical_state(
+        self,
+        trajectory: pl.DataFrame,
+        config: CriticalStateConfig = ...,
+    ) -> CriticalStateResult | None: ...
+
+    def find_last_critical_state(
+        self,
+        trajectory: pl.DataFrame,
+        config: CriticalStateConfig = ...,
+    ) -> CriticalStateResult | None: ...
+
+    def reconstruct_state_from_trajectory(
+        self,
+        trajectory: pl.DataFrame,
+        up_to_index: int,
+        config: CriticalStateConfig = ...,
+        filter_trajectory: bool = True,
+    ) -> State: ...
 
 class OldKTAM:
     @property
@@ -2069,7 +2259,7 @@ class OldKTAM:
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
         ci_confidence_level: float | None = None,
-    ) -> tuple[bool, float, tuple[float, float] | None, int, bool]: ...
+    ) -> tuple[bool, float, int, bool]: ...
 
     def calc_forward_probability(
         self,
@@ -2099,6 +2289,26 @@ class OldKTAM:
     ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
 
     def place_tile(self, state: State, point: tuple[int, int], tile: int) -> float: ...
+
+    def find_first_critical_state(
+        self,
+        trajectory: pl.DataFrame,
+        config: CriticalStateConfig = ...,
+    ) -> CriticalStateResult | None: ...
+
+    def find_last_critical_state(
+        self,
+        trajectory: pl.DataFrame,
+        config: CriticalStateConfig = ...,
+    ) -> CriticalStateResult | None: ...
+
+    def reconstruct_state_from_trajectory(
+        self,
+        trajectory: pl.DataFrame,
+        up_to_index: int,
+        config: CriticalStateConfig = ...,
+        filter_trajectory: bool = True,
+    ) -> State: ...
 
 class KBlock:
     @property
@@ -2429,7 +2639,7 @@ class KBlock:
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
         ci_confidence_level: float | None = None,
-    ) -> tuple[bool, float, tuple[float, float] | None, int, bool]: ...
+    ) -> tuple[bool, float, int, bool]: ...
 
     def calc_forward_probability(
         self,
@@ -2459,6 +2669,26 @@ class KBlock:
     ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
 
     def place_tile(self, state: State, point: tuple[int, int], tile: int) -> float: ...
+
+    def find_first_critical_state(
+        self,
+        trajectory: pl.DataFrame,
+        config: CriticalStateConfig = ...,
+    ) -> CriticalStateResult | None: ...
+
+    def find_last_critical_state(
+        self,
+        trajectory: pl.DataFrame,
+        config: CriticalStateConfig = ...,
+    ) -> CriticalStateResult | None: ...
+
+    def reconstruct_state_from_trajectory(
+        self,
+        trajectory: pl.DataFrame,
+        up_to_index: int,
+        config: CriticalStateConfig = ...,
+        filter_trajectory: bool = True,
+    ) -> State: ...
 
 
 System: TypeAlias = ATAM | KTAM | OldKTAM | KBlock | SDC
@@ -2540,6 +2770,99 @@ class State:
     @property
     def tile_counts(self) -> NDArray[np.uint32]:
         """Counts of each tile type in the state."""
+
+    def __getstate__(self) -> bytes:
+        """Serialize state for pickling."""
+
+    def __setstate__(self, state: bytes) -> None:
+        """Deserialize state from pickle data."""
+
+    def __getnewargs__(self) -> tuple[tuple[int, int]]:
+        """Return arguments for __new__ during unpickling."""
+
+    def replay(self, up_to_event: int | None = None) -> Self:
+        """
+        Replay the events from a MovieTracker up to a given event ID.
+
+        This reconstructs the state by replaying all events from the MovieTracker.
+        The state must have been created with Movie tracking enabled.
+
+        Parameters
+        ----------
+        up_to_event : int, optional
+            The event ID up to which to replay (inclusive). If not provided,
+            all events are replayed.
+
+        Returns
+        -------
+        State
+            A new State with the events replayed. The returned state has no
+            tracker and no rates calculated.
+
+        Raises
+        ------
+        ValueError
+            If the state does not have a MovieTracker.
+
+        Examples
+        --------
+        >>> # Create a state with movie tracking and evolve it
+        >>> state = ts.create_state(tracking="Movie")
+        >>> sys.evolve(state, for_events=100)
+        >>> # Replay to get state at event 50
+        >>> replayed = state.replay(up_to_event=50)
+        """
+
+    def replay_inplace(
+        self,
+        coords: list[tuple[int, int]],
+        new_tiles: list[int],
+        event_ids: list[int],
+        up_to_event_id: int,
+        n_tiles: list[int] | None = None,
+        total_time: list[float] | None = None,
+        energy: list[float] | None = None,
+    ) -> None:
+        """
+        Replay events in-place on this state from external event data.
+
+        This modifies the state's canvas by applying the events from the provided
+        coordinate and tile arrays. Unlike `replay()`, this method takes external
+        event data rather than using a MovieTracker.
+
+        Parameters
+        ----------
+        coords : list[tuple[int, int]]
+            List of (row, col) coordinates for each event.
+        new_tiles : list[int]
+            List of tile values for each event.
+        event_ids : list[int]
+            List of event IDs for each event.
+        up_to_event_id : int
+            The event ID up to which to replay (inclusive).
+        n_tiles : list[int], optional
+            List of tile counts at each event. If provided, sets the state's
+            n_tiles to the value at the last replayed event.
+        total_time : list[float], optional
+            List of total simulation times at each event. If provided, sets
+            the state's time to the value at the last replayed event.
+        energy : list[float], optional
+            List of energies at each event. If provided, sets the state's
+            energy to the value at the last replayed event.
+
+        Raises
+        ------
+        ValueError
+            If there is an error during replay.
+
+        Examples
+        --------
+        >>> state = State((10, 10))
+        >>> coords = [(1, 1), (2, 2)]
+        >>> new_tiles = [1, 2]
+        >>> event_ids = [0, 1]
+        >>> state.replay_inplace(coords, new_tiles, event_ids, 1)
+        """
 
 class TileSet:
     def __init__(self, **kwargs: Any) -> None: ...

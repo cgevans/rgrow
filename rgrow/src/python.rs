@@ -13,9 +13,11 @@ use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
+use crate::system::{CriticalStateConfig, CriticalStateResult};
 use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, System, TileBondInfo,
 };
+use crate::units::Second;
 use ndarray::Array2;
 use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray2, ToPyArray,
@@ -227,6 +229,121 @@ impl PyState {
     /// >>> assert copied_state.total_events == original_state.total_events
     pub fn copy(&self) -> Self {
         PyState(self.0.clone())
+    }
+
+    /// Serialize state for pickling.
+    fn __getstate__(&self) -> PyResult<Vec<u8>> {
+        bincode::serialize(&self.0).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "Failed to serialize state: {e}"
+            ))
+        })
+    }
+
+    /// Deserialize state from pickle data.
+    fn __setstate__(&mut self, state: Vec<u8>) -> PyResult<()> {
+        self.0 = bincode::deserialize(&state).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "Failed to deserialize state: {e}"
+            ))
+        })?;
+        Ok(())
+    }
+
+    /// Return arguments for __new__ during unpickling.
+    fn __getnewargs__(&self) -> ((usize, usize),) {
+        ((1, 1),)
+    }
+
+    /// Replay the events from a MovieTracker up to a given event ID.
+    ///
+    /// This reconstructs the state by replaying all events from the MovieTracker.
+    /// The state must have been created with Movie tracking enabled.
+    ///
+    /// Parameters
+    /// ----------
+    /// up_to_event : int, optional
+    ///     The event ID up to which to replay (inclusive). If not provided,
+    ///     all events are replayed.
+    ///
+    /// Returns
+    /// -------
+    /// State
+    ///     A new State with the events replayed. The returned state has no
+    ///     tracker and no rates calculated.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the state does not have a MovieTracker.
+    ///
+    /// Examples
+    /// --------
+    /// >>> # Create a state with movie tracking and evolve it
+    /// >>> state = ts.create_state(tracking="Movie")
+    /// >>> sys.evolve(state, for_events=100)
+    /// >>> # Replay to get state at event 50
+    /// >>> replayed = state.replay(up_to_event=50)
+    #[pyo3(signature = (up_to_event=None))]
+    pub fn replay(&self, up_to_event: Option<u64>) -> PyResult<Self> {
+        self.0
+            .replay(up_to_event)
+            .map(PyState)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+    }
+
+    /// Replay events in-place on this state from external event data.
+    ///
+    /// This modifies the state's canvas by applying the events from the provided
+    /// coordinate and tile arrays. Unlike `replay()`, this method takes external
+    /// event data rather than using a MovieTracker.
+    ///
+    /// Parameters
+    /// ----------
+    /// coords : list[tuple[int, int]]
+    ///     List of (row, col) coordinates for each event.
+    /// new_tiles : list[int]
+    ///     List of tile values for each event.
+    /// event_ids : list[int]
+    ///     List of event IDs for each event.
+    /// up_to_event_id : int
+    ///     The event ID up to which to replay (inclusive).
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If there is an error during replay.
+    ///
+    /// Examples
+    /// --------
+    /// >>> state = State((10, 10))
+    /// >>> coords = [(1, 1), (2, 2)]
+    /// >>> new_tiles = [1, 2]
+    /// >>> event_ids = [0, 1]
+    /// >>> state.replay_inplace(coords, new_tiles, event_ids, 1)
+    pub fn replay_inplace(
+        &mut self,
+        coords: Vec<(usize, usize)>,
+        new_tiles: Vec<Tile>,
+        event_ids: Vec<u64>,
+        up_to_event_id: u64,
+        n_tiles: Option<Vec<u32>>,
+        total_time: Option<Vec<f64>>,
+        energy: Option<Vec<f64>>,
+    ) -> PyResult<()> {
+        let total_time_seconds: Option<Vec<Second>> =
+            total_time.map(|v| v.into_iter().map(Second::new).collect());
+        self.0
+            .replay_inplace(
+                &coords,
+                &new_tiles,
+                &event_ids,
+                up_to_event_id,
+                n_tiles.as_ref().map(|v| v.as_slice()),
+                total_time_seconds.as_ref().map(|v| v.as_slice()),
+                energy.as_ref().map(|v| v.as_slice()),
+            )
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 }
 
@@ -836,8 +953,8 @@ macro_rules! create_py_system {
             #[allow(clippy::too_many_arguments)]
             #[pyo3(name = "calc_committer_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false, ci_confidence_level=None))]
             fn py_calc_committer_threshold_test(
-                &self,
-                state: &PyState,
+                &mut self,
+                state: &mut PyState,
                 cutoff_size: NumTiles,
                 threshold: f64,
                 confidence_level: f64,
@@ -847,7 +964,7 @@ macro_rules! create_py_system {
                 return_on_max_trials: bool,
                 ci_confidence_level: Option<f64>,
                 py: Python<'_>,
-            ) -> PyResult<(bool, f64, Option<(f64, f64)>, usize, bool)> {
+            ) -> PyResult<(bool, f64, usize, bool)> {
                 py.detach(|| {
                     self.calc_committer_threshold_test(
                         &state.0,
@@ -858,7 +975,6 @@ macro_rules! create_py_system {
                         max_events,
                         max_trials,
                         return_on_max_trials,
-                        ci_confidence_level,
                     )
                 })
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
@@ -1084,6 +1200,69 @@ macro_rules! create_py_system {
                 let energy_change = self.place_tile(&mut state.0, pt, tile.into())?;
                 Ok(energy_change)
             }
+
+            // TODO: Uncomment when find_first_critical_state is implemented on System trait
+            // /// Find the first state in a trajectory above the critical threshold.
+            // ///
+            // /// Iterates through the trajectory (after filtering redundant events),
+            // /// reconstructing the state at each point and testing if the committer
+            // /// probability is above the threshold with the specified confidence.
+            // ///
+            // /// Parameters
+            // /// ----------
+            // /// trajectory : pl.DataFrame
+            // ///     DataFrame with columns: row, col, new_tile, energy
+            // /// config : CriticalStateConfig, optional
+            // ///     Configuration for the search (uses defaults if not provided)
+            // ///
+            // /// Returns
+            // /// -------
+            // /// CriticalStateResult | None
+            // ///     The first critical state found, or None if no state is above threshold.
+            // #[pyo3(name = "find_first_critical_state", signature = (trajectory, config=CriticalStateConfig::default()))]
+            // pub fn py_find_first_critical_state(
+            //     &self,
+            //     trajectory: pyo3_polars::PyDataFrame,
+            //     config: CriticalStateConfig,
+            //     py: Python<'_>,
+            // ) -> PyResult<Option<CriticalStateResult>> {
+            //     py.detach(|| {
+            //         self.find_first_critical_state(&trajectory.0, &config)
+            //     })
+            //     .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+            // }
+
+            // TODO: Uncomment when find_last_critical_state is implemented on System trait
+            // /// Find the last state not above threshold, return the next state.
+            // ///
+            // /// Iterates backwards through the trajectory to find the last state that is
+            // /// NOT above the critical threshold, then returns the next state (which should
+            // /// be above threshold). This is useful for finding the "critical nucleus".
+            // ///
+            // /// Parameters
+            // /// ----------
+            // /// trajectory : pl.DataFrame
+            // ///     DataFrame with columns: row, col, new_tile, energy
+            // /// config : CriticalStateConfig, optional
+            // ///     Configuration for the search (uses defaults if not provided)
+            // ///
+            // /// Returns
+            // /// -------
+            // /// CriticalStateResult | None
+            // ///     The first state above threshold (following the last subcritical state),
+            // ///     or None if no transition is found.
+            // #[pyo3(name = "find_last_critical_state", signature = (trajectory, config=CriticalStateConfig::default()))]
+            // pub fn py_find_last_critical_state(
+            //     &self,
+            //     trajectory: pyo3_polars::PyDataFrame,
+            //     config: CriticalStateConfig,
+            //     py: Python<'_>,
+            // ) -> PyResult<Option<CriticalStateResult>> {
+            //     py.detach(|| {
+            //         self.find_last_critical_state(&trajectory.0, &config)
+            //     })
+            //     .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+            // }
         }
     };
 }

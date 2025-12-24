@@ -920,16 +920,13 @@ impl SDC {
 
             let mut friends = vec![0];
             if let Some(f) = self.friends_btm.get(*b) {
-                friends.extend(f.iter().map(|x| *x as u32));
+                friends.extend(f.iter().copied());
             };
 
             // println!("loc: {}, friends: {:?}", i, friends);
             // Filter by constraints, if constraints are nonempty
             if !constrain_at_loc[i].is_empty() {
-                friends = friends
-                    .into_iter()
-                    .filter(|x| constrain_at_loc[i].contains(x))
-                    .collect();
+                friends.retain(|x| constrain_at_loc[i].contains(x));
             }
             // println!("loc: {} after filter, friends: {:?}", i, friends);
 
@@ -968,7 +965,7 @@ impl SDC {
             // println!("loc: {} z_curr: {}", i, z_curr);
             prev_friends = friends;
         }
-        for (j, z) in z_curr.iter().enumerate() {
+        for z in z_curr.iter() {
             z_sum = z_sum.add(z, prec, rm);
         }
         z_sum
