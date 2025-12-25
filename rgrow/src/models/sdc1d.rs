@@ -2754,8 +2754,7 @@ mod test_sdc_model {
         let pf_full = sdc.partition_function_full();
         let pf = bigfloat_to_f64(&sdc.partition_function(), astro_float::RoundingMode::None);
 
-        let rel_diff =
-            ((pf - pf_full).abs() / pf_full.abs()).max(((pf - pf_full).abs() / pf.abs()));
+        let rel_diff = ((pf - pf_full).abs() / pf_full.abs()).max((pf - pf_full).abs() / pf.abs());
         assert!(rel_diff < 0.0001,
             "Relative difference between partition_function ({}) and partition_function_full ({}) should be less than 0.01%, got {}", 
             pf, pf_full, rel_diff);

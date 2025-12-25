@@ -951,7 +951,7 @@ macro_rules! create_py_system {
             ///     - num_trials: Number of trials performed
             ///     - exceeded_max_trials: True if max_trials was exceeded (warning flag)
             #[allow(clippy::too_many_arguments)]
-            #[pyo3(name = "calc_committer_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false, ci_confidence_level=None))]
+            #[pyo3(name = "calc_committer_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false))]
             fn py_calc_committer_threshold_test(
                 &mut self,
                 state: &mut PyState,
@@ -962,7 +962,6 @@ macro_rules! create_py_system {
                 max_events: Option<NumEvents>,
                 max_trials: Option<usize>,
                 return_on_max_trials: bool,
-                ci_confidence_level: Option<f64>,
                 py: Python<'_>,
             ) -> PyResult<(bool, f64, usize, bool)> {
                 py.detach(|| {
@@ -1201,7 +1200,6 @@ macro_rules! create_py_system {
                 Ok(energy_change)
             }
 
-            // TODO: Uncomment when find_first_critical_state is implemented on System trait
             // /// Find the first state in a trajectory above the critical threshold.
             // ///
             // /// Iterates through the trajectory (after filtering redundant events),
@@ -1219,18 +1217,18 @@ macro_rules! create_py_system {
             // /// -------
             // /// CriticalStateResult | None
             // ///     The first critical state found, or None if no state is above threshold.
-            // #[pyo3(name = "find_first_critical_state", signature = (trajectory, config=CriticalStateConfig::default()))]
-            // pub fn py_find_first_critical_state(
-            //     &self,
-            //     trajectory: pyo3_polars::PyDataFrame,
-            //     config: CriticalStateConfig,
-            //     py: Python<'_>,
-            // ) -> PyResult<Option<CriticalStateResult>> {
-            //     py.detach(|| {
-            //         self.find_first_critical_state(&trajectory.0, &config)
-            //     })
-            //     .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
-            // }
+            #[pyo3(name = "find_first_critical_state", signature = (end_state, config=CriticalStateConfig::default()))]
+            pub fn py_find_first_critical_state(
+                &mut self,
+                end_state: &PyState,
+                config: CriticalStateConfig,
+                py: Python<'_>,
+            ) -> PyResult<Option<CriticalStateResult>> {
+                py.detach(|| {
+                    self.find_first_critical_state(&end_state.0, &config)
+                })
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+            }
 
             // TODO: Uncomment when find_last_critical_state is implemented on System trait
             // /// Find the last state not above threshold, return the next state.
@@ -1251,18 +1249,18 @@ macro_rules! create_py_system {
             // /// CriticalStateResult | None
             // ///     The first state above threshold (following the last subcritical state),
             // ///     or None if no transition is found.
-            // #[pyo3(name = "find_last_critical_state", signature = (trajectory, config=CriticalStateConfig::default()))]
-            // pub fn py_find_last_critical_state(
-            //     &self,
-            //     trajectory: pyo3_polars::PyDataFrame,
-            //     config: CriticalStateConfig,
-            //     py: Python<'_>,
-            // ) -> PyResult<Option<CriticalStateResult>> {
-            //     py.detach(|| {
-            //         self.find_last_critical_state(&trajectory.0, &config)
-            //     })
-            //     .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
-            // }
+            #[pyo3(name = "find_last_critical_state", signature = (end_state, config=CriticalStateConfig::default()))]
+            pub fn py_find_last_critical_state(
+                &mut self,
+                end_state: &PyState,
+                config: CriticalStateConfig,
+                py: Python<'_>,
+            ) -> PyResult<Option<CriticalStateResult>> {
+                py.detach(|| {
+                    self.find_last_critical_state(&end_state.0, &config)
+                })
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+            }
         }
     };
 }

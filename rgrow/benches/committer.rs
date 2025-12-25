@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ndarray::array;
 use rgrow::{
     canvas::{CanvasPeriodic, PointSafe2},
@@ -6,6 +6,7 @@ use rgrow::{
     state::{NullStateTracker, QuadTreeState, StateEnum},
     system::{DynSystem, System},
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Benchmark calc_committer with different configurations

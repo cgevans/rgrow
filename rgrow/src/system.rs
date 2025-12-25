@@ -1753,10 +1753,11 @@ where
                     EvolveOutcome::ReachedSizeMin => {
                         num_trials += 1;
                     }
-                    _ => {
-                        return Err(GrowError::NotSupported(
-                            "Evolve outcome not supported".to_string(),
-                        ));
+                    x => {
+                        return Err(GrowError::NotSupported(format!(
+                            "Evolve outcome not supported: {:?}",
+                            x
+                        )));
                     }
                 }
             }

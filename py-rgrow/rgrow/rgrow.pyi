@@ -519,18 +519,22 @@ class ATAM:
 
     def find_first_critical_state(
         self,
-        trajectory: pl.DataFrame,
+        end_state: State,
         config: CriticalStateConfig = ...,
     ) -> CriticalStateResult | None:
         """
         Find the first state in a trajectory above the critical threshold.
 
+        Iterates through the trajectory (after filtering redundant events),
+        reconstructing the state at each point and testing if the committer
+        probability is above the threshold with the specified confidence.
+
         Parameters
         ----------
-        trajectory : pl.DataFrame
-            DataFrame with columns: row, col, new_tile, energy
+        end_state : State
+            A state with Movie tracking that contains the trajectory to search.
         config : CriticalStateConfig, optional
-            Configuration for the search
+            Configuration for the search (uses defaults if not provided)
 
         Returns
         -------
@@ -540,18 +544,22 @@ class ATAM:
 
     def find_last_critical_state(
         self,
-        trajectory: pl.DataFrame,
+        end_state: State,
         config: CriticalStateConfig = ...,
     ) -> CriticalStateResult | None:
         """
         Find the last state not above threshold, return the next state.
 
+        Iterates backwards through the trajectory to find the last state that is
+        NOT above the critical threshold, then returns the next state (which should
+        be above threshold). This is useful for finding the "critical nucleus".
+
         Parameters
         ----------
-        trajectory : pl.DataFrame
-            DataFrame with columns: row, col, new_tile, energy
+        end_state : State
+            A state with Movie tracking that contains the trajectory to search.
         config : CriticalStateConfig, optional
-            Configuration for the search
+            Configuration for the search (uses defaults if not provided)
 
         Returns
         -------
@@ -1034,13 +1042,13 @@ class SDC:
 
     def find_first_critical_state(
         self,
-        trajectory: pl.DataFrame,
+        end_state: State,
         config: CriticalStateConfig = ...,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
-        trajectory: pl.DataFrame,
+        end_state: State,
         config: CriticalStateConfig = ...,
     ) -> CriticalStateResult | None: ...
 
@@ -1935,13 +1943,13 @@ class KTAM:
 
     def find_first_critical_state(
         self,
-        trajectory: pl.DataFrame,
+        end_state: State,
         config: CriticalStateConfig = ...,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
-        trajectory: pl.DataFrame,
+        end_state: State,
         config: CriticalStateConfig = ...,
     ) -> CriticalStateResult | None: ...
 
@@ -2292,13 +2300,13 @@ class OldKTAM:
 
     def find_first_critical_state(
         self,
-        trajectory: pl.DataFrame,
+        end_state: State,
         config: CriticalStateConfig = ...,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
-        trajectory: pl.DataFrame,
+        end_state: State,
         config: CriticalStateConfig = ...,
     ) -> CriticalStateResult | None: ...
 
@@ -2672,13 +2680,13 @@ class KBlock:
 
     def find_first_critical_state(
         self,
-        trajectory: pl.DataFrame,
+        end_state: State,
         config: CriticalStateConfig = ...,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
-        trajectory: pl.DataFrame,
+        end_state: State,
         config: CriticalStateConfig = ...,
     ) -> CriticalStateResult | None: ...
 
