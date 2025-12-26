@@ -1834,7 +1834,8 @@ where
         }
 
         for i in 0..filtered_indices.len() {
-            let state = end_state.replay(Some(filtered_indices[i] as u64))?;
+            let mut state = end_state.replay(Some(filtered_indices[i] as u64))?;
+            self.update_state(&mut state, &NeededUpdate::All);
 
             let (is_above, prob, trials, exceeded) = self.calc_committer_threshold_test(
                 &state,
@@ -1886,7 +1887,8 @@ where
         }
 
         for i in (0..filtered_indices.len()).rev() {
-            let state = end_state.replay(Some(filtered_indices[i] as u64))?;
+            let mut state = end_state.replay(Some(filtered_indices[i] as u64))?;
+            self.update_state(&mut state, &NeededUpdate::All);
 
             let (is_above, prob, trials, exceeded) = self.calc_committer_threshold_test(
                 &state,
