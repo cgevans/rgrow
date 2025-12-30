@@ -363,7 +363,7 @@ impl RgrowGui {
             text("Max events/sec:").size(14),
             max_eps_input,
             apply_eps_button,
-            text("Set Timescale:").size(14),
+            text("Timescale:").size(14),
             timescale_input,
             apply_ts_button,
         ]
