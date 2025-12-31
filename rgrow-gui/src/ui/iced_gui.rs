@@ -304,6 +304,8 @@ impl RgrowGui {
     fn view(&self) -> Element<'_, Message> {
         let image_widget: Element<Message> = if let Some(handle) = &self.current_image {
             image::viewer(handle.clone())
+                // The image can get blurry when you zoom in, this helps with that
+                .filter_method(image::FilterMethod::Nearest)
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .into()
