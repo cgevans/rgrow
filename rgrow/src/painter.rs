@@ -8,7 +8,7 @@ use crate::colors::Color;
 #[derive(Debug, Clone, Copy)]
 pub struct TileStyle {
     /// RGBA values for each of the sides of a tile
-    tri_colors: [Color; 4],
+    pub tri_colors: [Color; 4],
 }
 
 pub struct SpriteSquare {
@@ -60,19 +60,5 @@ impl TileStyle {
             size,
             pixels: pixels.into_boxed_slice(),
         }
-    }
-}
-
-/// Let a `System` decide how the DNA should be painted in the GUI. This trait needs to be
-/// implemented in order for the system to be usable with the GUI.
-pub trait TilePainter {
-    type TileId;
-
-    /// Given some tile id, choose how it should be rendered in the GUI
-    fn tile_style(&self, id: Self::TileId) -> TileStyle;
-
-    /// Turn the tile into a sprite
-    fn tile_pixels(&self, id: Self::TileId, size: usize) -> SpriteSquare {
-        self.tile_style(id).as_sprite(size)
     }
 }
