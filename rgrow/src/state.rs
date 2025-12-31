@@ -2,6 +2,7 @@ use super::base::*;
 use crate::canvas::{
     Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals,
 };
+use crate::painter::SpriteSquare;
 use crate::tileset::{CanvasType, TrackingType};
 use crate::units::{PerSecond, Second};
 use crate::{
