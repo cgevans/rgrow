@@ -1,4 +1,4 @@
-type Color = [u8; 4];
+use crate::colors::Color;
 
 /// How to render a single tile.
 ///
