@@ -1,4 +1,8 @@
 [![codecov](https://codecov.io/github/cgevans/rgrow/graph/badge.svg?token=GZLWKMQ2GZ)](https://codecov.io/github/cgevans/rgrow)
+[![PyPI](https://img.shields.io/pypi/v/rgrow)](https://pypi.org/project/rgrow/)
+[![Crates.io](https://img.shields.io/crates/v/rgrow)](https://crates.io/crates/rgrow)
+[![docs.rs](https://docs.rs/rgrow/badge.svg)](https://docs.rs/rgrow)
+[![Read the Docs](https://readthedocs.org/projects/rgrow/badge/?version=latest)](https://rgrow.readthedocs.io/en/latest/)
 
 # Introduction
 
@@ -26,30 +30,10 @@ To install directly from git using Pip:
 pip install "git+https://github.com/cgevans/rgrow.git"
 ```
 
-For backwards compatibility, you can also use:
+or check out the repository, and use something like
 
 ```bash
-pip install "git+https://github.com/cgevans/rgrow.git#subdirectory=py-rgrow"
-```
-
-or check out the repository, and use
-
-```bash
-cd py-rgrow
 maturin develop --release -- -C target-cpu=native
 ```
 
-The FLTK-based UI is usable within Python if you have the correct dependencies, and activate the "ui" feature:
-
-```bash
-cd py-rgrow
-maturin develop --release -F ui -- -C target-cpu=native
-```
-
-## Rust / CLI
-
-Note that the rust version currently requires Rust nightly.  This should change soon.
-
-```bash
-cargo install rgrow
-```
+The UI used to have specific extra build instructions, but it should now just work.
