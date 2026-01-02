@@ -13,6 +13,8 @@ Rgrow Python interface documentation
    reference/tileset
    reference/simulation
    reference/ffs
+   reference/models
+   api/rgrow
 
 Indices and tables
 ==================

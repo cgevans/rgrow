@@ -13,7 +13,7 @@
 project = "Rgrow"
 copyright = "2023, Constantine Evans"
 author = "Constantine Evans"
-release = "0.12.2"
+release = "0.21.1"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -35,12 +35,11 @@ extensions = [
     # ----------------------
     # third-party extensions
     # ----------------------
-    "autodocsumm",
     "numpydoc",
     # "sphinx_autosummary_accessors",
-    "sphinx_copybutton",
-    "sphinx_design",
-    "sphinx_favicon",
+    "sphinx_autodoc_typehints",
+    # "sphinx_copybutton",
+    # "sphinx_favicon",
 ]
 
 templates_path = ["_templates"]  # , sphinx_autosummary_accessors.templates_path]
@@ -57,6 +56,9 @@ html_static_path = ["_static"]
 
 autosummary_generate = True
 numpydoc_show_class_members = False
+
+typehints_defaults = "comma"
+always_use_bars_union = True
 
 intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),

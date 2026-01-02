@@ -14,11 +14,6 @@ dependencies = [
 requires-python = ">=3.10"
 dynamic = ["version"]
 
-[project.optional-dependencies]
-testing = [
-    "pytest",
-    "hypothesis",
-]
 
 [tool.uv.sources]
 rgrow-gui = { workspace = true }
@@ -45,6 +40,12 @@ dev = [
     "pytest~=9.0",
     "hypothesis",
     "pytest-cov",
+]
+docs = [
+    "numpydoc~=1.10",
+    "sphinx>=7.0",
+    "pydata_sphinx_theme~=0.16",
+    "sphinx_autodoc_typehints"
 ]
 
 [tool.pytest]
