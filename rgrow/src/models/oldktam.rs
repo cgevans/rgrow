@@ -32,6 +32,9 @@ use crate::{
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
+#[cfg(feature = "python")]
+use numpy::ToPyArray;
+
 type Cache = SizedCache<(Tile, Tile, Tile, Tile), f64>;
 
 #[derive(Debug)]
@@ -139,17 +142,17 @@ impl OldKTAM {
 
     #[getter(energy_we)]
     fn py_get_energy_we<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
-        numpy::IntoPyArray::into_pyarray(self.energy_we.clone(), py)
+        self.energy_we.to_pyarray(py)
     }
 
     #[getter(energy_ns)]
     fn py_get_energy_ns<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
-        numpy::IntoPyArray::into_pyarray(self.energy_ns.clone(), py)
+        self.energy_ns.to_pyarray(py)
     }
 
     #[getter(tile_adj_concs)]
     fn py_get_tile_concs<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray1<f64>> {
-        numpy::IntoPyArray::into_pyarray(self.tile_adj_concs.clone(), py)
+        self.tile_adj_concs.to_pyarray(py)
     }
 
     #[staticmethod]

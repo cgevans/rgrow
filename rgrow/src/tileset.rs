@@ -119,8 +119,9 @@ pub enum TileShape {
 }
 
 #[cfg(feature = "python")]
-impl FromPyObject<'_> for TileShape {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for TileShape {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
         let s = ob.extract::<String>()?;
         match s.to_lowercase().as_str() {
             "single" | "s" => Ok(Self::Single),
@@ -457,8 +458,9 @@ pub enum CanvasType {
 }
 
 #[cfg(feature = "python")]
-impl FromPyObject<'_> for CanvasType {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for CanvasType {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
         let s: &str = ob.extract()?;
         CanvasType::try_from(s)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))

@@ -96,8 +96,9 @@ impl Display for ConfigRetentionMode {
 }
 
 #[cfg(feature = "python")]
-impl FromPyObject<'_> for ConfigRetentionMode {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for ConfigRetentionMode {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
         let s: &str = ob.extract()?;
         ConfigRetentionMode::try_from(s)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))

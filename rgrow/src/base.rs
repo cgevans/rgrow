@@ -5,7 +5,7 @@ use std::any::Any;
 #[cfg(feature = "python")]
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
 #[cfg(feature = "python")]
-use pyo3::{types::PyAnyMethods, IntoPyObjectExt};
+use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
 use thiserror;
 
@@ -32,7 +32,7 @@ impl From<StringConvError> for pyo3::PyErr {
 }
 
 #[cfg(feature = "python")]
-use pyo3::{FromPyObject, IntoPyObject, PyErr, PyResult, Python};
+use pyo3::{Borrowed, FromPyObject, IntoPyObject, PyErr, Python};
 
 #[derive(Error, Debug)]
 pub enum GrowError {
@@ -148,8 +148,9 @@ pub type TileIdent = Ident;
 pub struct RustAny(pub Box<dyn Any>);
 
 #[cfg(feature = "python")]
-impl FromPyObject<'_> for RustAny {
-    fn extract_bound(obj: &pyo3::Bound<'_, pyo3::PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for RustAny {
+    type Error = PyErr;
+    fn extract(obj: Borrowed<'_, '_, pyo3::PyAny>) -> Result<Self, Self::Error> {
         if let Ok(val) = obj.extract::<u64>() {
             Ok(RustAny(Box::new(val)))
         } else if let Ok(val) = obj.extract::<f64>() {
