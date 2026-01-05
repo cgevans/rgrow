@@ -1288,49 +1288,40 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     /// ```rust,no_run
     /// # use rgrow::system::DynSystem;
     /// # use rgrow::state::StateEnum;
-    /// # fn example(system: &dyn DynSystem, state: &StateEnum) -> Result<(), Box<dyn std::error::Error>> {
-    /// // Test at 95% confidence, no confidence interval returned
-    /// let (is_above, prob, ci, trials, exceeded) = system.calc_committer_threshold_test(
+    /// # fn example(system: &mut dyn DynSystem, state: &StateEnum) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Test at 95% confidence
+    /// let (is_above, prob, trials, exceeded) = system.calc_committer_threshold_test(
     ///     state,
     ///     10,      // cutoff_size
     ///     0.5,     // threshold
-    ///     0.95,    // confidence_level
+    ///     0.95,    // z_level
     ///     None,    // max_time
     ///     None,    // max_events
     ///     None,    // max_trials (default: 100,000)
     ///     false,   // return_on_max_trials
-    ///     None,    // ci_confidence_level (no CI returned)
     /// )?;
     ///
     /// println!("Probability {} threshold 0.5", if is_above { "above" } else { "below" });
     /// println!("Estimate: {:.4}, Trials: {}", prob, trials);
-    /// assert!(ci.is_none());
     ///
-    /// // Test at 95% confidence, show 99% confidence interval
-    /// let (is_above, prob, ci, trials, exceeded) = system.calc_committer_threshold_test(
+    /// // Test with max_trials limit
+    /// let (is_above, prob, trials, exceeded) = system.calc_committer_threshold_test(
     ///     state,
     ///     10,         // cutoff_size
     ///     0.5,        // threshold
-    ///     0.95,       // confidence_level (for test)
+    ///     0.95,       // z_level
     ///     None,       // max_time
     ///     None,       // max_events
     ///     Some(1000), // max_trials
     ///     true,       // return_on_max_trials
-    ///     Some(0.99), // ci_confidence_level (99% CI)
     /// )?;
     ///
-    /// if let Some((lower, upper)) = ci {
-    ///     println!("99% CI: ({:.4}, {:.4})", lower, upper);
-    /// }
     /// if exceeded {
     ///     println!("WARNING: Max trials exceeded!");
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// The confidence interval returned (if requested) uses the `ci_confidence_level` parameter,
-    /// which can be different from the `confidence_level` used for the threshold test.
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
     fn calc_committer_threshold_test(
