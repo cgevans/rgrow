@@ -45,6 +45,7 @@ dev = [
     "pytest~=9.0",
     "hypothesis",
     "pytest-cov",
+    "maturin>=1.11.2",
 ]
 
 [tool.pytest]
