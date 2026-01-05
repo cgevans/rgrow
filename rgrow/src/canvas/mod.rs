@@ -1,3 +1,10 @@
+use std::ops::Mul;
+
+use crate::{
+    painter::SpriteSquare,
+    system::{System, TileBondInfo},
+};
+
 use super::base::{GrowResult, NumTiles, Point, Tile};
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
@@ -294,6 +301,32 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
         for (p, v) in Iterator::zip(frame.chunks_exact_mut(4), self.raw_array().iter()) {
             let color = colors[*v as usize];
             p.copy_from_slice(&color);
+        }
+    }
+
+    /// Draw some sprite to some location in the canvas
+    fn draw_sprite(
+        &self,
+        frame: &mut [u8],
+        // Tile style
+        tile_style: SpriteSquare,
+        // Canvas size
+        // Where in the canvas the tile is
+        pos: PointSafeHere,
+    ) {
+        let (y, x) = pos.0;
+        let pixels = tile_style.pixels;
+        let tile_size = tile_style.size;
+
+        let tile_width_bytes = tile_size * 4;
+
+        let tile_nbytes = tile_size.pow(2) * 4;
+        let row_nbytes = self.ncols() * tile_nbytes;
+
+        let idx = row_nbytes * y + tile_width_bytes * x;
+        for (e, pixel_row) in pixels.chunks(tile_width_bytes).enumerate() {
+            let from = idx + (e * tile_width_bytes * self.ncols());
+            frame[from..from + tile_width_bytes].copy_from_slice(pixel_row);
         }
     }
 

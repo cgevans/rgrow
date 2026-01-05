@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     base::{Glue, GrowError, HashSetType},
     canvas::{PointSafe2, PointSafeHere},
+    painter::TileStyle,
     state::State,
     system::{DimerInfo, Event, FissionHandling, Orientation, System, TileBondInfo},
     type_alias,
@@ -910,6 +911,21 @@ impl TileBondInfo for KBlock {
         self.tile_colors[usize::from(tile_index(tileid.into()))]
     }
 
+    fn tile_style(&self, tile_number: crate::base::Tile) -> TileStyle {
+        let base_color = self.tile_color(tile_number);
+        let mut tri_colors = [base_color; 4];
+
+        // Make covered sides red
+        ALL_SIDES.iter().for_each(|side| {
+            let indec = side_index(*side).unwrap();
+            if tile_number & side != 0 {
+                tri_colors[indec] = [200; 4];
+            }
+        });
+
+        TileStyle { tri_colors }
+    }
+
     fn tile_name(&self, tileid: u32) -> &str {
         self.tile_names[usize::from(tile_index(tileid.into()))].as_str()
     }
@@ -1586,8 +1602,6 @@ impl From<KBlockParams> for KBlock {
             .flat_map(|tile| {
                 let mut colors = Vec::with_capacity(16);
                 colors.push(tile.color);
-                // Gray color: [128, 128, 128, 255]
-                colors.extend(std::iter::repeat_n([128, 128, 128, 255], 15));
                 colors
             })
             .collect::<Vec<_>>();

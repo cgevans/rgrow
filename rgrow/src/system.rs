@@ -13,9 +13,12 @@ use crate::ffs::FFSRunConfig;
 use crate::ffs::FFSRunResult;
 use crate::models::atam::ATAM;
 use crate::models::kblock::KBlock;
+use crate::models::kblock::TileState;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
+use crate::painter::SpriteSquare;
+use crate::painter::TileStyle;
 use crate::state::State;
 use crate::state::StateEnum;
 use crate::state::StateStatus;
@@ -715,6 +718,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             "Unknown".to_string()
         }
     }
+
     fn evolve_in_window<St: State>(
         &mut self,
         state: &mut St,
@@ -958,20 +962,16 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
             let pixel_frame = &mut frame_buffer[..];
 
-            if scale != 1 {
-                if edge_size == 0 {
-                    state.draw_scaled(pixel_frame, &tile_colors_vec, tile_size, edge_size);
-                } else {
-                    state.draw_scaled_with_mm(
-                        pixel_frame,
-                        &tile_colors_vec,
-                        self.calc_mismatch_locations(state),
-                        tile_size,
-                        edge_size,
-                    );
+            for y in 0..state.nrows() {
+                for x in 0..state.ncols() {
+                    let tileid = unsafe { state.uv_p((y, x)) };
+                    if tileid == 0 {
+                        continue;
+                    }
+
+                    let sprite = self.tile_pixels(tileid, scale);
+                    state.draw_sprite(pixel_frame, sprite, PointSafeHere((y, x)));
                 }
-            } else {
-                state.draw(pixel_frame, &tile_colors_vec);
             }
 
             let notification = UpdateNotification {
@@ -1949,6 +1949,19 @@ pub trait TileBondInfo {
     fn tile_colors(&self) -> &Vec<[u8; 4]>;
     fn tile_names(&self) -> Vec<&str>;
     fn bond_names(&self) -> Vec<&str>;
+
+    /// By default, we will make a tile be just a solid clor, but a system may override this to
+    /// customize how a tile looks.
+    fn tile_style(&self, tile_number: Tile) -> TileStyle {
+        let color = self.tile_color(tile_number);
+        let tri_colors = [color, color, color, color];
+        TileStyle { tri_colors }
+    }
+
+    /// Turn the tile into a sprite
+    fn tile_pixels(&self, tile_number: Tile, size: usize) -> SpriteSquare {
+        self.tile_style(tile_number).as_sprite(size)
+    }
 }
 
 pub trait SystemInfo {
