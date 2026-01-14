@@ -249,13 +249,18 @@ impl SDC {
     }
 
     fn update_monomer_point<S: State>(&self, state: &mut S, scaffold_point: &PointSafe2) {
-        let points = [
-            state.move_sa_w(*scaffold_point),
-            state.move_sa_e(*scaffold_point),
-            PointSafeHere(scaffold_point.0),
-        ]
-        .map(|point| (point, self.event_rate_at_point(state, point)));
+        let mut points = Vec::with_capacity(3);
 
+        let pw = state.move_sa_w(*scaffold_point);
+        if state.inbounds(pw.0) {
+            points.push((pw, self.event_rate_at_point(state, pw)));
+        }
+        let pe = state.move_sa_e(*scaffold_point);
+        if state.inbounds(pe.0) {
+            points.push((pe, self.event_rate_at_point(state, pe)));
+        }
+        let ph = PointSafeHere(scaffold_point.0);
+        points.push((ph, self.event_rate_at_point(state, ph)));
         state.update_multiple(&points);
     }
 
