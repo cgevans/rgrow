@@ -1,6 +1,7 @@
 use super::base::*;
 use crate::canvas::{
-    Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals,
+    Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasSquareCompact, CanvasTube,
+    CanvasTubeDiagonals,
 };
 use crate::tileset::{CanvasType, TrackingType};
 use crate::units::{PerSecond, Second};
@@ -53,26 +54,31 @@ impl_clonable_state! {
     (CanvasPeriodic, NullStateTracker) => PeriodicCanvasNoTracker,
     (CanvasTube, NullStateTracker) => TubeNoTracking,
     (CanvasTubeDiagonals, NullStateTracker) => TubeDiagonalsNoTracking,
+    (CanvasSquareCompact, NullStateTracker) => SquareCompactNoTracking,
 
     (CanvasSquare, OrderTracker) => SquareOrderTracking,
     (CanvasPeriodic, OrderTracker) => PeriodicOrderTracking,
     (CanvasTube, OrderTracker) => TubeOrderTracking,
     (CanvasTubeDiagonals, OrderTracker) => TubeDiagonalsOrderTracking,
+    (CanvasSquareCompact, OrderTracker) => SquareCompactOrderTracking,
 
     (CanvasSquare, LastAttachTimeTracker) => SquareLastAttachTimeTracking,
     (CanvasPeriodic, LastAttachTimeTracker) => PeriodicLastAttachTimeTracking,
     (CanvasTube, LastAttachTimeTracker) => TubeLastAttachTimeTracking,
     (CanvasTubeDiagonals, LastAttachTimeTracker) => TubeDiagonalsLastAttachTimeTracking,
+    (CanvasSquareCompact, LastAttachTimeTracker) => SquareCompactLastAttachTimeTracking,
 
     (CanvasSquare, PrintEventTracker) => SquarePrintEventTracking,
     (CanvasPeriodic, PrintEventTracker) => PeriodicPrintEventTracking,
     (CanvasTube, PrintEventTracker) => TubePrintEventTracking,
     (CanvasTubeDiagonals, PrintEventTracker) => TubeDiagonalsPrintEventTracking,
+    (CanvasSquareCompact, PrintEventTracker) => SquareCompactPrintEventTracking,
 
     (CanvasSquare, MovieTracker) => SquareMovieTracking,
     (CanvasPeriodic, MovieTracker) => PeriodicMovieTracking,
     (CanvasTube, MovieTracker) => TubeMovieTracking,
-    (CanvasTubeDiagonals, MovieTracker) => TubeDiagonalsMovieTracking
+    (CanvasTubeDiagonals, MovieTracker) => TubeDiagonalsMovieTracking,
+    (CanvasSquareCompact, MovieTracker) => SquareCompactMovieTracking
 }
 
 #[enum_dispatch(
@@ -92,22 +98,27 @@ pub enum StateEnum {
     PeriodicCanvasNoTracker(QuadTreeState<CanvasPeriodic, NullStateTracker>),
     TubeNoTracking(QuadTreeState<CanvasTube, NullStateTracker>),
     TubeDiagonalsNoTracking(QuadTreeState<CanvasTubeDiagonals, NullStateTracker>),
+    SquareCompactNoTracking(QuadTreeState<CanvasSquareCompact, NullStateTracker>),
     SquareOrderTracking(QuadTreeState<CanvasSquare, OrderTracker>),
     PeriodicOrderTracking(QuadTreeState<CanvasPeriodic, OrderTracker>),
     TubeOrderTracking(QuadTreeState<CanvasTube, OrderTracker>),
     TubeDiagonalsOrderTracking(QuadTreeState<CanvasTubeDiagonals, OrderTracker>),
+    SquareCompactOrderTracking(QuadTreeState<CanvasSquareCompact, OrderTracker>),
     SquareLastAttachTimeTracking(QuadTreeState<CanvasSquare, LastAttachTimeTracker>),
     PeriodicLastAttachTimeTracking(QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>),
     TubeLastAttachTimeTracking(QuadTreeState<CanvasTube, LastAttachTimeTracker>),
     TubeDiagonalsLastAttachTimeTracking(QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>),
+    SquareCompactLastAttachTimeTracking(QuadTreeState<CanvasSquareCompact, LastAttachTimeTracker>),
     SquarePrintEventTracking(QuadTreeState<CanvasSquare, PrintEventTracker>),
     PeriodicPrintEventTracking(QuadTreeState<CanvasPeriodic, PrintEventTracker>),
     TubePrintEventTracking(QuadTreeState<CanvasTube, PrintEventTracker>),
     TubeDiagonalsPrintEventTracking(QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>),
+    SquareCompactPrintEventTracking(QuadTreeState<CanvasSquareCompact, PrintEventTracker>),
     SquareMovieTracking(QuadTreeState<CanvasSquare, MovieTracker>),
     PeriodicMovieTracking(QuadTreeState<CanvasPeriodic, MovieTracker>),
     TubeMovieTracking(QuadTreeState<CanvasTube, MovieTracker>),
     TubeDiagonalsMovieTracking(QuadTreeState<CanvasTubeDiagonals, MovieTracker>),
+    SquareCompactMovieTracking(QuadTreeState<CanvasSquareCompact, MovieTracker>),
 }
 
 impl StateEnum {
@@ -153,6 +164,7 @@ impl StateEnum {
             CanvasType::Periodic => match_tracking!(CanvasPeriodic),
             CanvasType::Tube => match_tracking!(CanvasTube),
             CanvasType::TubeDiagonals => match_tracking!(CanvasTubeDiagonals),
+            CanvasType::SquareCompact => match_tracking!(CanvasSquareCompact),
         })
     }
 
@@ -162,6 +174,7 @@ impl StateEnum {
             StateEnum::PeriodicMovieTracking(state) => Some(&state.tracker),
             StateEnum::TubeMovieTracking(state) => Some(&state.tracker),
             StateEnum::TubeDiagonalsMovieTracking(state) => Some(&state.tracker),
+            StateEnum::SquareCompactMovieTracking(state) => Some(&state.tracker),
             _ => None,
         }
     }
@@ -178,6 +191,9 @@ impl StateEnum {
                 Ok(StateEnum::TubeNoTracking(state.clone_empty_no_tracker()?))
             }
             StateEnum::TubeDiagonalsMovieTracking(state) => Ok(StateEnum::TubeDiagonalsNoTracking(
+                state.clone_empty_no_tracker()?,
+            )),
+            StateEnum::SquareCompactMovieTracking(state) => Ok(StateEnum::SquareCompactNoTracking(
                 state.clone_empty_no_tracker()?,
             )),
             _ => Err(GrowError::NotSupported(
@@ -569,9 +585,10 @@ where
     type C = C;
 
     fn empty(params: Self::Params) -> Result<Self, GrowError> {
-        let rates: QuadTreeSquareArray<PerSecond> =
-            QuadTreeSquareArray::new_with_size(params.0, params.1);
         let canvas = C::new_sized(params)?;
+        let needed_size = canvas.array_size_needed();
+        let rates: QuadTreeSquareArray<PerSecond> =
+            QuadTreeSquareArray::new_with_size(needed_size.0, needed_size.1);
         let tracker = T::default(&canvas);
         Ok(QuadTreeState::<C, T> {
             rates,
@@ -586,9 +603,12 @@ where
     }
 
     fn empty_with_types(params: Self::Params, n_tile_types: usize) -> Result<Self, GrowError> {
-        let rates: QuadTreeSquareArray<PerSecond> =
-            QuadTreeSquareArray::new_with_size(params.0, params.1);
         let canvas = C::new_sized(params)?;
+        println!("Canvas created with size: {:?}", params);
+        let needed_size = canvas.array_size_needed();
+        println!("Needed size: {:?}", needed_size);
+        let rates: QuadTreeSquareArray<PerSecond> =
+            QuadTreeSquareArray::new_with_size(needed_size.0, needed_size.1);
         let tracker = T::default(&canvas);
         Ok(QuadTreeState::<C, T> {
             rates,

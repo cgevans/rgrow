@@ -454,6 +454,8 @@ pub enum CanvasType {
     Tube,
     #[serde(alias = "tube-diagonals")]
     TubeDiagonals,
+    #[serde(alias = "square-compact")]
+    SquareCompact,
 }
 
 #[cfg(feature = "python")]
@@ -473,6 +475,7 @@ impl<'py> IntoPyObject<'py> for CanvasType {
             CanvasType::Periodic => "periodic".into_bound_py_any(py),
             CanvasType::Tube => "tube".into_bound_py_any(py),
             CanvasType::TubeDiagonals => "tube-diagonals".into_bound_py_any(py),
+            CanvasType::SquareCompact => "square-compact".into_bound_py_any(py),
         }
     }
 
@@ -500,7 +503,8 @@ impl TryFrom<&str> for CanvasType {
             "periodic" => Ok(CanvasType::Periodic),
             "tube" => Ok(CanvasType::Tube),
             "tube-diagonals" => Ok(CanvasType::TubeDiagonals),
-            _ => Err(StringConvError(format!("Unknown canvas type {value}.  Valid options are \"square\", \"periodic\", and \"tube\"."))),
+            "square-compact" | "squarecompact" => Ok(CanvasType::SquareCompact),
+            _ => Err(StringConvError(format!("Unknown canvas type {value}.  Valid options are \"square\", \"periodic\", \"tube\", \"tube-diagonals\", \"square-compact\"."))),
         }
     }
 }
