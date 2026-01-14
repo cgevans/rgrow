@@ -332,6 +332,10 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
     fn center(&self) -> PointSafe2 {
         PointSafe2((self.nrows() / 2, self.ncols() / 2))
     }
+
+    fn array_size_needed(&self) -> (usize, usize) {
+        (self.nrows(), self.ncols())
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -432,11 +436,11 @@ impl Canvas for CanvasSquare {
     }
 
     fn nrows_usable(&self) -> usize {
-        self.0.nrows() - 2
+        self.0.nrows() - 4
     }
 
     fn ncols_usable(&self) -> usize {
-        self.0.ncols() - 2
+        self.0.ncols() - 4
     }
 }
 
@@ -523,5 +527,117 @@ impl Canvas for CanvasPeriodic {
 
     fn ncols_usable(&self) -> usize {
         self.0.ncols()
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CanvasSquareCompact(Array2<Tile>);
+
+impl CanvasCreate for CanvasSquareCompact {
+    type Params = (usize, usize);
+
+    fn new_sized(shape: Self::Params) -> GrowResult<Self> {
+        Ok(Self(Array2::zeros((shape.0 + 4, shape.1 + 4))))
+    }
+
+    fn from_array(arr: Array2<Tile>) -> GrowResult<Self> {
+        Ok(Self(arr))
+    }
+}
+
+impl Canvas for CanvasSquareCompact {
+    #[inline(always)]
+    unsafe fn uv_pr(&self, p: Point) -> &Tile {
+        self.0.uget((p.0 + 2, p.1 + 2))
+    }
+
+    #[inline(always)]
+    unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {
+        self.0.uget_mut((p.0 + 2, p.1 + 2))
+    }
+
+    #[inline(always)]
+    fn inbounds(&self, p: Point) -> bool {
+        (p.0 < self.nrows_usable()) & (p.1 < self.ncols_usable())
+    }
+
+    #[inline(always)]
+    fn u_move_point_n(&self, p: Point) -> Point {
+        (p.0 - 1, p.1)
+    }
+
+    #[inline(always)]
+    fn u_move_point_e(&self, p: Point) -> Point {
+        (p.0, p.1 + 1)
+    }
+
+    #[inline(always)]
+    fn u_move_point_s(&self, p: Point) -> Point {
+        (p.0 + 1, p.1)
+    }
+
+    #[inline(always)]
+    fn u_move_point_w(&self, p: Point) -> Point {
+        (p.0, p.1 - 1)
+    }
+
+    #[inline(always)]
+    fn u_move_point_ne(&self, p: Point) -> Point {
+        (p.0 - 1, p.1 + 1)
+    }
+
+    #[inline(always)]
+    fn u_move_point_se(&self, p: Point) -> Point {
+        (p.0 + 1, p.1 + 1)
+    }
+
+    #[inline(always)]
+    fn u_move_point_sw(&self, p: Point) -> Point {
+        (p.0 + 1, p.1 - 1)
+    }
+
+    #[inline(always)]
+    fn u_move_point_nw(&self, p: Point) -> Point {
+        (p.0 - 1, p.1 - 1)
+    }
+
+    #[inline(always)]
+    fn calc_n_tiles(&self) -> NumTiles {
+        self.0.fold(0, |x, y| x + u32::from(*y != 0))
+    }
+
+    fn raw_array(&self) -> ArrayView2<'_, Tile> {
+        self.0
+            .slice(s![2..self.0.nrows() - 2, 2..self.0.ncols() - 2])
+    }
+
+    fn raw_array_mut(&mut self) -> ArrayViewMut2<'_, Tile> {
+        self.0
+            .slice_mut(s![2..self.0.nrows() - 2, 2..self.0.ncols() - 2])
+    }
+
+    fn nrows(&self) -> usize {
+        self.0.nrows() - 4
+    }
+
+    fn ncols(&self) -> usize {
+        self.0.ncols() - 4
+    }
+
+    fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
+        self.0
+            .fold(0, |x, y| x + u32::from(should_be_counted[*y as usize]))
+    }
+
+    fn nrows_usable(&self) -> usize {
+        self.0.nrows() - 4
+    }
+
+    fn ncols_usable(&self) -> usize {
+        self.0.ncols() - 4
+    }
+
+    fn array_size_needed(&self) -> (usize, usize) {
+        (self.0.nrows(), self.0.ncols())
     }
 }

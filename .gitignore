@@ -32,3 +32,4 @@ coverage.lcov
 **/.cargo/config.toml
 
 uv.lock
+*.lcov
