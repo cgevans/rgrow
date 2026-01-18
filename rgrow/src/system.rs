@@ -965,10 +965,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             for y in 0..state.nrows() {
                 for x in 0..state.ncols() {
                     let tileid = unsafe { state.uv_p((y, x)) };
-                    if tileid == 0 {
-                        continue;
-                    }
-
                     let sprite = self.tile_pixels(tileid, scale);
                     state.draw_sprite(pixel_frame, sprite, PointSafeHere((y, x)));
                 }
