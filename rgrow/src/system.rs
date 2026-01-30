@@ -773,9 +773,9 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         })?;
 
         let shm_size = (width * height * scale as u32 * scale as u32 * 4) as usize;
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "macos")))]
         let shm_path = format!("/dev/shm/rgrow-frame-{}", std::process::id());
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "macos"))]
         let shm_path = std::env::temp_dir()
             .join(format!("rgrow-frame-{}", std::process::id()))
             .to_string_lossy()
