@@ -6,6 +6,8 @@ use thiserror::Error;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
+pub type Color = [u8; 4];
+
 #[derive(Error, Debug)]
 pub enum ColorError {
     #[error("Invalid color name: {0}")]
