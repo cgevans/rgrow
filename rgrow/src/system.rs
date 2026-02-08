@@ -962,12 +962,9 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
             let pixel_frame = &mut frame_buffer[..];
 
-            for y in 0..state.nrows() {
-                for x in 0..state.ncols() {
-                    let tileid = unsafe { state.uv_p((y, x)) };
-                    let sprite = self.tile_pixels(tileid, scale);
-                    state.draw_sprite(pixel_frame, sprite, PointSafeHere((y, x)));
-                }
+            for ((y, x), &tileid) in state.raw_array().indexed_iter() {
+                let sprite = self.tile_pixels(tileid, scale);
+                state.draw_sprite(pixel_frame, sprite, PointSafeHere((y, x)));
             }
 
             let notification = UpdateNotification {
