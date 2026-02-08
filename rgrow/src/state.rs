@@ -2,6 +2,7 @@ use super::base::*;
 use crate::canvas::{
     Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals,
 };
+use crate::painter::SpriteSquare;
 use crate::tileset::{CanvasType, TrackingType};
 use crate::units::{PerSecond, Second};
 use crate::{
@@ -537,27 +538,6 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
         self.canvas.draw(frame, colors)
     }
 
-    fn draw_scaled_with_mm(
-        &self,
-        frame: &mut [u8],
-        colors: &[[u8; 4]],
-        mismatches: Array2<usize>,
-        tile_size: usize,
-        edge_size: usize,
-    ) {
-        self.canvas
-            .draw_scaled_with_mm(frame, colors, mismatches, tile_size, edge_size)
-    }
-
-    fn draw_scaled(
-        &self,
-        frame: &mut [u8],
-        colors: &[[u8; 4]],
-        tile_size: usize,
-        edge_size: usize,
-    ) {
-        self.canvas.draw_scaled(frame, colors, tile_size, edge_size)
-    }
 }
 
 impl<C, T> StateWithCreate for QuadTreeState<C, T>

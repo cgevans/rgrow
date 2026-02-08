@@ -1,3 +1,10 @@
+use std::ops::Mul;
+
+use crate::{
+    painter::SpriteSquare,
+    system::{System, TileBondInfo},
+};
+
 use super::base::{GrowResult, NumTiles, Point, Tile};
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
@@ -297,96 +304,29 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
         }
     }
 
-    fn draw_scaled(
+    /// Draw some sprite to some location in the canvas
+    fn draw_sprite(
         &self,
         frame: &mut [u8],
-        colors: &[[u8; 4]],
-        tile_size: usize,
-        edge_size: usize,
+        // Tile style
+        tile_style: SpriteSquare,
+        // Canvas size
+        // Where in the canvas the tile is
+        pos: PointSafeHere,
     ) {
-        let scale = tile_size + 2 * edge_size;
-        let csc = self.ncols() * scale;
+        let (y, x) = pos.0;
+        let pixels = tile_style.pixels;
+        let tile_size = tile_style.size;
 
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let framex = i % csc;
-            let framey = i / csc;
+        let tile_width_bytes = tile_size * 4;
 
-            let x = framex / scale;
-            let y = framey / scale;
+        let tile_nbytes = tile_size.pow(2) * 4;
+        let row_nbytes = self.ncols() * tile_nbytes;
 
-            let blockx = framex % scale;
-            let blocky = framey % scale;
-
-            let tv = unsafe { self.uv_p((y, x)) };
-
-            pixel.copy_from_slice(
-                &(if (tv > 0)
-                    & (blockx + 1 > edge_size)
-                    & (blocky + 1 > edge_size)
-                    & (blockx < edge_size + tile_size)
-                    & (blocky < edge_size + tile_size)
-                {
-                    colors[tv as usize]
-                } else {
-                    [0, 0, 0, 0x00]
-                }),
-            );
-        }
-    }
-
-    fn draw_scaled_with_mm(
-        &self,
-        frame: &mut [u8],
-        colors: &[[u8; 4]],
-        mismatches: Array2<usize>,
-        tile_size: usize,
-        edge_size: usize,
-    ) {
-        let scale = tile_size + 2 * edge_size;
-        let csc = self.ncols() * scale;
-
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let framex = i % csc;
-            let framey = i / csc;
-
-            let x = framex / scale;
-            let y = framey / scale;
-
-            let blockx = framex % scale;
-            let blocky = framey % scale;
-
-            let tv = unsafe { self.uv_p((y, x)) };
-
-            pixel.copy_from_slice(
-                &(if (tv > 0)
-                    & (blockx + 1 > edge_size)
-                    & (blocky + 1 > edge_size)
-                    & (blockx < edge_size + tile_size)
-                    & (blocky < edge_size + tile_size)
-                {
-                    colors[tv as usize]
-                } else if ((blockx < edge_size)
-                    & (blocky + 1 > edge_size)
-                    & (blocky < edge_size + tile_size)
-                    & (mismatches[(y, x)] & 0b0001 == 0b0001))
-                    | ((blockx >= edge_size + tile_size)
-                        & (blocky + 1 > edge_size)
-                        & (blocky < edge_size + tile_size)
-                        & (mismatches[(y, x)] & 0b0100 == 0b0100))
-                    | ((blocky < edge_size)
-                        & (blockx + 1 > edge_size)
-                        & (blockx < edge_size + tile_size)
-                        & (mismatches[(y, x)] & 0b1000 == 0b1000))
-                    | ((blocky >= edge_size + tile_size)
-                        & (blockx + 1 > edge_size)
-                        & (blockx < edge_size + tile_size)
-                        & (mismatches[(y, x)] & 0b010 == 0b010))
-                {
-                    [0xff, 0x00, 0x00, 0xff]
-                } else {
-                    [0, 0, 0, 0x00]
-                }),
-            );
+        let idx = row_nbytes * y + tile_width_bytes * x;
+        for (e, pixel_row) in pixels.chunks(tile_width_bytes).enumerate() {
+            let from = idx + (e * tile_width_bytes * self.ncols());
+            frame[from..from + tile_width_bytes].copy_from_slice(pixel_row);
         }
     }
 

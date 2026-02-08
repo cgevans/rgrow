@@ -1,3 +1,4 @@
+use iced::task::Handle;
 use iced::widget::{button, column, container, image, row, text, text_input};
 use iced::{window, Color, Element, Length, Size, Subscription, Task, Theme};
 use std::collections::HashMap;
@@ -147,11 +148,8 @@ impl RgrowGui {
                 } => {
                     let t0 = Instant::now();
                     let t1 = Instant::now();
-                    self.current_image = Some(image::Handle::from_rgba(
-                        frame_width,
-                        frame_height,
-                        frame_data,
-                    ));
+                    let handle = image::Handle::from_rgba(frame_width, frame_height, frame_data);
+                    self.current_image = Some(handle);
                     if debug_enabled() {
                         eprintln!(
                             "[GUI] image handle creation: {:?} ({}x{} = {} bytes)",
@@ -305,7 +303,9 @@ impl RgrowGui {
 
     fn view(&self) -> Element<'_, Message> {
         let image_widget: Element<Message> = if let Some(handle) = &self.current_image {
-            image(handle.clone())
+            image::viewer(handle.clone())
+                // The image can get blurry when you zoom in, this helps with that
+                .filter_method(image::FilterMethod::Nearest)
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .into()
