@@ -11,8 +11,8 @@ pyo3 = {version = "^0.27", features = ["extension-module", "multiple-pymethods"]
 rayon = { version = "1" }
 numpy = "^0.27.1"
 approx = "^0.5"
-pyo3-polars = {git = "https://github.com/pola-rs/polars", package = "pyo3-polars"}
-polars = {git = "https://github.com/pola-rs/polars", features = ["lazy", "parquet", "product", "timezones"]}
+pyo3-polars = "^0.26"
+polars = {version = "^0.53", features = ["lazy", "parquet", "product", "timezones"]}
 
 [workspace.package]
 version = "0.21.1"
