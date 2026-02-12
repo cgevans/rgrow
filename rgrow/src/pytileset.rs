@@ -133,15 +133,15 @@ impl TileSet {
                 self.create_state_with_system(&self.create_system()?)?,
             )),
             Some(x) => {
-                if let Ok(sys) = x.downcast::<KTAM>() {
+                if let Ok(sys) = x.cast::<KTAM>() {
                     Ok(PyState(
                         self.create_state_with_system(sys.borrow().deref())?,
                     ))
-                } else if let Ok(sys) = x.downcast::<ATAM>() {
+                } else if let Ok(sys) = x.cast::<ATAM>() {
                     Ok(PyState(
                         self.create_state_with_system(sys.borrow().deref())?,
                     ))
-                } else if let Ok(sys) = x.downcast::<OldKTAM>() {
+                } else if let Ok(sys) = x.cast::<OldKTAM>() {
                     Ok(PyState(
                         self.create_state_with_system(sys.borrow().deref())?,
                     ))

@@ -1488,8 +1488,9 @@ struct KBlockTile {
 }
 
 #[cfg(feature = "python")]
-impl pyo3::FromPyObject<'_> for KBlockTile {
-    fn extract_bound(ob: &pyo3::Bound<'_, pyo3::PyAny>) -> pyo3::PyResult<Self> {
+impl pyo3::FromPyObject<'_, '_> for KBlockTile {
+    type Error = pyo3::PyErr;
+    fn extract(ob: pyo3::Borrowed<'_, '_, pyo3::PyAny>) -> Result<Self, Self::Error> {
         use pyo3::prelude::*;
 
         let name: String = ob.getattr("name")?.extract()?;
