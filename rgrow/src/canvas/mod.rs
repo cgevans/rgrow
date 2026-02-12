@@ -309,13 +309,13 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
         &self,
         frame: &mut [u8],
         // Tile style
-        tile_style: SpriteSquare,
+        tile_style: &SpriteSquare,
         // Canvas size
         // Where in the canvas the tile is
         pos: PointSafeHere,
     ) {
         let (y, x) = pos.0;
-        let pixels = tile_style.pixels;
+        let pixels = &tile_style.pixels;
         let tile_size = tile_style.size;
 
         let tile_width_bytes = tile_size * 4;

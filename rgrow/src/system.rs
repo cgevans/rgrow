@@ -730,6 +730,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     ) -> Result<EvolveOutcome, RgrowError> {
         use crate::ui::ipc::{ControlMessage, InitMessage, UpdateNotification};
         use crate::ui::ipc_server::IpcClient;
+        use std::collections::HashMap;
         use std::process::{Command, Stdio};
         use std::time::{Duration, Instant};
 
@@ -845,6 +846,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
         let mut evres: EvolveOutcome = EvolveOutcome::ReachedZeroRate;
         let mut frame_buffer = vec![0u8; shm_size];
+        let mut sprite_cache: HashMap<Tile, SpriteSquare> = HashMap::new();
         let mut last_frame_time = Instant::now();
         let mut events_this_second: u64 = 0;
         let mut second_start = Instant::now();
@@ -954,8 +956,6 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             last_frame_time = Instant::now();
 
             // Draw frame
-            let edge_size = scale / 10;
-            let tile_size = scale - 2 * edge_size;
             let frame_width = (width * scale as u32) as usize;
             let frame_height = (height * scale as u32) as usize;
             frame_buffer.resize(frame_width * frame_height * 4, 0);
@@ -963,7 +963,9 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             let pixel_frame = &mut frame_buffer[..];
 
             for ((y, x), &tileid) in state.raw_array().indexed_iter() {
-                let sprite = self.tile_pixels(tileid, scale);
+                let sprite = sprite_cache
+                    .entry(tileid)
+                    .or_insert_with(|| self.tile_pixels(tileid, scale));
                 state.draw_sprite(pixel_frame, sprite, PointSafeHere((y, x)));
             }
 
