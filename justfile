@@ -163,3 +163,11 @@ cov-html:
 
 # Full coverage with HTML report
 cov-full: coverage cov-html
+
+# Serve docs locally with live reload
+docs-serve:
+    source .venv/bin/activate && mkdocs serve
+
+# Build docs site
+docs-build:
+    source .venv/bin/activate && mkdocs build

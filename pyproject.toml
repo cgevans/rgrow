@@ -14,11 +14,6 @@ dependencies = [
 requires-python = ">=3.10"
 dynamic = ["version"]
 
-[project.optional-dependencies]
-testing = [
-    "pytest",
-    "hypothesis",
-]
 
 [build-system]
 requires = ["maturin~=1.10"]
@@ -39,6 +34,16 @@ rgrow-cli = { workspace = true }
 members = [".", "rgrow-cli"]
 
 [dependency-groups]
+testing = [
+    "pytest",
+    "hypothesis",
+]
+docs = [
+    "mkdocs-material",
+    "mkdocs-jupyter",
+    "mkdocstrings[python]",
+    "mkdocs-bibtex",
+]
 dev = [
     "ipykernel>=6.31.0",
     "ipywidgets>=8.1.8",

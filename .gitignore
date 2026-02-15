@@ -33,3 +33,4 @@ coverage.lcov
 
 uv.lock
 *.lcov
+site/
