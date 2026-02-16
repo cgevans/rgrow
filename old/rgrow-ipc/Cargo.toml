@@ -1,0 +1,15 @@
+[package]
+name = "rgrow-ipc"
+version = "0.22.0"
+description = "DEPRECATED: Merged into rgrow. Use rgrow instead."
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+categories.workspace = true
+readme = "README.md"
+
+[badges]
+maintenance = { status = "deprecated" }
+
+[dependencies]

@@ -1,0 +1,14 @@
+tile edges matches {{N E S W}*}
+num tile types=4
+num binding types=4
+tile edges={
+{1 4 0 4}[.4](green)
+{2 4 0 4}[.4](cyan)
+{2 3 2 3}(red)
+{1 3 1 3}(blue)
+}
+binding strengths=
+{1 1 1 2}
+seed=130,130,1
+Gse=8.6
+Gmc=17

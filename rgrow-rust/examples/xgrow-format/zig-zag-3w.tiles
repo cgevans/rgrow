@@ -1,0 +1,20 @@
+% 3 wide zig-zag boundary 
+num tile types=6
+num binding types=10
+tile edges={
+{7 2 3 8}(yellow)	% Tile 1
+{4 5 0 9}(magenta)	% Tile 2
+{1 8 4 2}(orange)	% Tile 3
+{3 9 0 5}(purple)	% Tile 4
+{0 10 1 6}(dark green)	% Tile 5
+{0 6 7 10}(green)	% Tile 6
+}
+binding strengths=
+{1 1 1 1 1 1 1 1 2 2}
+size=32
+block=8
+seed=16,16,5
+doubletile=5,6
+doubletile=4,2
+wander
+periodic

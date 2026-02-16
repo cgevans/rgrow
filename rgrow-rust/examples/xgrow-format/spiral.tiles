@@ -1,0 +1,32 @@
+tile edges matches {{N E S W}*}
+num tile types=14
+num binding types=17
+binding type names=
+  { seedN edgeN edgeE edgeS edgeW sideN sideE sideS sideW addN addE addS addW growN growE growS growW }
+tile edges={
+{seedN edgeE edgeS sideW}
+{sideN addE  seedN edgeW}
+
+{sideN growN addN  edgeW}
+{sideN growN sideN growN}
+{sideN addE  edgeN growN}
+
+{edgeN sideE growE addE }
+{growE sideE growE sideE}
+{growE sideE addS  edgeE}
+
+{addS  edgeE sideS growS}
+{sideS growS sideS growS}
+{edgeS growS sideS addW }
+
+{growW addW  edgeS sideW}
+{growW sideW growW sideW}
+{addN  edgeW growW sideW}
+}
+binding strengths={2   1 1 1 1   1 1 1 1   2 2 2 2   1 1 1 1}
+seed=30,30,1
+size=64
+block=10
+Gse=10
+Gmc=19
+update_rate=100

@@ -1,0 +1,158 @@
+# The counter system from Barish et al, 2009. This is the version with the
+# non-orthogonal glue strengths removed.
+bonds:
+- {name: origami, strength: 1}
+- {name: Z7Z8_db, strength: 0}
+- {name: Z5Z6_db, strength: 0}
+tiles:
+- color: white
+  edges: [origami, origami, origami, origami]
+  name: origami
+  stoic: 0
+- color: white
+  edges: [origami, in1, in1, origami]
+  name: AT-16-fake
+  stoic: 0
+- color: white
+  edges: [origami, in1, in1, origami]
+  name: AT-15-fake
+  stoic: 0
+- color: white
+  edges: [origami, gray1, ogreen1, origami]
+  name: AT-14
+  stoic: 0
+- color: white
+  edges: [origami, blue5, blue3, origami]
+  name: AT-13
+  stoic: 0
+- color: white
+  edges: [origami, blue2, green1, origami]
+  name: AT-12
+  stoic: 0
+- color: white
+  edges: [origami, blue5, blue3, origami]
+  name: AT-11
+  stoic: 0
+- color: white
+  edges: [origami, blue2, green1, origami]
+  name: AT-10
+  stoic: 0
+- color: white
+  edges: [origami, blue5, blue3, origami]
+  name: AT-9
+  stoic: 0
+- color: white
+  edges: [origami, blue2, green1, origami]
+  name: AT-8
+  stoic: 0
+- color: white
+  edges: [origami, blue5, blue3, origami]
+  name: AT-7
+  stoic: 0
+- color: white
+  edges: [origami, blue2, green1, origami]
+  name: AT-6
+  stoic: 0
+- color: white
+  edges: [origami, blue5, blue3, origami]
+  name: AT-5
+  stoic: 0
+- color: white
+  edges: [origami, blue2, green1, origami]
+  name: AT-4
+  stoic: 0
+- color: white
+  edges: [origami, brown5, brown3, origami]
+  name: AT-3
+  stoic: 0
+- color: white
+  edges: [origami, brown2, black1, origami]
+  name: AT-2
+  stoic: 0
+- color: white
+  edges: [origami, pink1, hp2, origami]
+  name: AT-1
+  stoic: 0
+- color: blue
+  edges: [green1, blue4, blue1, blue5]
+  name: Z9
+- color: blue
+  edges: [blue1, blue2, green1, blue6]
+  name: Z12V
+- color: light blue
+  edges: [blue3, blue6, green2, blue2]
+  name: Z10V
+- color: blue
+  edges: [green2, blue5, blue3, blue4]
+  name: Z11
+- color: orange
+  edges: [green1, red4, red1, red5]
+  name: ZB
+- color: orange
+  edges: [red1, red2, green1, red6]
+  name: ZDV
+- color: orange
+  edges: [red3, red6, green2, red2]
+  name: ZCV
+- color: orange
+  edges: [green2, red5, red3, red4]
+  name: ZA
+- color: pink
+  edges: [ogreen1, blue4, blue7, red5]
+  name: ZG
+- color: pink
+  edges: [blue7, blue2, ogreen1, red6]
+  name: ZE
+- color: green
+  edges: [ogreen1, red4, red7, blue5]
+  name: ZF
+- color: green
+  edges: [red7, red2, green1, blue6]
+  name: ZH
+- color: red
+  edges: [hp1, in2, gray1, ogreen1, green2, gray1]
+  name: Z7Z8
+  shape: H
+- color: brown
+  edges: [green1, brown4, brown1, brown5]
+  name: Z1
+- color: brown
+  edges: [brown1, brown2, black1, brown6]
+  name: Z4
+- color: brown
+  edges: [brown3, brown6, black2, brown2]
+  name: Z2
+- color: brown
+  edges: [green2, brown5, brown3, brown4]
+  name: Z3
+- color: red
+  edges: [black1, black2, pink1, hp2, bl1, pink1]
+  name: Z5Z6
+  shape: H
+xgrowargs:
+  Gmc: 16
+  Gse: 8.05
+  alpha: 0
+  seed:
+  - [2,17,2]
+  - [3,16,3]
+  - [4,15,4]
+  - [5,14,5]
+  - [6,13,6]
+  - [7,12,7]
+  - [8,11,8]
+  - [9,10,9]
+  - [10,9,10]
+  - [11,8,11]
+  - [12,7,12]
+  - [13,6,13]
+  - [14,5,14]
+  - [15,4,15]
+  - [16,3,16]
+  - [17,2,17]
+  size: [28, 128]
+  fission: keep-seeded
+  canvas_type: periodic 
+  threshold: 2
+  model: aTAM
+  # Or ATAM!

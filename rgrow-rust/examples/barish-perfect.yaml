@@ -1,0 +1,256 @@
+# The counter system from Barish et al, 2009. This is the version with the
+# non-orthogonal glue strengths removed.
+bonds:
+- {name: origami, strength: 0}
+- {name: Z7Z8_db, strength: 0}
+- {name: Z5Z6_db, strength: 0}
+- {name: hp1, strength: 0}
+- {name: hp1*, strength: 0}
+- {name: bl1, strength: 0}
+- {name: bl1*, strength: 0}
+- {name: hp2, strength: 0}
+- {name: hp2*, strength: 0}
+- {name: in1, strength: 0}
+- {name: in1*, strength: 0}
+- {name: in2, strength: 0}
+- {name: in2*, strength: 0}
+- {name: green1, strength: 0}
+- {name: green1*, strength: 0}
+- {name: green2, strength: 0}
+- {name: green2*, strength: 0}
+- {name: black1, strength: 0}
+- {name: black1*, strength: 0}
+- {name: black2, strength: 0}
+- {name: black2*, strength: 0}
+- {name: gray1, strength: 0}
+- {name: gray1*, strength: 0}
+- {name: pink1, strength: 0}
+- {name: pink1*, strength: 0}
+- {name: blue1, strength: 0}
+- {name: blue1*, strength: 0}
+- {name: blue2, strength: 0}
+- {name: blue2*, strength: 0}
+- {name: blue3, strength: 0}
+- {name: blue3*, strength: 0}
+- {name: blue4, strength: 0}
+- {name: blue4*, strength: 0}
+- {name: blue5, strength: 0}
+- {name: blue5*, strength: 0}
+- {name: blue6, strength: 0}
+- {name: blue6*, strength: 0}
+- {name: blue7, strength: 0}
+- {name: blue7*, strength: 0}
+- {name: red1, strength: 0}
+- {name: red1*, strength: 0}
+- {name: red2, strength: 0}
+- {name: red2*, strength: 0}
+- {name: red3, strength: 0}
+- {name: red3*, strength: 0}
+- {name: red4, strength: 0}
+- {name: red4*, strength: 0}
+- {name: red5, strength: 0}
+- {name: red5*, strength: 0}
+- {name: red6, strength: 0}
+- {name: red6*, strength: 0}
+- {name: red7, strength: 0}
+- {name: red7*, strength: 0}
+- {name: brown1, strength: 0}
+- {name: brown1*, strength: 0}
+- {name: brown2, strength: 0}
+- {name: brown2*, strength: 0}
+- {name: brown3, strength: 0}
+- {name: brown3*, strength: 0}
+- {name: brown4, strength: 0}
+- {name: brown4*, strength: 0}
+- {name: brown5, strength: 0}
+- {name: brown5*, strength: 0}
+- {name: brown6, strength: 0}
+- {name: brown6*, strength: 0}
+- {name: ogreen1, strength: 0}
+- {name: ogreen1*, strength: 0}
+glues:
+- [green1, green1*, 1]
+- [black1, black1*, 1]
+- [blue3, blue3*, 1]
+- [blue4, blue4*, 1]
+- [blue6, blue6*, 1]
+- [red3, red3*, 1]
+- [red4, red4*, 1]
+- [red6, red6*, 1]
+- [brown3, brown3*, 1]
+- [brown4, brown4*, 1]
+- [brown6, brown6*, 1]
+- [ogreen1, ogreen1*, 1]
+- [green2, green2*, 1]
+- [black2, black2*, 1]
+- [gray1, gray1*, 1]
+- [pink1, pink1*, 1]
+- [blue1, blue1*, 1]
+- [blue2, blue2*, 1]
+- [blue5, blue5*, 1]
+- [blue7, blue7*, 1]
+- [red1, red1*, 1]
+- [red2, red2*, 1]
+- [red5, red5*, 1]
+- [red7, red7*, 1]
+- [brown1, brown1*, 1]
+- [brown2, brown2*, 1]
+- [brown5, brown5*, 1]
+- [blue4, red5*, 1]
+- [blue4*, red5, 1]
+tiles:
+- color: white
+  edges: [origami, origami, origami, origami]
+  name: origami
+  stoic: 0
+- color: white
+  edges: [origami, in1, in1, origami]
+  name: AT-16-fake
+  stoic: 0
+- color: white
+  edges: [origami, in1, in1, origami]
+  name: AT-15-fake
+  stoic: 0
+- color: white
+  edges: [origami, gray1, ogreen1*, origami]
+  name: AT-14
+  stoic: 0
+- color: white
+  edges: [origami, blue5, blue3*, origami]
+  name: AT-13
+  stoic: 0
+- color: white
+  edges: [origami, blue2, green1*, origami]
+  name: AT-12
+  stoic: 0
+- color: white
+  edges: [origami, blue5, blue3*, origami]
+  name: AT-11
+  stoic: 0
+- color: white
+  edges: [origami, blue2, green1*, origami]
+  name: AT-10
+  stoic: 0
+- color: white
+  edges: [origami, blue5, blue3*, origami]
+  name: AT-9
+  stoic: 0
+- color: white
+  edges: [origami, blue2, green1*, origami]
+  name: AT-8
+  stoic: 0
+- color: white
+  edges: [origami, blue5, blue3*, origami]
+  name: AT-7
+  stoic: 0
+- color: white
+  edges: [origami, blue2, green1*, origami]
+  name: AT-6
+  stoic: 0
+- color: white
+  edges: [origami, blue5, blue3*, origami]
+  name: AT-5
+  stoic: 0
+- color: white
+  edges: [origami, blue2, green1*, origami]
+  name: AT-4
+  stoic: 0
+- color: white
+  edges: [origami, brown5, brown3*, origami]
+  name: AT-3
+  stoic: 0
+- color: white
+  edges: [origami, brown2, black1*, origami]
+  name: AT-2
+  stoic: 0
+- color: white
+  edges: [origami, pink1, hp2, origami]
+  name: AT-1
+  stoic: 0
+- color: blue
+  edges: [green1, blue4, blue1*, blue5*]
+  name: Z9
+- color: blue
+  edges: [blue1, blue2, green1*, blue6*]
+  name: Z12V
+- color: light blue
+  edges: [blue3, blue6, green2*, blue2*]
+  name: Z10V
+- color: blue
+  edges: [green2, blue5, blue3*, blue4*]
+  name: Z11
+- color: orange
+  edges: [green1, red4, red1*, red5*]
+  name: ZB
+- color: orange
+  edges: [red1, red2, green1*, red6*]
+  name: ZDV
+- color: orange
+  edges: [red3, red6, green2*, red2*]
+  name: ZCV
+- color: orange
+  edges: [green2, red5, red3*, red4*]
+  name: ZA
+- color: pink
+  edges: [ogreen1, blue4, blue7*, red5*]
+  name: ZG
+- color: pink
+  edges: [blue7, blue2, ogreen1*, red6*]
+  name: ZE
+- color: green
+  edges: [ogreen1, red4, red7*, blue5*]
+  name: ZF
+- color: green
+  edges: [red7, red2, green1*, blue6*]
+  name: ZH
+- color: red
+  edges: [hp1, Z7Z8_db, green2*, gray1*]
+  name: Z7Z8_left
+- color: red
+  edges: [in2, gray1, ogreen1*, Z7Z8_db]
+  name: Z7Z8_right
+- color: brown
+  edges: [green1, brown4, brown1*, brown5*]
+  name: Z1
+- color: brown
+  edges: [brown1, brown2, black1*, brown6*]
+  name: Z4
+- color: brown
+  edges: [brown3, brown6, black2*, brown2*]
+  name: Z2
+- color: brown
+  edges: [green2, brown5, brown3*, brown4*]
+  name: Z3
+- color: red
+  edges: [black1, Z5Z6_db, bl1, pink1*]
+  name: Z5Z6_left
+- color: red
+  edges: [black2, pink1, hp2, Z5Z6_db]
+  name: Z5Z6_right
+xgrowargs:
+  Gmc: 10.0
+  Gse: 5.05
+  alpha: -7.1
+  doubletiles:
+  - [Z7Z8_left, Z7Z8_right]
+  - [Z5Z6_left, Z5Z6_right]
+  seed:
+  - [2,17,2]
+  - [3,16,3]
+  - [4,15,4]
+  - [5,14,5]
+  - [6,13,6]
+  - [7,12,7]
+  - [8,11,8]
+  - [9,10,9]
+  - [10,9,10]
+  - [11,8,11]
+  - [12,7,12]
+  - [13,6,13]
+  - [14,5,14]
+  - [15,4,15]
+  - [16,3,16]
+  - [17,2,17]
+  size: [32, 128]
+  model: KTAM
+  start_paused: true

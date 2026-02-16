@@ -1,0 +1,129 @@
+% Lin and Rado 1965, http://www.logique.jussieu.fr/~michel/bbc.html
+tile edges matches {{N E S W}*}
+num tile types=101
+num binding types=64
+binding type names=
+  { seedN seedE seedS seedW frame1N frame2N N0 N1 A0N A1N B0N B1N C0N C1N AN BN CN xNl xNr frame1E frame2E E0 E1 A0E A1E B0E B1E C0E C1E AE BE CE xEl xEr frame1S frame2S S0 S1 A0S A1S B0S B1S C0S C1S AS BS CS xSl xSr frame1W frame2W W0 W1 A0W A1W B0W B1W C0W C1W AW BW CW xWl xWr}
+tile edges={
+{seedN seedE seedS seedW}
+
+{A0N frame1N seedN frame2N}
+{N0  frame2N frame1W W0}
+
+{frame2E A0E frame1E seedE}
+{N0 E0  frame2E frame1N}
+
+{seedS frame2S A0S frame1S}
+{frame1E E0 S0  frame2S}
+
+{frame1W seedW frame2W A0W}
+{frame2W frame1S S0 W0}
+
+{N0 E0 xEl xNr}
+{xEr E0 S0 xSl}
+{xWl xSr S0 W0}
+{N0 xNl xWr W0}
+
+{N0  xNl N0 xNl} (white)
+{N1  xNl N1 xNl} (grey80)
+{N0  xNr N0 xNr} (white)
+{N1  xNr N1 xNr} (grey80)
+{N1  BN A0N xNl} (red)
+{N1  xNr A1N xNl} (red)
+{N1  xNr B0N BN} (green)
+{N0  CN B1N xNl} (green)
+{N1  xNr C0N CN} (blue)
+{N1  xNr C1N AN} (blue)
+{A0N xNr N0 AN} (red)
+{A1N xNr N1 AN} (red)
+{A0N AN N0 xNl} (red)
+{A1N AN N1 xNl} (red)
+{B0N xNr N0 BN} (green)
+{B1N xNr N1 BN} (green)
+{B0N BN N0 xNl} (green)
+{B1N BN N1 xNl} (green)
+{C0N xNr N0 CN} (blue)
+{C1N xNr N1 CN} (blue)
+{C0N CN N0 xNl} (blue)
+{C1N CN N1 xNl} (blue)
+
+{xEl E0  xEl E0 } (white)
+{xEl E1  xEl E1 } (grey80)
+{xEr E0  xEr E0 } (white)
+{xEr E1  xEr E1 } (grey80)
+{xEl E1  BE A0E } (red)
+{xEl E1  xEr A1E } (red)
+{BE E1  xEr B0E } (green)
+{xEl E0  CE B1E } (green)
+{CE E1  xEr C0E } (blue)
+{AE E1  xEr C1E } (blue)
+{AE A0E xEr E0 } (red)
+{AE A1E xEr E1 } (red)
+{xEl A0E AE E0 } (red)
+{xEl A1E AE E1 } (red)
+{BE B0E xEr E0 } (green)
+{BE B1E xEr E1 } (green)
+{xEl B0E BE E0 } (green)
+{xEl B1E BE E1 } (green)
+{CE C0E xEr E0 } (blue)
+{CE C1E xEr E1 } (blue)
+{xEl C0E CE E0 } (blue)
+{xEl C1E CE E1 } (blue)
+
+
+{S0 xSl S0  xSl } (white)
+{S1 xSl S1  xSl } (grey80)
+{S0 xSr S0  xSr } (white)
+{S1 xSr S1  xSr } (grey80)
+{A0S xSl S1  BS } (red)
+{A1S xSl S1  xSr } (red)
+{B0S BS S1  xSr } (green)
+{B1S xSl S0  CS } (green)
+{C0S CS S1  xSr } (blue)
+{C1S AS S1  xSr } (blue)
+{S0 AS A0S xSr } (red)
+{S1 AS A1S xSr } (red)
+{S0 xSl A0S AS } (red)
+{S1 xSl A1S AS } (red)
+{S0 BS B0S xSr } (green)
+{S1 BS B1S xSr } (green)
+{S0 xSl B0S BS } (green)
+{S1 xSl B1S BS } (green)
+{S0 CS C0S xSr } (blue)
+{S1 CS C1S xSr } (blue)
+{S0 xSl C0S CS } (blue)
+{S1 xSl C1S CS } (blue)
+
+
+{xWl W0 xWl W0  } (white)
+{xWl W1 xWl W1  } (grey80)
+{xWr W0 xWr W0  } (white)
+{xWr W1 xWr W1  } (grey80)
+{BW A0W xWl W1  } (red)
+{xWr A1W xWl W1  } (red)
+{xWr B0W BW W1  } (green)
+{CW B1W xWl W0  } (green)
+{xWr C0W CW W1  } (blue)
+{xWr C1W AW W1  } (blue)
+{xWr W0 AW A0W } (red)
+{xWr W1 AW A1W } (red)
+{AW W0 xWl A0W } (red)
+{AW W1 xWl A1W } (red)
+{xWr W0 BW B0W } (green)
+{xWr W1 BW B1W } (green)
+{BW W0 xWl B0W } (green)
+{BW W1 xWl B1W } (green)
+{xWr W0 CW C0W } (blue)
+{xWr W1 CW C1W } (blue)
+{CW W0 xWl C0W } (blue)
+{CW W1 xWl C1W } (blue)
+
+
+}
+binding strengths={ 2 2 2 2   1 1 1 1 2 2 2 2 2 2 1 1 1 1 1    1 1 1 1 2 2 2 2 2 2 1 1 1 1 1    1 1 1 1 2 2 2 2 2 2 1 1 1 1 1    1 1 1 1 2 2 2 2 2 2 1 1 1 1 1 }
+seed=30,30,1
+size=64
+block=10
+Gse=10
+Gmc=19
+update_rate=100

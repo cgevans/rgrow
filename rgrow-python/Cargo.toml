@@ -1,0 +1,37 @@
+[package]
+name = "rgrow-python"
+description = "Python interface to rgrow."
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+
+
+[features]
+default = []
+
+[lib]
+name = "rgrow"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+indent = "0.1.1"
+serde = { workspace = true }
+rand = { workspace = true }
+ndarray = { workspace = true }
+numpy = { workspace = true }
+rayon = { version = "1" }
+polars = {workspace = true}
+pyo3-polars = {workspace = true}
+
+[dependencies.rgrow]
+path = "../rgrow-rust"
+features = ["python"]
+default-features = false
+
+[dependencies.pyo3]
+workspace = true
+features = ["extension-module", "abi3-py310"]

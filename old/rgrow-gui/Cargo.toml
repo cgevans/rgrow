@@ -1,0 +1,19 @@
+[package]
+name = "rgrow-gui"
+version = "0.22.0"
+description = "DEPRECATED: Merged into rgrow. Use rgrow with the gui feature instead."
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+categories.workspace = true
+readme = "README.md"
+
+[badges]
+maintenance = { status = "deprecated" }
+
+[dependencies]
+
+[[bin]]
+name = "rgrow-gui"
+path = "src/main.rs"

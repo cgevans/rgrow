@@ -1,0 +1,224 @@
+% counter2x2indestructible_seed.tiles  
+%  seed must be an assembly of tiles encoding a genome
+%
+% xgrow counter2x2indestructible_seed.tiles T=2 size=128 block=5 importfile=ULcounter.seed &
+% xgrow counter2x2indestructible_seed.tiles T=2 size=128 block=5 importfile=ULcounter.seed update_rate=15000 blast_rate_alpha=0.00001 fission wander &
+
+tile edges matches {{N E S W}*}
+num tile types=149       % 1 + 30 + 36 + 30 + 16 + 16 + 16 + 4
+num binding types=157
+binding type names={     % 11 +  16*4+2*20  + 21 + 21 = 
+    fill                 R0 R1 Rn Rc         A0 A1 B0 B1 C0 C1    
+    n0n s0n e0n w0n      n0c s0c e0c w0c     n1n s1n e1n w1n      n1c s1c e1c w1c
+    nn0 sn0 en0 wn0      nn1 sn1 en1 wn1     nc0 sc0 ec0 wc0      nc1 sc1 ec1 wc1    nnn snn enn wnn   
+    nA0 sA0 eA0 wA0      nA1 sA1 eA1 wA1     nB0 sB0 eB0 wB0      nB1 sB1 eB1 wB1 
+    n0A s0A e0A w0A      n0B s0B e0B w0B     n1A s1A e1A w1A      n1B s1B e1B w1B 
+    nAA sAA eAA wAA      nAB sAB eAB wAB     nBA sBA eBA wBA      nBB sBB eBB wBB 
+    nCA sCA eCA wCA      nCB sCB eCB wCB     nAC sAC eAC wAC      nBC sBC eBC wBC    nCC sCC eCC wCC 
+    t11 t12 t13 t14 t15  t21 t22 t23 t25     t31 t32 t33 t34      t41 t42 t43 t45    t51 t52 t53      t61 
+    b11 b12 b13 b14 b15  b21 b22 b23 b25     b31 b32 b33 b34      b41 b42 b43 b45    b51 b52 b53      b61 }
+tile edges={
+{t11 t11 C0 Rn} (red)  % upper right beam corner
+{t12 t21 t11 0} (red)
+{t13 t31 t12 Rn} (red)
+{t14 t41 t13 0} (red)
+{t21 t12 C1 t11} (red)
+{t22 t22 t21 t21} (red)
+{t23 t32 t22 t31} (red)
+{0 t42 t23 t41} (red)
+{t31 t13 C0 t12} (red)
+{t32 t23 t31 t22} (red)
+{t33 t33 t32 t32} (red)
+{t41 t14 C1 t13} (red)
+{t42 0 t41 t23} (red)
+{0 0 t43 t43} (red)
+
+{t15 t51 t14 Rc} (magenta)  % vertical upward beam
+{t14 t61 t15 0} (magenta)
+{t25 t52 0 t51} (magenta)
+{0 t42 t25 t61} (magenta)
+{t33 t53 t34 t52} (magenta)
+{t34 t43 t33 t42} (magenta)
+{t45 fill 0 t53} (magenta)
+{0 fill t45 t43} (magenta)
+
+{fill t45 t53 0} (pink)    % horizontal righward beam
+{t53 t33 t52 t34} (pink)
+{t52 t25 t51 0} (pink)
+{t51 t15 A0 t14} (pink)
+{fill 0 t43 t45} (pink)
+{t43 t34 t42 t33} (pink)
+{t42 0 t61 t25} (pink)
+{t61 t14 A1 t15} (pink)
+
+{fill fill fill fill} (white)  % unary counter  #31
+
+{A0 nAA wAA A0} (yellow)   % data tiles  #32-35
+{A1 A0 eAA nAA} (yellow)
+{eAA A1 A1 sAA} (yellow)
+{wAA sAA A0 A1} (yellow) 
+
+{A0 nAB wAB B0} (yellow)   %             #36-39
+{A1 B0 eAB nAB} (blue)
+{eAB B1 A1 sAB} (yellow)
+{wAB sAB A0 B1} (blue) 
+
+{A0 nAC wAC C0} (yellow)   %             #40-43
+{A1 C0 eAC nAC} (green)
+{eAC C1 A1 sAC} (yellow)
+{wAC sAC A0 C1} (green) 
+
+{B0 nBA wBA A0} (blue)   %             #44-47
+{B1 A0 eBA nBA} (yellow)
+{eBA A1 B1 sBA} (blue)
+{wBA sBA B0 A1} (yellow) 
+
+{B0 nBB wBB B0} (blue)   %             #48-51
+{B1 B0 eBB nBB} (blue)
+{eBB B1 B1 sBB} (blue)
+{wBB sBB B0 B1} (blue) 
+
+{B0 nBC wBC C0} (blue)   %             #52-55
+{B1 C0 eBC nBC} (green)
+{eBC C1 B1 sBC} (blue)
+{wBC sBC B0 C1} (green) 
+
+{C0 nCA wCA A0} (green)   %             #56-59
+{C1 A0 eCA nCA} (yellow)
+{eCA A1 C1 sCA} (green)
+{wCA sCA C0 A1} (yellow) 
+
+{C0 nCB wCB B0} (green)   %             #60-63
+{C1 B0 eCB nCB} (blue)
+{eCB B1 C1 sCB} (green)
+{wCB sCB C0 B1} (blue) 
+
+{C0 nCC wCC C0} (green)   %             #64-67
+{C1 C0 eCC nCC} (green)
+{eCC C1 C1 sCC} (green)
+{wCC sCC C0 C1} (green)
+
+{Rn C0 b11 b11} (red)  % lower left beam corner
+{0 b11 b21 b12} (red)
+{Rn b12 b31 b13} (red)
+{0 b13 b41 b14} (red)
+{b11 C1 b12 b21} (red)
+{b21 b21 b22 b22} (red)
+{b31 b22 b32 b23} (red)
+{b41 b23 b42 0} (red)
+{b12 C0 b13 b31} (red)
+{b22 b31 b23 b32} (red)
+{b32 b32 b33 b33} (red)
+{b13 C1 b14 b41} (red)
+{b23 b41 0 b42} (red)
+{b43 b43 0 0} (red)
+
+{Rc b14 b51 b15} (magenta)  % horizontal leftward beam
+{0 b15 b61 b14} (magenta)
+{b51 0 b52 b25} (magenta)
+{b61 b25 b42 0} (magenta)
+{b52 b34 b53 b33} (magenta)
+{b42 b33 b43 b34} (magenta)
+{b53 0 fill b45} (magenta)
+{b43 b45 fill 0} (magenta)
+
+{0 b53 b45 fill} (pink)    % vertical downward beam
+{b34 b52 b33 b53} (pink)
+{0 b51 b25 b52} (pink)
+{b14 A0 b15 b51} (pink)
+{b45 b43 0 fill} (pink)
+{b33 b42 b34 b43} (pink)
+{b25 b61 0 b42} (pink)
+{b15 A1 b14 b61} (pink)
+
+
+{0 nA0 wA0 0}   (tan)   % horizontal translator tiles, encoding copy
+{R0 0 eA0 nA0}  (tan)
+{eA0 Rn A1 sA0} (tan)
+{wA0 sA0 A0 Rn} (tan) 
+
+{0 nB0 wB0 0}   (brown)   
+{R1 0 eB0 nB0}  (brown)
+{eB0 Rn B1 sB0} (brown)
+{wB0 sB0 B0 Rn} (brown) 
+
+{0 n0A w0A 0}   (tan)   % vertical translator tiles, encoding copy
+{Rn A0 e0A n0A} (tan)
+{e0A A1 Rn s0A} (tan)
+{w0A s0A 0 R0}  (tan) 
+
+{0 n0B w0B 0}   (brown)   
+{Rn B0 e0B n0B} (brown)
+{e0B B1 Rn s0B} (brown)
+{w0B s0B 0 R1}  (brown) 
+
+{0 n0n w0n 0}   (cyan)  % vertical counter rule tiles
+{R0 0 e0n n0n}  (cyan)
+{e0n Rn R0 s0n} (cyan)
+{w0n s0n 0 Rn}  (cyan)
+
+{0 n0c w0c 0}   (blue)
+{R1 0 e0c n0c}  (blue)
+{e0c Rc R0 s0c} (blue)
+{w0c s0c 0 Rn}  (blue)
+
+{0 n1n w1n 0}   (blue)
+{R1 0 e1n n1n}  (blue)
+{e1n Rn R1 s1n} (blue)
+{w1n s1n 0 Rn}  (blue)
+
+{0 n1c w1c 0}   (cyan) 
+{R0 0 e1c n1c}  (cyan)
+{e1c Rc R1 s1c} (cyan)
+{w1c s1c 0 Rc}  (cyan)
+
+{0 nn0 wn0 0}   (cyan)  % horizontal counter rule tiles
+{Rn 0 en0 nn0}  (cyan)
+{en0 R0 Rn sn0} (cyan)
+{wn0 sn0 0 R0}  (cyan)
+
+{0 nn1 wn1 0}   (blue)
+{Rn 0 en1 nn1}  (blue)
+{en1 R1 Rn sn1} (blue)
+{wn1 sn1 0 R1}  (blue)
+
+{0 nc0 wc0 0}   (blue)
+{Rn 0 ec0 nc0}  (blue)
+{ec0 R0 Rc sc0} (blue)
+{wc0 sc0 0 R1}  (blue)
+
+{0 nc1 wc1 0}   (cyan) 
+{Rc 0 ec1 nc1}  (cyan)
+{ec1 R1 Rc sc1} (cyan)
+{wc1 sc1 0 R0}  (cyan)
+
+{0 nnn wnn 0}   (forest)  % counter diagonal tiles
+{R0 0 enn nnn}  (forest)
+{enn Rn Rn snn} (forest)
+{wnn snn 0 R0}  (forest)
+
+
+
+}
+%binding type names={
+%    fill                 R0 R1 Rn Rc         A0 A1 B0 B1 C0 C1 
+%    n0n s0n e0n w0n      n0c s0c e0c w0c     n1n s1n e1n w1n      n1c s1c e1c w1c
+%    nn0 sn0 en0 wn0      nn1 sn1 en1 wn1     nc0 sc0 ec0 wc0      nc1 sc1 ec1 wc1    n00 s00 e00 w00   
+%    nA0 sA0 eA0 wA0      nA1 sA1 eA1 wA1     nB0 sB0 eB0 wB0      nB1 sB1 eB1 wB1 
+%    n0A s0A e0A w0A      n0B s0B e0B w0B     n1A s1A e1A w1A      n1B s1B e1B w1B 
+%    nAA sAA eAA wAA      nAB sAB eAB wAB     nBA sBA eBA wBA      nBB sBB eBB wBB 
+%    nCA sCA eCA wCA      nCB sCB eCB wCB     nAC sAC eAC wAC      nBC sBC eBC wBC    nCC sCC eCC wCC 
+%    t11 t12 t13 t14 t15  t21 t22 t23 t25     t31 t32 t33 t34      t41 t42 t43 t45    t51 t52 t53      t61 
+%    b11 b12 b13 b14 b15  b21 b22 b23 b25     b31 b32 b33 b34      b41 b42 b43 b45    b51 b52 b53      b61 }
+binding strengths={
+     1                    1  1  1  1          1  1  1  1  1  1
+     1   2   2   1        1   2   2   1       1   2   2   1        1   2   2   1
+     1   2   2   1        1   2   2   1       1   2   2   1        1   2   2   1      1   2   2   1
+     1   1   2   1        1   1   2   1       1   1   2   1        1   1   2   1
+     1   2   1   1        1   2   1   1       1   2   1   1        1   2   1   1
+     1   1   1   1        1   1   1   1       1   1   1   1        1   1   1   1
+     1   1   1   1        1   1   1   1       1   1   1   1        1   1   1   1      1   1   1   1
+     1   1   2   1   2    1   1   1   1       1   2   1   2        2   1   1   1      1   2   2        1   
+     1   1   2   1   2    1   1   1   1       1   2   1   2        2   1   1   1      1   2   2        1   
+}
+%    1  1  2  for 11 12 13 usually; 2 2 2 allow to grow one quadrant from the seed

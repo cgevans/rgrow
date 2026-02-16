@@ -1,6 +1,6 @@
 version: 2
 sphinx:
-  configuration: py-rgrow/docs/source/conf.py
+  configuration: rgrow-python/docs/source/conf.py
 build:
     os: ubuntu-22.04
     tools:
@@ -20,9 +20,9 @@ build:
         - ln -s ~/.cargo/bin/* /home/docs/.asdf/bin/
 python:
   install:
-    - requirements: py-rgrow/docs/requirements-docs.txt
+    - requirements: rgrow-python/docs/requirements-docs.txt
     - method: pip
-      path: py-rgrow
+      path: rgrow-python
       extra_requirements:
         - docs
 

@@ -1,0 +1,79 @@
+% TwoCounterSquareCapped.tiles  output from source make2x2tiles.m 
+%  Modifies binarycap.tiles to use two perpendicular counters.
+%  This avoids prolonged facet exposure, and should yield
+%  lower error rates.  Counter tiles are at higher concentration
+%  to make counter growth and blank growth rates similar.
+%  Also, using unique bonds for the two layers of the counter growth
+%  (forward and backward) eliminates some spurious growth on those facets.
+tile edges matches {{N E S W}*}
+num tile types=59
+num binding types=28
+tile edges={
+{21 21 25 25}(white) % seed 
+{16 1 26 0}(red) % hor  seed row 6 
+{6 2 7 1}(red1) % hor  seed row 5 
+{5 3 7 2}(red2) % hor  seed row 4 
+{6 4 7 3}(red3) % hor  seed row 3 
+{5 24 7 4}(red4) % hor  seed row 2 
+{6 25 7 24}(red5) % hor  seed row 1 
+{1 16 0 26}(red) % vert seed row 6 
+{2 6 1 7}(red1) % vert seed row 5 
+{3 5 2 7}(red2) % vert seed row 4 
+{4 6 3 7}(red3) % vert seed row 3 
+{24 5 4 7}(red4) % vert seed row 2 
+{25 6 24 7}(red5) % vert seed row 1 
+{7 7 7 7}[.9](pink1) % blank 0 (small square) 
+{8 8 8 8}[.9](pink2) % blank 1 (large square) 
+{5 12 17 12} (blue3)  % -- vertical counter 
+{6 12 18 12} (green) 
+{17 10 6 10} (blue2) 
+{18 10 5 11} (green2) 
+{18 11 6 11} (green3) 
+{17 11 5 11} (blue1) 
+{20 8 13 12}(magenta1) 
+{21 8 14 12}(magenta2) 
+{13 8 21 10}[1.5](magenta3) 
+{14 8 20 11}[1.5](magenta4) 
+{15 12 22 0}[1.5](grey20) 
+{16 12 23 0}[1.5](grey30) 
+{27 10 16 0}(grey40) 
+{23 10 15 0}(grey50) 
+{22 11 15 0}(grey60) 
+{23 11 16 0}(grey70) 
+{12 5 12 17}  (blue3) % -- horizontal counter 
+{12 6 12 18}  (green) 
+{10 17 10 6}  (blue2) 
+{10 18 11 5}  (green2) 
+{11 18 11 6}  (green3) 
+{11 17 11 5}  (blue1) 
+{8 20 12 13}(magenta1) 
+{8 21 12 14}(magenta2) 
+{8 13 10 21}[1.5](magenta3) 
+{8 14 11 20}[1.5](magenta4) 
+{12 15 0 22}[1.5](grey20) 
+{12 16 0 23}[1.5](grey30) 
+{10 27 0 16}(grey40) 
+{10 23 0 15}(grey50) 
+{11 22 0 15}(grey60) 
+{11 23 0 16}(grey70) 
+{26 26 0 0}(yellow1) % cap keystone (small square) 
+{26 7 26 0}(green4)  % vert cap 1   (small square) 
+{7 26 0 26}(green4)  % hor  cap 1   (small square) 
+{0 28 27 0}[1.5](yellow3) % cap keystone for vert counter 
+{0 28 17 28}(gold)    % cap 1 for vert counter 
+{0 28 13 28}(orange)  % cap 2 for vert counter 
+{28 0 0 27}[1.5](yellow3) % cap keystone for hori counter 
+{28 0 28 17}(gold)    % cap 1 for hori counter 
+{28 0 28 13}(orange)  % cap 2 for hori counter 
+{0 28 8 28}(brown)   % hor  cap for blank (big square) 
+{28 0 28 8}(brown)   % vert cap for blank (big square) 
+{0 0 28 28}[2](yellow4) % cap keystone       (big square) 
+}
+binding strengths=
+{2 2 2 2 1 1 1 1 1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 1 2 1 }
+size=64
+block=10
+seed=50,8,1
+update_rate=50000
+Gse=9
+Gmc=17.7

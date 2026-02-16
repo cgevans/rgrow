@@ -14,12 +14,12 @@ test-rust:
 # Run Python tests (builds first)
 test-python:
     source .venv/bin/activate && maturin develop --uv
-    source .venv/bin/activate && pytest py-rgrow/tests/
+    source .venv/bin/activate && pytest rgrow-python/tests/
 
 # Run all linters
 lint:
     cargo clippy -p rgrow
-    ruff check py-rgrow/rgrow/
+    ruff check rgrow-python/rgrow/
 
 # Build manylinux wheels for free-threaded Python via Podman
 build-freethreaded-linux:

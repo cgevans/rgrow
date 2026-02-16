@@ -1,0 +1,17 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "rgrow-gui"
+version = "0.22.0"
+description = "DEPRECATED: rgrow-gui has been merged into rgrow. Just install rgrow instead."
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 7 - Inactive",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+
+[tool.maturin]
+features = []

@@ -1,0 +1,29 @@
+tile edges matches {{N E S W}*}
+num tile types=16
+num binding types=14
+binding type names= { L0 R0 L1 R1 L02 R02 L12 R12 Lne Rne N NN W WW}
+tile edges={
+{ N   0   0   W   }(red)
+{ NN  0   N   R0  }[.5](red)
+{ N   0   NN  R02 }[.5](orange)
+{ L1  W   0   WW  }[.5](red)
+{ Lne WW  0   W   }[.5](orange)
+{ Lne R0  L1  Rne }(brown)
+{ Lne R1  L0  Rne }(brown)
+{ L02 R0  L0  R02 }(yellow)
+{ L12 R1  L1  R12 }(green)
+{ L0  R02 L02 R0  }(white)
+{ L1  Rne L02 R1  }(blue)
+{ L0  R12 L12 R0  }(white)
+{ L1  Rne L12 R1  }(blue)
+{ L0  R02 Lne R0  }(white)
+{ L1  R12 Lne R1  }(blue)
+{ L1  Rne Lne R1  }(blue)
+}
+binding strengths={ 1 1 1 1 1  1 1 1 1 1 2 2 2 2 }
+seed=250,250,1
+size=256
+block=2
+Gse=9.6
+Gmc=19
+update_rate=10000

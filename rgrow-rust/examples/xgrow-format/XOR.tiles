@@ -1,0 +1,24 @@
+% XOR.tiles
+% This tileset contains the 4 rule tiles corresponding to a DAE-E tile set
+% RE-01, SE-10, UE-11, VE-00.
+tile edges matches {{N E S W}*}
+num tile types=4
+num binding types=3
+tile edges={
+{3 3 3 3}    (blue3)    % VE-00
+{3 2 2 3}    (green)    % UE-11 
+{2 3 2 2}    (yellow)   % SE-10
+{2 2 3 2}    (tan)      % RE-01
+}
+%
+%  VE-00    UE-11    SE-10    RE-01  
+%    3        3        2        2    
+%  3   3    3   2    2   3    2   2  
+%    3        2        2        3    
+%
+binding strengths={2 1 1}
+block=3
+Gse=10
+Gmc=16
+addflakes=130,130,1:10@26
+

@@ -1,0 +1,104 @@
+tile edges matches {{N E S W}*}
+num tile types=66  % 63 for long, 66 for short
+num binding types=50
+binding type names=
+  { s0 s1 s2 s3 s4 s5 s6
+    vLL vRR vL vR vn vc vCP v0 v1 
+    bDS bDD bTT bRR bR bD bB bT bL bc
+    ltDD ltB ltF rtDD rtB rtF
+    rLL rRR rL rR rn rc rCP r0 r1
+    lLL lRR lL lR ln lc lCP l0 l1}
+tile edges={
+{vL s0 0 0}      %% seed row of tiles
+%{v0 s1 0 s0}       % use this for large tree
+{v0 s2 0 s0}        % use this for small tree
+{v0 s2 0 s1}
+{v0 s3 0 s2}
+{v0 s4 0 s3}
+{v0 s5 0 s4}
+{v0 s6 0 s5}
+{vRR 0 0 s6}
+
+{vRR 0 vR vCP}   %% 
+{vR 0 vRR vc}      % vertical double tile part (right)
+{v1 vn v1 vn}   (magenta3)    %
+{v0 vn v0 vn}   (tan)     %
+{v0 vc v1 vc}   (yellow)    %   vertical counter
+{v1 vc v0 vn}   (red)       %
+{v0 vCP v0 vCP} (white)       %
+{v1 vCP v1 vCP} (magenta)   %
+{vL vCP vLL 0}     % vertical double tile part (left)
+{vLL vn vL 0}    %%
+
+{bDS vc vL 0}    %%
+{lCP bD bDS lL}    % beginning of branching tiles
+{bDD bB v0 bD}     %
+{bT bD bDD l0}     %
+{bT l0 bT l0}      %
+{v0 bB v0 bB}      %
+{bL rL vR bB}      %
+{bL r0 bL bB}      %
+%{bTT r0 bL bD}     %   long arms
+{bTT r1 bL bD}     %    --> gives short arms (shorter by 1)
+%{0 rRR bTT lR}     % end of branching tiles
+%{0 lR bT lR}     %%
+{0 rRR bTT bR}         %% -> these five instead of above two shorten arms by 1.
+{0 bR bT bR}     
+{0 bR lCP bRR}
+{0 bRR bc lR}
+{bc l0 lc l0}
+
+{0 rRR rCP rR}   %% 
+{0 rR rc rRR}      % rightward double tile part (right)
+{rCP r0 rCP r0} (pink)   %
+{rCP r1 rCP r1} (cyan)   %
+{rn r0 rn r0} (yellow)   %
+{rc r1 rn r0} (tan)      %
+{rn r1 rn r1} (green)    %
+{rc r0 rc r1} (lightbrown)    %   rightward counter
+{rCP rL 0 rLL}     % rightward double tile part (left)
+{rn rLL 0 rL}    %%
+
+{rc ltDD 0 rL}   %% 
+{ltB 0 0 ltDD}     % left-turn tiles
+{ltF ltDD ltB r0}  %
+{ltF r0 ltF r0}    %
+{vLL vCP ltF rR}   %
+{v0 vCP ltF vCP}   %
+{vR 0 ltB vCP}   %% 
+
+{0 lR lCP lRR}   %% 
+{0 lRR lc lR}      % leftward double tile part (right)
+{lCP l0 lCP l0} (gray80)   %
+{lCP l1 lCP l1} (blue)   %
+{ln l0 ln l0}   (red)   %
+{lc l1 lc l0}   (red4)   %   leftward counter
+{ln l1 ln l1}   (blue4)   %
+{lc l0 ln l1}   (gray50)   %
+{lCP lLL 0 lL}     % leftward double tile part (left)
+{ln lL 0 lLL}    %%
+
+{lc lL 0 rtDD}   %% 
+{rtB rtDD 0 0}     % right-turn tiles
+{rtF l0 rtB rtDD}  %
+{rtF l0 rtF l0}    %
+{vR lR rtF vCP}   %
+{v0 vCP rtF vCP}   %
+{vLL vCP rtB 0}   %% 
+
+}
+binding strengths=
+  { 2 2 2 2 2 2 2
+    2 2 1 1 1 1 1 1 1 
+    2 2 2 2 1 1 1 1 1 1
+    2 1 1 2 1 1
+    2 2 1 1 1 1 1 1 1
+    2 2 1 1 1 1 1 1 1}
+seed=510,250,1
+size=512
+block=2
+%seed=250,125,1   % must shrink seed by one bit
+%size=256
+%block=2
+T=2
+update_rate=1000

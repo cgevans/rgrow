@@ -1,0 +1,10 @@
+tiles:
+  - {edges: [0, 1, 0, 1]}
+  - {edges: [0, 1, 0, 0]}
+options:
+  Gse: 10.1
+  Gmc: 10.0
+  fission: keep-seeded
+  size: [8, 1024]
+  seed: [4, 2, 2]
+  model: oldktam

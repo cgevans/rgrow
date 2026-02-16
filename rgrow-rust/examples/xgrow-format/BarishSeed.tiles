@@ -1,0 +1,21 @@
+%Note: 5-5 bonds used with T=2 to create rapid self-assembling
+%and random input layer
+tile edges matches {{N E S W}*}
+num tile types=4
+num binding types=5
+tile edges={
+{1 2 1 2}[1.0](brown)
+{3 4 3 4}[1.0](yellow)
+{1 5 0 5}[0.2](red)
+{3 5 0 5}[0.2](pink)
+}
+g(2,4)=0.1 
+% can be set to 0.2-0.3 for faster                                          
+% growth at the expense of only                                               
+% slightly higher error rates                                                 
+g(1,1)=1.0
+g(3,3)=1.0
+g(5,5)=2.0
+seed=130,130,1
+
+

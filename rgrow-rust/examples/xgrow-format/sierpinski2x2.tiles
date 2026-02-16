@@ -1,0 +1,31 @@
+% sierpinski2x2.tiles
+% 2x2 proofreading construction from sierpinski.tiles
+tile edges matches {{N E S W}*}
+num tile types=21
+num binding types=14
+tile edges={
+{1 0 0 1}[.1](red)
+{10 0 1 2}[.5](magenta)
+{1 0 10 8}[.5](magenta4)
+{2 1 0 10}[.5](purple)
+{8 10 0 1}[.5](purple4)
+{9 11 11 9}(blue2)          % 0+0
+{3 9 4 11} (blue3)
+{4 3 3 4}  (slate grey)
+{11 4 9 3} (blue4)
+{9 14 14 9}(dark green)     % 1+1
+{3 8 7 14} (green2)
+{7 2 2 7}  (cyan)
+{14 7 8 3} (green1)
+{8 13 13 8}(gold4)          % 1+0
+{2 9 6 13} (yellow2)
+{6 3 2 6}  (ivory)
+{13 6 8 2} (yellow1)
+{8 12 12 8}(brown3)         % 0+1
+{2 8 5 12} (tan2)
+{5 2 3 5}  (gold)
+{12 5 9 2} (tan1)
+}
+binding strengths=
+{2 1 1 1 1 1 1 1 1 2 1 1 1 1}
+% historical: aka sierproof2x2RSq.tiles
