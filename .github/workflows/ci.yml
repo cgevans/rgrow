@@ -96,12 +96,12 @@ jobs:
         continue-on-error: true
         run: |
           uvx ty check rgrow-python/rgrow/
-      # - uses: codecov/codecov-action@v5
-      #   with:
-      #     files: coverage.xml,coverage.lcov
-      #     name: python-linux # ${{ matrix.os }}
-      #     token: ${{ secrets.CODECOV_TOKEN }}
-      #   continue-on-error: true
+      - uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml,coverage.lcov
+          name: python-linux
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
   linux:
     name: Python Linux builds
     needs: [python_checks]
