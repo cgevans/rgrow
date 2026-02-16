@@ -1384,6 +1384,29 @@ impl FFSRunResult {
                 FFSRun::<QuadTreeState<CanvasSquare, MovieTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
+
+            (CanvasType::SquareCompact, TrackingType::None) => {
+                FFSRun::<QuadTreeState<CanvasSquareCompact, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareCompact, TrackingType::Order) => {
+                FFSRun::<QuadTreeState<CanvasSquareCompact, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareCompact, TrackingType::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasSquareCompact, LastAttachTimeTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareCompact, TrackingType::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasSquareCompact, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareCompact, TrackingType::Movie) => {
+                FFSRun::<QuadTreeState<CanvasSquareCompact, MovieTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+
+
             (CanvasType::Periodic, TrackingType::None) => {
                 FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(sys, config)
                     .map(|x| x.into())

@@ -612,8 +612,10 @@ impl Canvas for CanvasSquareCompact {
     }
 
     fn raw_array_mut(&mut self) -> ArrayViewMut2<'_, Tile> {
+        let nrows = self.0.nrows();
+        let ncols = self.0.ncols(); 
         self.0
-            .slice_mut(s![2..self.0.nrows() - 2, 2..self.0.ncols() - 2])
+            .slice_mut(s![2..nrows - 2, 2..ncols - 2])
     }
 
     fn nrows(&self) -> usize {

@@ -2381,8 +2381,6 @@ mod test_anneal {
 
 #[cfg(test)]
 mod test_sdc_model {
-    use crate::assert_all;
-    use ndarray::array;
     use num_traits::PrimInt;
 
     use super::*;

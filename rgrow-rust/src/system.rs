@@ -1892,8 +1892,8 @@ where
             return Ok(None);
         }
 
-        for i in 0..filtered_indices.len() {
-            let mut state = end_state.replay(Some(filtered_indices[i] as u64))?;
+        for &item in &filtered_indices {
+            let mut state = end_state.replay(Some(item as u64))?;
             self.update_state(&mut state, &NeededUpdate::All);
 
             let (is_above, prob, trials, exceeded) = self.calc_committer_threshold_test(
@@ -1908,7 +1908,7 @@ where
             )?;
 
             if is_above {
-                let orig_idx = filtered_indices[i];
+                let orig_idx = item;
                 let energy = state.energy();
 
                 return Ok(Some(CriticalStateResult {
