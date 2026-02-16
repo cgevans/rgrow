@@ -60,7 +60,7 @@ jobs:
           export CARGO_INCREMENTAL=1
           cargo llvm-cov clean --workspace
           cargo test -p rgrow
-          cargo llvm-cov --no-run --lcov --output-path coverage.lcov -p rgrow -p py-rgrow
+          cargo llvm-cov --no-run --lcov --output-path coverage.lcov -p rgrow -p rgrow-python
       - uses: codecov/codecov-action@v5
         with:
           files: coverage.lcov
@@ -98,7 +98,7 @@ jobs:
       - name: Run Ruff on Python code
         uses: astral-sh/ruff-action@v3
         with:
-          src: "./py-rgrow/rgrow"
+          src: "./rgrow-python/rgrow"
       - name: Install carge llvm-cov
         run: cargo install cargo-llvm-cov
       - name: Install maturin and pytest
@@ -131,7 +131,7 @@ jobs:
       - name: Run ty
         continue-on-error: true
         run: |
-          uvx ty check py-rgrow/rgrow/
+          uvx ty check rgrow-python/rgrow/
       # - uses: codecov/codecov-action@v5
       #   with:
       #     files: coverage.xml,coverage.lcov

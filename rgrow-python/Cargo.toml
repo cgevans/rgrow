@@ -1,5 +1,5 @@
 [package]
-name = "pyrgrow"
+name = "rgrow-python"
 description = "Python interface to rgrow."
 version = { workspace = true }
 authors = { workspace = true }
@@ -28,7 +28,7 @@ polars = {workspace = true}
 pyo3-polars = {workspace = true}
 
 [dependencies.rgrow]
-path = "../rgrow"
+path = "../rgrow-rust"
 features = ["python"]
 default-features = false
 
