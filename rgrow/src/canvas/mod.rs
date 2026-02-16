@@ -1,9 +1,4 @@
-use std::ops::Mul;
-
-use crate::{
-    painter::SpriteSquare,
-    system::{System, TileBondInfo},
-};
+use crate::painter::SpriteSquare;
 
 use super::base::{GrowResult, NumTiles, Point, Tile};
 use enum_dispatch::enum_dispatch;

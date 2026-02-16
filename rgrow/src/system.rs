@@ -13,7 +13,6 @@ use crate::ffs::FFSRunConfig;
 use crate::ffs::FFSRunResult;
 use crate::models::atam::ATAM;
 use crate::models::kblock::KBlock;
-use crate::models::kblock::TileState;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
@@ -956,7 +955,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 
             // Draw frame
             let edge_size = scale / 10;
-            let tile_size = scale - 2 * edge_size;
+            let _tile_size = scale - 2 * edge_size;
             let frame_width = (width * scale as u32) as usize;
             let frame_height = (height * scale as u32) as usize;
             frame_buffer.resize(frame_width * frame_height * 4, 0);

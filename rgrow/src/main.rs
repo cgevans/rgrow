@@ -85,11 +85,10 @@ fn main() -> anyhow::Result<()> {
         }
         #[cfg(feature = "gui")]
         SubCommand::GuiSubprocess(args) => {
-            let socket_path = args.socket_path.ok_or_else(|| {
-                anyhow::anyhow!("Usage: rgrow gui-subprocess <socket_path>")
-            })?;
-            rgrow::gui::run_gui_subprocess(&socket_path)
-                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            let socket_path = args
+                .socket_path
+                .ok_or_else(|| anyhow::anyhow!("Usage: rgrow gui-subprocess <socket_path>"))?;
+            rgrow::gui::run_gui_subprocess(&socket_path).map_err(|e| anyhow::anyhow!("{}", e))?;
             Ok(())
         }
         #[cfg(not(feature = "gui"))]

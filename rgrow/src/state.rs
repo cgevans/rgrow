@@ -538,7 +538,6 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
     fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
         self.canvas.draw(frame, colors)
     }
-
 }
 
 impl<C, T> StateWithCreate for QuadTreeState<C, T>

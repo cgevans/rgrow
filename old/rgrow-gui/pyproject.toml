@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "rgrow-gui"
 version = "0.22.0"
-description = "DEPRECATED: rgrow-gui has been merged into rgrow. Install rgrow instead."
+description = "DEPRECATED: rgrow-gui has been merged into rgrow. Just install rgrow instead."
 requires-python = ">=3.9"
 classifiers = [
     "Development Status :: 7 - Inactive",

@@ -4,7 +4,9 @@ pub mod shm_reader;
 use crate::ui::ipc::{ControlMessage, IpcMessage};
 use shm_reader::ShmReader;
 
-pub fn run_gui_subprocess(socket_path: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn run_gui_subprocess(
+    socket_path: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     #[cfg(windows)]
     use named_pipe::{PipeOptions, PipeServer};
     use std::io::{Read, Write};

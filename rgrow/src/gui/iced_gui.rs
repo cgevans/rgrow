@@ -1,4 +1,3 @@
-use iced::task::Handle;
 use iced::widget::{button, column, container, image, row, text, text_input};
 use iced::{window, Color, Element, Length, Size, Subscription, Task, Theme};
 use std::collections::HashMap;
