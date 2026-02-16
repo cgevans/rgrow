@@ -1107,22 +1107,22 @@ impl SDC {
         let mfe_mat = self.mfe_matrix();
         let l = mfe_mat.len();
         let mut iterator = mfe_mat.into_iter().rev();
-        // Get the rightmost mfe
+
         let Some(last) = iterator.next() else {
             return (vec![], 0.0);
         };
 
-        // Since the last two scaffold elemnts are None, None, we know that the last vector of the
-        // mfe_matrix must be *exactly* of length 1, since the last index will have no friends, so
-        // the only possible value here is (0, mfe, 0)
-        let (mut left, energy, _) = last[0];
+        let (mut left, energy, strand) = last
+            .into_iter()
+            .min_by(|(_, energy1, _), (_, energy2, _)| energy1.partial_cmp(energy2).unwrap())
+            .unwrap();
+
         let mut mfe_conf = Vec::with_capacity(l);
-        // nothing is attached at the very end
-        //
+
         // note that we are building the mfe configuration from end to start -- since we know what
         // the last strand needs to be, and what it must have attached to. So at the end we will
         // reverse it
-        mfe_conf.push(0);
+        mfe_conf.push(strand);
         for v in iterator {
             // Find the strand we attached to, and see what it is attached to
             let (new_left, _, strand) = v

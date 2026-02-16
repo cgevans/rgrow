@@ -57,14 +57,18 @@ def temperature_for_target_prob(sys, prob=0.9, precision=0.1, start_range=(60, 9
 def test_bitcopy_const_temp():
     N = 8
     sys = make_bitcopy(N)
-    state = State((1024, N+4), kind="Square", tracking="None", n_tile_types=len(sys.tile_names))
+    state = State((1024, N), kind="SquareCompact", tracking="None", n_tile_types=len(sys.tile_names))
     sys.update_state(state)
 
     sys.temperature = temperature_for_target_prob(sys, prob=0.8, precision=0.1)
 
     sys.evolve(state, for_events=10000000)
 
-    target = np.all(state.canvas_view[2:-2,:] == np.array(sys.mfe_config()[0]), axis=1).mean()
+    print(state.canvas_view[:,:])
+    print(sys.mfe_config())
+    print(sys.mfe_matrix())
+
+    target = np.all(state.canvas_view[:,:] == np.array(sys.mfe_config()[0]), axis=1).mean()
     assert target > 0.70
     assert target < 0.90
    
@@ -82,7 +86,7 @@ def test_bitcopy_sane_temps():
     sys.temperature = 30
     target_config = sys.mfe_config()[0]
 
-    known_zero_target = [0,0,1] + [2*i+1 for i in range(1, N)] + [0,0]
+    known_zero_target = [1] + [2*i+1 for i in range(1, N)]
     # known_one_target = [0,0,2] + [2*i+2 for i in range(1, N)] + [0,0]
     assert target_config == known_zero_target
 
@@ -97,7 +101,7 @@ def test_bitcopy_sane_temps():
 
     # Our MFE should be empty:
     mfe_config = sys.mfe_config()[0]
-    assert np.all(mfe_config == [0,0] + [0]*N + [0,0])
+    assert np.all(mfe_config == [0]*N)
 
     # As we decrease temperature, the probability of the target config should monotonically increase
     for temp in range(85, 20, -10):
@@ -116,15 +120,15 @@ def test_bitcopy_sane_temps():
 def test_basic_on_rates():
     N = 8
     sys = make_bitcopy(N)
-    state = State((1024, N+4), kind="Square", tracking="None", n_tile_types=len(sys.tile_names))
+    state = State((1024, N), kind="SquareCompact", tracking="None", n_tile_types=len(sys.tile_names))
     sys.update_state(state)
 
     kf = sys.get_param("kf")
 
-    assert state.rate_at_point((5, 2)) == kf * 1e-7
-    assert state.rate_at_point((5, 3)) == 2 * kf * 1e-7
+    assert state.rate_at_point((5, 0)) == kf * 1e-7
+    assert state.rate_at_point((5, 1)) == 2 * kf * 1e-7
 
     sys.set_param("kf", 1e7)
     sys.update_state(state)
-    assert state.rate_at_point((5, 2)) == 1e7 * 1e-7
-    assert state.rate_at_point((5, 3)) == 2 * 1e7 * 1e-7
+    assert state.rate_at_point((5, 0)) == 1e7 * 1e-7
+    assert state.rate_at_point((5, 1)) == 2 * 1e7 * 1e-7
