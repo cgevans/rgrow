@@ -163,14 +163,14 @@ jobs:
           args: --release --out dist 
           sccache: "true"
           manylinux: "auto"
-      - name: Build gui wheels
+      - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out ../dist
           sccache: "true"
           manylinux: "auto"
-          working-directory: rgrow-gui
+          working-directory: rgrow-cli
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -199,14 +199,14 @@ jobs:
           args: --release --out dist --interpreter python3
           sccache: "true"
           manylinux: "auto"
-      - name: Build gui wheels
+      - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out ../dist --interpreter python3
           sccache: "true"
           manylinux: "auto"
-          working-directory: rgrow-gui
+          working-directory: rgrow-cli
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -238,13 +238,13 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: "true"
           rust-toolchain: stable
-      - name: Build gui wheels
+      - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out ../dist --find-interpreter
           sccache: "true"
-          working-directory: rgrow-gui
+          working-directory: rgrow-cli
           rust-toolchain: stable
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -276,14 +276,14 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: "true"
           rust-toolchain: stable
-      - name: Build gui wheels
+      - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out ../dist --find-interpreter
           sccache: "true"
           rust-toolchain: stable
-          working-directory: rgrow-gui
+          working-directory: rgrow-cli
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -315,14 +315,14 @@ jobs:
           args: --release --out dist --interpreter python3
           sccache: "true"
           rust-toolchain: stable
-      - name: Build gui wheels
+      - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out ../dist --interpreter python3
           sccache: "true"
           rust-toolchain: stable
-          working-directory: rgrow-gui
+          working-directory: rgrow-cli
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -355,14 +355,14 @@ jobs:
           args: --release --out dist --interpreter python3
           sccache: "true"
           rust-toolchain: stable
-      - name: Build gui wheels
+      - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out ../dist --interpreter python3
           sccache: "true"
           rust-toolchain: stable
-          working-directory: rgrow-gui
+          working-directory: rgrow-cli
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -383,11 +383,11 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
-      - name: Build gui sdist
+      - name: Build CLI sdist
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          working-directory: rgrow-gui
+          working-directory: rgrow-cli
           args: --out ../dist 
       - name: Upload sdist
         uses: actions/upload-artifact@v4

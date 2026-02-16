@@ -1048,8 +1048,10 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
 ///
 /// Search order:
 /// 1. Self-spawn (non-Python build with gui feature): use current_exe() + ["gui-subprocess"]
-/// 2. External rgrow binary: search package dir (Python), RGROW_PACKAGE_DIR, PATH, exe dir,
+/// 2. External `rgrow` binary: search package dir (Python), RGROW_PACKAGE_DIR, PATH, exe dir,
 ///    version-checked with `rgrow gui-subprocess --version`.
+/// 3. Legacy `rgrow-gui` binary fallback: PATH, package dir (Python), exe dir.
+///    Returns `(path, vec![])` since `rgrow-gui` takes socket_path directly.
 #[cfg_attr(test, allow(dead_code))]
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn find_gui_command() -> Option<(std::path::PathBuf, Vec<String>)> {
@@ -1147,6 +1149,62 @@ pub fn find_gui_command() -> Option<(std::path::PathBuf, Vec<String>)> {
 
             if rgrow_exe.exists() && check_version(&rgrow_exe) {
                 return Some((rgrow_exe, vec!["gui-subprocess".to_string()]));
+            }
+        }
+    }
+
+    // Backward compatibility fallbacks: search for legacy `rgrow-gui` binary.
+    // The old `rgrow-gui` binary takes socket_path directly (no extra args).
+
+    // 6. Check PATH for rgrow-gui
+    if let Ok(path) = which::which("rgrow-gui") {
+        return Some((path, vec![]));
+    }
+
+    // 7. Check package directory for rgrow-gui (Python installations)
+    #[cfg(feature = "python")]
+    {
+        if let Ok(package_dir) = Python::attach(|py| -> PyResult<String> {
+            let importlib = PyModule::import(py, "importlib.util")?;
+            let spec = importlib.call_method1("find_spec", ("rgrow",))?;
+            let origin = spec.getattr("origin")?;
+
+            if origin.is_none() {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "Could not find rgrow package",
+                ));
+            }
+
+            let origin_str = origin.extract::<String>()?;
+            let path = std::path::PathBuf::from(origin_str);
+
+            if let Some(parent) = path.parent() {
+                Ok(parent.to_string_lossy().to_string())
+            } else {
+                Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "Could not determine package directory",
+                ))
+            }
+        }) {
+            let gui_exe = std::path::PathBuf::from(&package_dir).join("rgrow-gui");
+            #[cfg(windows)]
+            let gui_exe = std::path::PathBuf::from(&package_dir).join("rgrow-gui.exe");
+
+            if gui_exe.exists() {
+                return Some((gui_exe, vec![]));
+            }
+        }
+    }
+
+    // 8. Check in the same directory as the current executable for rgrow-gui
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let gui_exe = exe_dir.join("rgrow-gui");
+            #[cfg(windows)]
+            let gui_exe = exe_dir.join("rgrow-gui.exe");
+
+            if gui_exe.exists() {
+                return Some((gui_exe, vec![]));
             }
         }
     }

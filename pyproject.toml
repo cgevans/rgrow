@@ -9,6 +9,7 @@ dependencies = [
     "pyyaml",
     "platformdirs",
     "patchelf>=0.17.2.4",
+    "rgrow-cli",
 ]
 requires-python = ">=3.10"
 dynamic = ["version"]
@@ -31,8 +32,11 @@ manifest-path = "py-rgrow/Cargo.toml"
 python-source = "py-rgrow"
 
 
+[tool.uv.sources]
+rgrow-cli = { workspace = true }
+
 [tool.uv.workspace]
-members = ["."]
+members = [".", "rgrow-cli"]
 
 [dependency-groups]
 dev = [
