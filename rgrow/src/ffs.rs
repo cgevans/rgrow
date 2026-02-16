@@ -16,6 +16,7 @@ use crate::units::{MolarPerSecond, PerSecond};
 
 use canvas::Canvas;
 use num_traits::{Float, Num, Zero};
+#[cfg(feature = "polars")]
 use polars::prelude::*;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -1163,6 +1164,7 @@ pub struct FFSRunResult {
     pub system: Option<SystemEnum>,
 }
 
+#[cfg(feature = "polars")]
 #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSRunResultDF {
@@ -1175,6 +1177,7 @@ pub struct FFSRunResultDF {
     pub dimerization_rate: MolarPerSecond,
 }
 
+#[cfg(feature = "polars")]
 impl From<FFSRunResult> for FFSRunResultDF {
     fn from(value: FFSRunResult) -> Self {
         let surfaces_df = value.surfaces_dataframe().unwrap();
@@ -1189,6 +1192,7 @@ impl From<FFSRunResult> for FFSRunResultDF {
     }
 }
 
+#[cfg(feature = "polars")]
 impl FFSRunResultDF {
     pub fn read_files(prefix: &str) -> Result<Self, PolarsError> {
         let file = std::fs::File::open(format!("{prefix}.surfaces.parquet"))?;
@@ -1350,6 +1354,111 @@ impl FFSRunResult {
         self.dimerization_rate
     }
 
+    pub fn run_from_system<Sy: System>(
+        sys: &mut Sy,
+        config: &FFSRunConfig,
+    ) -> Result<FFSRunResult, RgrowError>
+    where
+        SystemEnum: From<Sy>,
+    {
+        let mut res: FFSRunResult = (match (config.canvas_type, config.tracking) {
+            (CanvasType::Square, TrackingType::None) => {
+                FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Square, TrackingType::Order) => {
+                FFSRun::<QuadTreeState<CanvasSquare, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Square, TrackingType::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasSquare, LastAttachTimeTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Square, TrackingType::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasSquare, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Square, TrackingType::Movie) => {
+                FFSRun::<QuadTreeState<CanvasSquare, MovieTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Periodic, TrackingType::None) => {
+                FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Periodic, TrackingType::Order) => {
+                FFSRun::<QuadTreeState<CanvasPeriodic, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Periodic, TrackingType::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Periodic, TrackingType::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasPeriodic, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Periodic, TrackingType::Movie) => {
+                FFSRun::<QuadTreeState<CanvasPeriodic, MovieTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Tube, TrackingType::None) => {
+                FFSRun::<QuadTreeState<CanvasTube, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Tube, TrackingType::Order) => {
+                FFSRun::<QuadTreeState<CanvasTube, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Tube, TrackingType::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasTube, LastAttachTimeTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Tube, TrackingType::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasTube, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::Tube, TrackingType::Movie) => {
+                FFSRun::<QuadTreeState<CanvasTube, MovieTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::TubeDiagonals, TrackingType::None) => {
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::TubeDiagonals, TrackingType::Order) => {
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::TubeDiagonals, TrackingType::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>>::create(
+                    sys, config,
+                )
+                .map(|x| x.into())
+            }
+            (CanvasType::TubeDiagonals, TrackingType::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::TubeDiagonals, TrackingType::Movie) => {
+                FFSRun::<QuadTreeState<CanvasTubeDiagonals, MovieTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+        })?;
+
+        if config.store_ffs_config {
+            res.ffs_config = Some(config.clone());
+        }
+        if config.store_system {
+            res.system = Some(sys.clone().into());
+        }
+
+        Ok(res)
+    }
+}
+
+#[cfg(feature = "polars")]
+impl FFSRunResult {
     fn surfaces_dataframe(&self) -> Result<DataFrame, PolarsError> {
         let surfaces = self.surfaces();
 
@@ -1509,108 +1618,6 @@ impl FFSRunResult {
         serde_json::to_writer_pretty(file, self).unwrap();
 
         Ok(())
-    }
-
-    pub fn run_from_system<Sy: System>(
-        sys: &mut Sy,
-        config: &FFSRunConfig,
-    ) -> Result<FFSRunResult, RgrowError>
-    where
-        SystemEnum: From<Sy>,
-    {
-        let mut res: FFSRunResult = (match (config.canvas_type, config.tracking) {
-            (CanvasType::Square, TrackingType::None) => {
-                FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Square, TrackingType::Order) => {
-                FFSRun::<QuadTreeState<CanvasSquare, OrderTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Square, TrackingType::LastAttachTime) => {
-                FFSRun::<QuadTreeState<CanvasSquare, LastAttachTimeTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Square, TrackingType::PrintEvent) => {
-                FFSRun::<QuadTreeState<CanvasSquare, PrintEventTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Square, TrackingType::Movie) => {
-                FFSRun::<QuadTreeState<CanvasSquare, MovieTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Periodic, TrackingType::None) => {
-                FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Periodic, TrackingType::Order) => {
-                FFSRun::<QuadTreeState<CanvasPeriodic, OrderTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Periodic, TrackingType::LastAttachTime) => {
-                FFSRun::<QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Periodic, TrackingType::PrintEvent) => {
-                FFSRun::<QuadTreeState<CanvasPeriodic, PrintEventTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Periodic, TrackingType::Movie) => {
-                FFSRun::<QuadTreeState<CanvasPeriodic, MovieTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Tube, TrackingType::None) => {
-                FFSRun::<QuadTreeState<CanvasTube, NullStateTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Tube, TrackingType::Order) => {
-                FFSRun::<QuadTreeState<CanvasTube, OrderTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Tube, TrackingType::LastAttachTime) => {
-                FFSRun::<QuadTreeState<CanvasTube, LastAttachTimeTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Tube, TrackingType::PrintEvent) => {
-                FFSRun::<QuadTreeState<CanvasTube, PrintEventTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Tube, TrackingType::Movie) => {
-                FFSRun::<QuadTreeState<CanvasTube, MovieTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::TubeDiagonals, TrackingType::None) => {
-                FFSRun::<QuadTreeState<CanvasTubeDiagonals, NullStateTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::TubeDiagonals, TrackingType::Order) => {
-                FFSRun::<QuadTreeState<CanvasTubeDiagonals, OrderTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::TubeDiagonals, TrackingType::LastAttachTime) => {
-                FFSRun::<QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>>::create(
-                    sys, config,
-                )
-                .map(|x| x.into())
-            }
-            (CanvasType::TubeDiagonals, TrackingType::PrintEvent) => {
-                FFSRun::<QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::TubeDiagonals, TrackingType::Movie) => {
-                FFSRun::<QuadTreeState<CanvasTubeDiagonals, MovieTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-        })?;
-
-        if config.store_ffs_config {
-            res.ffs_config = Some(config.clone());
-        }
-        if config.store_system {
-            res.system = Some(sys.clone().into());
-        }
-
-        Ok(res)
     }
 }
 

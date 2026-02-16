@@ -44,7 +44,8 @@ name = "rgrow"
 path = "src/main.rs"
 
 [features]
-python = ["pyo3", "numpy", "pyo3-polars"]
+python = ["pyo3", "numpy", "pyo3-polars", "polars"]
+polars = ["dep:polars"]
 gui = ["dep:iced", "dep:tokio", "dep:image"]
 default = ["gui"]
 
@@ -70,7 +71,7 @@ pyo3 = { workspace = true, optional = true }
 rand = { workspace = true }
 ndarray = { workspace = true }
 enum_dispatch = "0.3"
-polars = { workspace = true }
+polars = { workspace = true, optional = true }
 pyo3-polars = {workspace = true, optional = true}
 approx = { workspace = true }
 astro-float = "0.9.4"

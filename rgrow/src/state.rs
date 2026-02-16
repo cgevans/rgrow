@@ -15,6 +15,7 @@ use ndarray::prelude::*;
 
 use enum_dispatch::enum_dispatch;
 use num_traits::Zero;
+#[cfg(feature = "polars")]
 use polars::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -1191,6 +1192,7 @@ impl StateTracker for MovieTracker {
         }
     }
 
+    #[cfg(feature = "polars")]
     fn get_tracker_data(&self) -> RustAny {
         // Convert time and rates to f64 for DataFrame
         let time_f64: Vec<f64> = self.time.iter().map(|&t| t.into()).collect();
@@ -1215,6 +1217,11 @@ impl StateTracker for MovieTracker {
         .expect("Failed to create DataFrame from MovieTracker data");
 
         RustAny(Box::new(df))
+    }
+
+    #[cfg(not(feature = "polars"))]
+    fn get_tracker_data(&self) -> RustAny {
+        RustAny(Box::new(()))
     }
 }
 
