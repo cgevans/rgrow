@@ -40,7 +40,7 @@ build-freethreaded-linux:
         --interpreter /opt/python/cp313-cp313t/bin/python3 /opt/python/cp314-cp314t/bin/python3
     podman run --rm \
         -v "$(pwd)":/io \
-        -w /io/rgrow-gui \
+        -w /io/rgrow-cli \
         ghcr.io/pyo3/maturin:latest \
         build --release --out /io/dist \
         --interpreter /opt/python/cp313-cp313t/bin/python3 /opt/python/cp314-cp314t/bin/python3
@@ -48,7 +48,7 @@ build-freethreaded-linux:
 # Build native macOS wheels for free-threaded Python (run on macOS)
 build-freethreaded-macos:
     maturin build --release --out dist --interpreter python3.13t python3.14t
-    cd rgrow-gui && maturin build --release --out ../dist --interpreter python3.13t python3.14t
+    cd rgrow-cli && maturin build --release --out ../dist --interpreter python3.13t python3.14t
 
 # Build free-threaded macOS wheels from a specific git ref using a worktree
 build-freethreaded-macos-ref ref:
@@ -60,7 +60,7 @@ build-freethreaded-macos-ref ref:
     trap 'echo "Copying wheels..."; cp "$worktree"/dist/*.whl dist/ 2>/dev/null || true; echo "Removing worktree..."; git worktree remove --force "$worktree"; echo "Done."' EXIT
     cd "$worktree"
     maturin build --release --out dist --interpreter python3.13t python3.14t
-    cd rgrow-gui && maturin build --release --out ../dist --interpreter python3.13t python3.14t
+    cd rgrow-cli && maturin build --release --out ../dist --interpreter python3.13t python3.14t
 
 # Build all free-threaded wheels (Linux via Podman + native macOS)
 build-freethreaded: build-freethreaded-linux
@@ -81,7 +81,7 @@ build-freethreaded-ref ref:
         --interpreter /opt/python/cp313-cp313t/bin/python3 /opt/python/cp314-cp314t/bin/python3
     podman run --rm \
         -v "$worktree":/io \
-        -w /io/rgrow-gui \
+        -w /io/rgrow-cli \
         ghcr.io/pyo3/maturin:latest \
         build --release --out /io/dist \
         --interpreter /opt/python/cp313-cp313t/bin/python3 /opt/python/cp314-cp314t/bin/python3
@@ -110,6 +110,7 @@ cov-python:
     export CARGO_INCREMENTAL=1
     cargo llvm-cov clean --workspace
     source .venv/bin/activate
+    uv pip install ./rgrow-cli
     maturin develop --uv --profile dev
     pytest rgrow-python/tests -v
     cargo llvm-cov report --lcov --output-path coverage-python.lcov -p rgrow -p rgrow-python
@@ -126,6 +127,7 @@ coverage:
     cargo test -p rgrow
     # Build and run Python tests
     source .venv/bin/activate
+    uv pip install ./rgrow-cli
     maturin develop --uv --profile dev
     pytest rgrow-python/tests -v
     # Generate combined coverage report
