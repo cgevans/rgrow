@@ -29,6 +29,9 @@ pub mod models;
 pub mod painter;
 pub mod ui;
 
+#[cfg(feature = "gui")]
+pub mod gui;
+
 #[cfg(feature = "python")]
 pub mod python;
 

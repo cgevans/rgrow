@@ -20,6 +20,15 @@ struct Opts {
 enum SubCommand {
     Run(PO),
     NucRate(FFSOptions),
+    /// Internal: GUI subprocess (hidden from help)
+    #[clap(name = "gui-subprocess", hide = true)]
+    GuiSubprocess(GuiSubprocessArgs),
+}
+
+#[derive(Parser)]
+#[clap(version)]
+struct GuiSubprocessArgs {
+    socket_path: Option<String>,
 }
 
 #[derive(Parser)]
@@ -73,6 +82,20 @@ fn main() -> anyhow::Result<()> {
         SubCommand::NucRate(po) => {
             nucrate(po)?;
             Ok(())
+        }
+        #[cfg(feature = "gui")]
+        SubCommand::GuiSubprocess(args) => {
+            let socket_path = args.socket_path.ok_or_else(|| {
+                anyhow::anyhow!("Usage: rgrow gui-subprocess <socket_path>")
+            })?;
+            rgrow::gui::run_gui_subprocess(&socket_path)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            Ok(())
+        }
+        #[cfg(not(feature = "gui"))]
+        SubCommand::GuiSubprocess(_) => {
+            eprintln!("GUI support is not enabled. Rebuild with the 'gui' feature.");
+            std::process::exit(1);
         }
     }
 }

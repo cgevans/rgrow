@@ -1,13 +1,12 @@
-// UI module is now in lib.rs for testing
-use rgrow_gui::ui;
+pub mod iced_gui;
+pub mod shm_reader;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use crate::ui::iced_gui;
-    use crate::ui::shm_reader::ShmReader;
+use crate::ui::ipc::{ControlMessage, IpcMessage};
+use shm_reader::ShmReader;
+
+pub fn run_gui_subprocess(socket_path: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     #[cfg(windows)]
     use named_pipe::{PipeOptions, PipeServer};
-    use rgrow_ipc::{ControlMessage, IpcMessage};
-    use std::env;
     use std::io::{Read, Write};
     #[cfg(unix)]
     use std::os::unix::net::UnixListener;
@@ -15,18 +14,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::{Duration, Instant};
-
-    let args: Vec<String> = env::args().collect();
-    if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
-        println!("rgrow-gui {}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
-    }
-    if args.len() < 2 {
-        eprintln!("Usage: rgrow-gui <socket_path>");
-        std::process::exit(1);
-    }
-
-    let socket_path = &args[1];
 
     #[cfg(unix)]
     let listener = UnixListener::bind(socket_path)?;

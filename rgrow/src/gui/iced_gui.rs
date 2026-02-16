@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use rgrow_ipc::{ControlMessage, InitMessage, ParameterInfo};
+use crate::ui::ipc::{ControlMessage, InitMessage, ParameterInfo};
 
 fn debug_enabled() -> bool {
     std::env::var("RGROW_DEBUG_PERF").is_ok()

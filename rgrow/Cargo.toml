@@ -45,9 +45,10 @@ path = "src/main.rs"
 
 [features]
 python = ["pyo3", "numpy", "pyo3-polars"]
+gui = ["dep:iced", "dep:tokio", "dep:image"]
+default = ["gui"]
 
 [dependencies]
-rgrow-ipc = { path = "../rgrow-ipc", version = "0.21.1" }
 num-format = "0.4"
 fnv = "1.0"
 bimap = "0.6"
@@ -75,6 +76,9 @@ approx = { workspace = true }
 astro-float = "0.9.4"
 paste="1.0.15"
 bpci = "0.1.0"
+iced = { version = "0.13", features = ["wgpu", "image", "tokio"], optional = true }
+tokio = { version = "1", features = ["full"], optional = true }
+image = { version = "0.25", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 named_pipe = "0.4"
