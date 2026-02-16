@@ -10,5 +10,5 @@ build-backend = "maturin"
 
 [tool.maturin]
 bindings = "bin"
-manifest-path = "../rgrow/Cargo.toml"
+manifest-path = "../rgrow-rust/Cargo.toml"
 profile = "release"
