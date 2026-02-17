@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use super::sdc1d::{SDCParams, SDCStrand};
 use serde::{Deserialize, Serialize};
-use crate::{canvas::PointSafe2, colors::get_color_or_random, models::sdc1d::{SingleOrMultiScaffold, get_or_generate}, system::{Event, System, TileBondInfo}, units::PerSecond};
+use crate::{canvas::{PointSafe2, PointSafeHere}, colors::get_color_or_random, models::sdc1d::{SingleOrMultiScaffold, get_or_generate}, state::State, system::{Event, System, TileBondInfo}, units::PerSecond};
 
 #[cfg(feature = "python")]
 use numpy::PyArrayMethods;
@@ -45,7 +45,7 @@ impl TileBondInfo for SDC1DBindReplace   {
     }
 
     fn tile_colors(&self) -> &Vec<[u8; 4]> {
-        todo!(); // &self.colors
+        &self.strand_colors
     }
 
     fn tile_name(&self, tile_number: u32) -> &str {
@@ -70,14 +70,22 @@ impl System for SDC1DBindReplace {
     fn system_info(&self) -> String {
         format!(
             "SDC1DBindReplace with {} strands, {} glues, and length {} scaffold",
-            self.strand_names.len(),
-            self.glue_names.len(),
+            self.strand_names.len() - 1,
+            self.glue_names.len() - 1,
             self.scaffold.len()
         )
     }
 
-    fn update_after_event<St: crate::state::State>(&self, state: &mut St, event: &crate::system::Event) {
-        todo!()
+    fn update_after_event<St: State>(&self, state: &mut St, event: &Event) {
+        match event {
+            Event::None => todo!(),
+            Event::MonomerAttachment(scaffold_point, _)
+            | Event::MonomerDetachment(scaffold_point)
+            | Event::MonomerChange(scaffold_point, _) => {
+                self.update_monomer_point(state, scaffold_point)
+            }
+            _ => panic!("This event is not supported in SDC"),
+        }
     }
 
     fn event_rate_at_point<St: crate::state::State>(&self, state: &St, p: crate::canvas::PointSafeHere) -> PerSecond {
@@ -165,6 +173,22 @@ impl System for SDC1DBindReplace {
 }
 
 impl SDC1DBindReplace {
+    fn update_monomer_point<S: State>(&self, state: &mut S, scaffold_point: &PointSafe2) {
+        let mut points = Vec::with_capacity(3);
+
+        let pw = state.move_sa_w(*scaffold_point);
+        if state.inbounds(pw.0) {
+            points.push((pw, self.event_rate_at_point(state, pw)));
+        }
+        let pe = state.move_sa_e(*scaffold_point);
+        if state.inbounds(pe.0) {
+            points.push((pe, self.event_rate_at_point(state, pe)));
+        }
+        let ph = PointSafeHere(scaffold_point.0);
+        points.push((ph, self.event_rate_at_point(state, ph)));
+        state.update_multiple(&points);
+    }
+
     pub fn from_params(params: SDCParams) -> Self {
         let mut glue_name_map: HashMap<String, usize> = HashMap::new();
         let strand_count = params.strands.len() + 1; // to account for empty
@@ -239,4 +263,13 @@ fn update(&mut self) {
         self.matching_tiles_at_site[i] = matching_tiles;
     }
  }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl SDC1DBindReplace {
+    #[new]
+    fn py_new(params: SDCParams) -> Self {
+        Self::from_params(params)
+    }
 }
