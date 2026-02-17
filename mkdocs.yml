@@ -47,7 +47,6 @@ nav:
   - API Reference:
       - reference/index.md
       - TileSet & Tiles: reference/tileset.md
-      - Simulation: reference/simulation.md
       - Forward Flux Sampling: reference/ffs.md
       - SDC: reference/sdc.md
       - KBlock: reference/kblock.md
