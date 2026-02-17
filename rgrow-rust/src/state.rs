@@ -584,9 +584,7 @@ where
 
     fn empty_with_types(params: Self::Params, n_tile_types: usize) -> Result<Self, GrowError> {
         let canvas = C::new_sized(params)?;
-        println!("Canvas created with size: {:?}", params);
         let needed_size = canvas.array_size_needed();
-        println!("Needed size: {:?}", needed_size);
         let rates: QuadTreeSquareArray<PerSecond> =
             QuadTreeSquareArray::new_with_size(needed_size.0, needed_size.1);
         let tracker = T::default(&canvas);

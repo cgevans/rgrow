@@ -12,6 +12,7 @@
 - 1D SDC:
   - Only a single scaffold domain list is accepted per system; you can no longer have a collection of different ones at different positions.  This feature was never well supported (and not really supported in Python at all), and had unclear behavior when combined with equilibrium calculations.
   - Scaffold-strand interactions are no longer necessarily glue-complement.  While glue-complement is still supported, arbitrary glue-glue free energies can be set, and these will function with the scaffold strand.
+  - A two-tile empty border is no longer removed by commands.  Use `SquareCompact` as your canvas type instead of `Square`.
 
 # v0.21.1
 

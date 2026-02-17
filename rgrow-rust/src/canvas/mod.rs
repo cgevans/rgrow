@@ -530,6 +530,12 @@ impl Canvas for CanvasPeriodic {
     }
 }
 
+/// CanvasSquareCompact tries to have the advantages of the two-tile-zero border of CanvasSquare, without the associated
+/// nuisances, like always having to worry about padding and avoiding the border.   Rather than using a two-tile border around
+/// the entire array, visible to the user and part of the coordinate system, it uses a two-tile border on the high-index sides of
+/// the array, and a periodic boundary on the low-index sides, wrapping into the high-index two-tile border.  This allows code
+/// to treat the canvas the same way as CanvasSquare (eg, tiles are always at PointSafe2 coordinates, and PointSafe2 coordinates always
+/// allow two moves away without moving out of *memory* bounds).)
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CanvasSquareCompact(Array2<Tile>);
 
@@ -537,10 +543,11 @@ impl CanvasCreate for CanvasSquareCompact {
     type Params = (usize, usize);
 
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
-        Ok(Self(Array2::zeros((shape.0 + 4, shape.1 + 4))))
+        Ok(Self(Array2::zeros((shape.0 + 2, shape.1 + 2))))
     }
 
     fn from_array(arr: Array2<Tile>) -> GrowResult<Self> {
+        // TODO: maybe we want to pad this
         Ok(Self(arr))
     }
 }
@@ -548,12 +555,12 @@ impl CanvasCreate for CanvasSquareCompact {
 impl Canvas for CanvasSquareCompact {
     #[inline(always)]
     unsafe fn uv_pr(&self, p: Point) -> &Tile {
-        self.0.uget((p.0 + 2, p.1 + 2))
+        self.0.uget((p.0, p.1))
     }
 
     #[inline(always)]
     unsafe fn uvm_p(&mut self, p: Point) -> &mut Tile {
-        self.0.uget_mut((p.0 + 2, p.1 + 2))
+        self.0.uget_mut((p.0, p.1))
     }
 
     #[inline(always)]
@@ -561,44 +568,28 @@ impl Canvas for CanvasSquareCompact {
         (p.0 < self.nrows_usable()) & (p.1 < self.ncols_usable())
     }
 
-    #[inline(always)]
     fn u_move_point_n(&self, p: Point) -> Point {
-        (p.0 - 1, p.1)
+        if p.0 == 0 {
+            (self.0.nrows() - 1, p.1)
+        } else {
+            (p.0 - 1, p.1)
+        }
     }
 
-    #[inline(always)]
     fn u_move_point_e(&self, p: Point) -> Point {
         (p.0, p.1 + 1)
     }
 
-    #[inline(always)]
     fn u_move_point_s(&self, p: Point) -> Point {
         (p.0 + 1, p.1)
     }
 
-    #[inline(always)]
     fn u_move_point_w(&self, p: Point) -> Point {
-        (p.0, p.1 - 1)
-    }
-
-    #[inline(always)]
-    fn u_move_point_ne(&self, p: Point) -> Point {
-        (p.0 - 1, p.1 + 1)
-    }
-
-    #[inline(always)]
-    fn u_move_point_se(&self, p: Point) -> Point {
-        (p.0 + 1, p.1 + 1)
-    }
-
-    #[inline(always)]
-    fn u_move_point_sw(&self, p: Point) -> Point {
-        (p.0 + 1, p.1 - 1)
-    }
-
-    #[inline(always)]
-    fn u_move_point_nw(&self, p: Point) -> Point {
-        (p.0 - 1, p.1 - 1)
+        if p.1 == 0 {
+            (p.0, self.0.ncols() - 1)
+        } else {
+            (p.0, p.1 - 1)
+        }
     }
 
     #[inline(always)]
@@ -608,22 +599,22 @@ impl Canvas for CanvasSquareCompact {
 
     fn raw_array(&self) -> ArrayView2<'_, Tile> {
         self.0
-            .slice(s![2..self.0.nrows() - 2, 2..self.0.ncols() - 2])
+            .slice(s![0..self.0.nrows() - 2, 0..self.0.ncols() - 2])
     }
 
     fn raw_array_mut(&mut self) -> ArrayViewMut2<'_, Tile> {
         let nrows = self.0.nrows();
         let ncols = self.0.ncols(); 
         self.0
-            .slice_mut(s![2..nrows - 2, 2..ncols - 2])
+            .slice_mut(s![0..nrows - 2, 0..ncols - 2])
     }
 
     fn nrows(&self) -> usize {
-        self.0.nrows() - 4
+        self.0.nrows() - 2
     }
 
     fn ncols(&self) -> usize {
-        self.0.ncols() - 4
+        self.0.ncols() - 2
     }
 
     fn calc_n_tiles_with_tilearray(&self, should_be_counted: &Array1<bool>) -> NumTiles {
@@ -632,11 +623,11 @@ impl Canvas for CanvasSquareCompact {
     }
 
     fn nrows_usable(&self) -> usize {
-        self.0.nrows() - 4
+        self.0.nrows() - 2
     }
 
     fn ncols_usable(&self) -> usize {
-        self.0.ncols() - 4
+        self.0.ncols() - 2
     }
 
     fn array_size_needed(&self) -> (usize, usize) {

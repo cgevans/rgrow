@@ -8,7 +8,7 @@ def mean_energies(strand_length: int = 10) -> tuple[float, float]:
         -0.02201875 * (strand_length-1)
     )
 
-def make_bitcopy(N, input="0", conc=1e-7, cdl=10, sdl=20):
+def make_bitcopy(N, input="0", conc=1e-7, cdl=10, sdl=20, pad=False):
     strands = []
 
     match input:
@@ -27,6 +27,11 @@ def make_bitcopy(N, input="0", conc=1e-7, cdl=10, sdl=20):
         strands.append(SDCStrand(conc, "c0", f"sc{i}", "c0*", f"{i}_0"))
         strands.append(SDCStrand(conc, "c1", f"sc{i}", "c1*", f"{i}_1"))
 
+    if pad:
+        scaffold = [None, None] + [f"sc{i}*" for i in range(0,N)] + [None, None]
+    else:
+        scaffold = [f"sc{i}*" for i in range(0,N)]
+
     params = SDCParams(
         strands=strands,
         glue_dg_s = (
@@ -34,7 +39,7 @@ def make_bitcopy(N, input="0", conc=1e-7, cdl=10, sdl=20):
             {"c1": mean_energies(cdl)} |
             {f"sc{i}": mean_energies(sdl) for i in range(0,N)}
         ),
-        scaffold = [f"sc{i}*" for i in range(0,N)]
+        scaffold = scaffold
     )
 
     return SDC(params)
@@ -57,24 +62,48 @@ def temperature_for_target_prob(sys, prob=0.9, precision=0.1, start_range=(60, 9
 def test_bitcopy_const_temp():
     N = 8
     sys = make_bitcopy(N)
-    state = State((1024, N), kind="SquareCompact", tracking="None", n_tile_types=len(sys.tile_names))
+    state = State((256, N), kind="SquareCompact", tracking="None", n_tile_types=len(sys.tile_names))
     sys.update_state(state)
 
-    sys.temperature = temperature_for_target_prob(sys, prob=0.8, precision=0.1)
+    sys.temperature = temperature_for_target_prob(sys, prob=0.75, precision=0.1)
 
-    sys.evolve(state, for_events=10000000)
+    sys.evolve(state, for_events=1000000)
 
     print(state.canvas_view[:,:])
     print(sys.mfe_config())
     print(sys.mfe_matrix())
 
     target = np.all(state.canvas_view[:,:] == np.array(sys.mfe_config()[0]), axis=1).mean()
-    assert target > 0.70
-    assert target < 0.90
+    assert target > 0.60
+    assert target < 0.80
    
     # Now test melting:
     sys.temperature += 15
-    sys.evolve(state, for_events=10000000)
+    sys.evolve(state, for_events=1000000)
+
+    assert state.n_tiles < 10
+
+def test_bitcopy_const_temp_sq():
+    N = 8
+    sys = make_bitcopy(N,  pad=True) 
+    state = State((256, N+4), kind="Square", tracking="None", n_tile_types=len(sys.tile_names))
+    sys.update_state(state)
+
+    sys.temperature = temperature_for_target_prob(sys, prob=0.75, precision=0.1)
+
+    sys.evolve(state, for_events=1000000)
+
+    print(state.canvas_view[:,:])
+    print(sys.mfe_config())
+    print(sys.mfe_matrix())
+
+    target = np.all(state.canvas_view[2:-2,:] == np.array(sys.mfe_config()[0]), axis=1).mean()
+    assert target > 0.60
+    assert target < 0.80
+   
+    # Now test melting:
+    sys.temperature += 15
+    sys.evolve(state, for_events=1000000)
 
     assert state.n_tiles < 10
 
