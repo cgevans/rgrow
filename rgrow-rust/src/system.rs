@@ -66,7 +66,7 @@ pub enum StepOutcome {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow.rgrow"))]
 pub enum NeededUpdate {
     None,
     NonZero,
@@ -74,7 +74,7 @@ pub enum NeededUpdate {
 }
 
 #[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 pub struct EvolveBounds {
     /// Stop if this number of events has taken place during this evolve call.
     pub for_events: Option<NumEvents>,
@@ -168,7 +168,7 @@ impl EvolveBounds {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(C)]
 pub enum EvolveOutcome {
@@ -181,13 +181,13 @@ pub enum EvolveOutcome {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow.rgrow"))]
 pub enum Orientation {
     NS,
     WE,
 }
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow.rgrow"))]
 pub struct DimerInfo {
     pub t1: Tile,
     pub t2: Tile,
@@ -205,7 +205,7 @@ impl DimerInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow.rgrow"))]
 pub enum ChunkHandling {
     #[serde(alias = "none")]
     None,
@@ -229,7 +229,7 @@ impl TryFrom<&str> for ChunkHandling {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow.rgrow"))]
 pub enum ChunkSize {
     #[serde(alias = "single")]
     Single,
@@ -253,7 +253,7 @@ impl TryFrom<&str> for ChunkSize {
 
 /// Result of a critical state search.
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 pub struct CriticalStateResult {
     /// The critical state found.
     pub state: StateEnum,
@@ -323,7 +323,7 @@ impl CriticalStateResult {
 
 /// Configuration for critical state search algorithms.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow.rgrow"))]
 pub struct CriticalStateConfig {
     /// Cutoff size for committer calculation (tiles above which growth is considered successful).
     pub cutoff_size: NumTiles,
@@ -2038,7 +2038,7 @@ pub trait SystemInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow.rgrow"))]
 pub enum FissionHandling {
     #[serde(alias = "off", alias = "no-fission")]
     NoFission,

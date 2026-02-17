@@ -34,7 +34,7 @@ use super::*;
 
 /// Configuration data retention mode for FFS simulations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-// #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+// #[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 pub enum ConfigRetentionMode {
     /// No configuration data retained (minimal memory usage).
     None,
@@ -189,7 +189,7 @@ use system::{DynSystem, Orientation, System, SystemEnum};
 
 /// Configuration options for Forward Flux Sampling (FFS) simulations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow.rgrow"))]
 pub struct FFSRunConfig {
     /// Use constant-variance, variable-configurations-per-surface method.
     ///
@@ -1154,7 +1154,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
 // RESULTS CODE
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSRunResult {
     #[serde(skip)]
@@ -1167,7 +1167,7 @@ pub struct FFSRunResult {
 }
 
 #[cfg(feature = "polars")]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSRunResultDF {
     #[serde(skip)]
@@ -1271,7 +1271,7 @@ where
     }
 }
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSLevelResult {
     pub state_list: Vec<Arc<StateEnum>>,
@@ -1892,7 +1892,7 @@ impl FFSRunResultDF {
     // }
 }
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[allow(dead_code)] // This is used in the python interface
 pub struct FFSLevelRef(Weak<FFSLevelResult>);
 
@@ -1953,7 +1953,7 @@ impl FFSLevelRef {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[allow(dead_code)] // This is used in the python interface
 #[derive(Clone)]
 pub struct FFSStateRef(Weak<StateEnum>);

@@ -87,7 +87,7 @@ enum TileShape {
     DupleToTop(Tile),
 }
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KTAM {
     /// Tile names, as strings.  Only used for reference.

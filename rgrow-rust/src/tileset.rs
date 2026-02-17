@@ -190,7 +190,7 @@ impl Display for Tile {
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow.rgrow"))]
 pub enum Direction {
     N,
     E,
@@ -246,7 +246,7 @@ struct SerdeTileSet {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[serde(from = "SerdeTileSet")]
 pub struct TileSet {
     #[serde(default = "Vec::new")]
@@ -487,7 +487,7 @@ impl<'py> IntoPyObject<'py> for CanvasType {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow", eq, eq_int))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow", eq, eq_int))]
 pub enum TrackingType {
     None,
     Order,

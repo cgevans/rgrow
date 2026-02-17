@@ -54,7 +54,7 @@ enum TileShape {
 ///
 /// Supports duples, and concentration-based attachment rates, which may
 /// be important for non-deterministic systems.
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ATAM {
     /// Tile names, as strings.  Only used for reference.
