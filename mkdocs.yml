@@ -44,8 +44,6 @@ nav:
       - KBlock: examples/kblock.ipynb
       - FFS - Simple: examples/ffs-simple.ipynb
       - FFS - Pattern Recognition: examples/ffs-pattern-recognition.ipynb
-      - SDC - Bit Copy: examples/sdc-bit-copy.ipynb
-      - SDC - Bit Copy Dual: examples/sdc-bit-copy-dual.ipynb
   - API Reference:
       - reference/index.md
       - TileSet & Tiles: reference/tileset.md

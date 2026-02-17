@@ -1,7 +1,8 @@
 // #![feature(stmt_expr_attributes)]
 extern crate ndarray;
 
-use clap::Parser;
+use clap::{Parser};
+use clap::crate_version; 
 
 use rgrow::base::RgrowError;
 use rgrow::ffs;
@@ -10,7 +11,7 @@ use rgrow::tileset::TileSet;
 use std::fs::File;
 
 #[derive(Parser)]
-#[clap(version = "0.1.0", author = "Constantine Evans <cevans@costinet.org")]
+#[clap(version = crate_version!(), author = "Constantine Evans <cevans@costinet.org")]
 struct Opts {
     #[clap(subcommand)]
     subcmd: SubCommand,
@@ -18,7 +19,9 @@ struct Opts {
 
 #[derive(Parser)]
 enum SubCommand {
+    /// Run a tileset in the GUI
     Run(PO),
+    /// Run FFS to compute a nucleation rate
     NucRate(FFSOptions),
     /// Internal: GUI subprocess (hidden from help)
     #[clap(name = "gui-subprocess", hide = true)]
@@ -33,18 +36,19 @@ struct GuiSubprocessArgs {
 
 #[derive(Parser)]
 struct FFSOptions {
+    /// Input tileset file
     input: String,
-    #[arg(short, long, default_value_t = 0.01)]
+    #[arg(long, default_value_t = 0.01)]
     varpermean2: f64,
-    #[arg(short, long, default_value_t = 1_000)]
+    #[arg(long, default_value_t = 1_000)]
     min_configs: usize,
-    #[arg(short, long, default_value_t = 100)]
+    #[arg(long, default_value_t = 100)]
     target_size: u32,
-    #[arg(short, long, default_value_t = 0.99)]
+    #[arg(long, default_value_t = 0.99)]
     cutoff_probability: f64,
-    #[arg(short, long, default_value_t = 4)]
+    #[arg(long, default_value_t = 4)]
     cutoff_surfaces: usize,
-    #[arg(short, long, default_value_t = 30)]
+    #[arg(long, default_value_t = 30)]
     min_cutoff_size: u32,
 }
 
@@ -67,6 +71,7 @@ struct EO {}
 
 #[derive(Parser)]
 struct PO {
+    /// Input tileset file
     input: String,
 }
 

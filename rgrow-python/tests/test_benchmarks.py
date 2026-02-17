@@ -1,5 +1,6 @@
 from rgrow import State
 from test_sdc import make_bitcopy, temperature_for_target_prob
+from test_sierpinski import create_sierpinski_tileset
 
 
 def test_bench_evolve_squarecompact(benchmark):

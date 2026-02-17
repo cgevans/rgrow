@@ -34,3 +34,4 @@ coverage.lcov
 uv.lock
 *.lcov
 site/
+.DS_Store

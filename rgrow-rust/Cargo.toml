@@ -87,7 +87,7 @@ winapi = { version = "0.3", features = ["namedpipeapi"] }
 
 [dependencies.clap]
 version = "4"
-features = ["derive"]
+features = ["derive","cargo"]
 
 
 [dependencies.cached]

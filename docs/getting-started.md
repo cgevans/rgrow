@@ -1,92 +1,73 @@
 # Getting Started
 
-## Installation
+## Forms and installation instructions
 
-### From PyPI (recommended)
+Rgrow is designed with several uses in mind:
 
-Releases are pushed, in both source and a variety of binary forms, to PyPI:
+- For most users, the Python library is the easiest way to use Rgrow.  It allows tile systems to be defined in Python code (or via tileset files), allows flexible interactions with simulations, interfaces with Polars and Numpy for data access and manipulation, and allows the GUI to be run.  It can conveniently be used through Jupyter notebooks as well.
 
-```bash
-pip install rgrow
-```
+- For exploring tile systems, the `rgrow` standalone executable operates like Xgrow (and can interpret many Xgrow tileset files), taking a declarative input file defining the tile system and displaying the simulation in a GUI.  The standalone executable is also included as a dependency of the Python package.
 
-### From Git
+- For some users, interfacing directly with the core Rust library may make sense.
 
-To install directly from the repository:
+### Python package installation
 
-```bash
-pip install "git+https://github.com/cgevans/rgrow.git"
-```
+The Python package has a number of pre-built wheels for Linux, MacOS, and Windows; in many cases, it should be easily installable via a command like `uv pip install rgrow` or `pip install rgrow`, depending on your preferred package manager.  The package includes both the Python library and the standalone executable.
 
-### Development Install
+When installing from source, you will need a Rust installation.  Installing the latest commit directly from the repository can be done with `uv pip install git+https://github.com/cgevans/rgrow`.  Note that this may take much longer than most python package installations, while the underlying Rust library is compiled.
 
-Check out the repository and build with [maturin](https://www.maturin.rs/):
+### Standalone executable
 
-```bash
-git clone https://github.com/cgevans/rgrow.git
-cd rgrow
-maturin develop --release
-```
+The standalone `rgrow` executable can be installed in two ways:
 
-For optimized builds targeting your CPU:
+- Installing the `rgrow` or `rgrow-cli` Python packages, which will install a pre-build wheel if possible.
 
-```bash
-maturin develop --release -- -C target-cpu=native
-```
+- Installing `rgrow` with `cargo`, eg, `cargo install rgrow`.  This does not require Python at all, and will build the executable from source.
 
-## Quick Start
+## Basic usage in Python
 
-### Define a Tile Set
+Rgrow is built around a series of *models*, within which *systems* can be defined, these in turn operate on *states*. 
+
+- The *model* defines 
+- The *system* 
+- The *state* 
+
+Rgrow has two ways of defining systems: the *tileset* interface, which was, and the *direct* interface.
+
+For example, to use the tileset interface to create a basic XOR system in the aTAM, one might use
 
 ```python
-import rgrow as rg
-
-tileset = rg.TileSet(
-    tiles=[
-        rg.Tile(edges=["N", "E", "S", "W"], name="center", color="blue"),
+from rgrow improt TileSet, Tile, Bond
+tileset = TileSet(
+    [
+        Tile(name="S", edges=["null", "rb", "bb", "null"], color="purple", stoic=0),
+        Tile(name="RB", edges=["null", "rb", "e1", "rb"], color="red"),
+        Tile(name="BB", edges= ["bb", "e1", "bb", "null"], color="blue"),
+        Tile(name="00", edges= ["e0", "e0", "e0", "e0"], color="teal"),
+        Tile(name="10", edges= ["e1", "e1", "e1", "e0"], color="green"),
+        Tile(name="01", edges= ["e0", "e1", "e1", "e1"], color="yellow"),
+        Tile(name="11", edges= ["e1", "e0", "e0", "e1"], color="orange"),
     ],
-    bonds=[("N", 1.0), ("E", 1.0), ("S", 1.0), ("W", 1.0)],
-    gse=8.0,
-    gmc=16.0,
-    size=64,
-    seed=(32, 32, "center"),
+    bonds=[Bond("rb", 2), Bond("bb", 2)],
+    seed=[
+        (0, 0, "S")
+    ],
+    threshold=2,
+    model="aTAM",
+    size=(32,32),
+    canvas_type="SquareCompact",
 )
 ```
 
-### Run a Simulation
+Then, the tileset definition can be used to create a system and state:
 
 ```python
-sim = rg.Simulation(tileset)
-sim.add_state()
-sim.evolve(for_events=10000)
+system, state = tileset.create_system_and_state()
 ```
 
-### Visualize the Result
+And finally, the state can be evolved and plotted
 
 ```python
-import matplotlib.pyplot as plt
-
-sys, state = tileset.create_system_and_state()
-sys.evolve(state, for_events=10000)
-sys.plot_canvas(sys, state)
-plt.show()
+system.evolve(state, for_events=1023)
+system.plot_canvas(state)
 ```
-
-### Forward Flux Sampling
-
-rgrow includes an implementation of forward flux sampling (FFS) for computing nucleation rates:
-
-```python
-result = tileset.run_ffs(
-    target_size=50,
-    canvas_size=(64, 64),
-)
-print(f"Nucleation rate: {result.nucleation_rate}")
-```
-
-See the [FFS examples](examples/index.md#forward-flux-sampling) for detailed walkthroughs.
-
-## Next Steps
-
-- Browse the [Examples](examples/index.md) for interactive Jupyter notebooks
-- Read the [API Reference](reference/index.md) for detailed documentation
