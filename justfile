@@ -19,6 +19,14 @@ build-python:
 test-python: build-python
     source .venv/bin/activate && pytest rgrow-python/tests/ -v
 
+# Run Python benchmarks (builds first)
+bench-python: build-python
+    source .venv/bin/activate && pytest rgrow-python/tests/ --benchmark-only -v
+
+# Run Python benchmarks and save JSON output
+bench-python-json: build-python
+    source .venv/bin/activate && pytest rgrow-python/tests/ --benchmark-only --benchmark-json benchmark-results.json -v
+
 # Run Rust clippy
 clippy:
     cargo clippy -p rgrow

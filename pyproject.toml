@@ -37,6 +37,7 @@ members = [".", "rgrow-cli"]
 testing = [
     "pytest",
     "hypothesis",
+    "pytest-benchmark",
 ]
 docs = [
     "mkdocs-material",
@@ -50,10 +51,11 @@ dev = [
     "pytest~=9.0",
     "hypothesis",
     "pytest-cov",
+    "pytest-benchmark",
     "maturin>=1.11.2",
 ]
 
-[tool.pytest]
+[tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["rgrow-python/tests"]
 norecursedirs = [
@@ -61,3 +63,4 @@ norecursedirs = [
     "build",
     ".tox",
 ]
+addopts = "--benchmark-skip"
