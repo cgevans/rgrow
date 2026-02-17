@@ -16,6 +16,7 @@ use crate::models::kblock::KBlock;
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
+use crate::models::sdc1d_bindreplace::SDC1DBindReplace;
 use crate::painter::SpriteSquare;
 use crate::painter::TileStyle;
 use crate::state::State;
@@ -1988,6 +1989,7 @@ pub enum SystemEnum {
     OldKTAM,
     ATAM,
     SDC, // StaticKTAMCover
+    SDC1DBindReplace,
     KBlock,
 }
 
@@ -2000,6 +2002,7 @@ impl<'py> IntoPyObject<'py> for SystemEnum {
             SystemEnum::ATAM(atam) => atam.into_bound_py_any(py),
             SystemEnum::SDC(sdc) => sdc.into_bound_py_any(py),
             SystemEnum::KBlock(kblock) => kblock.into_bound_py_any(py),
+            SystemEnum::SDC1DBindReplace(sdc1dbr) => sdc1dbr.into_bound_py_any(py),
         }
     }
 

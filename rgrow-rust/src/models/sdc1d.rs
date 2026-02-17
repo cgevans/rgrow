@@ -89,13 +89,9 @@ fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass(subclass, module = "rgrow.sdc"))]
+#[cfg_attr(feature = "python", pyclass(subclass, module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC {
-    /// The anchor tiles for each of the scaffolds
-    ///
-    /// To get the anchor tile of the nth scaffold, anchor_tiles.get(n)
-    pub anchor_tiles: Vec<(PointSafe2, Tile)>,
     pub strand_names: Vec<String>,
     pub glue_names: Vec<String>,
     /// Identifies the strand that serves as a binding site for the quencher
@@ -1244,7 +1240,7 @@ impl System for SDC {
     }
 
     fn seed_locs(&self) -> Vec<(crate::canvas::PointSafe2, Tile)> {
-        self.anchor_tiles.clone()
+        Vec::default()
     }
 
     fn calc_mismatch_locations<St: State>(&self, state: &St) -> Array2<usize> {
@@ -1565,7 +1561,7 @@ fn self_and_inverse(value: &str) -> (bool, String, String) {
     (is_from, filtered.to_string(), format!("{filtered}*"))
 }
 
-fn get_or_generate(
+pub(super) fn get_or_generate(
     map: &mut HashMap<String, usize>,
     count: &mut usize,
     val: Option<String>,
@@ -1778,15 +1774,13 @@ impl SDC {
         }
 
         {
-            let anchor_tiles = vec![];
             let strand_concentration = strand_concentration.mapv(Molar::new);
             let scaffold_concentration = Molar::new(params.scaffold_concentration);
-            let kf = PerMolarSecond::new(params.k_f);
+            let kf: PerMolarSecond = PerMolarSecond::new(params.k_f);
             let temperature = Celsius(params.temperature);
             let strand_count = strand_names.len();
             let scaffold_count = scaffold.len();
             let mut s = SDC {
-                anchor_tiles,
                 strand_concentration,
                 strand_names,
                 colors: strand_colors,
