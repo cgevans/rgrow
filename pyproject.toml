@@ -16,6 +16,8 @@ dynamic = ["version"]
 [project.optional-dependencies]
 gui = ["rgrow-cli"]
 cli = ["rgrow-cli"]
+full = ["rgrow"]
+default = ["rgrow"]
 
 [build-system]
 requires = ["maturin~=1.10"]
