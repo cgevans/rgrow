@@ -35,3 +35,4 @@ uv.lock
 *.lcov
 site/
 .DS_Store
+py-rgrow/rgrow/rgrow.abi3.so
