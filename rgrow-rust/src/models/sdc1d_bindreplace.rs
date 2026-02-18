@@ -39,25 +39,17 @@ pub struct SDC1DBindReplace {
     matching_tiles_at_site: Vec<Vec<Tile>>,
 }
 
-impl TileBondInfo for SDC1DBindReplace   {
+impl TileBondInfo for SDC1DBindReplace {
     fn tile_colors(&self) -> &Vec<[u8; 4]> {
         &self.strand_colors
     }
 
-    fn tile_name(&self, tile_number: u32) -> &str {
-        self.strand_names[tile_number as usize].as_str()
+    fn tile_names(&self) -> &[String] {
+        &self.strand_names
     }
 
-    fn tile_names(&self) -> Vec<&str> {
-        self.strand_names.iter().map(|s| s.as_str()).collect()
-    }
-
-    fn bond_name(&self, bond_number: usize) -> &str {
-        self.glue_names[bond_number].as_str()
-    }
-
-    fn bond_names(&self) -> Vec<&str> {
-        self.glue_names.iter().map(|x| x.as_str()).collect()
+    fn bond_names(&self) -> &[String] {
+        &self.glue_names
     }
 }
 

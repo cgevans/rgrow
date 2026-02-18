@@ -965,24 +965,16 @@ impl System for KTAM {
 }
 
 impl TileBondInfo for KTAM {
-    fn tile_name(&self, tile_number: Tile) -> &str {
-        self.tile_names[tile_number as usize].as_str()
-    }
-
-    fn bond_name(&self, bond_number: usize) -> &str {
-        &self.glue_names[bond_number]
-    }
-
     fn tile_colors(&self) -> &Vec<[u8; 4]> {
         &self.tile_colors
     }
 
-    fn tile_names(&self) -> Vec<&str> {
-        self.tile_names.iter().map(|x| x.as_str()).collect()
+    fn tile_names(&self) -> &[String] {
+        &self.tile_names
     }
 
-    fn bond_names(&self) -> Vec<&str> {
-        todo!()
+    fn bond_names(&self) -> &[String] {
+        &self.glue_names
     }
 }
 

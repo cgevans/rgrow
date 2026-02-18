@@ -2016,12 +2016,16 @@ pub trait TileBondInfo {
     fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
         self.tile_colors()[tile_number as usize]
     }
-    fn tile_name(&self, tile_number: Tile) -> &str;
-    fn bond_name(&self, bond_number: usize) -> &str;
+    fn tile_name(&self, tile_number: Tile) -> &str {
+        &self.tile_names()[tile_number as usize]
+    }
+    fn bond_name(&self, bond_number: usize) -> &str {
+        &self.bond_names()[bond_number]
+    }
 
     fn tile_colors(&self) -> &Vec<[u8; 4]>;
-    fn tile_names(&self) -> Vec<&str>;
-    fn bond_names(&self) -> Vec<&str>;
+    fn tile_names(&self) -> &[String];
+    fn bond_names(&self) -> &[String];
 
     /// By default, we will make a tile be just a solid clor, but a system may override this to
     /// customize how a tile looks.
