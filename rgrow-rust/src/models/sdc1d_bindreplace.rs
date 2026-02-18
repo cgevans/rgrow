@@ -40,10 +40,6 @@ pub struct SDC1DBindReplace {
 }
 
 impl TileBondInfo for SDC1DBindReplace   {
-    fn tile_color(&self, tile_number: u32) -> [u8; 4] {
-        self.strand_colors[tile_number as usize]
-    }
-
     fn tile_colors(&self) -> &Vec<[u8; 4]> {
         &self.strand_colors
     }

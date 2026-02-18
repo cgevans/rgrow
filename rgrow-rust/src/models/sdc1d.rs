@@ -1356,10 +1356,6 @@ impl System for SDC {
 }
 
 impl TileBondInfo for SDC {
-    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.colors[tile_number as usize]
-    }
-
     fn tile_colors(&self) -> &Vec<[u8; 4]> {
         &self.colors
     }

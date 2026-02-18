@@ -965,10 +965,6 @@ impl System for KTAM {
 }
 
 impl TileBondInfo for KTAM {
-    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.tile_colors[tile_number as usize]
-    }
-
     fn tile_name(&self, tile_number: Tile) -> &str {
         self.tile_names[tile_number as usize].as_str()
     }

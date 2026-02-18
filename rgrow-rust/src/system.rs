@@ -2013,7 +2013,9 @@ impl<'py> IntoPyObject<'py> for SystemEnum {
 
 #[enum_dispatch]
 pub trait TileBondInfo {
-    fn tile_color(&self, tile_number: Tile) -> [u8; 4];
+    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
+        self.tile_colors()[tile_number as usize]
+    }
     fn tile_name(&self, tile_number: Tile) -> &str;
     fn bond_name(&self, bond_number: usize) -> &str;
 
