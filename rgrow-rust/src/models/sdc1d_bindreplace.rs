@@ -1,6 +1,6 @@
-// #[cfg_attr(feature = "python", pyclass(subclass, module = "rgrow.sdc"))]
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct SDC {
+/// The Bind-Replace model of SDC from the SI of https://www.biorxiv.org/content/10.1101/2025.07.16.664196v1
+/// As this model is extremely simple, it also serves as a nice guide to implementing new models.
+
 
 use core::panic;
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ impl Glue {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]  
 struct Tile(u32);
 
-#[cfg_attr(feature = "python", pyclass(subclass, module = "rgrow.sdc"))]
+#[cfg_attr(feature = "python", pyclass(subclass, module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SDC1DBindReplace {
     pub strand_names: Vec<String>,

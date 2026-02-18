@@ -44,6 +44,8 @@ nav:
       - KBlock: examples/kblock.ipynb
       - FFS - Simple: examples/ffs-simple.ipynb
       - FFS - Pattern Recognition: examples/ffs-pattern-recognition.ipynb
+  - Developing:
+      - Implementing a New Model: developing/new-model.md
   - API Reference:
       - reference/index.md
       - TileSet & Tiles: reference/tileset.md
