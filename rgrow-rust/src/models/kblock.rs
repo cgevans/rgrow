@@ -930,20 +930,16 @@ impl TileBondInfo for KBlock {
         self.tile_names[usize::from(tile_index(tileid.into()))].as_str()
     }
 
-    fn bond_name(&self, bond_number: usize) -> &str {
-        &self.glue_names[bond_number]
-    }
-
     fn tile_colors(&self) -> &Vec<[u8; 4]> {
         &self.tile_colors
     }
 
-    fn tile_names(&self) -> Vec<&str> {
-        self.tile_names.iter().map(|s| s.as_str()).collect()
+    fn tile_names(&self) -> &[String] {
+        &self.tile_names
     }
 
-    fn bond_names(&self) -> Vec<&str> {
-        self.glue_names.iter().map(|s| s.as_str()).collect()
+    fn bond_names(&self) -> &[String] {
+        &self.glue_names
     }
 }
 

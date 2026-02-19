@@ -102,55 +102,55 @@ jobs:
           name: python-linux
           token: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: true
-  python_benchmarks:
-    name: Python Benchmarks
-    needs: [python_checks]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: cgevans/tiny-xlib
-          path: ./tiny-xlib
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Set up Rust cache
-        uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-      - name: Install just
-        uses: extractions/setup-just@v2
-      - name: Setup virtual environment
-        run: |
-          uv venv
-          uv pip install maturin pytest pytest-benchmark numpy hypothesis
-      - name: Build Python extension
-        run: |
-          source .venv/bin/activate
-          maturin develop --uv
-      - name: Run benchmarks
-        run: |
-          source .venv/bin/activate
-          pytest rgrow-python/tests/ --benchmark-only --benchmark-json output.json -v
-      - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: 'pytest'
-          output-file-path: output.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: ${{ github.ref == 'refs/heads/main' }}
-          alert-threshold: '150%'
-          comment-on-alert: true
-          fail-on-alert: false
-          benchmark-data-dir-path: dev/bench
+  # python_benchmarks:
+  #   name: Python Benchmarks
+  #   needs: [python_checks]
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: write
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         repository: cgevans/tiny-xlib
+  #         path: ./tiny-xlib
+  #     - uses: dtolnay/rust-toolchain@master
+  #       with:
+  #         toolchain: stable
+  #     - name: Set up Rust cache
+  #       uses: Swatinem/rust-cache@v2
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.12"
+  #     - name: Install uv
+  #       uses: astral-sh/setup-uv@v7
+  #       with:
+  #         enable-cache: true
+  #     - name: Install just
+  #       uses: extractions/setup-just@v2
+  #     - name: Setup virtual environment
+  #       run: |
+  #         uv venv
+  #         uv pip install maturin pytest pytest-benchmark numpy hypothesis
+  #     - name: Build Python extension
+  #       run: |
+  #         source .venv/bin/activate
+  #         maturin develop --uv
+  #     - name: Run benchmarks
+  #       run: |
+  #         source .venv/bin/activate
+  #         pytest rgrow-python/tests/ --benchmark-only --benchmark-json output.json -v
+  #     - name: Store benchmark result
+  #       uses: benchmark-action/github-action-benchmark@v1
+  #       with:
+  #         tool: 'pytest'
+  #         output-file-path: output.json
+  #         github-token: ${{ secrets.GITHUB_TOKEN }}
+  #         auto-push: ${{ github.ref == 'refs/heads/main' }}
+  #         alert-threshold: '150%'
+  #         comment-on-alert: true
+  #         fail-on-alert: false
+  #         benchmark-data-dir-path: dev/bench
 
   linux:
     name: Python Linux builds

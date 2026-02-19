@@ -159,3 +159,39 @@ docs-serve:
 # Build docs site
 docs-build:
     source .venv/bin/activate && mkdocs build
+
+# --- Profiling ---
+# Prerequisites:
+#   cargo install samply
+#   cargo install flamegraph
+#   sudo dnf install perf  (Fedora)
+
+# Profile a Rust benchmark with samply (opens Firefox Profiler)
+profile-bench-samply bench="sierpinski":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo bench --bench {{bench}} --profile profiling --no-run
+    bin=$(find target/profiling/deps -name '{{bench}}-*' -executable | head -1)
+    echo "Profiling: $bin"
+    samply record "$bin" --bench
+
+# Profile a Rust benchmark with cargo-flamegraph (produces SVG)
+profile-bench-flamegraph bench="sierpinski":
+    cargo flamegraph --bench {{bench}} --profile profiling -o flamegraph-{{bench}}.svg -- --bench
+
+# Profile a Python script with samply (builds with debug symbols first)
+profile-python-samply script:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source .venv/bin/activate
+    maturin develop --profile profiling --uv
+    samply record -- python {{script}}
+
+# Profile a Python script with perf + flamegraph (builds with debug symbols first)
+profile-python-flamegraph script:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source .venv/bin/activate
+    maturin develop --profile profiling --uv
+    perf record -g --call-graph dwarf -- python {{script}}
+    perf script | flamegraph > flamegraph-python.svg

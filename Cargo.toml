@@ -21,3 +21,8 @@ edition = "2021"
 repository = "https://github.com/cgevans/rgrow"
 license = "BSD-3-Clause"
 categories = ["science", "simulation"]
+
+# Optimized build with debug symbols for profiling (samply, perf, flamegraph)
+[profile.profiling]
+inherits = "release"
+debug = true

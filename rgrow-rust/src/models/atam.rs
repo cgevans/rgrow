@@ -857,14 +857,6 @@ impl ATAM {
 }
 
 impl TileBondInfo for ATAM {
-    fn tile_color(&self, tile_number: Tile) -> [u8; 4] {
-        self.tile_colors[tile_number as usize]
-    }
-
-    fn tile_name(&self, tile_number: Tile) -> &str {
-        self.tile_names[tile_number as usize].as_str()
-    }
-
     fn bond_name(&self, _bond_number: usize) -> &str {
         todo!()
     }
@@ -873,11 +865,11 @@ impl TileBondInfo for ATAM {
         &self.tile_colors
     }
 
-    fn tile_names(&self) -> Vec<&str> {
-        self.tile_names.iter().map(|x| x.as_str()).collect()
+    fn tile_names(&self) -> &[String] {
+        &self.tile_names
     }
 
-    fn bond_names(&self) -> Vec<&str> {
+    fn bond_names(&self) -> &[String] {
         todo!()
     }
 }
