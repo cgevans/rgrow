@@ -1,3 +1,20 @@
+# 0.22.0
+
+- Repository reorganization: `rgrow` package is now in `rgrow-rust`, `py-rgrow` is now in `rgrow-python`.  Both use `rgrow` as their name.
+- Merged `rgrow-gui` and `rgrow-ipc` into `rgrow-rust` behind a `gui` feature flag.
+- New `rgrow-cli` pip package to distribute the full rgrow binary with GUI.
+- UI rendering rewritten: tile-by-tile drawing, per-system tile coloring, and a new `painter` module.  KBlock renders blocked sides.
+- A (experimentally, potentially short-lived) `SquareCompact` canvas type to avoid the two-tile-border of `Square`.
+- Polars is now an optional dependency (only needed for Python builds).
+- Updated to PyO3 0.27, numpy-rust, and polars.
+- CI: free-threaded Python wheels (3.13t, 3.14t), trusted publisher and `uv publish` for PyPI.
+- Documentation is being migrated to MkDocs.
+- 1D SDC:
+  - Only a single scaffold domain list is accepted per system; you can no longer have a collection of different ones at different positions.  This feature was never well supported (and not really supported in Python at all), and had unclear behavior when combined with equilibrium calculations.
+  - Scaffold-strand interactions are no longer necessarily glue-complement.  While glue-complement is still supported, arbitrary glue-glue free energies can be set, and these will function with the scaffold strand.
+  - A two-tile empty border is no longer removed by commands.  Use `SquareCompact` as your canvas type instead of `Square`.
+- Benchmarking in Python tests.
+
 # v0.21.1
 
 - Fix GUI on macOS by using temp directory instead of `/dev/shm/` for shared memory (which doesn't exist on macOS).

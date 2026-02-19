@@ -11,15 +11,32 @@ test: test-rust test-python
 test-rust:
     cargo test -p rgrow
 
-# Run Python tests (builds first)
-test-python:
+# Build Python extension (with venv)
+build-python:
     source .venv/bin/activate && maturin develop --uv
-    source .venv/bin/activate && pytest rgrow-python/tests/
 
-# Run all linters
-lint:
+# Run Python tests only (builds first)
+test-python: build-python
+    source .venv/bin/activate && pytest rgrow-python/tests/ -v
+
+# Run Python benchmarks (builds first)
+bench-python: build-python
+    source .venv/bin/activate && pytest rgrow-python/tests/ --benchmark-only -v
+
+# Run Python benchmarks and save JSON output
+bench-python-json: build-python
+    source .venv/bin/activate && pytest rgrow-python/tests/ --benchmark-only --benchmark-json benchmark-results.json -v
+
+# Run Rust clippy
+clippy:
     cargo clippy -p rgrow
+
+# Run Ruff on Python code
+ruff:
     ruff check rgrow-python/rgrow/
+
+# Run all lints
+lint: clippy ruff
 
 # Build manylinux wheels for free-threaded Python via Podman
 build-freethreaded-linux:
@@ -31,7 +48,7 @@ build-freethreaded-linux:
         --interpreter /opt/python/cp313-cp313t/bin/python3 /opt/python/cp314-cp314t/bin/python3
     podman run --rm \
         -v "$(pwd)":/io \
-        -w /io/rgrow-gui \
+        -w /io/rgrow-cli \
         ghcr.io/pyo3/maturin:latest \
         build --release --out /io/dist \
         --interpreter /opt/python/cp313-cp313t/bin/python3 /opt/python/cp314-cp314t/bin/python3
@@ -39,7 +56,7 @@ build-freethreaded-linux:
 # Build native macOS wheels for free-threaded Python (run on macOS)
 build-freethreaded-macos:
     maturin build --release --out dist --interpreter python3.13t python3.14t
-    cd rgrow-gui && maturin build --release --out ../dist --interpreter python3.13t python3.14t
+    cd rgrow-cli && maturin build --release --out ../dist --interpreter python3.13t python3.14t
 
 # Build free-threaded macOS wheels from a specific git ref using a worktree
 build-freethreaded-macos-ref ref:
@@ -51,7 +68,7 @@ build-freethreaded-macos-ref ref:
     trap 'echo "Copying wheels..."; cp "$worktree"/dist/*.whl dist/ 2>/dev/null || true; echo "Removing worktree..."; git worktree remove --force "$worktree"; echo "Done."' EXIT
     cd "$worktree"
     maturin build --release --out dist --interpreter python3.13t python3.14t
-    cd rgrow-gui && maturin build --release --out ../dist --interpreter python3.13t python3.14t
+    cd rgrow-cli && maturin build --release --out ../dist --interpreter python3.13t python3.14t
 
 # Build all free-threaded wheels (Linux via Podman + native macOS)
 build-freethreaded: build-freethreaded-linux
@@ -72,7 +89,73 @@ build-freethreaded-ref ref:
         --interpreter /opt/python/cp313-cp313t/bin/python3 /opt/python/cp314-cp314t/bin/python3
     podman run --rm \
         -v "$worktree":/io \
-        -w /io/rgrow-gui \
+        -w /io/rgrow-cli \
         ghcr.io/pyo3/maturin:latest \
         build --release --out /io/dist \
         --interpreter /opt/python/cp313-cp313t/bin/python3 /opt/python/cp314-cp314t/bin/python3
+
+# Clean coverage data
+cov-clean:
+    cargo llvm-cov clean --workspace
+
+# Run tests with coverage (Rust tests only)
+cov-rust:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
+    export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+    export CARGO_INCREMENTAL=1
+    cargo llvm-cov clean --workspace
+    cargo test -p rgrow
+    cargo llvm-cov report --lcov --output-path coverage-rust.lcov -p rgrow
+
+# Run tests with coverage (Python tests, collecting Rust coverage)
+cov-python:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
+    export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+    export CARGO_INCREMENTAL=1
+    cargo llvm-cov clean --workspace
+    source .venv/bin/activate
+    uv pip install ./rgrow-cli
+    maturin develop --uv --profile dev
+    pytest rgrow-python/tests -v
+    cargo llvm-cov report --lcov --output-path coverage-python.lcov -p rgrow -p rgrow-python
+
+# Run all tests with combined Rust coverage (both Rust and Python tests)
+coverage:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
+    export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+    export CARGO_INCREMENTAL=1
+    cargo llvm-cov clean --workspace
+    # Run Rust tests
+    cargo test -p rgrow
+    # Build and run Python tests
+    source .venv/bin/activate
+    uv pip install ./rgrow-cli
+    maturin develop --uv --profile dev
+    pytest rgrow-python/tests -v
+    # Generate combined coverage report
+    cargo llvm-cov report --lcov --output-path coverage.lcov -p rgrow -p rgrow-python
+
+# Generate HTML coverage report (run after coverage)
+cov-html:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
+    export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+    cargo llvm-cov report --html -p rgrow -p rgrow-python
+
+# Full coverage with HTML report
+cov-full: coverage cov-html
+
+# Serve docs locally with live reload
+docs-serve:
+    source .venv/bin/activate && mkdocs serve
+
+# Build docs site
+docs-build:
+    source .venv/bin/activate && mkdocs build

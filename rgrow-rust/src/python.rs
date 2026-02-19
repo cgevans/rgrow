@@ -29,7 +29,7 @@ use pyo3::IntoPyObjectExt;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 /// A State object.
-#[cfg_attr(feature = "python", pyclass(name = "State", module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(name = "State", module = "rgrow.rgrow"))]
 #[repr(transparent)]
 pub struct PyState(pub(crate) StateEnum);
 

@@ -190,7 +190,7 @@ impl Display for Tile {
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(eq, eq_int, module = "rgrow.rgrow"))]
 pub enum Direction {
     N,
     E,
@@ -246,7 +246,7 @@ struct SerdeTileSet {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[serde(from = "SerdeTileSet")]
 pub struct TileSet {
     #[serde(default = "Vec::new")]
@@ -455,6 +455,8 @@ pub enum CanvasType {
     Tube,
     #[serde(alias = "tube-diagonals")]
     TubeDiagonals,
+    #[serde(alias = "square-compact")]
+    SquareCompact,
 }
 
 #[cfg(feature = "python")]
@@ -475,6 +477,7 @@ impl<'py> IntoPyObject<'py> for CanvasType {
             CanvasType::Periodic => "periodic".into_bound_py_any(py),
             CanvasType::Tube => "tube".into_bound_py_any(py),
             CanvasType::TubeDiagonals => "tube-diagonals".into_bound_py_any(py),
+            CanvasType::SquareCompact => "square-compact".into_bound_py_any(py),
         }
     }
 
@@ -484,7 +487,7 @@ impl<'py> IntoPyObject<'py> for CanvasType {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow", eq, eq_int))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow", eq, eq_int))]
 pub enum TrackingType {
     None,
     Order,
@@ -502,7 +505,8 @@ impl TryFrom<&str> for CanvasType {
             "periodic" => Ok(CanvasType::Periodic),
             "tube" => Ok(CanvasType::Tube),
             "tube-diagonals" => Ok(CanvasType::TubeDiagonals),
-            _ => Err(StringConvError(format!("Unknown canvas type {value}.  Valid options are \"square\", \"periodic\", and \"tube\"."))),
+            "square-compact" | "squarecompact" => Ok(CanvasType::SquareCompact),
+            _ => Err(StringConvError(format!("Unknown canvas type {value}.  Valid options are \"square\", \"periodic\", \"tube\", \"tube-diagonals\", \"square-compact\"."))),
         }
     }
 }

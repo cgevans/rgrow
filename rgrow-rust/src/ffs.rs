@@ -6,7 +6,9 @@ use std::ops::Deref;
 use std::sync::{Arc, Weak};
 
 use crate::base::{GrowError, RgrowError, StringConvError, Tile};
-use crate::canvas::{CanvasPeriodic, CanvasSquare, CanvasTube, CanvasTubeDiagonals, PointSafe2};
+use crate::canvas::{
+    CanvasPeriodic, CanvasSquare, CanvasSquareCompact, CanvasTube, CanvasTubeDiagonals, PointSafe2,
+};
 use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::state::{MovieTracker, NullStateTracker, QuadTreeState};
@@ -32,7 +34,7 @@ use super::*;
 
 /// Configuration data retention mode for FFS simulations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-// #[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+// #[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 pub enum ConfigRetentionMode {
     /// No configuration data retained (minimal memory usage).
     None,
@@ -187,7 +189,7 @@ use system::{DynSystem, Orientation, System, SystemEnum};
 
 /// Configuration options for Forward Flux Sampling (FFS) simulations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow.rgrow"))]
 pub struct FFSRunConfig {
     /// Use constant-variance, variable-configurations-per-surface method.
     ///
@@ -1152,7 +1154,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
 // RESULTS CODE
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSRunResult {
     #[serde(skip)]
@@ -1165,7 +1167,7 @@ pub struct FFSRunResult {
 }
 
 #[cfg(feature = "polars")]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSRunResultDF {
     #[serde(skip)]
@@ -1269,7 +1271,7 @@ where
     }
 }
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FFSLevelResult {
     pub state_list: Vec<Arc<StateEnum>>,
@@ -1382,6 +1384,29 @@ impl FFSRunResult {
                 FFSRun::<QuadTreeState<CanvasSquare, MovieTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
+
+            (CanvasType::SquareCompact, TrackingType::None) => {
+                FFSRun::<QuadTreeState<CanvasSquareCompact, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareCompact, TrackingType::Order) => {
+                FFSRun::<QuadTreeState<CanvasSquareCompact, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareCompact, TrackingType::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasSquareCompact, LastAttachTimeTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareCompact, TrackingType::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasSquareCompact, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareCompact, TrackingType::Movie) => {
+                FFSRun::<QuadTreeState<CanvasSquareCompact, MovieTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+
+
             (CanvasType::Periodic, TrackingType::None) => {
                 FFSRun::<QuadTreeState<CanvasPeriodic, NullStateTracker>>::create(sys, config)
                     .map(|x| x.into())
@@ -1867,7 +1892,7 @@ impl FFSRunResultDF {
     // }
 }
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[allow(dead_code)] // This is used in the python interface
 pub struct FFSLevelRef(Weak<FFSLevelResult>);
 
@@ -1928,7 +1953,7 @@ impl FFSLevelRef {
     }
 }
 
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[allow(dead_code)] // This is used in the python interface
 #[derive(Clone)]
 pub struct FFSStateRef(Weak<StateEnum>);

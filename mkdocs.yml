@@ -1,0 +1,98 @@
+site_name: rgrow
+site_description: Fast, extensible simulator for Tile Assembly Models
+site_url: https://rgrow.readthedocs.io/
+repo_url: https://github.com/cgevans/rgrow
+repo_name: cgevans/rgrow
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Models:
+      - kTAM: models/ktam.md
+      - aTAM: models/atam.md
+      - SDC: models/sdc.md
+      - kBlock: models/kblock.md
+  - Examples:
+      - examples/index.md
+      - Sierpinski Triangle: examples/simple-sierpinski.ipynb
+      - Tube Canvas: examples/tube.ipynb
+      - KBlock: examples/kblock.ipynb
+      - FFS - Simple: examples/ffs-simple.ipynb
+      - FFS - Pattern Recognition: examples/ffs-pattern-recognition.ipynb
+  - API Reference:
+      - reference/index.md
+      - TileSet & Tiles: reference/tileset.md
+      - Forward Flux Sampling: reference/ffs.md
+      - SDC: reference/sdc.md
+      - KBlock: reference/kblock.md
+      - kTAM: reference/ktam.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - footnotes
+
+plugins:
+  - search
+  - bibtex:
+      bib_file: docs/references.bib
+  - mkdocs-jupyter:
+      include: ["*.ipynb"]
+      execute: false
+      allow_errors: true
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+            heading_level: 2
+            members_order: source
+            find_stubs_package: true
+          paths: ["rgrow-python/src"]
+
+extra_javascript:
+  - javascripts/katex.js
+  - https://unpkg.com/katex@0/dist/katex.min.js
+  - https://unpkg.com/katex@0/dist/contrib/auto-render.min.js
+
+extra_css:
+  - stylesheets/extra.css
+  - https://unpkg.com/katex@0/dist/katex.min.css

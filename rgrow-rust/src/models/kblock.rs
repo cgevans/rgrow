@@ -144,7 +144,7 @@ pub fn side_as_str(side: Sides) -> &'static str {
         _ => panic!("Input was not a side"),
     }
 }
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KBlock {
     pub tile_names: Vec<String>,

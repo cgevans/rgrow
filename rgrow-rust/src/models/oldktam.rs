@@ -99,7 +99,7 @@ fn create_friend_data(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow"))]
+#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 pub struct OldKTAM {
     pub tile_adj_concs: Array1<Rate>,
     pub energy_ns: Array2<Energy>,

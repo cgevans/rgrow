@@ -21,13 +21,13 @@ For FFS examples, see the [examples/ffs](https://github.com/cgevans/rgrow/tree/m
 Releases are pushed, in both source and a variety of binary forms, to PyPI.  To install the latest release, use:
 
 ```bash
-pip install rgrow
+pip install rgrow[default]
 ```
 
 To install directly from git using Pip:
 
 ```bash
-pip install "git+https://github.com/cgevans/rgrow.git"
+pip install "git+https://github.com/cgevans/rgrow.git[default]"
 ```
 
 or check out the repository, and use something like

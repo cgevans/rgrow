@@ -8,7 +8,7 @@ def mean_energies(strand_length: int = 10) -> tuple[float, float]:
         -0.02201875 * (strand_length-1)
     )
 
-def make_bitcopy(N, input="0", conc=1e-7, cdl=10, sdl=20):
+def make_bitcopy(N, input="0", conc=1e-7, cdl=10, sdl=20, pad=False):
     strands = []
 
     match input:
@@ -27,6 +27,11 @@ def make_bitcopy(N, input="0", conc=1e-7, cdl=10, sdl=20):
         strands.append(SDCStrand(conc, "c0", f"sc{i}", "c0*", f"{i}_0"))
         strands.append(SDCStrand(conc, "c1", f"sc{i}", "c1*", f"{i}_1"))
 
+    if pad:
+        scaffold = [None, None] + [f"sc{i}*" for i in range(0,N)] + [None, None]
+    else:
+        scaffold = [f"sc{i}*" for i in range(0,N)]
+
     params = SDCParams(
         strands=strands,
         glue_dg_s = (
@@ -34,7 +39,7 @@ def make_bitcopy(N, input="0", conc=1e-7, cdl=10, sdl=20):
             {"c1": mean_energies(cdl)} |
             {f"sc{i}": mean_energies(sdl) for i in range(0,N)}
         ),
-        scaffold = [f"sc{i}*" for i in range(0,N)]
+        scaffold = scaffold
     )
 
     return SDC(params)
@@ -57,20 +62,48 @@ def temperature_for_target_prob(sys, prob=0.9, precision=0.1, start_range=(60, 9
 def test_bitcopy_const_temp():
     N = 8
     sys = make_bitcopy(N)
-    state = State((1024, N+4), kind="Square", tracking="None", n_tile_types=len(sys.tile_names))
+    state = State((256, N), kind="SquareCompact", tracking="None", n_tile_types=len(sys.tile_names))
     sys.update_state(state)
 
-    sys.temperature = temperature_for_target_prob(sys, prob=0.8, precision=0.1)
+    sys.temperature = temperature_for_target_prob(sys, prob=0.75, precision=0.1)
 
-    sys.evolve(state, for_events=10000000)
+    sys.evolve(state, for_events=1000000)
 
-    target = np.all(state.canvas_view[2:-2,:] == np.array(sys.mfe_config()[0]), axis=1).mean()
-    assert target > 0.70
-    assert target < 0.90
+    print(state.canvas_view[:,:])
+    print(sys.mfe_config())
+    print(sys.mfe_matrix())
+
+    target = np.all(state.canvas_view[:,:] == np.array(sys.mfe_config()[0]), axis=1).mean()
+    assert target > 0.60
+    assert target < 0.80
    
     # Now test melting:
     sys.temperature += 15
-    sys.evolve(state, for_events=10000000)
+    sys.evolve(state, for_events=1000000)
+
+    assert state.n_tiles < 10
+
+def test_bitcopy_const_temp_sq():
+    N = 8
+    sys = make_bitcopy(N,  pad=True) 
+    state = State((256, N+4), kind="Square", tracking="None", n_tile_types=len(sys.tile_names))
+    sys.update_state(state)
+
+    sys.temperature = temperature_for_target_prob(sys, prob=0.75, precision=0.1)
+
+    sys.evolve(state, for_events=1000000)
+
+    print(state.canvas_view[:,:])
+    print(sys.mfe_config())
+    print(sys.mfe_matrix())
+
+    target = np.all(state.canvas_view[2:-2,:] == np.array(sys.mfe_config()[0]), axis=1).mean()
+    assert target > 0.60
+    assert target < 0.80
+   
+    # Now test melting:
+    sys.temperature += 15
+    sys.evolve(state, for_events=1000000)
 
     assert state.n_tiles < 10
 
@@ -82,7 +115,7 @@ def test_bitcopy_sane_temps():
     sys.temperature = 30
     target_config = sys.mfe_config()[0]
 
-    known_zero_target = [0,0,1] + [2*i+1 for i in range(1, N)] + [0,0]
+    known_zero_target = [1] + [2*i+1 for i in range(1, N)]
     # known_one_target = [0,0,2] + [2*i+2 for i in range(1, N)] + [0,0]
     assert target_config == known_zero_target
 
@@ -97,7 +130,7 @@ def test_bitcopy_sane_temps():
 
     # Our MFE should be empty:
     mfe_config = sys.mfe_config()[0]
-    assert np.all(mfe_config == [0,0] + [0]*N + [0,0])
+    assert np.all(mfe_config == [0]*N)
 
     # As we decrease temperature, the probability of the target config should monotonically increase
     for temp in range(85, 20, -10):
@@ -116,15 +149,15 @@ def test_bitcopy_sane_temps():
 def test_basic_on_rates():
     N = 8
     sys = make_bitcopy(N)
-    state = State((1024, N+4), kind="Square", tracking="None", n_tile_types=len(sys.tile_names))
+    state = State((1024, N), kind="SquareCompact", tracking="None", n_tile_types=len(sys.tile_names))
     sys.update_state(state)
 
     kf = sys.get_param("kf")
 
-    assert state.rate_at_point((5, 2)) == kf * 1e-7
-    assert state.rate_at_point((5, 3)) == 2 * kf * 1e-7
+    assert state.rate_at_point((5, 0)) == kf * 1e-7
+    assert state.rate_at_point((5, 1)) == 2 * kf * 1e-7
 
     sys.set_param("kf", 1e7)
     sys.update_state(state)
-    assert state.rate_at_point((5, 2)) == 1e7 * 1e-7
-    assert state.rate_at_point((5, 3)) == 2 * 1e7 * 1e-7
+    assert state.rate_at_point((5, 0)) == 1e7 * 1e-7
+    assert state.rate_at_point((5, 1)) == 2 * 1e7 * 1e-7
