@@ -27,7 +27,7 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
     let (width, height) = state.draw_size();
     let tile_colors_vec = sys.tile_colors().clone();
 
-    let scale = block.unwrap_or(8);
+    let scale = block.unwrap_or(12);
 
     let socket_path =
         std::env::temp_dir().join(format!("rgrow-gui-{}.sock", std::process::id()));
@@ -261,12 +261,29 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
             state.draw_sprite(pixel_frame, sprite, PointSafeHere((y, x)));
         }
 
+        // Draw thin outlines around non-empty tiles to distinguish them
+        if scale >= 12 {
+            use crate::painter::draw_rect;
+            let outline_color = [0u8, 0, 0, 255];
+            for ((y, x), &tileid) in state.raw_array().indexed_iter() {
+                if tileid == 0 {
+                    continue;
+                }
+                let tile_x = x * scale;
+                let tile_y = y * scale;
+                draw_rect(pixel_frame, tile_x, tile_x + scale, tile_y, tile_y + 1, outline_color, frame_width);
+                draw_rect(pixel_frame, tile_x, tile_x + scale, tile_y + scale - 1, tile_y + scale, outline_color, frame_width);
+                draw_rect(pixel_frame, tile_x, tile_x + 1, tile_y, tile_y + scale, outline_color, frame_width);
+                draw_rect(pixel_frame, tile_x + scale - 1, tile_x + scale, tile_y, tile_y + scale, outline_color, frame_width);
+            }
+        }
+
         // Draw blocker rectangles protruding outside tile edges
         {
             use crate::painter::draw_rect;
-            let depth = (scale / 5).max(1); // how far the rectangle protrudes outward
-            let half_len = (scale / 6).max(1); // half-length along the edge
-            let blocker_color = [60, 60, 60, 255];
+            let depth = (scale / 3).max(2); // how far the rectangle protrudes outward
+            let half_len = (scale / 3).max(2); // half-length along the edge
+            let blocker_color = [140, 140, 140, 255];
             for ((y, x), &tileid) in state.raw_array().indexed_iter() {
                 let mask = sys.tile_blocker_mask(tileid);
                 if mask == 0 {
@@ -346,8 +363,8 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
             use crate::painter::draw_rect;
             // `thick`: pixels straddling each side of the boundary
             // `long`: half-length along the edge (from tile center outward)
-            let thick = (scale / 8).max(1);
-            let long = (scale / 4).max(1);
+            let thick = (scale / 4).max(1);
+            let long = (scale / 3).max(1);
             let color = [255, 0, 0, 255]; // red
             for ((y, x), &mm) in locs.indexed_iter() {
                 if mm == 0 {
