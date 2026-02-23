@@ -941,12 +941,85 @@ impl System for KTAM {
         state: &mut St,
         point: PointSafe2,
         tile: Tile,
+        replace: bool,
     ) -> Result<f64, GrowError> {
-        // FIXME: this does not currently check if the event clobbers something.
-        let event = Event::MonomerAttachment(point, tile);
-        let energy_change = self.perform_event(state, &event);
-        self.update_after_event(state, &event);
-        Ok(energy_change)
+        // Fast path for systems without duples (common case)
+        if !self.has_duples {
+            let mut energy_change = 0.0;
+            let existing = state.tile_at_point(point);
+            if existing != 0 {
+                if !replace {
+                    return Err(GrowError::TilePlacementBlocked {
+                        row: point.0 .0,
+                        col: point.0 .1,
+                        tile,
+                        existing_tile: existing,
+                    });
+                }
+                let ev = Event::MonomerDetachment(point);
+                energy_change += self.perform_event(state, &ev);
+                self.update_after_event(state, &ev);
+            }
+            let ev = Event::MonomerAttachment(point, tile);
+            energy_change += self.perform_event(state, &ev);
+            self.update_after_event(state, &ev);
+            return Ok(energy_change);
+        }
+
+        // Duple-aware path
+        let (real_point, real_tile) = self.resolve_to_real_tile(state, point, tile);
+        let companion = self.companion_point(state, real_point, real_tile);
+
+        if replace {
+            let mut energy_change = 0.0;
+            // Clear primary site (MonomerDetachment removes its duple companion too)
+            if state.tile_at_point(real_point) != 0 {
+                let ev = Event::MonomerDetachment(real_point);
+                energy_change += self.perform_event(state, &ev);
+                self.update_after_event(state, &ev);
+            }
+            // Clear companion site if still occupied (by an unrelated tile)
+            if let Some(cp) = companion {
+                if state.tile_at_point(cp) != 0 {
+                    let ev = Event::MonomerDetachment(cp);
+                    energy_change += self.perform_event(state, &ev);
+                    self.update_after_event(state, &ev);
+                }
+            }
+            // Attach new tile (companion placed automatically by perform_event)
+            let ev = Event::MonomerAttachment(real_point, real_tile);
+            energy_change += self.perform_event(state, &ev);
+            self.update_after_event(state, &ev);
+            Ok(energy_change)
+        } else {
+            // Check primary site
+            let existing = state.tile_at_point(real_point);
+            if existing != 0 {
+                return Err(GrowError::TilePlacementBlocked {
+                    row: real_point.0 .0,
+                    col: real_point.0 .1,
+                    tile: real_tile,
+                    existing_tile: existing,
+                });
+            }
+            // Check companion site
+            if let Some(cp) = companion {
+                let existing = state.tile_at_point(cp);
+                if existing != 0 {
+                    return Err(GrowError::TilePlacementBlocked {
+                        row: cp.0 .0,
+                        col: cp.0 .1,
+                        tile: real_tile,
+                        existing_tile: existing,
+                    });
+                }
+            }
+            // Sites are clear — attach
+            let ev = Event::MonomerAttachment(real_point, real_tile);
+            let energy_change = self.perform_event(state, &ev);
+            self.update_after_event(state, &ev);
+            Ok(energy_change)
+        }
     }
 
     fn clone_state<St: crate::state::StateWithCreate>(&self, initial_state: &St) -> St {
@@ -2099,6 +2172,43 @@ impl KTAM {
         energy
     }
 
+    /// Resolve a potentially fake tile to its real (canonical) tile and placement point.
+    /// If the tile is a fake duple part (DupleToLeft/DupleToTop), returns the real tile
+    /// and shifted point. Otherwise returns the original tile and point.
+    fn resolve_to_real_tile<St: State>(
+        &self,
+        state: &St,
+        point: PointSafe2,
+        tile: Tile,
+    ) -> (PointSafe2, Tile) {
+        match self.tile_shape(tile) {
+            TileShape::DupleToLeft(real_tile) => {
+                (PointSafe2(state.move_sa_w(point).0), real_tile)
+            }
+            TileShape::DupleToTop(real_tile) => {
+                (PointSafe2(state.move_sa_n(point).0), real_tile)
+            }
+            _ => (point, tile),
+        }
+    }
+
+    /// Get the companion point for a duple tile, if applicable.
+    /// Returns None for single tiles, or the companion site for duple tiles.
+    fn companion_point<St: State>(
+        &self,
+        state: &St,
+        point: PointSafe2,
+        tile: Tile,
+    ) -> Option<PointSafe2> {
+        match self.tile_shape(tile) {
+            TileShape::Single => None,
+            TileShape::DupleToRight(_) => Some(PointSafe2(state.move_sa_e(point).0)),
+            TileShape::DupleToBottom(_) => Some(PointSafe2(state.move_sa_s(point).0)),
+            TileShape::DupleToLeft(_) => Some(PointSafe2(state.move_sa_w(point).0)),
+            TileShape::DupleToTop(_) => Some(PointSafe2(state.move_sa_n(point).0)),
+        }
+    }
+
     /// Get the effective concentration for a tile, using the real tile concentration for fake duple parts
     fn get_effective_concentration(&self, tile: Tile) -> f64 {
         if self.has_duples && !self.should_be_counted[tile as usize] {
@@ -2402,7 +2512,7 @@ mod tests {
 
         // Test placing a single tile
         let single_point = PointSafe2((5, 5));
-        system.place_tile(&mut state, single_point, 1)?;
+        system.place_tile(&mut state, single_point, 1, true)?;
         assert_eq!(
             state.tile_at_point(single_point),
             1,
@@ -2412,7 +2522,7 @@ mod tests {
         // Test placing a horizontal double tile (real part)
         let hdouble_left = PointSafe2((3, 3));
         let hdouble_right = PointSafe2((3, 4));
-        system.place_tile(&mut state, hdouble_left, 2)?; // Place real tile (left part)
+        system.place_tile(&mut state, hdouble_left, 2, true)?; // Place real tile (left part)
         assert_eq!(
             state.tile_at_point(hdouble_left),
             2,
@@ -2427,7 +2537,7 @@ mod tests {
         // Test placing a vertical double tile (real part)
         let vdouble_top = PointSafe2((7, 7));
         let vdouble_bottom = PointSafe2((8, 7));
-        system.place_tile(&mut state, vdouble_top, 4)?; // Place real tile (top part)
+        system.place_tile(&mut state, vdouble_top, 4, true)?; // Place real tile (top part)
         assert_eq!(
             state.tile_at_point(vdouble_top),
             4,
@@ -2442,7 +2552,7 @@ mod tests {
         // Test placing a fake tile (should redirect to real tile)
         let fake_h_point = PointSafe2((6, 6));
         let real_h_point = PointSafe2((6, 5)); // Should place the real tile to the left
-        system.place_tile(&mut state, fake_h_point, 3)?; // Try to place fake horizontal tile
+        system.place_tile(&mut state, fake_h_point, 3, true)?; // Try to place fake horizontal tile
         assert_eq!(
             state.tile_at_point(real_h_point),
             2,
@@ -2457,7 +2567,7 @@ mod tests {
         // Test placing a fake vertical tile (should redirect to real tile)
         let fake_v_point = PointSafe2((9, 9));
         let real_v_point = PointSafe2((8, 9)); // Should place the real tile above
-        system.place_tile(&mut state, fake_v_point, 5)?; // Try to place fake vertical tile
+        system.place_tile(&mut state, fake_v_point, 5, true)?; // Try to place fake vertical tile
         assert_eq!(
             state.tile_at_point(real_v_point),
             4,
@@ -2483,6 +2593,170 @@ mod tests {
             expected_tile_count,
             "State's ntiles count should be correct"
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_place_tile_error_if_occupied() -> Result<(), anyhow::Error> {
+        use crate::canvas::CanvasSquare;
+        use crate::state::{NullStateTracker, QuadTreeState};
+
+        let mut system = KTAM::new_sized(5, 3);
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [1, 0, 0, 0], // tile 1 (single)
+            [2, 0, 0, 0], // tile 2 (left part of horizontal duple)
+            [3, 1, 0, 0], // tile 3 (right part of horizontal duple)
+            [0, 2, 0, 1], // tile 4 (top part of vertical duple)
+            [0, 3, 1, 2], // tile 5 (bottom part of vertical duple)
+        ];
+        system.set_duples(vec![(2, 3)], vec![(4, 5)]);
+        system.glue_strengths = array![0.0, 2.0, 1.5, 1.0];
+        system.tile_concs = array![0.0, 1e-6, 0.5e-6, 0.0, 0.8e-6, 0.0];
+        system.g_se = 8.0;
+        system.alpha = 0.5;
+        system.kf = 1e6;
+        system.update_system();
+
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
+            system.new_state((16, 16))?;
+
+        // Place a single tile, then try to place at the same location with replace=false
+        let point = PointSafe2((5, 5));
+        system.place_tile(&mut state, point, 1, true)?;
+        let result = system.place_tile(&mut state, point, 1, false);
+        assert!(
+            result.is_err(),
+            "Should error when placing on occupied site with replace=false"
+        );
+        match result.unwrap_err() {
+            GrowError::TilePlacementBlocked {
+                row,
+                col,
+                tile,
+                existing_tile,
+            } => {
+                assert_eq!(row, 5);
+                assert_eq!(col, 5);
+                assert_eq!(tile, 1);
+                assert_eq!(existing_tile, 1);
+            }
+            e => panic!("Expected TilePlacementBlocked, got {:?}", e),
+        }
+
+        // Test duple companion site conflict: place a single tile where a duple's
+        // companion would go, then try to place duple with replace=false
+        let companion_point = PointSafe2((3, 4)); // where hduple right part goes
+        system.place_tile(&mut state, companion_point, 1, true)?;
+        let duple_point = PointSafe2((3, 3));
+        let result = system.place_tile(&mut state, duple_point, 2, false);
+        assert!(
+            result.is_err(),
+            "Should error when duple companion site is occupied with replace=false"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_place_tile_replace_clears_existing() -> Result<(), anyhow::Error> {
+        use crate::canvas::CanvasSquare;
+        use crate::state::{NullStateTracker, QuadTreeState};
+
+        let mut system = KTAM::new_sized(5, 3);
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [1, 0, 0, 0], // tile 1 (single)
+            [2, 0, 0, 0], // tile 2 (left part of horizontal duple)
+            [3, 1, 0, 0], // tile 3 (right part of horizontal duple)
+            [0, 2, 0, 1], // tile 4 (top part of vertical duple)
+            [0, 3, 1, 2], // tile 5 (bottom part of vertical duple)
+        ];
+        system.set_duples(vec![(2, 3)], vec![(4, 5)]);
+        system.glue_strengths = array![0.0, 2.0, 1.5, 1.0];
+        system.tile_concs = array![0.0, 1e-6, 0.5e-6, 0.0, 0.8e-6, 0.0];
+        system.g_se = 8.0;
+        system.alpha = 0.5;
+        system.kf = 1e6;
+        system.update_system();
+
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
+            system.new_state((16, 16))?;
+
+        // Place a duple, then replace the primary site with a single tile
+        let duple_point = PointSafe2((5, 5));
+        let companion_point = PointSafe2((5, 6));
+        system.place_tile(&mut state, duple_point, 2, true)?;
+        assert_eq!(state.tile_at_point(duple_point), 2);
+        assert_eq!(state.tile_at_point(companion_point), 3);
+
+        // Replace with a single tile at the same location
+        system.place_tile(&mut state, duple_point, 1, true)?;
+        assert_eq!(
+            state.tile_at_point(duple_point),
+            1,
+            "Should have single tile after replace"
+        );
+        assert_eq!(
+            state.tile_at_point(companion_point),
+            0,
+            "Companion site should be cleared after replacing duple"
+        );
+
+        // Verify counts are correct (should just be 1 tile)
+        assert_eq!(system.calc_n_tiles(&state), 1);
+        assert_eq!(state.n_tiles(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_place_tile_replace_duple_over_existing() -> Result<(), anyhow::Error> {
+        use crate::canvas::CanvasSquare;
+        use crate::state::{NullStateTracker, QuadTreeState};
+
+        let mut system = KTAM::new_sized(5, 3);
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [1, 0, 0, 0], // tile 1 (single)
+            [2, 0, 0, 0], // tile 2 (left part of horizontal duple)
+            [3, 1, 0, 0], // tile 3 (right part of horizontal duple)
+            [0, 2, 0, 1], // tile 4 (top part of vertical duple)
+            [0, 3, 1, 2], // tile 5 (bottom part of vertical duple)
+        ];
+        system.set_duples(vec![(2, 3)], vec![(4, 5)]);
+        system.glue_strengths = array![0.0, 2.0, 1.5, 1.0];
+        system.tile_concs = array![0.0, 1e-6, 0.5e-6, 0.0, 0.8e-6, 0.0];
+        system.g_se = 8.0;
+        system.alpha = 0.5;
+        system.kf = 1e6;
+        system.update_system();
+
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
+            system.new_state((16, 16))?;
+
+        // Place a single tile at the companion site, then place a duple with replace=true
+        let companion_point = PointSafe2((5, 6));
+        system.place_tile(&mut state, companion_point, 1, true)?;
+        assert_eq!(state.tile_at_point(companion_point), 1);
+
+        let duple_point = PointSafe2((5, 5));
+        system.place_tile(&mut state, duple_point, 2, true)?;
+        assert_eq!(
+            state.tile_at_point(duple_point),
+            2,
+            "Duple real part should be placed"
+        );
+        assert_eq!(
+            state.tile_at_point(companion_point),
+            3,
+            "Duple companion should replace the single tile"
+        );
+
+        // Verify counts: 1 duple = 1 counted tile
+        assert_eq!(system.calc_n_tiles(&state), 1);
+        assert_eq!(state.n_tiles(), 1);
 
         Ok(())
     }

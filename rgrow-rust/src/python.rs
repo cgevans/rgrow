@@ -1176,6 +1176,9 @@ macro_rules! create_py_system {
 
             /// Place a tile at a point in the given state.
             ///
+            /// This updates tile counts and rates but does not increment the
+            /// event counter or record events in the state tracker.
+            ///
             /// Parameters
             /// ----------
             /// state : PyState
@@ -1184,20 +1187,25 @@ macro_rules! create_py_system {
             ///     The coordinates at which to place the tile (i, j).
             /// tile : int
             ///     The tile number to place.
+            /// replace : bool, optional
+            ///     If True (default), any existing tile at the target site is removed
+            ///     first. If False, raises an error if the site is occupied.
             ///
             /// Returns
             /// -------
             /// float
             ///     The energy change from placing the tile.
             #[pyo3(name = "place_tile")]
+            #[pyo3(signature = (state, point, tile, replace=true))]
             pub fn py_place_tile(
                 &self,
                 state: &mut PyState,
                 point: (usize, usize),
                 tile: u32,
+                replace: bool,
             ) -> Result<f64, RgrowError> {
                 let pt = PointSafe2(point);
-                let energy_change = self.place_tile(&mut state.0, pt, tile.into())?;
+                let energy_change = self.place_tile(&mut state.0, pt, tile.into(), replace)?;
                 Ok(energy_change)
             }
 

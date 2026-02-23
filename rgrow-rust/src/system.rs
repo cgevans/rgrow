@@ -582,16 +582,39 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     /// corresponding "fake" tile (right/bottom part). Attempting to place a "fake" tile
     /// directly will place the corresponding "real" tile instead.
     ///
+    /// If `replace` is true, any existing tile at the target site is removed first.
+    /// If `replace` is false, returns `GrowError::TilePlacementBlocked` if the site is occupied.
+    ///
+    /// This updates tile counts and rates but does not increment the event counter
+    /// or record events in the state tracker. Callers that need event tracking
+    /// should call `record_event` separately.
+    ///
     /// Returns energy change caused by placement, or NaN if energy is not calculated.
     fn place_tile<St: State>(
         &self,
         state: &mut St,
         point: PointSafe2,
         tile: Tile,
+        replace: bool,
     ) -> Result<f64, GrowError> {
-        // Default implementation: just place the tile directly
-        self.set_safe_point(state, point, tile);
-        Ok(f64::NAN)
+        let existing = state.tile_at_point(point);
+        if existing != 0 {
+            if !replace {
+                return Err(GrowError::TilePlacementBlocked {
+                    row: point.0 .0,
+                    col: point.0 .1,
+                    tile,
+                    existing_tile: existing,
+                });
+            }
+            let ev = Event::MonomerDetachment(point);
+            self.perform_event(state, &ev);
+            self.update_after_event(state, &ev);
+        }
+        let ev = Event::MonomerAttachment(point, tile);
+        let energy_change = self.perform_event(state, &ev);
+        self.update_after_event(state, &ev);
+        Ok(energy_change)
     }
 
     fn configure_empty_state<St: State>(&self, state: &mut St) -> Result<(), GrowError> {

@@ -1,5 +1,5 @@
 use crate::{
-    base::{RgrowError, Tile},
+    base::{GrowError, RgrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
     state::State,
     system::{Event, System, SystemInfo, TileBondInfo},
@@ -184,6 +184,90 @@ impl System for ATAM {
         self.perform_event(state, &event);
         self.update_after_event(state, &event);
         self
+    }
+
+    fn place_tile<S: State>(
+        &self,
+        state: &mut S,
+        point: PointSafe2,
+        tile: Tile,
+        replace: bool,
+    ) -> Result<f64, GrowError> {
+        // Fast path for systems without duples (common case)
+        if !self.has_duples {
+            let existing = state.tile_at_point(point);
+            if existing != 0 {
+                if !replace {
+                    return Err(GrowError::TilePlacementBlocked {
+                        row: point.0 .0,
+                        col: point.0 .1,
+                        tile,
+                        existing_tile: existing,
+                    });
+                }
+                let ev = Event::MonomerDetachment(point);
+                self.perform_event(state, &ev);
+                self.update_after_event(state, &ev);
+            }
+            let ev = Event::MonomerAttachment(point, tile);
+            self.perform_event(state, &ev);
+            self.update_after_event(state, &ev);
+            return Ok(f64::NAN);
+        }
+
+        // Duple-aware path
+        let (real_point, real_tile) = self.resolve_to_real_tile(state, point, tile);
+        let companion = self.companion_point(state, real_point, real_tile);
+
+        if replace {
+            // Clear primary site (MonomerDetachment removes its duple companion too)
+            if state.tile_at_point(real_point) != 0 {
+                let ev = Event::MonomerDetachment(real_point);
+                self.perform_event(state, &ev);
+                self.update_after_event(state, &ev);
+            }
+            // Clear companion site if still occupied (by an unrelated tile)
+            if let Some(cp) = companion {
+                if state.tile_at_point(cp) != 0 {
+                    let ev = Event::MonomerDetachment(cp);
+                    self.perform_event(state, &ev);
+                    self.update_after_event(state, &ev);
+                }
+            }
+            // Attach new tile (companion placed automatically by perform_event)
+            let ev = Event::MonomerAttachment(real_point, real_tile);
+            self.perform_event(state, &ev);
+            self.update_after_event(state, &ev);
+            Ok(f64::NAN)
+        } else {
+            // Check primary site
+            let existing = state.tile_at_point(real_point);
+            if existing != 0 {
+                return Err(GrowError::TilePlacementBlocked {
+                    row: real_point.0 .0,
+                    col: real_point.0 .1,
+                    tile: real_tile,
+                    existing_tile: existing,
+                });
+            }
+            // Check companion site
+            if let Some(cp) = companion {
+                let existing = state.tile_at_point(cp);
+                if existing != 0 {
+                    return Err(GrowError::TilePlacementBlocked {
+                        row: cp.0 .0,
+                        col: cp.0 .1,
+                        tile: real_tile,
+                        existing_tile: existing,
+                    });
+                }
+            }
+            // Sites are clear — attach
+            let ev = Event::MonomerAttachment(real_point, real_tile);
+            self.perform_event(state, &ev);
+            self.update_after_event(state, &ev);
+            Ok(f64::NAN)
+        }
     }
 
     fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> f64 {
@@ -417,6 +501,40 @@ impl ATAM {
             return TileShape::DupleToTop(dt);
         }
         TileShape::Single
+    }
+
+    /// Resolve a potentially fake tile to its real (canonical) tile and placement point.
+    fn resolve_to_real_tile<St: State>(
+        &self,
+        state: &St,
+        point: PointSafe2,
+        tile: Tile,
+    ) -> (PointSafe2, Tile) {
+        match self.tile_shape(tile) {
+            TileShape::DupleToLeft(real_tile) => {
+                (PointSafe2(state.move_sa_w(point).0), real_tile)
+            }
+            TileShape::DupleToTop(real_tile) => {
+                (PointSafe2(state.move_sa_n(point).0), real_tile)
+            }
+            _ => (point, tile),
+        }
+    }
+
+    /// Get the companion point for a duple tile, if applicable.
+    fn companion_point<St: State>(
+        &self,
+        state: &St,
+        point: PointSafe2,
+        tile: Tile,
+    ) -> Option<PointSafe2> {
+        match self.tile_shape(tile) {
+            TileShape::Single => None,
+            TileShape::DupleToRight(_) => Some(PointSafe2(state.move_sa_e(point).0)),
+            TileShape::DupleToBottom(_) => Some(PointSafe2(state.move_sa_s(point).0)),
+            TileShape::DupleToLeft(_) => Some(PointSafe2(state.move_sa_w(point).0)),
+            TileShape::DupleToTop(_) => Some(PointSafe2(state.move_sa_n(point).0)),
+        }
     }
 
     pub fn total_monomer_attachment_rate_at_point<S: State>(

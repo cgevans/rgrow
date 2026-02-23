@@ -1026,8 +1026,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     Orientation::WE => PointSafe2(state.move_sa_e(mid).0),
                 };
                 // Use place_tile to properly handle double tiles
-                let energy_change = system.place_tile(&mut state, mid, dimer.t1)?
-                    + system.place_tile(&mut state, other, dimer.t2)?;
+                let energy_change = system.place_tile(&mut state, mid, dimer.t1, true)?
+                    + system.place_tile(&mut state, other, dimer.t2, true)?;
                 let cl = [(mid, dimer.t1), (other, dimer.t2)];
                 state.record_event(
                     &system::Event::PolymerAttachment(cl.to_vec()),
@@ -1049,8 +1049,8 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
                     let mut dimer_state = St::empty(config.canvas_size)?;
 
                     // Use place_tile to properly handle double tiles for dimer state too
-                    let energy_change = system.place_tile(&mut dimer_state, mid, dimer.t1)?
-                        + system.place_tile(&mut dimer_state, other, dimer.t2)?;
+                    let energy_change = system.place_tile(&mut dimer_state, mid, dimer.t1, true)?
+                        + system.place_tile(&mut dimer_state, other, dimer.t2, true)?;
                     dimer_state.record_event(
                         &system::Event::PolymerAttachment(cl.to_vec()),
                         PerSecond::zero(),

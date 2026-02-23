@@ -52,6 +52,13 @@ pub enum GrowError {
     NoParameter(String),
     #[error("Parameter type is wrong for {0}")]
     WrongParameterType(String),
+    #[error("Cannot place tile {tile} at ({row}, {col}): site occupied by tile {existing_tile}")]
+    TilePlacementBlocked {
+        row: usize,
+        col: usize,
+        tile: Tile,
+        existing_tile: Tile,
+    },
 }
 
 #[cfg(feature = "python")]
