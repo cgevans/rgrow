@@ -572,8 +572,8 @@ impl TileSet {
         serde_json::from_str(data)
     }
 
-    pub fn from_yaml(data: &str) -> Result<Self, serde_yaml::Error> {
-        serde_yaml::from_str(data)
+    pub fn from_yaml(data: &str) -> Result<Self, serde_saphyr::Error> {
+        serde_saphyr::from_str(data)
     }
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, anyhow::Error> {
@@ -582,7 +582,7 @@ impl TileSet {
         let mut s = String::new();
         file.read_to_string(&mut s)?;
 
-        let res: Result<TileSet, _> = serde_yaml::from_str(&s);
+        let res: Result<TileSet, _> = serde_saphyr::from_str(&s);
 
         if let Ok(ts) = res {
             return Ok(ts);

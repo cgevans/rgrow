@@ -20,9 +20,11 @@ Added `replace: bool` parameter. When `false`, returns `TilePlacementBlocked` er
 
 ## Moderate Severity
 
-### 3. Deprecated dependency: `serde_yaml`
+### ~~3. Deprecated dependency: `serde_yaml`~~ FIXED
 
-`serde_yaml 0.9.34` is archived/deprecated upstream. Should migrate to `serde_yml` or another YAML library.
+~~`serde_yaml 0.9.34` is archived/deprecated upstream. Should migrate to `serde_yml` or another YAML library.~~
+
+Migrated to `serde-saphyr` (panic-free YAML parsing with good error reporting). Only deserialization was used (`from_str`, `from_reader`), so the migration was a drop-in replacement.
 
 ### 4. Dimer detachment energy calculation uncertainty
 
@@ -70,9 +72,9 @@ Added `replace: bool` parameter. When `false`, returns `TilePlacementBlocked` er
 - ~~`rgrow-rust/src/models/kblock.rs:361` — `Array2<Energy>`~~
 - ~~`rgrow-rust/src/models/sdc1d.rs:1855` — `Vec<temperatures>`, `Vec<times>`~~
 
-### 12. Duplicate dependency versions
+### 12. Duplicate dependency versions (transitive — cannot fix locally)
 
-Both `rand` (0.8 + 0.9) and `thiserror` (1.x + 2.x) coexist in the dependency tree, increasing binary size.
+Both `rand` (0.8 + 0.9) and `thiserror` (1.x + 2.x) coexist in the dependency tree, increasing binary size. These are all from transitive dependencies: `rand 0.8` comes from `astro-float-num` and `zbus` (via iced); `thiserror 1.x` from `bpci`, `iced`, and transitive GUI deps. Cannot be resolved without upstream updates.
 
 ### 13. `state_energy` ignores canvas bounds
 

@@ -106,7 +106,7 @@ fn main() -> anyhow::Result<()> {
 
 fn nucrate(po: FFSOptions) -> Result<(), RgrowError> {
     let tileset: TileSet =
-        serde_yaml::from_reader(File::open(po.input.clone()).expect("Input file not found."))
+        serde_saphyr::from_reader(File::open(po.input.clone()).expect("Input file not found."))
             .expect("Input file parse erorr.");
 
     let ffsrun = tileset.run_ffs(&po.into())?;
