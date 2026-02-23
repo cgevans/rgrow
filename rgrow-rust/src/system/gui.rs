@@ -261,6 +261,74 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
             state.draw_sprite(pixel_frame, sprite, PointSafeHere((y, x)));
         }
 
+        // Draw blocker rectangles protruding outside tile edges
+        {
+            use crate::painter::draw_rect;
+            let depth = (scale / 5).max(1); // how far the rectangle protrudes outward
+            let half_len = (scale / 6).max(1); // half-length along the edge
+            let blocker_color = [60, 60, 60, 255];
+            for ((y, x), &tileid) in state.raw_array().indexed_iter() {
+                let mask = sys.tile_blocker_mask(tileid);
+                if mask == 0 {
+                    continue;
+                }
+                let tile_x = x * scale;
+                let tile_y = y * scale;
+                let mid_x = tile_x + scale / 2;
+                let mid_y = tile_y + scale / 2;
+                // North blocker: rectangle above tile
+                if mask & 0b0001 != 0 {
+                    draw_rect(
+                        pixel_frame,
+                        mid_x.saturating_sub(half_len),
+                        mid_x + half_len,
+                        tile_y.saturating_sub(depth),
+                        tile_y,
+                        blocker_color,
+                        frame_width,
+                    );
+                }
+                // East blocker: rectangle to the right
+                if mask & 0b0010 != 0 {
+                    let right = tile_x + scale;
+                    draw_rect(
+                        pixel_frame,
+                        right,
+                        (right + depth).min(frame_width),
+                        mid_y.saturating_sub(half_len),
+                        mid_y + half_len,
+                        blocker_color,
+                        frame_width,
+                    );
+                }
+                // South blocker: rectangle below tile
+                if mask & 0b0100 != 0 {
+                    let bottom = tile_y + scale;
+                    draw_rect(
+                        pixel_frame,
+                        mid_x.saturating_sub(half_len),
+                        mid_x + half_len,
+                        bottom,
+                        (bottom + depth).min(frame_height),
+                        blocker_color,
+                        frame_width,
+                    );
+                }
+                // West blocker: rectangle to the left
+                if mask & 0b1000 != 0 {
+                    draw_rect(
+                        pixel_frame,
+                        tile_x.saturating_sub(depth),
+                        tile_x,
+                        mid_y.saturating_sub(half_len),
+                        mid_y + half_len,
+                        blocker_color,
+                        frame_width,
+                    );
+                }
+            }
+        }
+
         // Compute mismatch locations and derive count
         let (mismatch_count, mismatch_locs) = if show_mismatches {
             let locs = sys.calc_mismatch_locations(state);
@@ -275,7 +343,7 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
 
         // Draw mismatch markers if enabled
         if let Some(ref locs) = mismatch_locs {
-            use crate::painter::draw_mismatch;
+            use crate::painter::draw_rect;
             // `thick`: pixels straddling each side of the boundary
             // `long`: half-length along the edge (from tile center outward)
             let thick = (scale / 8).max(1);
@@ -286,11 +354,10 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
                     continue;
                 }
                 // S mismatch: horizontal bar straddling bottom edge
-                // Boundary falls between row (y+1)*scale-1 and (y+1)*scale
                 if mm & 0b0010 != 0 {
-                    let edge_y = y * scale + scale; // first row of next tile
+                    let edge_y = y * scale + scale;
                     let mid_x = x * scale + scale / 2;
-                    draw_mismatch(
+                    draw_rect(
                         pixel_frame,
                         mid_x.saturating_sub(long),
                         mid_x + long,
@@ -301,11 +368,10 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
                     );
                 }
                 // W mismatch: vertical bar straddling left edge
-                // Boundary falls between column x*scale-1 and x*scale
                 if mm & 0b0001 != 0 {
-                    let edge_x = x * scale; // first col of this tile
+                    let edge_x = x * scale;
                     let mid_y = y * scale + scale / 2;
-                    draw_mismatch(
+                    draw_rect(
                         pixel_frame,
                         edge_x.saturating_sub(thick),
                         edge_x + thick,

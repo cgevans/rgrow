@@ -1,9 +1,9 @@
 use crate::colors::Color;
 
-/// Draw a filled rectangle (mismatch indicator) into an RGBA frame buffer.
+/// Draw a filled rectangle into an RGBA frame buffer.
 /// Pixel region is `x_min..x_max, y_min..y_max` (exclusive upper bounds).
 /// `frame_width`: width of the frame in pixels (for row stride calculation).
-pub fn draw_mismatch(
+pub fn draw_rect(
     frame: &mut [u8],
     x_min: usize,
     x_max: usize,

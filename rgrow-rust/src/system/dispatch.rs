@@ -510,6 +510,13 @@ pub trait TileBondInfo {
     fn tile_pixels(&self, tile_number: Tile, size: usize) -> SpriteSquare {
         self.tile_style(tile_number).as_sprite(size)
     }
+
+    /// Return a bitmask of sides that have blockers attached.
+    /// Bit layout: 0b_WESN (bit 0 = North, bit 1 = East, bit 2 = South, bit 3 = West).
+    /// Default: no blockers.
+    fn tile_blocker_mask(&self, _tile_number: Tile) -> u8 {
+        0
+    }
 }
 
 pub trait SystemInfo {
