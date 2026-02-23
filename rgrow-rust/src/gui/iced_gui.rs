@@ -48,6 +48,7 @@ pub struct RgrowGui {
     pub timescale: String,
     pub model_name: String,
     pub parameters: HashMap<String, ParameterState>,
+    pub show_mismatches: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +68,7 @@ pub enum Message {
     IncrementParameter { name: String },
     DecrementParameter { name: String },
     UpdateIncrement { name: String, increment: String },
+    ToggleMismatches,
 }
 
 impl RgrowGui {
@@ -121,6 +123,7 @@ impl RgrowGui {
             timescale,
             model_name: init.model_name,
             parameters,
+            show_mismatches: true,
         }
     }
 
@@ -295,6 +298,10 @@ impl RgrowGui {
                     }
                 }
             }
+            Message::ToggleMismatches => {
+                self.show_mismatches = !self.show_mismatches;
+                self.send_control(ControlMessage::SetShowMismatches(self.show_mismatches));
+            }
         }
 
         Task::none()
@@ -331,11 +338,21 @@ impl RgrowGui {
             .width(80)
             .size(14);
 
+        let mismatch_text = if self.show_mismatches {
+            "Mismatches: On"
+        } else {
+            "Mismatches: Off"
+        };
+        let mismatch_button = button(text(mismatch_text).size(14))
+            .on_press(Message::ToggleMismatches)
+            .padding([5, 15]);
+
         let control_row1 = row![
             pause_button,
             step_button,
             text("Events/step:").size(14),
             events_per_step_input,
+            mismatch_button,
         ]
         .spacing(10)
         .align_y(iced::Alignment::Center);

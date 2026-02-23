@@ -1,5 +1,27 @@
 use crate::colors::Color;
 
+/// Draw a filled rectangle (mismatch indicator) into an RGBA frame buffer.
+/// Pixel region is `x_min..x_max, y_min..y_max` (exclusive upper bounds).
+/// `frame_width`: width of the frame in pixels (for row stride calculation).
+pub fn draw_mismatch(
+    frame: &mut [u8],
+    x_min: usize,
+    x_max: usize,
+    y_min: usize,
+    y_max: usize,
+    color: [u8; 4],
+    frame_width: usize,
+) {
+    for py in y_min..y_max {
+        for px in x_min..x_max {
+            let idx = (py * frame_width + px) * 4;
+            if idx + 4 <= frame.len() {
+                frame[idx..idx + 4].copy_from_slice(&color);
+            }
+        }
+    }
+}
+
 /// How to render a single tile.
 ///
 /// To give some flexibility, you can give a tile 4 colors, when drawing the tile,

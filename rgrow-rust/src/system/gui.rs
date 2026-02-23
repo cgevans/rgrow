@@ -132,6 +132,7 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
     let mut remaining_step_events: Option<u64> = None;
     let mut max_events_per_sec: Option<u64> = initial_max_events_per_sec;
     let mut timescale: Option<f64> = initial_timescale;
+    let mut show_mismatches = true;
 
     let mut evres: EvolveOutcome = EvolveOutcome::ReachedZeroRate;
     let mut frame_buffer = vec![0u8; shm_size];
@@ -173,6 +174,9 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
                     if let Ok(needed) = sys.set_param(&name, Box::new(value)) {
                         sys.update_state(state, &needed);
                     }
+                }
+                ControlMessage::SetShowMismatches(v) => {
+                    show_mismatches = v;
                 }
             }
         }
@@ -257,13 +261,70 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
             state.draw_sprite(pixel_frame, sprite, PointSafeHere((y, x)));
         }
 
+        // Compute mismatch locations and derive count
+        let (mismatch_count, mismatch_locs) = if show_mismatches {
+            let locs = sys.calc_mismatch_locations(state);
+            let count: u32 = locs
+                .iter()
+                .map(|x| ((x & 0b01) + ((x & 0b10) >> 1)) as u32)
+                .sum();
+            (count, Some(locs))
+        } else {
+            (sys.calc_mismatches(state) as u32, None)
+        };
+
+        // Draw mismatch markers if enabled
+        if let Some(ref locs) = mismatch_locs {
+            use crate::painter::draw_mismatch;
+            // `thick`: pixels straddling each side of the boundary
+            // `long`: half-length along the edge (from tile center outward)
+            let thick = (scale / 8).max(1);
+            let long = (scale / 4).max(1);
+            let color = [255, 0, 0, 255]; // red
+            for ((y, x), &mm) in locs.indexed_iter() {
+                if mm == 0 {
+                    continue;
+                }
+                // S mismatch: horizontal bar straddling bottom edge
+                // Boundary falls between row (y+1)*scale-1 and (y+1)*scale
+                if mm & 0b0010 != 0 {
+                    let edge_y = y * scale + scale; // first row of next tile
+                    let mid_x = x * scale + scale / 2;
+                    draw_mismatch(
+                        pixel_frame,
+                        mid_x.saturating_sub(long),
+                        mid_x + long,
+                        edge_y.saturating_sub(thick),
+                        edge_y + thick,
+                        color,
+                        frame_width,
+                    );
+                }
+                // W mismatch: vertical bar straddling left edge
+                // Boundary falls between column x*scale-1 and x*scale
+                if mm & 0b0001 != 0 {
+                    let edge_x = x * scale; // first col of this tile
+                    let mid_y = y * scale + scale / 2;
+                    draw_mismatch(
+                        pixel_frame,
+                        edge_x.saturating_sub(thick),
+                        edge_x + thick,
+                        mid_y.saturating_sub(long),
+                        mid_y + long,
+                        color,
+                        frame_width,
+                    );
+                }
+            }
+        }
+
         let notification = UpdateNotification {
             frame_width: frame_width as u32,
             frame_height: frame_height as u32,
             time: state.time().into(),
             total_events: state.total_events(),
             n_tiles: state.n_tiles(),
-            mismatches: sys.calc_mismatches(state) as u32,
+            mismatches: mismatch_count,
             energy: state.energy(),
             scale,
             data_len: pixel_frame.len(),

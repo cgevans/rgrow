@@ -68,4 +68,5 @@ pub enum ControlMessage {
     SetTimescale(Option<f64>),       // None = unlimited, else sim_time/real_time
     SetTemperature(f64),             // Deprecated, use SetParameter instead
     SetParameter { name: String, value: f64 },
+    SetShowMismatches(bool),
 }
