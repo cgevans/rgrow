@@ -99,9 +99,6 @@ pub struct ATAM {
     should_be_counted: Array1<bool>,
 }
 
-unsafe impl Send for ATAM {}
-unsafe impl Sync for ATAM {}
-
 impl System for ATAM {
     fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {

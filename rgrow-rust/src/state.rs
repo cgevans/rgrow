@@ -673,8 +673,6 @@ where
     }
 }
 
-unsafe impl<C: Canvas, T: StateTracker> Send for QuadTreeState<C, T> {}
-
 impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
     #[inline(always)]
     fn n_tiles(&self) -> NumTiles {

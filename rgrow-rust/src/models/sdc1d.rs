@@ -1852,7 +1852,7 @@ impl AnnealProtocol {
     }
 
     /// Generates two arrays:
-    /// (Vec<temperatures>, Vec<times>)
+    /// (`Vec<temperatures>`, `Vec<times>`)
     pub fn generate_arrays(&self) -> (Vec<f64>, Vec<f64>) {
         // See how many steps we wil take during each of the stages
         let steps_init = self.initial_steps();

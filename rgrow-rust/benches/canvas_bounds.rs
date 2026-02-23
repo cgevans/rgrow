@@ -11,9 +11,6 @@ use std::time::Duration;
 #[derive(Clone, Debug)]
 struct CanvasSquareBoundsCheck(Array2<Tile>);
 
-unsafe impl Send for CanvasSquareBoundsCheck {}
-unsafe impl Sync for CanvasSquareBoundsCheck {}
-
 impl CanvasCreate for CanvasSquareBoundsCheck {
     type Params = (usize, usize);
 

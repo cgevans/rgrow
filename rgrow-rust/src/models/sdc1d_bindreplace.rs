@@ -1,13 +1,18 @@
 /// The Bind-Replace model of SDC from the SI of https://www.biorxiv.org/content/10.1101/2025.07.16.664196v1
 /// As this model is extremely simple, it also serves as a nice guide to implementing new models.
-
-
 use core::panic;
 use std::collections::HashMap;
 
 use super::sdc1d::{SDCParams, SDCStrand};
+use crate::{
+    canvas::{PointSafe2, PointSafeHere},
+    colors::get_color_or_random,
+    models::sdc1d::{get_or_generate, SingleOrMultiScaffold},
+    state::State,
+    system::{Event, System, TileBondInfo},
+    units::PerSecond,
+};
 use serde::{Deserialize, Serialize};
-use crate::{canvas::{PointSafe2, PointSafeHere}, colors::get_color_or_random, models::sdc1d::{SingleOrMultiScaffold, get_or_generate}, state::State, system::{Event, System, TileBondInfo}, units::PerSecond};
 
 #[cfg(feature = "python")]
 use numpy::PyArrayMethods;
@@ -16,7 +21,7 @@ use numpy::ToPyArray;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]   
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 struct Glue(u64);
 
 impl Glue {
@@ -25,7 +30,7 @@ impl Glue {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]  
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 struct Tile(u32);
 
 #[cfg_attr(feature = "python", pyclass(subclass, module = "rgrow.rgrow"))]
@@ -53,7 +58,6 @@ impl TileBondInfo for SDC1DBindReplace {
     }
 }
 
-
 impl System for SDC1DBindReplace {
     fn system_info(&self) -> String {
         format!(
@@ -76,16 +80,18 @@ impl System for SDC1DBindReplace {
         }
     }
 
-    fn event_rate_at_point<St: crate::state::State>(&self, state: &St, p: crate::canvas::PointSafeHere) -> PerSecond {
+    fn event_rate_at_point<St: crate::state::State>(
+        &self,
+        state: &St,
+        p: crate::canvas::PointSafeHere,
+    ) -> PerSecond {
         if !state.inbounds(p.0) {
             return PerSecond::new(0.0);
         };
 
         let coord = PointSafe2(p.0);
         match state.tile_at_point(coord) {
-            0 => {
-                return PerSecond::from(self.matching_tiles_at_site[coord.0.1].len() as f64);
-            },
+            0 => PerSecond::from(self.matching_tiles_at_site[coord.0 .1].len() as f64),
             s => {
                 let (glue_w, _, glue_e) = self.strand_glues[s as usize];
                 let (glue_to_e, _, _) = self.strand_glues[state.tile_to_e(coord) as usize];
@@ -93,17 +99,18 @@ impl System for SDC1DBindReplace {
                 let ng = glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
 
                 let mut n_others = 0.;
-                for &possible_replace in &self.matching_tiles_at_site[coord.0.1] {
+                for &possible_replace in &self.matching_tiles_at_site[coord.0 .1] {
                     if s == possible_replace.0 {
                         continue;
                     }
                     let (glue_w, _, glue_e) = self.strand_glues[possible_replace.0 as usize];
-                    let ng_replace = glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
+                    let ng_replace =
+                        glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
                     if ng_replace >= ng {
                         n_others += 1.;
                     }
                 }
-                return PerSecond::from(n_others);
+                PerSecond::from(n_others)
             }
         }
     }
@@ -119,34 +126,41 @@ impl System for SDC1DBindReplace {
 
         match t {
             Tile(0) => {
-                 for t in &self.matching_tiles_at_site[p.0.1] {
-                    mut_acc = mut_acc - PerSecond::from(1.0);
+                for t in &self.matching_tiles_at_site[p.0 .1] {
+                    mut_acc -= PerSecond::from(1.0);
                     if mut_acc.0 <= 0.0 {
                         return (Event::MonomerAttachment(p, t.0), 1.0);
                     }
-                 }
-                 panic!("Should have found an event to choose at point {:?} with acc {}", p, acc);
-            },
+                }
+                panic!(
+                    "Should have found an event to choose at point {:?} with acc {}",
+                    p, acc
+                );
+            }
             t => {
                 let (glue_w, _, glue_e) = self.strand_glues[t.0 as usize];
                 let (glue_to_e, _, _) = self.strand_glues[state.tile_to_e(p) as usize];
-                let ( _, _, glue_to_w) = self.strand_glues[state.tile_to_w(p) as usize];
+                let (_, _, glue_to_w) = self.strand_glues[state.tile_to_w(p) as usize];
                 let ng = glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
 
-                for &possible_replace in &self.matching_tiles_at_site[p.0.1] {
+                for &possible_replace in &self.matching_tiles_at_site[p.0 .1] {
                     if t.0 == possible_replace.0 {
                         continue;
                     }
                     let (glue_w, _, glue_e) = self.strand_glues[possible_replace.0 as usize];
-                    let ng_replace = glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
+                    let ng_replace =
+                        glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
                     if ng_replace >= ng {
-                        mut_acc = mut_acc - PerSecond::from(1.0);
+                        mut_acc -= PerSecond::from(1.0);
                         if mut_acc.0 <= 0.0 {
                             return (Event::MonomerChange(p, possible_replace.0), 1.0);
                         }
                     }
                 }
-                panic!("Should have found an event to choose at point {:?} with acc {}", p, acc);
+                panic!(
+                    "Should have found an event to choose at point {:?} with acc {}",
+                    p, acc
+                );
             }
         }
     }
@@ -155,7 +169,10 @@ impl System for SDC1DBindReplace {
         Vec::default()
     }
 
-    fn calc_mismatch_locations<St: crate::state::State>(&self, state: &St) -> ndarray::Array2<usize> {
+    fn calc_mismatch_locations<St: crate::state::State>(
+        &self,
+        _state: &St,
+    ) -> ndarray::Array2<usize> {
         todo!()
     }
 }
@@ -199,8 +216,9 @@ impl SDC1DBindReplace {
                 left_glue,
                 right_glue,
                 ..
-            }
-        ) in params.strands.into_iter().enumerate() {
+            },
+        ) in params.strands.into_iter().enumerate()
+        {
             strand_names.push(name.unwrap_or(format!("{}", id)));
             strand_colors.push(get_color_or_random(color.as_deref()).unwrap());
 
@@ -216,7 +234,9 @@ impl SDC1DBindReplace {
             SingleOrMultiScaffold::Single(s) => {
                 let mut scaffold = Vec::<Glue>::with_capacity(s.len());
                 for g in s.into_iter() {
-                    scaffold.push(Glue(get_or_generate(&mut glue_name_map, &mut gluenum, g) as u64));
+                    scaffold.push(Glue(
+                        get_or_generate(&mut glue_name_map, &mut gluenum, g) as u64
+                    ));
                 }
                 scaffold
             }
@@ -226,7 +246,7 @@ impl SDC1DBindReplace {
         let mut glue_names = vec![String::default(); gluenum];
         for (sx, i) in glue_name_map.into_iter() {
             glue_names[i] = sx;
-        };
+        }
 
         let mut sys = SDC1DBindReplace {
             strand_names,
@@ -238,19 +258,19 @@ impl SDC1DBindReplace {
         };
         sys.update();
         sys
-}
-
-fn update(&mut self) {
-    for (i, &scaffold_glue) in self.scaffold.iter().enumerate() {
-        let mut matching_tiles = vec![];
-        for (tile_num, &(glue_w, glue_b, glue_e)) in self.strand_glues.iter().enumerate() {
-            if glue_b.matches(scaffold_glue) {
-                matching_tiles.push(Tile(tile_num as u32));
-            }
-        }
-        self.matching_tiles_at_site[i] = matching_tiles;
     }
- }
+
+    fn update(&mut self) {
+        for (i, &scaffold_glue) in self.scaffold.iter().enumerate() {
+            let mut matching_tiles = vec![];
+            for (tile_num, &(_glue_w, glue_b, _glue_e)) in self.strand_glues.iter().enumerate() {
+                if glue_b.matches(scaffold_glue) {
+                    matching_tiles.push(Tile(tile_num as u32));
+                }
+            }
+            self.matching_tiles_at_site[i] = matching_tiles;
+        }
+    }
 }
 
 #[cfg(feature = "python")]

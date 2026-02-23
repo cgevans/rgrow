@@ -49,7 +49,7 @@ jobs:
           cargo llvm-cov --no-run --lcov --output-path coverage.lcov -p rgrow -p rgrow-python
       - uses: codecov/codecov-action@v5
         with:
-          files: coverage-rust.lcov
+          files: coverage.lcov
           name: rust-linux
           token: ${{ secrets.CODECOV_TOKEN }}
   python_checks:

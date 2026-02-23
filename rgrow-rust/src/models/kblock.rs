@@ -358,7 +358,7 @@ impl KBlock {
         }
     }
 
-    /// Fill energy_ns, energy_we: Array2<Energy>
+    /// Fill energy_ns, energy_we: `Array2<Energy>`
     ///
     /// This will mutate the structure
     pub fn fill_energy_pairs(&mut self) {

@@ -1,8 +1,8 @@
 // #![feature(stmt_expr_attributes)]
 extern crate ndarray;
 
-use clap::{Parser};
-use clap::crate_version; 
+use clap::crate_version;
+use clap::Parser;
 
 use rgrow::base::RgrowError;
 use rgrow::ffs;
