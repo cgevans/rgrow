@@ -185,6 +185,7 @@ enum XgrowArgs<'a> {
     Periodic(bool),
     HDoubleTile(TileIdent, TileIdent),
     VDoubleTile(TileIdent, TileIdent),
+    Pause,
 }
 
 fn arg_block(input: &str) -> IResult<&str, XgrowArgs<'_>> {
@@ -254,6 +255,10 @@ fn arg_vdoubletile(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     )(input)
 }
 
+fn arg_pause(input: &str) -> IResult<&str, XgrowArgs<'_>> {
+    map(tag("pause"), |_| XgrowArgs::Pause)(input)
+}
+
 fn arg_periodic(input: &str) -> IResult<&str, XgrowArgs<'_>> {
     alt((
         map(tag("periodic=False"), |_| XgrowArgs::Periodic(false)),
@@ -283,6 +288,7 @@ fn xgrow_args(input: &str) -> IResult<&str, (tileset::TileSet, GlueVec)> {
         arg_threshold,
         arg_gluelink,
         arg_periodic,
+        arg_pause,
         arg_hdoubletile,
         arg_vdoubletile,
         unhandled_option,
@@ -340,6 +346,9 @@ fn xgrow_args(input: &str) -> IResult<&str, (tileset::TileSet, GlueVec)> {
                     Some(ref mut v) => v.push((t1, t2)),
                 };
             }
+            XgrowArgs::Pause => {
+                args.start_paused = true;
+            }
         }
         i2 = input;
     }
@@ -383,4 +392,21 @@ pub fn parse_xgrow_string(tilestring: &str) -> anyhow::Result<tileset::TileSet> 
     parse(tilestring)
         .map_err(|x| x.to_owned().into())
         .map(|x| x.1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sierpinski_has_pause() {
+        let ts = parse_xgrow("examples/xgrow-format/sierpinski.tiles").unwrap();
+        assert!(ts.start_paused, "sierpinski.tiles should set start_paused");
+    }
+
+    #[test]
+    fn binary_counter_no_pause() {
+        let ts = parse_xgrow("examples/xgrow-format/BinaryCounter.tiles").unwrap();
+        assert!(!ts.start_paused, "BinaryCounter.tiles should not set start_paused");
+    }
 }
