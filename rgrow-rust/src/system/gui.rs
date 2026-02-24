@@ -1,9 +1,8 @@
 use std::time::{Duration, Instant};
 
-use crate::base::RgrowError;
-use crate::canvas::PointSafeHere;
+use crate::base::{RgrowError, Tile};
+use crate::painter::{blit_sprite, render_blockers, render_mismatches, render_outlines};
 use crate::state::State;
-
 use crate::ui::find_gui_command;
 
 use super::core::System;
@@ -248,103 +247,43 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
         last_frame_time = Instant::now();
 
         // Draw frame
-        let edge_size = scale / 10;
-        let _tile_size = scale - 2 * edge_size;
         let frame_width = (width * scale as u32) as usize;
         let frame_height = (height * scale as u32) as usize;
         frame_buffer.resize(frame_width * frame_height * 4, 0);
 
         let pixel_frame = &mut frame_buffer[..];
 
-        for ((y, x), &tileid) in state.raw_array().indexed_iter() {
-            let sprite = sys.tile_pixels(tileid, scale);
-            state.draw_sprite(pixel_frame, sprite, PointSafeHere((y, x)));
+        // Pre-compute per-tile-type data
+        let tiles = state.raw_array();
+        let max_tile = tiles.iter().copied().max().unwrap_or(0) as usize;
+        let sprites: Vec<_> = (0..=max_tile)
+            .map(|t| sys.tile_pixels(t as Tile, scale))
+            .collect();
+        let blocker_masks: Vec<u8> = (0..=max_tile)
+            .map(|t| sys.tile_blocker_mask(t as Tile))
+            .collect();
+
+        // Render tiles
+        for ((y, x), &tileid) in tiles.indexed_iter() {
+            if let Some(sprite) = sprites.get(tileid as usize) {
+                blit_sprite(pixel_frame, sprite, x, y, frame_width);
+            }
         }
 
-        // Draw thin outlines around non-empty tiles to distinguish them
+        // Draw thin outlines around non-empty tiles
         if scale >= 12 {
-            use crate::painter::draw_rect;
-            let outline_color = [0u8, 0, 0, 255];
-            for ((y, x), &tileid) in state.raw_array().indexed_iter() {
-                if tileid == 0 {
-                    continue;
-                }
-                let tile_x = x * scale;
-                let tile_y = y * scale;
-                draw_rect(pixel_frame, tile_x, tile_x + scale, tile_y, tile_y + 1, outline_color, frame_width);
-                draw_rect(pixel_frame, tile_x, tile_x + scale, tile_y + scale - 1, tile_y + scale, outline_color, frame_width);
-                draw_rect(pixel_frame, tile_x, tile_x + 1, tile_y, tile_y + scale, outline_color, frame_width);
-                draw_rect(pixel_frame, tile_x + scale - 1, tile_x + scale, tile_y, tile_y + scale, outline_color, frame_width);
-            }
+            render_outlines(pixel_frame, tiles, scale, frame_width);
         }
 
-        // Draw blocker rectangles protruding outside tile edges
-        {
-            use crate::painter::draw_rect;
-            let depth = (scale / 3).max(2); // how far the rectangle protrudes outward
-            let half_len = (scale / 3).max(2); // half-length along the edge
-            let blocker_color = [140, 140, 140, 255];
-            for ((y, x), &tileid) in state.raw_array().indexed_iter() {
-                let mask = sys.tile_blocker_mask(tileid);
-                if mask == 0 {
-                    continue;
-                }
-                let tile_x = x * scale;
-                let tile_y = y * scale;
-                let mid_x = tile_x + scale / 2;
-                let mid_y = tile_y + scale / 2;
-                // North blocker: rectangle above tile
-                if mask & 0b0001 != 0 {
-                    draw_rect(
-                        pixel_frame,
-                        mid_x.saturating_sub(half_len),
-                        mid_x + half_len,
-                        tile_y.saturating_sub(depth),
-                        tile_y,
-                        blocker_color,
-                        frame_width,
-                    );
-                }
-                // East blocker: rectangle to the right
-                if mask & 0b0010 != 0 {
-                    let right = tile_x + scale;
-                    draw_rect(
-                        pixel_frame,
-                        right,
-                        (right + depth).min(frame_width),
-                        mid_y.saturating_sub(half_len),
-                        mid_y + half_len,
-                        blocker_color,
-                        frame_width,
-                    );
-                }
-                // South blocker: rectangle below tile
-                if mask & 0b0100 != 0 {
-                    let bottom = tile_y + scale;
-                    draw_rect(
-                        pixel_frame,
-                        mid_x.saturating_sub(half_len),
-                        mid_x + half_len,
-                        bottom,
-                        (bottom + depth).min(frame_height),
-                        blocker_color,
-                        frame_width,
-                    );
-                }
-                // West blocker: rectangle to the left
-                if mask & 0b1000 != 0 {
-                    draw_rect(
-                        pixel_frame,
-                        tile_x.saturating_sub(depth),
-                        tile_x,
-                        mid_y.saturating_sub(half_len),
-                        mid_y + half_len,
-                        blocker_color,
-                        frame_width,
-                    );
-                }
-            }
-        }
+        // Draw blocker rectangles
+        render_blockers(
+            pixel_frame,
+            tiles,
+            &blocker_masks,
+            scale,
+            frame_width,
+            frame_height,
+        );
 
         // Compute mismatch locations and derive count
         let (mismatch_count, mismatch_locs) = if show_mismatches {
@@ -360,45 +299,7 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
 
         // Draw mismatch markers if enabled
         if let Some(ref locs) = mismatch_locs {
-            use crate::painter::draw_rect;
-            // `thick`: pixels straddling each side of the boundary
-            // `long`: half-length along the edge (from tile center outward)
-            let thick = (scale / 4).max(1);
-            let long = (scale / 3).max(1);
-            let color = [255, 0, 0, 255]; // red
-            for ((y, x), &mm) in locs.indexed_iter() {
-                if mm == 0 {
-                    continue;
-                }
-                // S mismatch: horizontal bar straddling bottom edge
-                if mm & 0b0010 != 0 {
-                    let edge_y = y * scale + scale;
-                    let mid_x = x * scale + scale / 2;
-                    draw_rect(
-                        pixel_frame,
-                        mid_x.saturating_sub(long),
-                        mid_x + long,
-                        edge_y.saturating_sub(thick),
-                        edge_y + thick,
-                        color,
-                        frame_width,
-                    );
-                }
-                // W mismatch: vertical bar straddling left edge
-                if mm & 0b0001 != 0 {
-                    let edge_x = x * scale;
-                    let mid_y = y * scale + scale / 2;
-                    draw_rect(
-                        pixel_frame,
-                        edge_x.saturating_sub(thick),
-                        edge_x + thick,
-                        mid_y.saturating_sub(long),
-                        mid_y + long,
-                        color,
-                        frame_width,
-                    );
-                }
-            }
+            render_mismatches(pixel_frame, &locs.view(), scale, frame_width);
         }
 
         let notification = UpdateNotification {
