@@ -68,7 +68,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
 
     fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError>;
 
-    fn calc_committer(
+    fn calc_committor(
         &mut self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
@@ -77,7 +77,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         num_trials: usize,
     ) -> Result<f64, GrowError>;
 
-    fn calc_committer_adaptive(
+    fn calc_committor_adaptive(
         &self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
@@ -86,7 +86,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         conf_interval_margin: f64,
     ) -> Result<(f64, usize), GrowError>;
 
-    fn calc_committers_adaptive(
+    fn calc_committors_adaptive(
         &self,
         initial_states: &[&StateEnum],
         cutoff_size: NumTiles,
@@ -122,15 +122,15 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         conf_interval_margin: f64,
     ) -> Result<(Vec<f64>, Vec<usize>), GrowError>;
 
-    /// Determine whether the committer probability for a state is above or below a threshold
+    /// Determine whether the committor probability for a state is above or below a threshold
     /// with a specified confidence level using adaptive sampling.
     ///
     /// This function uses adaptive sampling with Wilson Score confidence intervals to determine
-    /// with the desired confidence whether the true committer probability is above or below the
+    /// with the desired confidence whether the true committor probability is above or below the
     /// given threshold. It continues sampling until the confidence interval is narrow enough to
     /// make a definitive determination, or until the maximum number of trials is reached.
     ///
-    /// The committer probability is the probability that when a simulation is started from the
+    /// The committor probability is the probability that when a simulation is started from the
     /// given state, the assembly will grow to reach `cutoff_size` rather than melting to zero tiles.
     ///
     /// # Arguments
@@ -153,7 +153,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     /// Returns `Ok((is_above_threshold, probability_estimate, confidence_interval, num_trials, exceeded_max_trials))`
     /// where:
     /// * `is_above_threshold` - `true` if probability is above threshold with given confidence
-    /// * `probability_estimate` - The estimated committer probability (between 0.0 and 1.0)
+    /// * `probability_estimate` - The estimated committor probability (between 0.0 and 1.0)
     /// * `confidence_interval` - `Some((lower_bound, upper_bound))` if `ci_confidence_level` is provided,
     ///   `None` otherwise
     /// * `num_trials` - Number of trials performed
@@ -175,7 +175,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     /// # use rgrow::state::StateEnum;
     /// # fn example(system: &mut dyn DynSystem, state: &StateEnum) -> Result<(), Box<dyn std::error::Error>> {
     /// // Test at 95% confidence
-    /// let (is_above, prob, trials, exceeded) = system.calc_committer_threshold_test(
+    /// let (is_above, prob, trials, exceeded) = system.calc_committor_threshold_test(
     ///     state,
     ///     10,      // cutoff_size
     ///     0.5,     // threshold
@@ -190,7 +190,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     /// println!("Estimate: {:.4}, Trials: {}", prob, trials);
     ///
     /// // Test with max_trials limit
-    /// let (is_above, prob, trials, exceeded) = system.calc_committer_threshold_test(
+    /// let (is_above, prob, trials, exceeded) = system.calc_committor_threshold_test(
     ///     state,
     ///     10,         // cutoff_size
     ///     0.5,        // threshold
@@ -209,7 +209,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     /// ```
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
-    fn calc_committer_threshold_test(
+    fn calc_committor_threshold_test(
         &mut self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
@@ -310,7 +310,7 @@ where
         self.system_info()
     }
 
-    fn calc_committer(
+    fn calc_committor(
         &mut self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
@@ -318,10 +318,10 @@ where
         max_events: Option<NumEvents>,
         num_trials: usize,
     ) -> Result<f64, GrowError> {
-        analysis::calc_committer(self, initial_state, cutoff_size, max_time, max_events, num_trials)
+        analysis::calc_committor(self, initial_state, cutoff_size, max_time, max_events, num_trials)
     }
 
-    fn calc_committer_adaptive(
+    fn calc_committor_adaptive(
         &self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
@@ -329,7 +329,7 @@ where
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
     ) -> Result<(f64, usize), GrowError> {
-        analysis::calc_committer_adaptive(
+        analysis::calc_committor_adaptive(
             self,
             initial_state,
             cutoff_size,
@@ -339,7 +339,7 @@ where
         )
     }
 
-    fn calc_committers_adaptive(
+    fn calc_committors_adaptive(
         &self,
         initial_states: &[&StateEnum],
         cutoff_size: NumTiles,
@@ -347,7 +347,7 @@ where
         max_events: Option<NumEvents>,
         conf_interval_margin: f64,
     ) -> Result<(Vec<f64>, Vec<usize>), GrowError> {
-        analysis::calc_committers_adaptive(
+        analysis::calc_committors_adaptive(
             self,
             initial_states,
             cutoff_size,
@@ -411,7 +411,7 @@ where
         )
     }
 
-    fn calc_committer_threshold_test(
+    fn calc_committor_threshold_test(
         &mut self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
@@ -422,7 +422,7 @@ where
         max_trials: Option<usize>,
         return_on_max_trials: bool,
     ) -> Result<(bool, f64, usize, bool), GrowError> {
-        analysis::calc_committer_threshold_test(
+        analysis::calc_committor_threshold_test(
             self,
             initial_state,
             cutoff_size,

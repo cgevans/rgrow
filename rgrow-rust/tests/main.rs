@@ -259,7 +259,7 @@ fn get_sierpinski() -> Result<TileSet> {
 }
 
 #[test]
-fn test_calc_committer() -> Result<()> {
+fn test_calc_committor() -> Result<()> {
     // In these conditions, the max energy square is k=8.
     let mut sys = KTAM::new_sized(1, 1);
     sys.tile_edges = array![[0, 0, 0, 0], [1, 1, 1, 1]];
@@ -283,12 +283,12 @@ fn test_calc_committer() -> Result<()> {
 
     let se = StateEnum::PeriodicCanvasNoTracker(state);
 
-    let committer = sys.calc_committer(&se, 200, None, None, 100)?;
+    let committor = sys.calc_committor(&se, 200, None, None, 100)?;
 
-    println!("committer k=14: {committer}");
+    println!("committor k=14: {committor}");
     assert!(
-        (committer > 0.9),
-        "committer out of expected range: {committer}"
+        (committor > 0.9),
+        "committor out of expected range: {committor}"
     );
 
     let mut state = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((32, 32))?;
@@ -303,12 +303,12 @@ fn test_calc_committer() -> Result<()> {
 
     let se = StateEnum::PeriodicCanvasNoTracker(state);
 
-    let committer = sys.calc_committer(&se, 200, None, None, 100)?;
+    let committor = sys.calc_committor(&se, 200, None, None, 100)?;
 
-    println!("committer k=8: {committer}");
+    println!("committor k=8: {committor}");
     assert!(
-        (committer > 0.5) && (committer < 0.9),
-        "committer out of expected range: {committer}"
+        (committor > 0.5) && (committor < 0.9),
+        "committor out of expected range: {committor}"
     );
 
     let mut state = sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((32, 32))?;
@@ -323,12 +323,12 @@ fn test_calc_committer() -> Result<()> {
 
     let se = StateEnum::PeriodicCanvasNoTracker(state);
 
-    let committer = sys.calc_committer(&se, 200, None, None, 100)?;
+    let committor = sys.calc_committor(&se, 200, None, None, 100)?;
 
-    println!("committer k=5: {committer}");
+    println!("committor k=5: {committor}");
     assert!(
-        (committer < 0.1),
-        "committer out of expected range: {committer}"
+        (committor < 0.1),
+        "committor out of expected range: {committor}"
     );
 
     Ok(())

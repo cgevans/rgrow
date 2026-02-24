@@ -19,7 +19,7 @@
 
 - Fix GUI on macOS by using temp directory instead of `/dev/shm/` for shared memory (which doesn't exist on macOS).
 - Fix GUI on Windows (though WSL is likely the better option for Windows users).
-- Fixes for committer function calculation and movie tracking.
+- Fixes for committor function calculation and movie tracking.
 - KBlock fixes.
 
 # 0.21.0

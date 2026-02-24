@@ -276,7 +276,7 @@ class ATAM:
         self, state: State | FFSStateRef | NDArray[np.uint]
     ) -> NDArray[np.str_]: ...
 
-    def calc_committer(
+    def calc_committor(
         self,
         state: State,
         cutoff_size: int,
@@ -285,7 +285,7 @@ class ATAM:
         max_events: int | None = None,
     ) -> float:
         """
-        Calculate the committer function for a state.
+        Calculate the committor function for a state.
 
         Parameters
         ----------
@@ -306,7 +306,7 @@ class ATAM:
             Probability of reaching cutoff_size (between 0.0 and 1.0)
         """
 
-    def calc_committer_adaptive(
+    def calc_committor_adaptive(
         self,
         state: State,
         cutoff_size: int,
@@ -315,7 +315,7 @@ class ATAM:
         max_events: int | None = None,
     ) -> tuple[float, int]:
         """
-        Calculate the committer function for a state using adaptive sampling.
+        Calculate the committor function for a state using adaptive sampling.
 
         Parameters
         ----------
@@ -336,7 +336,7 @@ class ATAM:
             Tuple of (probability of reaching cutoff_size, number of trials run)
         """
 
-    def calc_committers_adaptive(
+    def calc_committors_adaptive(
         self,
         states: list[State],
         cutoff_size: int,
@@ -345,7 +345,7 @@ class ATAM:
         max_events: int | None = None,
     ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]:
         """
-        Calculate the committer function for multiple states using adaptive sampling.
+        Calculate the committor function for multiple states using adaptive sampling.
 
         Parameters
         ----------
@@ -363,10 +363,10 @@ class ATAM:
         Returns
         -------
         tuple[NDArray[float64], NDArray[usize]]
-            Tuple of (committer probabilities, number of trials for each state)
+            Tuple of (committor probabilities, number of trials for each state)
         """
 
-    def calc_committer_threshold_test(
+    def calc_committor_threshold_test(
         self,
         state: State,
         cutoff_size: int,
@@ -379,7 +379,7 @@ class ATAM:
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]:
         """
-        Determine whether the committer probability is above or below a threshold.
+        Determine whether the committor probability is above or below a threshold.
 
         Parameters
         ----------
@@ -526,7 +526,7 @@ class ATAM:
         Find the first state in a trajectory above the critical threshold.
 
         Iterates through the trajectory (after filtering redundant events),
-        reconstructing the state at each point and testing if the committer
+        reconstructing the state at each point and testing if the committor
         probability is above the threshold with the specified confidence.
 
         Parameters
@@ -971,7 +971,7 @@ class SDC:
     def mfe_matrix(self) -> list[list[tuple[int, float, int]]]: ...
     def all_scaffolds_slow(self) -> list[list[int]]: ...
 
-    def calc_committer(
+    def calc_committor(
         self,
         state: State,
         cutoff_size: int,
@@ -980,7 +980,7 @@ class SDC:
         max_events: int | None = None,
     ) -> float: ...
 
-    def calc_committer_adaptive(
+    def calc_committor_adaptive(
         self,
         state: State,
         cutoff_size: int,
@@ -989,7 +989,7 @@ class SDC:
         max_events: int | None = None,
     ) -> tuple[float, int]: ...
 
-    def calc_committers_adaptive(
+    def calc_committors_adaptive(
         self,
         states: list[State],
         cutoff_size: int,
@@ -998,7 +998,7 @@ class SDC:
         max_events: int | None = None,
     ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
 
-    def calc_committer_threshold_test(
+    def calc_committor_threshold_test(
         self,
         state: State,
         cutoff_size: int,
@@ -1390,7 +1390,7 @@ class CriticalStateConfig:
     Parameters
     ----------
     cutoff_size : int, optional
-        Cutoff size for committer calculation (tiles above which growth is considered successful).
+        Cutoff size for committor calculation (tiles above which growth is considered successful).
         Default is 100.
     threshold : float, optional
         Probability threshold for determining if state is "critical" (above/below this).
@@ -1398,7 +1398,7 @@ class CriticalStateConfig:
     confidence_level : float, optional
         Confidence level for the threshold test. Default is 0.98.
     max_trials : int, optional
-        Maximum number of trials for committer calculation. Default is 100000.
+        Maximum number of trials for committor calculation. Default is 100000.
     ci_confidence_level : float, optional
         Confidence level for the confidence interval (if requested). Default is 0.95.
     canvas_size : tuple[int, int], optional
@@ -1440,7 +1440,7 @@ class CriticalStateResult:
     is_above_threshold : bool
         Whether the state is above threshold.
     probability : float
-        Estimated committer probability.
+        Estimated committor probability.
     num_trials : int
         Number of trials used in the calculation.
     max_trials_exceeded : bool
@@ -1872,7 +1872,7 @@ class KTAM:
             The total energy of the state.
         """
 
-    def calc_committer(
+    def calc_committor(
         self,
         state: State,
         cutoff_size: int,
@@ -1881,7 +1881,7 @@ class KTAM:
         max_events: int | None = None,
     ) -> float: ...
 
-    def calc_committer_adaptive(
+    def calc_committor_adaptive(
         self,
         state: State,
         cutoff_size: int,
@@ -1890,7 +1890,7 @@ class KTAM:
         max_events: int | None = None,
     ) -> tuple[float, int]: ...
 
-    def calc_committers_adaptive(
+    def calc_committors_adaptive(
         self,
         states: list[State],
         cutoff_size: int,
@@ -1899,7 +1899,7 @@ class KTAM:
         max_events: int | None = None,
     ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
 
-    def calc_committer_threshold_test(
+    def calc_committor_threshold_test(
         self,
         state: State,
         cutoff_size: int,
@@ -2229,7 +2229,7 @@ class OldKTAM:
             The name of the file to write to.
         """
 
-    def calc_committer(
+    def calc_committor(
         self,
         state: State,
         cutoff_size: int,
@@ -2238,7 +2238,7 @@ class OldKTAM:
         max_events: int | None = None,
     ) -> float: ...
 
-    def calc_committer_adaptive(
+    def calc_committor_adaptive(
         self,
         state: State,
         cutoff_size: int,
@@ -2247,7 +2247,7 @@ class OldKTAM:
         max_events: int | None = None,
     ) -> tuple[float, int]: ...
 
-    def calc_committers_adaptive(
+    def calc_committors_adaptive(
         self,
         states: list[State],
         cutoff_size: int,
@@ -2256,7 +2256,7 @@ class OldKTAM:
         max_events: int | None = None,
     ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
 
-    def calc_committer_threshold_test(
+    def calc_committor_threshold_test(
         self,
         state: State,
         cutoff_size: int,
@@ -2609,7 +2609,7 @@ class KBlock:
         self, state: State | FFSStateRef | NDArray[np.uint]
     ) -> NDArray[np.str_]: ...
 
-    def calc_committer(
+    def calc_committor(
         self,
         state: State,
         cutoff_size: int,
@@ -2618,7 +2618,7 @@ class KBlock:
         max_events: int | None = None,
     ) -> float: ...
 
-    def calc_committer_adaptive(
+    def calc_committor_adaptive(
         self,
         state: State,
         cutoff_size: int,
@@ -2627,7 +2627,7 @@ class KBlock:
         max_events: int | None = None,
     ) -> tuple[float, int]: ...
 
-    def calc_committers_adaptive(
+    def calc_committors_adaptive(
         self,
         states: list[State],
         cutoff_size: int,
@@ -2636,7 +2636,7 @@ class KBlock:
         max_events: int | None = None,
     ) -> tuple[NDArray[np.float64], NDArray[np.uintp]]: ...
 
-    def calc_committer_threshold_test(
+    def calc_committor_threshold_test(
         self,
         state: State,
         cutoff_size: int,

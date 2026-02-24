@@ -9,7 +9,7 @@ use super::core::System;
 use super::dispatch::SystemEnum;
 use super::types::*;
 
-pub(super) fn calc_committer<S: System>(
+pub(super) fn calc_committor<S: System>(
     sys: &mut S,
     initial_state: &StateEnum,
     cutoff_size: NumTiles,
@@ -60,7 +60,7 @@ where
     Ok(successes as f64 / num_trials as f64)
 }
 
-pub(super) fn calc_committer_adaptive<S: System>(
+pub(super) fn calc_committor_adaptive<S: System>(
     sys: &S,
     initial_state: &StateEnum,
     cutoff_size: NumTiles,
@@ -115,7 +115,7 @@ where
     Ok((successes as f64 / num_trials as f64, num_trials as usize))
 }
 
-pub(super) fn calc_committers_adaptive<S: System>(
+pub(super) fn calc_committors_adaptive<S: System>(
     sys: &S,
     initial_states: &[&StateEnum],
     cutoff_size: NumTiles,
@@ -129,7 +129,7 @@ where
     let results = initial_states
         .par_iter()
         .map(|initial_state| {
-            calc_committer_adaptive(
+            calc_committor_adaptive(
                 sys,
                 initial_state,
                 cutoff_size,
@@ -142,10 +142,10 @@ where
 
     let results: Vec<(f64, usize)> = results.into_iter().map(|r| r.unwrap()).collect();
 
-    let committers: Vec<f64> = results.iter().map(|(c, _)| *c).collect();
+    let committors: Vec<f64> = results.iter().map(|(c, _)| *c).collect();
     let trials: Vec<usize> = results.iter().map(|(_, t)| *t).collect();
 
-    Ok((committers, trials))
+    Ok((committors, trials))
 }
 
 pub(super) fn calc_forward_probability<S: System>(
@@ -294,7 +294,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn calc_committer_threshold_test<S: System>(
+pub(super) fn calc_committor_threshold_test<S: System>(
     sys: &mut S,
     initial_state: &StateEnum,
     cutoff_size: NumTiles,
@@ -435,7 +435,7 @@ where
         let mut state = end_state.replay(Some(item as u64))?;
         sys.update_state(&mut state, &NeededUpdate::All);
 
-        let (is_above, prob, trials, exceeded) = calc_committer_threshold_test(
+        let (is_above, prob, trials, exceeded) = calc_committor_threshold_test(
             sys,
             &state,
             config.cutoff_size,
@@ -492,7 +492,7 @@ where
         let mut state = end_state.replay(Some(filtered_indices[i] as u64))?;
         sys.update_state(&mut state, &NeededUpdate::All);
 
-        let (is_above, prob, trials, exceeded) = calc_committer_threshold_test(
+        let (is_above, prob, trials, exceeded) = calc_committor_threshold_test(
             sys,
             &state,
             config.cutoff_size,
