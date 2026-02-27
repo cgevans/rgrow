@@ -227,6 +227,7 @@ impl StateEnum {
         Ok(base_state)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn replay_inplace(
         &mut self,
         coords: &[(usize, usize)],

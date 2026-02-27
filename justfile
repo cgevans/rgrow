@@ -29,7 +29,7 @@ bench-python-json: build-python
 
 # Run Rust clippy
 clippy:
-    cargo clippy -p rgrow
+    cargo clippy -p rgrow -- -D warnings
 
 # Run Ruff on Python code
 ruff:
