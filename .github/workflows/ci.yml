@@ -425,9 +425,9 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
       - name: Publish rgrow to PyPI
-        run: uv publish --trusted-publishing always dist/rgrow-[0-9]*
+        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/rgrow-[0-9]*
       - name: Publish rgrow-cli to PyPI
-        run: uv publish --trusted-publishing always dist/rgrow_cli-*
+        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/rgrow_cli-*
 
   rust_release:
     name: Rust Crates.io Release
