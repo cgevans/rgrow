@@ -88,9 +88,11 @@ Highest density in `ktam.rs` (18), `oldktam.rs` (11), and `sdc1d.rs` (8). Most a
 
 ## Improvement Opportunities
 
-### 15. Split `system.rs` (2,077 lines)
+### ~~15. Split `system.rs` (2,077 lines)~~ FIXED
 
-Contains at least 5 distinct concerns: event types, evolution bounds, the `System` trait, GUI/IPC integration (~490 lines), and statistical analysis (committor calculations, ~485 lines). Could be split into `system/core.rs`, `system/gui.rs`, `system/analysis.rs`, `system/types.rs`.
+~~Contains at least 5 distinct concerns: event types, evolution bounds, the `System` trait, GUI/IPC integration (~490 lines), and statistical analysis (committer calculations, ~485 lines). Could be split into `system/core.rs`, `system/gui.rs`, `system/analysis.rs`, `system/types.rs`.~~
+
+Split into `system/{mod,types,core,dispatch,analysis,gui}.rs` plus `ui/find_gui.rs`. Pure refactor with all public API preserved via re-exports.
 
 ### 16. Missing `CLAUDE.md` / `CONTRIBUTING.md`
 
