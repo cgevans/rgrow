@@ -28,7 +28,7 @@ fn test_sim(ts: &TileSet) -> Result<()> {
 #[test]
 fn parser_test() -> Result<()> {
     let mut paths = Vec::new();
-    for entry in std::fs::read_dir("./examples/")? {
+    for entry in std::fs::read_dir("../examples/")? {
         let entry = entry?;
         let path = entry.path();
         if let Some("yaml") = path.extension().map(|s| s.to_str().unwrap()) {
@@ -42,7 +42,7 @@ fn parser_test() -> Result<()> {
     }
 
     paths.clear();
-    for entry in std::fs::read_dir("./examples/xgrow-format/")? {
+    for entry in std::fs::read_dir("../examples/xgrow-format/")? {
         let entry = entry?;
         let path = entry.path();
         println!("path: {path:?}");
@@ -134,7 +134,7 @@ fn ktam_test() -> Result<()> {
 
 #[test]
 fn ktam_barish_test() -> Result<()> {
-    let mut ts = TileSet::from_file("examples/barish-perfect.yaml")?;
+    let mut ts = TileSet::from_file("../examples/barish-perfect.yaml")?;
 
     print!("ts: {ts:?}");
 
@@ -206,7 +206,7 @@ fn oldktam_test() -> Result<()> {
 
 #[test]
 fn simple_fission_test() -> Result<()> {
-    let mut ts = TileSet::from_file("examples/fission-small-ribbon.yaml")?;
+    let mut ts = TileSet::from_file("../examples/fission-small-ribbon.yaml")?;
 
     ts.fission = Some(FissionHandling::NoFission);
     let (sys, mut state) = ts.create_system_and_state()?;
@@ -234,7 +234,7 @@ fn simple_fission_test() -> Result<()> {
 
 #[test]
 fn nucrate_test() -> Result<()> {
-    let mut ts: TileSet = serde_saphyr::from_reader(File::open("examples/barish-perfect.yaml")?)?;
+    let mut ts: TileSet = serde_saphyr::from_reader(File::open("../examples/barish-perfect.yaml")?)?;
 
     ts.alpha = Some(-7.1);
     ts.gse = Some(5.7);
@@ -254,7 +254,7 @@ fn nucrate_test() -> Result<()> {
 }
 
 fn get_sierpinski() -> Result<TileSet> {
-    serde_saphyr::from_reader(File::open("examples/sierpinski.yaml")?)
+    serde_saphyr::from_reader(File::open("../examples/sierpinski.yaml")?)
         .context("Failure opening sierpinski example.")
 }
 
