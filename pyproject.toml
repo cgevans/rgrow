@@ -28,6 +28,7 @@ bindings = "pyo3"
 profile = "release"
 manifest-path = "rgrow-python/Cargo.toml"
 python-source = "rgrow-python"
+include = ["LICENSE"]
 
 
 [tool.uv.sources]

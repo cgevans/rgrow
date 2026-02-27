@@ -12,3 +12,4 @@ build-backend = "maturin"
 bindings = "bin"
 manifest-path = "../rgrow-rust/Cargo.toml"
 profile = "release"
+include = ["LICENSE"]
