@@ -19,7 +19,7 @@ name = "sierpinski"
 harness = false
 
 [[bench]]
-name = "committer"
+name = "committor"
 harness = false
 
 [[bench]]

@@ -22,7 +22,7 @@ use numpy::ToPyArray;
 use pyo3::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-struct Glue(u64);
+pub struct Glue(u64);
 
 impl Glue {
     fn matches(&self, other: Glue) -> bool {

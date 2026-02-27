@@ -785,7 +785,7 @@ macro_rules! create_py_system {
                 Ok(())
             }
 
-            /// Calculate the committer function for a state: the probability that when a simulation
+            /// Calculate the committor function for a state: the probability that when a simulation
             /// is started from that state, the assembly will grow to a larger size (cutoff_size)
             /// rather than melting to zero tiles.
             ///
@@ -806,8 +806,8 @@ macro_rules! create_py_system {
             /// -------
             /// float
             ///     Probability of reaching cutoff_size (between 0.0 and 1.0)
-            #[pyo3(name = "calc_committer", signature = (state, cutoff_size, num_trials, max_time=None, max_events=None))]
-            fn py_calc_committer(
+            #[pyo3(name = "calc_committor", signature = (state, cutoff_size, num_trials, max_time=None, max_events=None))]
+            fn py_calc_committor(
                 &mut self,
                 state: &PyState,
                 cutoff_size: NumTiles,
@@ -820,7 +820,7 @@ macro_rules! create_py_system {
                 let state = &state.0;
 
                 let out = py.detach(|| {
-                    self.calc_committer(
+                    self.calc_committor(
                         &state,
                         cutoff_size,
                         max_time,
@@ -830,7 +830,7 @@ macro_rules! create_py_system {
                 out.map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }
 
-            /// Calculate the committer function for a state using adaptive sampling: the probability
+            /// Calculate the committor function for a state using adaptive sampling: the probability
             /// that when a simulation is started from that state, the assembly will grow to a larger
             /// size (cutoff_size) rather than melting to zero tiles. Automatically determines the
             /// number of trials needed to achieve a specified confidence interval margin.
@@ -852,8 +852,8 @@ macro_rules! create_py_system {
             /// -------
             /// tuple[float, int]
             ///     Tuple of (probability of reaching cutoff_size, number of trials run)
-            #[pyo3(name = "calc_committer_adaptive", signature = (state, cutoff_size, conf_interval_margin, max_time=None, max_events=None))]
-            fn py_calc_committer_adaptive(
+            #[pyo3(name = "calc_committor_adaptive", signature = (state, cutoff_size, conf_interval_margin, max_time=None, max_events=None))]
+            fn py_calc_committor_adaptive(
                 &self,
                 state: &PyState,
                 cutoff_size: NumTiles,
@@ -863,7 +863,7 @@ macro_rules! create_py_system {
                 py: Python<'_>,
             ) -> PyResult<(f64, usize)> {
                 py.detach(|| {
-                    self.calc_committer_adaptive(
+                    self.calc_committor_adaptive(
                         &state.0,
                         cutoff_size,
                         max_time,
@@ -874,7 +874,7 @@ macro_rules! create_py_system {
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }
 
-            /// Calculate the committer function for multiple states using adaptive sampling.
+            /// Calculate the committor function for multiple states using adaptive sampling.
             ///
             /// Parameters
             /// ----------
@@ -892,9 +892,9 @@ macro_rules! create_py_system {
             /// Returns
             /// -------
             /// tuple[NDArray[float64], NDArray[usize]]
-            ///     Tuple of (committer probabilities, number of trials for each state)
-            #[pyo3(name = "calc_committers_adaptive", signature = (states, cutoff_size, conf_interval_margin, max_time=None, max_events=None))]
-            fn py_calc_committers_adaptive<'py>(
+            ///     Tuple of (committor probabilities, number of trials for each state)
+            #[pyo3(name = "calc_committors_adaptive", signature = (states, cutoff_size, conf_interval_margin, max_time=None, max_events=None))]
+            fn py_calc_committors_adaptive<'py>(
                 &self,
                 states: Vec<Bound<'py, PyState>>,
                 cutoff_size: NumTiles,
@@ -906,18 +906,18 @@ macro_rules! create_py_system {
 
                 let refs = states.iter().map(|x| x.borrow()).collect::<Vec<_>>();
                 let states = refs.iter().map(|x| &x.0).collect::<Vec<_>>();
-                let (committers, trials) = py.detach(|| {
-                    self.calc_committers_adaptive(&states, cutoff_size, max_time, max_events, conf_interval_margin)
+                let (committors, trials) = py.detach(|| {
+                    self.calc_committors_adaptive(&states, cutoff_size, max_time, max_events, conf_interval_margin)
                 }).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
 
-                Ok((committers.into_pyarray(py), trials.into_pyarray(py)))
+                Ok((committors.into_pyarray(py), trials.into_pyarray(py)))
             }
 
-            /// Determine whether the committer probability for a state is above or below a threshold
+            /// Determine whether the committor probability for a state is above or below a threshold
             /// with a specified confidence level using adaptive sampling.
             ///
             /// This function uses adaptive sampling to determine with the desired confidence whether
-            /// the true committer probability is above or below the given threshold. It continues
+            /// the true committor probability is above or below the given threshold. It continues
             /// sampling until the confidence interval is narrow enough to make a definitive determination.
             ///
             /// Parameters
@@ -952,8 +952,8 @@ macro_rules! create_py_system {
             ///     - num_trials: Number of trials performed
             ///     - exceeded_max_trials: True if max_trials was exceeded (warning flag)
             #[allow(clippy::too_many_arguments)]
-            #[pyo3(name = "calc_committer_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false))]
-            fn py_calc_committer_threshold_test(
+            #[pyo3(name = "calc_committor_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false))]
+            fn py_calc_committor_threshold_test(
                 &mut self,
                 state: &mut PyState,
                 cutoff_size: NumTiles,
@@ -966,7 +966,7 @@ macro_rules! create_py_system {
                 py: Python<'_>,
             ) -> PyResult<(bool, f64, usize, bool)> {
                 py.detach(|| {
-                    self.calc_committer_threshold_test(
+                    self.calc_committor_threshold_test(
                         &state.0,
                         cutoff_size,
                         threshold,
@@ -983,7 +983,7 @@ macro_rules! create_py_system {
             /// Calculate forward probability for a given state.
             ///
             /// This function calculates the probability that a state will grow by at least
-            /// `forward_step` tiles before shrinking to size 0. Unlike calc_committer which
+            /// `forward_step` tiles before shrinking to size 0. Unlike calc_committor which
             /// uses a fixed cutoff size, this uses a dynamic cutoff based on the current
             /// state size plus the forward_step parameter.
             ///
@@ -1212,7 +1212,7 @@ macro_rules! create_py_system {
             // /// Find the first state in a trajectory above the critical threshold.
             // ///
             // /// Iterates through the trajectory (after filtering redundant events),
-            // /// reconstructing the state at each point and testing if the committer
+            // /// reconstructing the state at each point and testing if the committor
             // /// probability is above the threshold with the specified confidence.
             // ///
             // /// Parameters

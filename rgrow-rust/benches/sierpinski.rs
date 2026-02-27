@@ -20,7 +20,7 @@ const BOUNDS10K: EvolveBounds = EvolveBounds {
 };
 
 fn raw_sim_run(c: &mut Criterion) {
-    let mut ts = TileSet::from_file("examples/sierpinski.yaml").unwrap();
+    let mut ts = TileSet::from_file("../examples/sierpinski.yaml").unwrap();
 
     ts.seed = Some(Seed::Single(2045, 2045, 1.into()));
 

@@ -48,6 +48,7 @@ pub struct RgrowGui {
     pub timescale: String,
     pub model_name: String,
     pub parameters: HashMap<String, ParameterState>,
+    pub show_mismatches: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -121,6 +122,7 @@ impl RgrowGui {
             timescale,
             model_name: init.model_name,
             parameters,
+            show_mismatches: true,
         }
     }
 

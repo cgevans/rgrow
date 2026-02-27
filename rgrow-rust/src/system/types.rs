@@ -226,7 +226,7 @@ pub struct CriticalStateResult {
     pub trajectory_index: usize,
     /// Whether the state is above threshold.
     pub is_above_threshold: bool,
-    /// Estimated committer probability.
+    /// Estimated committor probability.
     pub probability: f64,
     /// Number of trials used in the calculation.
     pub num_trials: usize,
@@ -284,13 +284,13 @@ impl CriticalStateResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", pyclass(get_all, set_all, module = "rgrow.rgrow"))]
 pub struct CriticalStateConfig {
-    /// Cutoff size for committer calculation (tiles above which growth is considered successful).
+    /// Cutoff size for committor calculation (tiles above which growth is considered successful).
     pub cutoff_size: NumTiles,
     /// Probability threshold for determining if state is "critical" (above/below this).
     pub threshold: f64,
     /// Confidence level for the threshold test.
     pub confidence_level: f64,
-    /// Maximum number of trials for committer calculation.
+    /// Maximum number of trials for committor calculation.
     pub max_trials: usize,
     /// Confidence level for the confidence interval (if requested).
     pub ci_confidence_level: f64,

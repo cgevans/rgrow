@@ -913,17 +913,12 @@ impl TileBondInfo for KBlock {
 
     fn tile_style(&self, tile_number: crate::base::Tile) -> TileStyle {
         let base_color = self.tile_color(tile_number);
-        let mut tri_colors = [base_color; 4];
-
-        // Make covered sides red
-        ALL_SIDES.iter().for_each(|side| {
-            let indec = side_index(*side).unwrap();
-            if tile_number & side != 0 {
-                tri_colors[indec] = [200; 4];
-            }
-        });
-
+        let tri_colors = [base_color; 4];
         TileStyle { tri_colors }
+    }
+
+    fn tile_blocker_mask(&self, tile_number: crate::base::Tile) -> u8 {
+        (tile_number & ALL_BLOCKERS) as u8
     }
 
     fn tile_name(&self, tileid: u32) -> &str {

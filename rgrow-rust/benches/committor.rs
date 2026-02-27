@@ -9,11 +9,11 @@ use rgrow::{
 use std::hint::black_box;
 use std::time::Duration;
 
-/// Benchmark calc_committer with different configurations
-fn bench_calc_committer(c: &mut Criterion) {
-    let mut group = c.benchmark_group("calc_committer");
+/// Benchmark calc_committor with different configurations
+fn bench_calc_committor(c: &mut Criterion) {
+    let mut group = c.benchmark_group("calc_committor");
 
-    // Set measurement time to be shorter since each calc_committer call is expensive
+    // Set measurement time to be shorter since each calc_committor call is expensive
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(10);
 
@@ -30,7 +30,7 @@ fn bench_calc_committer(c: &mut Criterion) {
                         let se = StateEnum::PeriodicCanvasNoTracker(state);
                         (sys, se)
                     },
-                    |(mut sys, se)| black_box(sys.calc_committer(&se, 50, None, None, 5).unwrap()),
+                    |(mut sys, se)| black_box(sys.calc_committor(&se, 50, None, None, 5).unwrap()),
                 )
             },
         );
@@ -50,7 +50,7 @@ fn bench_calc_committer(c: &mut Criterion) {
                         (sys, se)
                     },
                     |(mut sys, se)| {
-                        black_box(sys.calc_committer(&se, 50, None, None, trials).unwrap())
+                        black_box(sys.calc_committor(&se, 50, None, None, trials).unwrap())
                     },
                 )
             },
@@ -71,7 +71,7 @@ fn bench_calc_committer(c: &mut Criterion) {
                         (sys, se)
                     },
                     |(mut sys, se)| {
-                        black_box(sys.calc_committer(&se, cutoff, None, None, 3).unwrap())
+                        black_box(sys.calc_committor(&se, cutoff, None, None, 3).unwrap())
                     },
                 )
             },
@@ -129,5 +129,5 @@ fn create_state_with_tiles(
     state
 }
 
-criterion_group!(benches, bench_calc_committer, bench_setup_overhead);
+criterion_group!(benches, bench_calc_committor, bench_setup_overhead);
 criterion_main!(benches);

@@ -72,6 +72,10 @@ def test_ktam_melt():
     assert out == EvolveOutcome.ReachedSizeMin
 
 def test_ktam_equilibrium():
+    """A perfectly balanced system (gmc=2*gse) should remain stable: neither
+    growing to max size nor melting completely.  We use a large starting
+    structure so the boundaries are far from the random walk's reach
+    (stddev ≈ sqrt(100k) ≈ 316, boundaries ~1560 tiles away)."""
     tube_ts = TileSet(
         [
             Tile(["a","a","b","b"],),
@@ -79,29 +83,25 @@ def test_ktam_equilibrium():
         ],
         [Bond("a", 1), Bond("b", 1)],
         canvas_type="tube",
-        size=(8, 256),
+        size=(8, 512),
         alpha=-7.1,
         gse=5.0,
         gmc=10.0
     )
 
     sys, state = cast(tuple[KTAM, State], tube_ts.create_system_and_state())
-    
-    # We'll start with some tiles:
-    state.canvas_view[::2, 5:50] = 1
-    state.canvas_view[1::2, 5:50] = 2
+
+    state.canvas_view[::2, 5:200] = 1
+    state.canvas_view[1::2, 5:200] = 2
 
     sys.update_all(state)
 
-    # Should have no mismatches:
     assert sys.calc_mismatches(state) == 0
-    
+
     start_n = state.n_tiles
 
-    # We should melt in these conditions:
     out = sys.evolve(state, for_events=100_000, size_min=0, size_max=2*start_n)
 
-    # We should run out of events, hopefully.
     assert out == EvolveOutcome.ReachedEventsMax
 
 

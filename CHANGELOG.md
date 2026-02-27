@@ -1,25 +1,41 @@
 # 0.22.0
 
+This has a number of changes, and the documentation transition isn't complete, but I'm pushing this out now because it makes it much easier for me to use than to depend on the git version.
+
 - Repository reorganization: `rgrow` package is now in `rgrow-rust`, `py-rgrow` is now in `rgrow-python`.  Both use `rgrow` as their name.
-- Merged `rgrow-gui` and `rgrow-ipc` into `rgrow-rust` behind a `gui` feature flag.
 - New `rgrow-cli` pip package to distribute the full rgrow binary with GUI.
-- UI rendering rewritten: tile-by-tile drawing, per-system tile coloring, and a new `painter` module.  KBlock renders blocked sides.
+- UI rendering rewritten: tile-by-tile drawing, per-system tile coloring, and a new `painter` module with rendering logic extracted into testable functions.
+  - KBlock renders blocked sides as external rectangles protruding from tile edges.
+  - Mismatch bond visualization overlay (mismatches are now shown when running the GUI).
+  - Tile outlines and tuned overlay sizes at a larger default scale.
+- New SDC Bind/Replace model (`sdc1d_bindreplace`).
 - A (experimentally, potentially short-lived) `SquareCompact` canvas type to avoid the two-tile-border of `Square`.
-- Polars is now an optional dependency (only needed for Python builds).
-- Updated to PyO3 0.27, numpy-rust, and polars.
-- CI: free-threaded Python wheels (3.13t, 3.14t), trusted publisher and `uv publish` for PyPI.
+- `place_tile` now has a `replace` parameter, guarding against silent overwrites of existing tiles.
+- Handle "pause" option in Xgrow format parser.
 - Documentation is being migrated to MkDocs.
 - 1D SDC:
   - Only a single scaffold domain list is accepted per system; you can no longer have a collection of different ones at different positions.  This feature was never well supported (and not really supported in Python at all), and had unclear behavior when combined with equilibrium calculations.
   - Scaffold-strand interactions are no longer necessarily glue-complement.  While glue-complement is still supported, arbitrary glue-glue free energies can be set, and these will function with the scaffold strand.
   - A two-tile empty border is no longer removed by commands.  Use `SquareCompact` as your canvas type instead of `Square`.
+- Spelling fix: `calc_committer` → `calc_committor` (and related functions) in both Rust and Python APIs.
+- CI: free-threaded Python wheels (3.13t, 3.14t), trusted publisher and `uv publish` for PyPI.
 - Benchmarking in Python tests.
+
+Rust API changes:
+
+- Merged `rgrow-gui` and `rgrow-ipc` into `rgrow-rust` behind a `gui` feature flag.  GUI is now also optional in Python builds.
+- Split `system.rs` (~2,100 lines) into focused modules under `system/`.
+- `TileBondInfo` trait simplified: `tile_names`/`bond_names` return `&[String]`, added default methods for singular accessors.
+- Replaced deprecated `serde_yaml` with `serde-saphyr`.
+- Polars is now an optional dependency (only needed for Python builds).
+- Updated to PyO3 0.27, numpy-rust, and polars.
+- Code quality improvements: formatting, clippy fixes, dead code removal.
 
 # v0.21.1
 
 - Fix GUI on macOS by using temp directory instead of `/dev/shm/` for shared memory (which doesn't exist on macOS).
 - Fix GUI on Windows (though WSL is likely the better option for Windows users).
-- Fixes for committer function calculation and movie tracking.
+- Fixes for committor function calculation and movie tracking.
 - KBlock fixes.
 
 # 0.21.0

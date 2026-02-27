@@ -1,9 +1,8 @@
 use std::time::{Duration, Instant};
 
-use crate::base::RgrowError;
-use crate::canvas::PointSafeHere;
+use crate::base::{RgrowError, Tile};
+use crate::painter::{blit_sprite, render_blockers, render_mismatches, render_outlines};
 use crate::state::State;
-
 use crate::ui::find_gui_command;
 
 use super::core::System;
@@ -27,7 +26,7 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
     let (width, height) = state.draw_size();
     let tile_colors_vec = sys.tile_colors().clone();
 
-    let scale = block.unwrap_or(8);
+    let scale = block.unwrap_or(12);
 
     let socket_path =
         std::env::temp_dir().join(format!("rgrow-gui-{}.sock", std::process::id()));
@@ -132,6 +131,7 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
     let mut remaining_step_events: Option<u64> = None;
     let mut max_events_per_sec: Option<u64> = initial_max_events_per_sec;
     let mut timescale: Option<f64> = initial_timescale;
+    let mut show_mismatches = true;
 
     let mut evres: EvolveOutcome = EvolveOutcome::ReachedZeroRate;
     let mut frame_buffer = vec![0u8; shm_size];
@@ -173,6 +173,9 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
                     if let Ok(needed) = sys.set_param(&name, Box::new(value)) {
                         sys.update_state(state, &needed);
                     }
+                }
+                ControlMessage::SetShowMismatches(v) => {
+                    show_mismatches = v;
                 }
             }
         }
@@ -244,17 +247,59 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
         last_frame_time = Instant::now();
 
         // Draw frame
-        let edge_size = scale / 10;
-        let _tile_size = scale - 2 * edge_size;
         let frame_width = (width * scale as u32) as usize;
         let frame_height = (height * scale as u32) as usize;
         frame_buffer.resize(frame_width * frame_height * 4, 0);
 
         let pixel_frame = &mut frame_buffer[..];
 
-        for ((y, x), &tileid) in state.raw_array().indexed_iter() {
-            let sprite = sys.tile_pixels(tileid, scale);
-            state.draw_sprite(pixel_frame, sprite, PointSafeHere((y, x)));
+        // Pre-compute per-tile-type data
+        let tiles = state.raw_array();
+        let max_tile = tiles.iter().copied().max().unwrap_or(0) as usize;
+        let sprites: Vec<_> = (0..=max_tile)
+            .map(|t| sys.tile_pixels(t as Tile, scale))
+            .collect();
+        let blocker_masks: Vec<u8> = (0..=max_tile)
+            .map(|t| sys.tile_blocker_mask(t as Tile))
+            .collect();
+
+        // Render tiles
+        for ((y, x), &tileid) in tiles.indexed_iter() {
+            if let Some(sprite) = sprites.get(tileid as usize) {
+                blit_sprite(pixel_frame, sprite, x, y, frame_width);
+            }
+        }
+
+        // Draw thin outlines around non-empty tiles
+        if scale >= 12 {
+            render_outlines(pixel_frame, tiles, scale, frame_width);
+        }
+
+        // Draw blocker rectangles
+        render_blockers(
+            pixel_frame,
+            tiles,
+            &blocker_masks,
+            scale,
+            frame_width,
+            frame_height,
+        );
+
+        // Compute mismatch locations and derive count
+        let (mismatch_count, mismatch_locs) = if show_mismatches {
+            let locs = sys.calc_mismatch_locations(state);
+            let count: u32 = locs
+                .iter()
+                .map(|x| ((x & 0b01) + ((x & 0b10) >> 1)) as u32)
+                .sum();
+            (count, Some(locs))
+        } else {
+            (sys.calc_mismatches(state) as u32, None)
+        };
+
+        // Draw mismatch markers if enabled
+        if let Some(ref locs) = mismatch_locs {
+            render_mismatches(pixel_frame, &locs.view(), scale, frame_width);
         }
 
         let notification = UpdateNotification {
@@ -263,7 +308,7 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
             time: state.time().into(),
             total_events: state.total_events(),
             n_tiles: state.n_tiles(),
-            mismatches: sys.calc_mismatches(state) as u32,
+            mismatches: mismatch_count,
             energy: state.energy(),
             scale,
             data_len: pixel_frame.len(),
