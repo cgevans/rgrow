@@ -201,23 +201,26 @@ jobs:
         python-version: ['3.13t', '3.14t']
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - name: Compute container interpreter path
+        id: interp
+        run: |
+          VER="${{ matrix.python-version }}"
+          MM=$(echo "$VER" | tr -d '.t')
+          echo "path=/opt/python/cp${MM}-cp${MM}t/bin/python3" >> "$GITHUB_OUTPUT"
       - name: Set up Rust cache
         uses: Swatinem/rust-cache@v2
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --interpreter python3
+          args: --release --out dist --interpreter ${{ steps.interp.outputs.path }} --no-default-features
           sccache: "true"
           manylinux: "auto"
       - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out ../dist --interpreter python3
+          args: --release --out ../dist --interpreter ${{ steps.interp.outputs.path }}
           sccache: "true"
           manylinux: "auto"
           working-directory: rgrow-cli
@@ -326,7 +329,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --interpreter python3
+          args: --release --out dist --interpreter python3 --no-default-features
           sccache: "true"
           rust-toolchain: stable
       - name: Build CLI wheels
@@ -366,7 +369,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --interpreter python3
+          args: --release --out dist --interpreter python3 --no-default-features
           sccache: "true"
           rust-toolchain: stable
       - name: Build CLI wheels

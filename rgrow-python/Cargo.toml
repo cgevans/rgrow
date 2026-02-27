@@ -10,7 +10,8 @@ categories = { workspace = true }
 
 
 [features]
-default = []
+default = ["abi3"]
+abi3 = ["pyo3/abi3-py310"]
 
 [lib]
 name = "rgrow"
@@ -34,4 +35,4 @@ default-features = false
 
 [dependencies.pyo3]
 workspace = true
-features = ["extension-module", "abi3-py310"]
+features = ["extension-module"]
