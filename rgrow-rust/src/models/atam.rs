@@ -511,12 +511,8 @@ impl ATAM {
         tile: Tile,
     ) -> (PointSafe2, Tile) {
         match self.tile_shape(tile) {
-            TileShape::DupleToLeft(real_tile) => {
-                (PointSafe2(state.move_sa_w(point).0), real_tile)
-            }
-            TileShape::DupleToTop(real_tile) => {
-                (PointSafe2(state.move_sa_n(point).0), real_tile)
-            }
+            TileShape::DupleToLeft(real_tile) => (PointSafe2(state.move_sa_w(point).0), real_tile),
+            TileShape::DupleToTop(real_tile) => (PointSafe2(state.move_sa_n(point).0), real_tile),
             _ => (point, tile),
         }
     }

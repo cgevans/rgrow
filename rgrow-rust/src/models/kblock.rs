@@ -202,6 +202,14 @@ pub struct KBlock {
     pub no_partially_blocked_attachments: bool,
 
     pub blocker_energy_adj: KcalPerMol,
+
+    /// Cached equilibrium dimer concentrations from equiconc.
+    #[serde(skip)]
+    dimer_eq_concs: Vec<(u32, u32, Orientation, f64)>,
+
+    /// Free monomer concentrations after dimer depletion.
+    #[serde(skip)]
+    free_tile_concs: Vec<Molar>,
 }
 
 #[inline(always)]
@@ -219,6 +227,158 @@ impl KBlock {
         self.fill_energy_pairs();
         self.fill_energy_blockers();
         self.fill_free_blocker_concentrations();
+        self.compute_and_cache_dimer_equilibrium();
+    }
+
+    /// Compute dimer equilibrium using equiconc and cache the results.
+    fn compute_and_cache_dimer_equilibrium(&mut self) {
+        self.dimer_eq_concs.clear();
+        self.free_tile_concs = self.tile_concentration.clone();
+
+        let has_dimers = self.energy_ns.iter().any(|e| !e.is_zero())
+            || self.energy_we.iter().any(|e| !e.is_zero());
+
+        if !has_dimers {
+            return;
+        }
+
+        match self.compute_dimer_equilibrium() {
+            Ok(eq) => {
+                let tile_count = self.tile_names.len();
+
+                // Cache free monomer concentrations
+                for t in 1..tile_count {
+                    if !self.tile_concentration[t].is_zero() {
+                        if let Some(c) = eq.concentration(&self.tile_names[t]) {
+                            self.free_tile_concs[t] = Molar::new(c);
+                        }
+                    }
+                }
+
+                // Cache dimer concentrations
+                for t1 in 0..tile_count {
+                    for t2 in 0..tile_count {
+                        if !self.energy_ns[(t1, t2)].is_zero() {
+                            let dimer_name =
+                                format!("{}_{}_NS", self.tile_names[t1], self.tile_names[t2]);
+                            let conc = eq.concentration(&dimer_name).unwrap_or(0.0);
+                            let t1_ts = TileType(t1).unblocked();
+                            let t2_ts = TileType(t2).unblocked();
+                            self.dimer_eq_concs.push((
+                                t1_ts.into(),
+                                t2_ts.into(),
+                                Orientation::NS,
+                                conc,
+                            ));
+                        }
+                        if !self.energy_we[(t1, t2)].is_zero() {
+                            let dimer_name =
+                                format!("{}_{}_WE", self.tile_names[t1], self.tile_names[t2]);
+                            let conc = eq.concentration(&dimer_name).unwrap_or(0.0);
+                            let t1_ts = TileType(t1).unblocked();
+                            let t2_ts = TileType(t2).unblocked();
+                            self.dimer_eq_concs.push((
+                                t1_ts.into(),
+                                t2_ts.into(),
+                                Orientation::WE,
+                                conc,
+                            ));
+                        }
+                    }
+                }
+
+                // Depletion warning
+                for t in 1..tile_count {
+                    if !self.tile_concentration[t].is_zero() {
+                        let total: f64 = self.tile_concentration[t].into();
+                        let free: f64 = self.free_tile_concs[t].into();
+                        let frac = 1.0 - free / total;
+                        if frac > 0.1 {
+                            eprintln!(
+                                "Warning: Tile '{}' has {:.0}% depletion from dimerization.",
+                                self.tile_names[t],
+                                frac * 100.0
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!(
+                    "Warning: Failed to compute dimer equilibrium: {e}. Using naive concentrations."
+                );
+            }
+        }
+    }
+
+    /// Compute dimer equilibrium using equiconc.
+    fn compute_dimer_equilibrium(&self) -> Result<equiconc::Equilibrium, GrowError> {
+        use crate::units::Temperature;
+
+        let mut sys = equiconc::System::new().temperature(self.temperature.to_kelvin_m());
+
+        let tile_count = self.tile_names.len();
+
+        // Add each tile as a monomer
+        for t in 1..tile_count {
+            let conc: f64 = self.tile_concentration[t].into();
+            if conc > 0.0 {
+                sys = sys.monomer(&self.tile_names[t], conc);
+            }
+        }
+
+        // Add NS dimers
+        for t1 in 0..tile_count {
+            for t2 in 0..tile_count {
+                let e = self.energy_ns[(t1, t2)];
+                if !e.is_zero() {
+                    let conc1: f64 = self.tile_concentration[t1].into();
+                    let conc2: f64 = self.tile_concentration[t2].into();
+                    if conc1 <= 0.0 || conc2 <= 0.0 {
+                        continue;
+                    }
+                    let delta_g: f64 = -(f64::from(e));
+                    let dimer_name = format!("{}_{}_NS", self.tile_names[t1], self.tile_names[t2]);
+                    if t1 == t2 {
+                        sys = sys.complex(&dimer_name, &[(&self.tile_names[t1], 2)], delta_g);
+                    } else {
+                        sys = sys.complex(
+                            &dimer_name,
+                            &[(&self.tile_names[t1], 1), (&self.tile_names[t2], 1)],
+                            delta_g,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Add WE dimers
+        for t1 in 0..tile_count {
+            for t2 in 0..tile_count {
+                let e = self.energy_we[(t1, t2)];
+                if !e.is_zero() {
+                    let conc1: f64 = self.tile_concentration[t1].into();
+                    let conc2: f64 = self.tile_concentration[t2].into();
+                    if conc1 <= 0.0 || conc2 <= 0.0 {
+                        continue;
+                    }
+                    let delta_g: f64 = -(f64::from(e));
+                    let dimer_name = format!("{}_{}_WE", self.tile_names[t1], self.tile_names[t2]);
+                    if t1 == t2 {
+                        sys = sys.complex(&dimer_name, &[(&self.tile_names[t1], 2)], delta_g);
+                    } else {
+                        sys = sys.complex(
+                            &dimer_name,
+                            &[(&self.tile_names[t1], 1), (&self.tile_names[t2], 1)],
+                            delta_g,
+                        );
+                    }
+                }
+            }
+        }
+
+        sys.equilibrium()
+            .map_err(|e| GrowError::EquilibriumCalcError(e.to_string()))
     }
 
     /// Get the unblocked friends to one side of some given tile
@@ -276,7 +436,7 @@ impl KBlock {
         let mut glues = vec![0; 4];
         for s in ALL_SIDES {
             if !tile_id.is_blocked(s) {
-                let i = side_index(s).unwrap() as usize;
+                let i = side_index(s).unwrap();
                 glues[i] = row[i];
             }
         }
@@ -1118,36 +1278,53 @@ impl System for KBlock {
     fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
         let mut dvec = Vec::new();
 
-        for (t1, _) in self.tile_concentration.iter().enumerate() {
-            let t1: TileState = TileType(t1).unblocked();
-            if let Some(friends) = self.get_unblocked_friends_to_side(EAST, t1) {
-                for t2 in friends.iter() {
-                    let biconc = self.tile_concentration(t1) * self.tile_concentration(*t2);
-                    dvec.push(DimerInfo {
-                        t1: t1.into(),
-                        t2: (*t2).into(),
-                        orientation: Orientation::WE,
-                        formation_rate: self.kf * biconc,
-                        equilibrium_conc: biconc.over_u0()
-                            * (self.energy_we[(tile_index(t1).into(), tile_index(*t2).into())]
-                                .times_beta(self.temperature))
-                            .exp(),
-                    });
-                }
+        if !self.dimer_eq_concs.is_empty() {
+            // Use cached equiconc results for equilibrium concentrations
+            for &(t1, t2, ref orientation, eq_conc) in &self.dimer_eq_concs {
+                let t1_ts: TileState = t1.into();
+                let t2_ts: TileState = t2.into();
+                let biconc = self.tile_concentration(t1_ts) * self.tile_concentration(t2_ts);
+                dvec.push(DimerInfo {
+                    t1,
+                    t2,
+                    orientation: orientation.clone(),
+                    formation_rate: self.kf * biconc,
+                    equilibrium_conc: Molar::new(eq_conc),
+                });
             }
-            if let Some(friends) = self.get_unblocked_friends_to_side(SOUTH, t1) {
-                for t2 in friends.iter() {
-                    let biconc = self.tile_concentration(t1) * self.tile_concentration(*t2);
-                    dvec.push(DimerInfo {
-                        t1: t1.into(),
-                        t2: (*t2).into(),
-                        orientation: Orientation::NS,
-                        formation_rate: self.kf * biconc,
-                        equilibrium_conc: biconc.over_u0()
-                            * (self.energy_ns[(tile_index(t1).into(), tile_index(*t2).into())]
-                                .times_beta(self.temperature))
-                            .exp(),
-                    });
+        } else {
+            // Fallback: naive formula
+            for (t1, _) in self.tile_concentration.iter().enumerate() {
+                let t1: TileState = TileType(t1).unblocked();
+                if let Some(friends) = self.get_unblocked_friends_to_side(EAST, t1) {
+                    for t2 in friends.iter() {
+                        let biconc = self.tile_concentration(t1) * self.tile_concentration(*t2);
+                        dvec.push(DimerInfo {
+                            t1: t1.into(),
+                            t2: (*t2).into(),
+                            orientation: Orientation::WE,
+                            formation_rate: self.kf * biconc,
+                            equilibrium_conc: biconc.over_u0()
+                                * (self.energy_we[(tile_index(t1).into(), tile_index(*t2).into())]
+                                    .times_beta(self.temperature))
+                                .exp(),
+                        });
+                    }
+                }
+                if let Some(friends) = self.get_unblocked_friends_to_side(SOUTH, t1) {
+                    for t2 in friends.iter() {
+                        let biconc = self.tile_concentration(t1) * self.tile_concentration(*t2);
+                        dvec.push(DimerInfo {
+                            t1: t1.into(),
+                            t2: (*t2).into(),
+                            orientation: Orientation::NS,
+                            formation_rate: self.kf * biconc,
+                            equilibrium_conc: biconc.over_u0()
+                                * (self.energy_ns[(tile_index(t1).into(), tile_index(*t2).into())]
+                                    .times_beta(self.temperature))
+                                .exp(),
+                        });
+                    }
                 }
             }
         }
@@ -1328,9 +1505,12 @@ mod test_kblock {
             let kf = PerMolarSecond::new(1e6);
             let fission_handling = FissionHandling::JustDetach;
             let tilecount = tile_names.len();
+            let tile_conc_vec: Vec<Molar> =
+                tile_concentration.iter().map(|c| (*c).into()).collect();
+            let free_tile_concs = tile_conc_vec.clone();
             let mut s = KBlock {
                 tile_names,
-                tile_concentration: tile_concentration.iter().map(|c| (*c).into()).collect(),
+                tile_concentration: tile_conc_vec,
                 tile_colors,
                 glue_names,
                 blocker_concentrations: blocker_concentrations
@@ -1359,6 +1539,8 @@ mod test_kblock {
                         .collect(),
                 ),
                 blocker_energy_adj: 0.0.into(),
+                dimer_eq_concs: Vec::new(),
+                free_tile_concs,
             };
             s.fill_friends();
             s.update();
@@ -1463,6 +1645,90 @@ mod test_kblock {
         assert!(removals.contains(&PointSafe2((5, 3))));
         assert!(removals.contains(&PointSafe2((5, 4))));
         assert!(removals.contains(&PointSafe2((6, 2))));
+    }
+
+    #[test]
+    fn test_kblock_equiconc_dimer_computation() {
+        let kblock = sample_kblock();
+
+        // sample_kblock has tiles with binding glues, so dimers should be computed
+        let dimers = kblock.calc_dimers().unwrap();
+
+        // Verify all equilibrium concentrations are non-negative
+        for dimer in &dimers {
+            let eq: f64 = dimer.equilibrium_conc.into();
+            assert!(
+                eq >= 0.0,
+                "Equilibrium concentration should be non-negative"
+            );
+        }
+    }
+
+    #[test]
+    fn test_kblock_equiconc_mass_conservation() {
+        let kblock = sample_kblock();
+
+        // For each tile with non-zero concentration, free + dimer contributions = total
+        let dimers = kblock.calc_dimers().unwrap();
+
+        for t in 1..kblock.tile_names.len() {
+            let total: f64 = kblock.tile_concentration[t].into();
+            if total <= 0.0 {
+                continue;
+            }
+
+            let free: f64 = kblock.free_tile_concs[t].into();
+            let t_ts: u32 = TileType(t).unblocked().into();
+
+            let mut dimer_contribution = 0.0;
+            for d in &dimers {
+                let eq: f64 = d.equilibrium_conc.into();
+                if d.t1 == t_ts {
+                    dimer_contribution += eq;
+                }
+                if d.t2 == t_ts {
+                    dimer_contribution += eq;
+                }
+            }
+
+            let reconstructed = free + dimer_contribution;
+            let rel_err = (reconstructed - total).abs() / total;
+            assert!(
+                rel_err < 0.05,
+                "Mass conservation for tile '{}': reconstructed={reconstructed:.4e}, total={total:.4e}, rel_err={rel_err:.4e}",
+                kblock.tile_names[t]
+            );
+        }
+    }
+
+    #[test]
+    fn test_kblock_equiconc_recomputation() {
+        let mut kblock = sample_kblock();
+
+        let dimers_before = kblock.calc_dimers().unwrap();
+        let eq_before: Vec<f64> = dimers_before
+            .iter()
+            .map(|d| d.equilibrium_conc.into())
+            .collect();
+
+        // Change temperature significantly
+        kblock.temperature = Celsius(90.0);
+        kblock.update();
+
+        let dimers_after = kblock.calc_dimers().unwrap();
+        let eq_after: Vec<f64> = dimers_after
+            .iter()
+            .map(|d| d.equilibrium_conc.into())
+            .collect();
+
+        // At least one equilibrium concentration should have changed
+        assert!(
+            eq_before
+                .iter()
+                .zip(eq_after.iter())
+                .any(|(b, a)| (b - a).abs() > 1e-20),
+            "Dimer concentrations should change when temperature changes"
+        );
     }
 }
 
@@ -1701,9 +1967,12 @@ impl From<KBlockParams> for KBlock {
             let no_partially_blocked_attachments = value.no_partially_blocked_attachments;
             let blocker_energy_adj = value.blocker_energy_adj;
             let tilecount = tile_names.len();
+            let tile_conc_vec: Vec<Molar> =
+                tile_concentration.iter().map(|c| (*c).into()).collect();
+            let free_tile_concs = tile_conc_vec.clone();
             let mut s = KBlock {
                 tile_names,
-                tile_concentration: tile_concentration.iter().map(|c| (*c).into()).collect(),
+                tile_concentration: tile_conc_vec,
                 tile_colors,
                 glue_names,
                 blocker_concentrations: blocker_concentrations
@@ -1732,6 +2001,8 @@ impl From<KBlockParams> for KBlock {
                         .collect(),
                 ),
                 blocker_energy_adj,
+                dimer_eq_concs: Vec::new(),
+                free_tile_concs,
             };
             s.fill_friends();
             s.update();

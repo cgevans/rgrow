@@ -344,11 +344,11 @@ mod test_utils {
     use crate::utils::LOOP_TABLE;
     use crate::utils::T37C;
 
-    use super::string_dna_dg_ds;
-    use super::DnaNucleotideBase;
     use super::_loop_penalty;
     use super::string_dna_delta_g;
+    use super::string_dna_dg_ds;
     use super::two_window_fold;
+    use super::DnaNucleotideBase;
     use approx::assert_ulps_eq;
 
     #[test]

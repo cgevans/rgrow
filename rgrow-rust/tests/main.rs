@@ -234,7 +234,8 @@ fn simple_fission_test() -> Result<()> {
 
 #[test]
 fn nucrate_test() -> Result<()> {
-    let mut ts: TileSet = serde_saphyr::from_reader(File::open("../examples/barish-perfect.yaml")?)?;
+    let mut ts: TileSet =
+        serde_saphyr::from_reader(File::open("../examples/barish-perfect.yaml")?)?;
 
     ts.alpha = Some(-7.1);
     ts.gse = Some(5.7);

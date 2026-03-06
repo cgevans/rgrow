@@ -28,8 +28,7 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
 
     let scale = block.unwrap_or(12);
 
-    let socket_path =
-        std::env::temp_dir().join(format!("rgrow-gui-{}.sock", std::process::id()));
+    let socket_path = std::env::temp_dir().join(format!("rgrow-gui-{}.sock", std::process::id()));
     let socket_path_str = socket_path.to_string_lossy().to_string();
 
     // Try to find rgrow GUI command
@@ -352,4 +351,3 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
 
     Ok(evres)
 }
-

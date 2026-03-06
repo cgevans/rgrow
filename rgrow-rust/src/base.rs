@@ -59,6 +59,8 @@ pub enum GrowError {
         tile: Tile,
         existing_tile: Tile,
     },
+    #[error("Equilibrium calculation failed: {0}")]
+    EquilibriumCalcError(String),
 }
 
 #[cfg(feature = "python")]

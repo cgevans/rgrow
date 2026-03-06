@@ -407,6 +407,9 @@ mod tests {
     #[test]
     fn binary_counter_no_pause() {
         let ts = parse_xgrow("../examples/xgrow-format/BinaryCounter.tiles").unwrap();
-        assert!(!ts.start_paused, "BinaryCounter.tiles should not set start_paused");
+        assert!(
+            !ts.start_paused,
+            "BinaryCounter.tiles should not set start_paused"
+        );
     }
 }

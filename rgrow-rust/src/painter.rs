@@ -138,13 +138,45 @@ pub fn render_outlines(
         let tx = x * scale;
         let ty = y * scale;
         // Top edge
-        draw_rect(frame, tx, tx + scale, ty, ty + 1, outline_color, frame_width_px);
+        draw_rect(
+            frame,
+            tx,
+            tx + scale,
+            ty,
+            ty + 1,
+            outline_color,
+            frame_width_px,
+        );
         // Bottom edge
-        draw_rect(frame, tx, tx + scale, ty + scale - 1, ty + scale, outline_color, frame_width_px);
+        draw_rect(
+            frame,
+            tx,
+            tx + scale,
+            ty + scale - 1,
+            ty + scale,
+            outline_color,
+            frame_width_px,
+        );
         // Left edge
-        draw_rect(frame, tx, tx + 1, ty, ty + scale, outline_color, frame_width_px);
+        draw_rect(
+            frame,
+            tx,
+            tx + 1,
+            ty,
+            ty + scale,
+            outline_color,
+            frame_width_px,
+        );
         // Right edge
-        draw_rect(frame, tx + scale - 1, tx + scale, ty, ty + scale, outline_color, frame_width_px);
+        draw_rect(
+            frame,
+            tx + scale - 1,
+            tx + scale,
+            ty,
+            ty + scale,
+            outline_color,
+            frame_width_px,
+        );
     }
 }
 
@@ -428,7 +460,10 @@ mod tests {
         assert_eq!(pixel_at(&frame, 2 * scale - 1, scale - 1, frame_w), black);
         // Tile 0 area should be untouched
         assert_eq!(pixel_at(&frame, 0, 0, frame_w), [0, 0, 0, 0]);
-        assert_eq!(pixel_at(&frame, scale - 1, scale - 1, frame_w), [0, 0, 0, 0]);
+        assert_eq!(
+            pixel_at(&frame, scale - 1, scale - 1, frame_w),
+            [0, 0, 0, 0]
+        );
     }
 
     // ── render_blockers ────────────────────────────────────────────────

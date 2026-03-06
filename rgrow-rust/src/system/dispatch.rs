@@ -318,7 +318,14 @@ where
         max_events: Option<NumEvents>,
         num_trials: usize,
     ) -> Result<f64, GrowError> {
-        analysis::calc_committor(self, initial_state, cutoff_size, max_time, max_events, num_trials)
+        analysis::calc_committor(
+            self,
+            initial_state,
+            cutoff_size,
+            max_time,
+            max_events,
+            num_trials,
+        )
     }
 
     fn calc_committor_adaptive(
