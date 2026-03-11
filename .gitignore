@@ -34,5 +34,9 @@ coverage.lcov
 uv.lock
 *.lcov
 site/
+# Generated notebook markdown and support files (from docs/convert_notebooks.sh)
+docs/examples/*.md
+!docs/examples/index.md
+docs/examples/*_files/
 .DS_Store
 py-rgrow/rgrow/rgrow.abi3.so

@@ -44,10 +44,10 @@ testing = [
     "pytest-benchmark",
 ]
 docs = [
-    "mkdocs-material",
-    "mkdocs-jupyter",
+    "zensical",
     "mkdocstrings[python]",
-    "mkdocs-bibtex",
+    "jupyter",
+    "nbconvert",
 ]
 dev = [
     "ipykernel>=6.31.0",

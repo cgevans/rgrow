@@ -152,13 +152,17 @@ cov-html:
 # Full coverage with HTML report
 cov-full: coverage cov-html
 
+# Convert example notebooks to markdown for docs
+docs-convert:
+    source .venv/bin/activate && bash docs/convert_notebooks.sh
+
 # Serve docs locally with live reload
-docs-serve:
-    source .venv/bin/activate && mkdocs serve
+docs-serve: docs-convert
+    source .venv/bin/activate && zensical serve
 
 # Build docs site
-docs-build:
-    source .venv/bin/activate && mkdocs build
+docs-build: docs-convert
+    source .venv/bin/activate && zensical build --clean
 
 # --- Profiling ---
 # Prerequisites:

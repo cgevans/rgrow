@@ -1,6 +1,6 @@
 site_name: rgrow
 site_description: Fast, extensible simulator for Tile Assembly Models
-site_url: https://rgrow.readthedocs.io/
+site_url: https://cgevans.github.io/rgrow/
 repo_url: https://github.com/cgevans/rgrow
 repo_name: cgevans/rgrow
 
@@ -39,11 +39,11 @@ nav:
       - kBlock: models/kblock.md
   - Examples:
       - examples/index.md
-      - Sierpinski Triangle: examples/simple-sierpinski.ipynb
-      - Tube Canvas: examples/tube.ipynb
-      - KBlock: examples/kblock.ipynb
-      - FFS - Simple: examples/ffs-simple.ipynb
-      - FFS - Pattern Recognition: examples/ffs-pattern-recognition.ipynb
+      - Sierpinski Triangle: examples/simple-sierpinski.md
+      - Tube Canvas: examples/tube.md
+      - KBlock: examples/kblock.md
+      - FFS - Simple: examples/ffs-simple.md
+      - FFS - Pattern Recognition: examples/ffs-pattern-recognition.md
   - Developing:
       - Implementing a New Model: developing/new-model.md
   - API Reference:
@@ -71,13 +71,6 @@ markdown_extensions:
   - footnotes
 
 plugins:
-  - search
-  - bibtex:
-      bib_file: docs/references.bib
-  - mkdocs-jupyter:
-      include: ["*.ipynb"]
-      execute: false
-      allow_errors: true
   - mkdocstrings:
       handlers:
         python:

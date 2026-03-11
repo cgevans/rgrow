@@ -11,7 +11,7 @@
 
 # Kinetic Tile Assembly Model (kTAM)
 
-The kinetic Tile Assembly Model, along with the abstract Tile Assembly Model, were introduced in Winfree 1998[@winfree_simulations_1998]; Evans and Winfree 2017 is a modern review on the model[@evans_physical_2017].
+The kinetic Tile Assembly Model, along with the abstract Tile Assembly Model, were introduced in Winfree 1998[^winfree1998]; Evans and Winfree 2017 is a modern review on the model[^evans2017].
 
 \[
 \begin{align*}
@@ -49,6 +49,9 @@ Fission occurs when a detachment event would split the assembly into multiple di
 - **KeepLargest** (alias: `keep-largest`):  
   After fission, keep only the largest fragment (by tile count). Remove all others.  Detailed balance is violated.
 
-- **KeepWeighted** (alias: `keep-weighted`):  
+- **KeepWeighted** (alias: `keep-weighted`):
   After fission, randomly keep one fragment with probability proportional to its size. Remove all others.  Detailed balance is violated.
+
+[^winfree1998]: Winfree, E. (1998). Simulations of Computing by Self-Assembly. Caltech Technical Report CS-TR:1998.22. [DOI: 10.7907/Z9TB14X7](https://doi.org/10.7907/Z9TB14X7)
+[^evans2017]: Evans, C. & Winfree, E. (2017). Physical Principles for DNA Tile Self-Assembly. *Chemical Society Reviews*, 46(12), 3808–3829. [DOI: 10.1039/C6CS00745G](https://doi.org/10.1039/C6CS00745G)
 
