@@ -4,19 +4,23 @@ use core::panic;
 use std::collections::HashMap;
 
 use super::sdc1d::{SDCParams, SDCStrand};
+#[allow(unused_imports)]
 use crate::{
     canvas::{PointSafe2, PointSafeHere},
     colors::get_color_or_random,
     models::sdc1d::{get_or_generate, SingleOrMultiScaffold},
     state::State,
     system::{Event, System, TileBondInfo},
-    units::PerSecond,
+    units::{KcalPerMol, Kelvin, Molar, PerSecond},
 };
+#[allow(unused_imports)]
+use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "python")]
 use numpy::PyArrayMethods;
 #[cfg(feature = "python")]
+#[allow(unused_imports)]
 use numpy::ToPyArray;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -41,7 +45,21 @@ pub struct SDC1DBindReplace {
     pub glue_names: Vec<String>,
     pub scaffold: Vec<Glue>,
     pub strand_glues: Vec<(Glue, Glue, Glue)>,
+
+    // pub strand_concentrations: Array1<Molar>,
+    // pub delta_g_matrix: Array2<KcalPerMol>,
+    // pub entropy_matrix: Array2<KcalPerMol>,
+    // pub temperature: Kelvin,
+
+    // pub allow_mismatch_creation: bool,
+    // pub account_for_concentration: bool,
+    // pub account_for_energy: bool,
+    #[serde(skip)]
     matching_tiles_at_site: Vec<Vec<Tile>>,
+    // #[serde(skip)]
+    // strand_energy_bonds: Array2<f64>,
+    // #[serde(skip)]
+    // scaffold_energy_bonds: Array2<f64>,
 }
 
 impl TileBondInfo for SDC1DBindReplace {
@@ -255,6 +273,15 @@ impl SDC1DBindReplace {
             scaffold: scaffold.to_vec(),
             strand_glues: glues,
             matching_tiles_at_site: vec![vec![]; scaffold.len()],
+            // strand_concentrations: Array1::<Molar>::ones(strand_count),
+            // delta_g_matrix: Array2::<KcalPerMol>::zeros((gluenum, gluenum)),
+            // entropy_matrix: Array2::<KcalPerMol>::zeros((gluenum, gluenum)),
+            // temperature: Kelvin::new(298.15),
+            // allow_mismatch_creation: false,
+            // account_for_concentration: false,
+            // account_for_energy: false,
+            // strand_energy_bonds: Array2::<f64>::zeros((strand_count, strand_count)),
+            // scaffold_energy_bonds: Array2::<f64>::zeros((strand_count, strand_count)),
         };
         sys.update();
         sys
@@ -270,6 +297,8 @@ impl SDC1DBindReplace {
             }
             self.matching_tiles_at_site[i] = matching_tiles;
         }
+
+        // TODO: update arrays for energy and concentration effects when those are implemented
     }
 }
 
