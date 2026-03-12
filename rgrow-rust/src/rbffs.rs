@@ -413,6 +413,9 @@ where
     let mut n_traj = 0;
     let n_trials = config.n_trials;
 
+    // Pre-allocate a reusable trial state to avoid per-trial allocation.
+    let mut trial_state = St::empty(config.canvas_size)?;
+
     'outer: while n_traj < config.n_trajectories {
         if n_traj == 0 {
             n_surfs = 1;
@@ -431,7 +434,8 @@ where
             if n_traj == 0 {
                 n_surfs += 1;
             }
-            let mut successful_states = Vec::new();
+            // Reservoir sampling: keep one uniformly random successful state.
+            let mut kept_state: Option<St> = None;
             let mut n_success: u64 = 0;
             let bounds = {
                 let mut b = config.subseq_bound;
@@ -440,15 +444,19 @@ where
                 b
             };
             for _ in 0..n_trials {
-                let mut state = base_state.clone();
-                let outcome = system.evolve(&mut state, bounds)?;
+                // Reuse trial_state: reset it and copy base_state into it.
+                trial_state.reset_state();
+                system.clone_state_into_empty_state(&base_state, &mut trial_state);
+                let outcome = system.evolve(&mut trial_state, bounds)?;
                 match outcome {
-                    EvolveOutcome::ReachedSizeMin => continue,
+                    EvolveOutcome::ReachedSizeMin | EvolveOutcome::ReachedTimeMax => continue,
                     EvolveOutcome::ReachedSizeMax => {
                         n_success += 1;
-                        successful_states.push(state);
+                        // Reservoir sampling (k=1): keep each success with probability 1/n_success.
+                        if rand::random_range(1..=n_success) == 1 {
+                            kept_state = Some(trial_state.clone());
+                        }
                     }
-                    EvolveOutcome::ReachedTimeMax => continue,
                     _ => {
                         panic!("Unexpected outcome: {:?}", outcome)
                     }
@@ -463,7 +471,7 @@ where
             }
             successes.push(n_success);
             traj.push(base_state);
-            base_state = successful_states.pop().unwrap(); // FIXME: choose randomly
+            base_state = kept_state.unwrap();
             next_size += 1;
         }
 
