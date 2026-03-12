@@ -1138,6 +1138,11 @@ class RBFFSResult:
     @property
     def failed_at_size(self) -> NDArray[np.uint32]:
         """For each failed trajectory, the target size it was trying to reach when it failed."""
+    @property
+    def trajectories(self) -> list[list[FFSStateRef]]:
+        """Complete trajectories as lists of state references (one per surface)."""
+    def resample_trajectories(self, n: int) -> list[list[FFSStateRef]]:
+        """Resample n trajectories with probability proportional to weight, yielding an evenly-weighted set."""
 
 class FFSRunConfig:
     """

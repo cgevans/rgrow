@@ -4,6 +4,8 @@
 //! "Forward flux sampling for rare event simulations," J. Phys.: Condens. Matter,
 //! vol. 21, no. 46, p. 463102, Oct. 2009, doi: 10.1088/0953-8984/21/46/463102.
 
+use std::sync::Arc;
+
 use num_traits::Zero;
 use rand::distr::{weighted::WeightedIndex, Distribution};
 use serde::{Deserialize, Serialize};
@@ -14,6 +16,9 @@ use numpy::{PyArray1, ToPyArray};
 use pyo3::exceptions::PyTypeError;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+use crate::ffs::FFSStateRef;
 
 use crate::{
     base::{GrowError, NumTiles, RgrowError},
@@ -158,7 +163,7 @@ pub struct RBFFSResult {
     /// Complete trajectories have len == n_surfs - 1.
     /// Failed trajectories are shorter; their last entry is 0.
     all_trajectory_successes: Vec<Vec<u64>>,
-    config_trajectories: Vec<Vec<StateEnum>>,
+    config_trajectories: Vec<Vec<Arc<StateEnum>>>,
     n_trials: usize,
     n_surfs: usize,
     dimerization_rate: MolarPerSecond,
@@ -224,7 +229,26 @@ impl RBFFSResult {
         self.dimerization_rate * self.forward_probabilities().iter().product::<f64>()
     }
 
-    pub fn trajectories(&self) -> &Vec<Vec<StateEnum>> {
+    /// Resample `n` trajectories with probability proportional to their statistical
+    /// weights, producing an evenly-weighted set.
+    pub fn resample_trajectories(&self, n: usize) -> Vec<Vec<Arc<StateEnum>>> {
+        if n == 0 {
+            return Vec::new();
+        }
+        let weights = self.trajectory_weights();
+        if weights.is_empty() {
+            return Vec::new();
+        }
+        let Ok(chooser) = WeightedIndex::new(&weights) else {
+            return Vec::new();
+        };
+        let mut rng = rand::rng();
+        (0..n)
+            .map(|_| self.config_trajectories[chooser.sample(&mut rng)].clone())
+            .collect()
+    }
+
+    pub fn trajectories(&self) -> &Vec<Vec<Arc<StateEnum>>> {
         &self.config_trajectories
     }
 
@@ -366,6 +390,30 @@ impl RBFFSResult {
     }
 
     #[getter]
+    fn get_trajectories(&self) -> Vec<Vec<FFSStateRef>> {
+        self.config_trajectories
+            .iter()
+            .map(|traj| {
+                traj.iter()
+                    .map(|s| FFSStateRef(Arc::downgrade(s)))
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[pyo3(name = "resample_trajectories")]
+    fn py_resample_trajectories(&self, n: usize) -> Vec<Vec<FFSStateRef>> {
+        self.resample_trajectories(n)
+            .iter()
+            .map(|traj| {
+                traj.iter()
+                    .map(|s| FFSStateRef(Arc::downgrade(s)))
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[getter]
     fn get_failed_at_size<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<u32>> {
         let v: Vec<u32> = self.failed_at_size.iter().map(|&x| x as u32).collect();
         v.to_pyarray(py)
@@ -484,7 +532,7 @@ where
         all_trajectory_successes,
         config_trajectories: config_trajectories
             .into_iter()
-            .map(|traj| traj.into_iter().map(|s| s.into()).collect())
+            .map(|traj| traj.into_iter().map(|s| Arc::new(s.into())).collect())
             .collect(),
         n_trials,
         n_surfs,
