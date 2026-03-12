@@ -8,6 +8,7 @@ on:
       - 'mkdocs.yml'
       - 'examples/**/*.ipynb'
       - 'rgrow-python/rgrow/**'
+      - 'rgrow-rust/src/**'
   workflow_dispatch:
 
 permissions:
@@ -32,10 +33,16 @@ jobs:
           python-version: "3.12"
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
       - name: Install dependencies
         run: |
           uv venv
-          uv pip install zensical "mkdocstrings[python]" jupyter nbconvert
+          uv pip install maturin zensical "mkdocstrings[python]" jupyter nbconvert
+      - name: Build and install rgrow
+        run: |
+          source .venv/bin/activate
+          maturin develop --manifest-path rgrow-python/Cargo.toml
       - name: Convert notebooks
         run: |
           source .venv/bin/activate

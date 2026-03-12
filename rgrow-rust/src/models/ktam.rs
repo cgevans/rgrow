@@ -2409,6 +2409,7 @@ impl KTAM {
         if self.ns_dimers.is_empty() && self.we_dimers.is_empty() {
             return (false, acc, Event::None, f64::NAN);
         }
+        println!("Finding dimer attachment possibilities at {p:?}");
 
         let tn = state.tile_to_n(p);
         let tw = state.tile_to_w(p);
@@ -2452,7 +2453,7 @@ impl KTAM {
         // giving us the sort of behavior we have for monomers.
 
         let pe = state.move_sa_e(p);
-        if te != 0 && state.inbounds(pe.0) {
+        if te == 0 && state.inbounds(pe.0) {
             let pe = PointSafe2(pe.0); // Safe because of inbounds check
             if tne.nonzero() {
                 friends_east.extend(&self.friends_n[te as usize]);
@@ -2463,7 +2464,12 @@ impl KTAM {
             if tse.nonzero() {
                 friends_east.extend(&self.friends_s[te as usize]);
             }
+            println!(
+                "Friends: here={:?}, east={:?}, south={:?}",
+                friends_here, friends_east, friends_south
+            );
             for &(t1, t2, dimer_conc) in &self.we_dimers {
+                println!("Checking dimer attachment possibility at {p:?} with te={te}, tss={tss}, tne={tne}, tee={tee}, tse={tse}, tsw={tsw}");
                 if friends_here.contains(&t1) || friends_east.contains(&t2) {
                     let rate = self.kf * dimer_conc;
                     acc -= rate;
@@ -2480,7 +2486,7 @@ impl KTAM {
         }
 
         let ps = state.move_sa_s(p);
-        if ts != 0 && state.inbounds(ps.0) {
+        if ts == 0 && state.inbounds(ps.0) {
             let ps = PointSafe2(ps.0); // Safe because of inbounds check
             if tss.nonzero() {
                 friends_south.extend(&self.friends_s[ts as usize]);
@@ -2511,7 +2517,8 @@ impl KTAM {
     }
 
     fn total_dimer_attachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate64 {
-        self._find_dimer_attachment_possibilities_at_point(state, p, 0., true)
+        -self
+            ._find_dimer_attachment_possibilities_at_point(state, p, 0., true)
             .1
         // FIXME: consider check for hopefully unreachable true return / early choice/break, as in monomer version.
     }
@@ -3094,7 +3101,7 @@ mod tests {
         let system = make_equiconc_test_system(
             1.0,                // g_se (weak)
             0.0,                // alpha
-            &[0.0, 1e-3, 1e-3], // tile concs: tile 0 empty, tiles 1 & 2
+            &[0.0, 1e-7, 1e-7], // tile concs: tile 0 empty, tiles 1 & 2
             &[0.0, 1.0],        // glue strengths
             array![
                 [0, 0, 0, 0], // tile 0
@@ -3114,7 +3121,7 @@ mod tests {
         // Naive formula: [AB] = [A]*[B] * exp(E - alpha)
         //   E = g_se * glue_strength = 1.0 * 1.0 = 1.0
         //   [AB]_naive = 1e-3 * 1e-3 * exp(1.0) = 1e-6 * e
-        let naive_eq = 1e-3 * 1e-3 * (1.0f64).exp();
+        let naive_eq = 1e-7 * 1e-7 * (1.0f64).exp();
         let eq_conc: f64 = dimer.equilibrium_conc.into();
 
         // With weak binding and high concentrations, depletion is negligible,
@@ -3304,25 +3311,24 @@ mod tests {
         let mut system = make_equiconc_test_system(
             8.0,
             0.0,
-            &[0.0, 1e-6, 1e-6],
-            &[0.0, 1.0],
+            &[0.0, 1e-6, 1e-6, 1e-6],
+            &[0.0, 1.0, 1.0],
             array![
                 [0, 0, 0, 0],
                 [0, 0, 1, 0], // tile 1: S=1
-                [1, 0, 0, 0], // tile 2: N=1
+                [1, 2, 0, 0], // tile 2: N=1
+                [0, 0, 0, 2]
             ],
             vec!["empty".into(), "A".into(), "B".into()],
         );
+
+        let mut system_no_eq = system.clone();
+
         system.chunk_handling = ChunkHandling::Equilibrium;
+        system_no_eq.chunk_handling = ChunkHandling::None;
         system.update_system();
+        system_no_eq.update_system();
 
-        // There should be dimer attachments
-        assert!(
-            !system.ns_dimers.is_empty(),
-            "Should have NS dimer attachments"
-        );
-
-        // Create a state and check rates at empty point adjacent to seed
         let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
             system.new_state((16, 16)).unwrap();
         system.setup_state(&mut state).unwrap();
@@ -3334,10 +3340,26 @@ mod tests {
         // Check that the dimer attachment rate at the south of the seed is non-zero
         // (tile 1 has S=1 which can bind with tile 2's N=1)
         let ps = state.move_sa_s(center);
+        println!("{:?}, {:?}", center, ps);
+        println!("{:?}", system.we_dimers);
         let dimer_rate = system.total_dimer_attachment_rate_at_point(&state, PointSafe2(ps.0));
+        let monomer_rate = system.total_monomer_attachment_rate_at_point(&state, PointSafe2(ps.0));
         assert!(
             dimer_rate >= 0.0,
             "Dimer attachment rate should be non-negative"
+        );
+
+        // Rate should be the same with and without dimer eq, because of depletion
+        let full_rate_no_eq =
+            system_no_eq.total_monomer_attachment_rate_at_point(&state, PointSafe2(ps.0));
+
+        let ns_dimer_conc = system.ns_dimers[0].2;
+        let ns_dimer_rate = system.kf * ns_dimer_conc;
+        let comb_rate = dimer_rate + monomer_rate + ns_dimer_rate;
+
+        assert!(
+            (dimer_rate + monomer_rate + ns_dimer_rate - full_rate_no_eq).abs() < 1e-8,
+            "Attachment rate should be: with_eq={dimer_rate:.3e} + {monomer_rate:.3e} + {ns_dimer_rate:.3e} = {comb_rate:.8e}, no_eq={full_rate_no_eq:.8e}"
         );
     }
 
