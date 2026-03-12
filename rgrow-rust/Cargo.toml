@@ -75,7 +75,7 @@ polars = { workspace = true, optional = true }
 pyo3-polars = {workspace = true, optional = true}
 approx = { workspace = true }
 astro-float = "0.9.4"
-equiconc = "0.1.0"
+equiconc = { git = "https://github.com/cgevans/equiconc" }
 paste="1.0.15"
 bpci = "0.1.0"
 iced = { version = "0.13", features = ["wgpu", "image", "tokio"], optional = true }

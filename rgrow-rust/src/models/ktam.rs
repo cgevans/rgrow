@@ -150,8 +150,8 @@ pub struct KTAM {
 
     /// Cached equilibrium dimer concentrations from equiconc.
     /// Recomputed in update_system().
-    #[serde(skip)]
-    dimer_eq_concs: Vec<(Tile, Tile, Orientation, f64)>,
+    // #[serde(skip)]
+    // dimer_eq_concs: Vec<(Tile, Tile, Orientation, Molar)>,
 
     /// Free monomer concentrations after dimer depletion.
     /// Always computed (for warnings), but only applied to rates
@@ -161,11 +161,11 @@ pub struct KTAM {
 
     /// Pre-computed NS dimer attachment info: (t1_north, t2_south, dimer_eq_conc).
     #[serde(skip)]
-    ns_dimer_attachments: Vec<(Tile, Tile, Conc)>,
+    ns_dimers: Vec<(Tile, Tile, Conc)>,
 
     /// Pre-computed WE dimer attachment info: (t1_west, t2_east, dimer_eq_conc).
     #[serde(skip)]
-    we_dimer_attachments: Vec<(Tile, Tile, Conc)>,
+    we_dimers: Vec<(Tile, Tile, Conc)>,
 }
 
 #[cfg(feature = "python")]
@@ -352,28 +352,13 @@ impl System for KTAM {
             (false, acc, _, _) => match self.choose_attachment_at_point(state, p, acc) {
                 (true, _, event, rate) => (event, rate),
                 (false, acc, _, _) => {
-                    if self.chunk_handling == ChunkHandling::Equilibrium {
-                        match self.choose_dimer_attachment_at_point(state, p, acc) {
-                            (true, _, event, rate) => (event, rate),
-                            (false, acc, _, _) => {
-                                panic!(
-                                    "Dimer rate selection failed: {:?}, {:?}, {:?}, {:?}",
-                                    acc,
-                                    p,
-                                    state,
-                                    state.raw_array()
-                                );
-                            }
-                        }
-                    } else {
-                        panic!(
-                            "Rate: {:?}, {:?}, {:?}, {:?}",
-                            acc,
-                            p,
-                            state,
-                            state.raw_array()
-                        );
-                    }
+                    panic!(
+                        "Rate: {:?}, {:?}, {:?}, {:?}",
+                        acc,
+                        p,
+                        state,
+                        state.raw_array()
+                    );
                 }
             },
         }
@@ -933,50 +918,31 @@ impl System for KTAM {
     fn calc_dimers(&self) -> Result<Vec<DimerInfo>, GrowError> {
         let mut dvec = Vec::new();
 
-        if !self.dimer_eq_concs.is_empty() {
-            // Use cached equiconc results for equilibrium concentrations
-            for &(t1, t2, ref orientation, eq_conc) in &self.dimer_eq_concs {
-                let conc1 = self.get_effective_concentration(t1);
-                let conc2 = self.get_effective_concentration(t2);
-                let biconc: MolarSq = (conc1 * conc2).into();
-                dvec.push(DimerInfo {
-                    t1,
-                    t2,
-                    orientation: orientation.clone(),
-                    formation_rate: Into::<PerMolarSecond>::into(self.kf) * biconc,
-                    equilibrium_conc: Molar::new(eq_conc),
-                });
-            }
-        } else {
-            // Fallback: naive formula when equiconc wasn't run
-            for ((t1, t2), e) in self.energy_ns.indexed_iter() {
-                if *e > 0. {
-                    let conc1 = self.get_effective_concentration(t1 as Tile);
-                    let conc2 = self.get_effective_concentration(t2 as Tile);
-                    let biconc: MolarSq = (conc1 * conc2).into();
-                    dvec.push(DimerInfo {
-                        t1: t1 as Tile,
-                        t2: t2 as Tile,
-                        orientation: Orientation::NS,
-                        formation_rate: Into::<PerMolarSecond>::into(self.kf) * biconc,
-                        equilibrium_conc: biconc.over_u0() * f64::exp(*e - self.alpha),
-                    });
-                }
-            }
-            for ((t1, t2), e) in self.energy_we.indexed_iter() {
-                if *e > 0. {
-                    let conc1 = self.get_effective_concentration(t1 as Tile);
-                    let conc2 = self.get_effective_concentration(t2 as Tile);
-                    let biconc: MolarSq = (conc1 * conc2).into();
-                    dvec.push(DimerInfo {
-                        t1: t1 as Tile,
-                        t2: t2 as Tile,
-                        orientation: Orientation::WE,
-                        formation_rate: Into::<PerMolarSecond>::into(self.kf) * biconc,
-                        equilibrium_conc: biconc.over_u0() * f64::exp(*e - self.alpha),
-                    });
-                }
-            }
+        for &(t1, t2, eq_conc) in &self.ns_dimers {
+            // FIXME: as it is used by FFS, the formation_rate needs to be the *undepleted* dimer conc.
+            let conc1 = self.get_tile_concentration_of_real_part(t1);
+            let conc2 = self.get_tile_concentration_of_real_part(t2);
+            let biconc: MolarSq = (conc1 * conc2).into();
+            dvec.push(DimerInfo {
+                t1,
+                t2,
+                orientation: Orientation::NS,
+                formation_rate: Into::<PerMolarSecond>::into(self.kf) * biconc,
+                equilibrium_conc: Molar(eq_conc),
+            });
+        }
+
+        for &(t1, t2, eq_conc) in &self.we_dimers {
+            let conc1 = self.get_tile_concentration_of_real_part(t1);
+            let conc2 = self.get_tile_concentration_of_real_part(t2);
+            let biconc: MolarSq = (conc1 * conc2).into();
+            dvec.push(DimerInfo {
+                t1,
+                t2,
+                orientation: Orientation::WE,
+                formation_rate: Into::<PerMolarSecond>::into(self.kf) * biconc,
+                equilibrium_conc: Molar(eq_conc),
+            });
         }
 
         Ok(dvec)
@@ -1141,10 +1107,9 @@ impl KTAM {
             has_duples: false,
             duple_info: Array1::default(ntiles + 1),
             should_be_counted: Array1::default(ntiles + 1),
-            dimer_eq_concs: Vec::new(),
             free_tile_concs: Array1::zeros(ntiles + 1),
-            ns_dimer_attachments: Vec::new(),
-            we_dimer_attachments: Vec::new(),
+            ns_dimers: Vec::new(),
+            we_dimers: Vec::new(),
         }
     }
 
@@ -1358,166 +1323,96 @@ impl KTAM {
         }
 
         // Compute dimer equilibrium and cache results
-        self.dimer_eq_concs.clear();
         self.free_tile_concs = self.tile_concs.clone();
-        self.ns_dimer_attachments.clear();
-        self.we_dimer_attachments.clear();
+        self.ns_dimers.clear();
+        self.we_dimers.clear();
 
-        let has_dimers =
-            self.energy_ns.iter().any(|e| *e > 0.0) || self.energy_we.iter().any(|e| *e > 0.0);
-
-        // Only run equiconc if we have tile names for all tiles
-        if has_dimers && self.tile_names.len() >= self.tile_concs.len() {
-            // Check for duplicate tile names and use index-based names if needed
-            let mut seen_names = HashSetType::<&str>::default();
-            let mut has_dup_names = false;
-            for t in 1..self.tile_concs.len() {
-                if self.tile_concs[t] > 0.0
-                    && self.should_be_counted[t]
-                    && !seen_names.insert(&self.tile_names[t])
-                {
-                    has_dup_names = true;
-                    break;
+        let eq = match self.compute_dimer_equilibrium() {
+            Ok(eq) => Some(eq),
+            Err(e) => {
+                if self.chunk_handling == ChunkHandling::Equilibrium {
+                    panic!("Error computing dimer equilibrium: {:?}", e);
+                } else {
+                    eprintln!(
+                        "Warning: Error computing dimer equilibrium (but not used): {:?}.",
+                        e
+                    );
+                    None
                 }
             }
-            let tile_name_for = |t: usize, ktam: &KTAM| -> String {
-                if has_dup_names {
-                    format!("t{}", t)
-                } else {
-                    ktam.equiconc_tile_name(t)
+        };
+
+        // Cache free monomer concentrations
+        for t in 1..self.tile_concs.len() {
+            self.free_tile_concs[t] = eq
+                .as_ref()
+                .map(|eq| {
+                    eq.concentration(&format!("{}", t))
+                        .unwrap_or(self.tile_concs[t])
+                })
+                .unwrap_or(self.tile_concs[t]);
+        }
+
+        // Cache dimer concentrations
+        for ((t1, t2), e) in self.energy_ns.indexed_iter() {
+            if *e > 0.0 && t1 > 0 && t2 > 0 {
+                let conc1 = self.get_tile_concentration_of_real_part(t1 as Tile);
+                let conc2 = self.get_tile_concentration_of_real_part(t2 as Tile);
+                if conc1 <= 0.0 || conc2 <= 0.0 {
+                    continue; // FIXME: do we need this?
                 }
-            };
+                let dimer_name = format!("NS{}_{}", t1, t2);
+                let conc = Molar(
+                    eq.as_ref()
+                        .map(|eq| eq.concentration(&dimer_name).unwrap_or(0.0))
+                        .unwrap_or(0.0),
+                );
+                // self.dimer_eq_concs.push((
+                //     t1 as Tile,
+                //     t2 as Tile,
+                //     Orientation::NS,
+                //     conc,
+                // ));
+                self.ns_dimers.push((t1 as Tile, t2 as Tile, conc.0));
+            }
+        }
 
-            match self.compute_dimer_equilibrium() {
-                Ok(eq) => {
-                    // Cache free monomer concentrations
-                    for t in 1..self.tile_concs.len() {
-                        if self.tile_concs[t] > 0.0 && self.should_be_counted[t] {
-                            self.free_tile_concs[t] = eq
-                                .concentration(&tile_name_for(t, self))
-                                .unwrap_or(self.tile_concs[t]);
-                        }
-                    }
-
-                    // Cache dimer concentrations
-                    for ((t1, t2), e) in self.energy_ns.indexed_iter() {
-                        if *e > 0.0 && t1 > 0 && t2 > 0 {
-                            let conc1 = self.get_effective_concentration(t1 as Tile);
-                            let conc2 = self.get_effective_concentration(t2 as Tile);
-                            if conc1 <= 0.0 || conc2 <= 0.0 {
-                                continue;
-                            }
-                            let n1 = tile_name_for(
-                                if self.has_duples && !self.should_be_counted[t1] {
-                                    match self.tile_shape(t1 as Tile) {
-                                        TileShape::DupleToLeft(rt) | TileShape::DupleToTop(rt) => {
-                                            rt as usize
-                                        }
-                                        _ => t1,
-                                    }
-                                } else {
-                                    t1
-                                },
-                                self,
-                            );
-                            let n2 = tile_name_for(
-                                if self.has_duples && !self.should_be_counted[t2] {
-                                    match self.tile_shape(t2 as Tile) {
-                                        TileShape::DupleToLeft(rt) | TileShape::DupleToTop(rt) => {
-                                            rt as usize
-                                        }
-                                        _ => t2,
-                                    }
-                                } else {
-                                    t2
-                                },
-                                self,
-                            );
-                            let dimer_name = format!("{}_{}_NS", n1, n2);
-                            let conc = eq.concentration(&dimer_name).unwrap_or(0.0);
-                            self.dimer_eq_concs.push((
-                                t1 as Tile,
-                                t2 as Tile,
-                                Orientation::NS,
-                                conc,
-                            ));
-                            if conc > 0.0 {
-                                self.ns_dimer_attachments
-                                    .push((t1 as Tile, t2 as Tile, conc));
-                            }
-                        }
-                    }
-
-                    for ((t1, t2), e) in self.energy_we.indexed_iter() {
-                        if *e > 0.0 && t1 > 0 && t2 > 0 {
-                            let conc1 = self.get_effective_concentration(t1 as Tile);
-                            let conc2 = self.get_effective_concentration(t2 as Tile);
-                            if conc1 <= 0.0 || conc2 <= 0.0 {
-                                continue;
-                            }
-                            let n1 = tile_name_for(
-                                if self.has_duples && !self.should_be_counted[t1] {
-                                    match self.tile_shape(t1 as Tile) {
-                                        TileShape::DupleToLeft(rt) | TileShape::DupleToTop(rt) => {
-                                            rt as usize
-                                        }
-                                        _ => t1,
-                                    }
-                                } else {
-                                    t1
-                                },
-                                self,
-                            );
-                            let n2 = tile_name_for(
-                                if self.has_duples && !self.should_be_counted[t2] {
-                                    match self.tile_shape(t2 as Tile) {
-                                        TileShape::DupleToLeft(rt) | TileShape::DupleToTop(rt) => {
-                                            rt as usize
-                                        }
-                                        _ => t2,
-                                    }
-                                } else {
-                                    t2
-                                },
-                                self,
-                            );
-                            let dimer_name = format!("{}_{}_WE", n1, n2);
-                            let conc = eq.concentration(&dimer_name).unwrap_or(0.0);
-                            self.dimer_eq_concs.push((
-                                t1 as Tile,
-                                t2 as Tile,
-                                Orientation::WE,
-                                conc,
-                            ));
-                            if conc > 0.0 {
-                                self.we_dimer_attachments
-                                    .push((t1 as Tile, t2 as Tile, conc));
-                            }
-                        }
-                    }
-
-                    // Depletion warning (when not using Equilibrium chunk handling)
-                    if self.chunk_handling != ChunkHandling::Equilibrium {
-                        for t in 1..self.tile_concs.len() {
-                            if self.tile_concs[t] > 0.0 && self.should_be_counted[t] {
-                                let frac = 1.0 - self.free_tile_concs[t] / self.tile_concs[t];
-                                if frac > 0.1 {
-                                    eprintln!(
-                                        "Warning: Tile '{}' has {:.0}% depletion from dimerization. \
-                                         Consider chunk_handling: equilibrium.",
-                                        self.tile_names[t],
-                                        frac * 100.0
-                                    );
-                                }
-                            }
-                        }
-                    }
+        for ((t1, t2), e) in self.energy_we.indexed_iter() {
+            if *e > 0.0 && t1 > 0 && t2 > 0 {
+                let conc1 = self.get_tile_concentration_of_real_part(t1 as Tile);
+                let conc2 = self.get_tile_concentration_of_real_part(t2 as Tile);
+                if conc1 <= 0.0 || conc2 <= 0.0 {
+                    continue;
                 }
-                Err(e) => {
-                    eprintln!(
-                        "Warning: Failed to compute dimer equilibrium: {e}. Using naive concentrations."
-                    );
-                    // dimer_eq_concs stays empty; free_tile_concs stays = tile_concs
+                let dimer_name = format!("WE{}_{}", t1, t2);
+                let conc = Molar(
+                    eq.as_ref()
+                        .map(|eq| eq.concentration(&dimer_name).unwrap_or(0.0))
+                        .unwrap_or(0.0),
+                );
+                // self.dimer_eq_concs.push((
+                //     t1 as Tile,
+                //     t2 as Tile,
+                //     Orientation::WE,
+                //     conc,
+                // ));
+                self.we_dimers.push((t1 as Tile, t2 as Tile, conc.0));
+            }
+        }
+
+        // Depletion warning (when not using Equilibrium chunk handling)
+        if self.chunk_handling != ChunkHandling::Equilibrium {
+            for t in 1..self.tile_concs.len() {
+                if self.tile_concs[t] > 0.0 && self.should_be_counted[t] {
+                    let frac = 1.0 - self.free_tile_concs[t] / self.tile_concs[t];
+                    if frac > 0.1 {
+                        eprintln!(
+                            "Warning: Tile '{}' has {:.0}% depletion from dimerization. \
+                                        Consider chunk_handling: equilibrium.",
+                            self.tile_names[t],
+                            frac * 100.0
+                        );
+                    }
                 }
             }
         }
@@ -1731,7 +1626,12 @@ impl KTAM {
         p: PointSafe2,
         acc: Rate64,
     ) -> (bool, Rate64, Event, Rate64) {
-        self.choose_monomer_attachment_at_point(state, p, acc)
+        let r = self.choose_monomer_attachment_at_point(state, p, acc);
+        if r.0 {
+            r
+        } else {
+            self.choose_dimer_attachment_at_point(state, p, acc)
+        }
     }
 
     pub fn choose_monomer_attachment_at_point<S: State>(
@@ -1818,6 +1718,7 @@ impl KTAM {
             if tse.nonzero() {
                 friends.extend(&self.friends_se[tse as usize])
             }
+            // FIXME: is this missing SW?
         }
 
         for t in friends.drain() {
@@ -2421,13 +2322,13 @@ impl KTAM {
     }
 
     /// Get the effective concentration for a tile, using the real tile concentration for fake duple parts
-    fn get_effective_concentration(&self, tile: Tile) -> f64 {
+    fn get_tile_concentration_of_real_part(&self, tile: Tile) -> f64 {
         if self.has_duples && !self.should_be_counted[tile as usize] {
             // This is a fake duple part, find the corresponding real tile
             match self.tile_shape(tile) {
                 TileShape::DupleToLeft(real_tile) => self.tile_concs[real_tile as usize],
                 TileShape::DupleToTop(real_tile) => self.tile_concs[real_tile as usize],
-                _ => self.tile_concs[tile as usize], // Shouldn't happen for fake tiles
+                _ => self.tile_concs[tile as usize], // FIXME: Shouldn't happen for fake tiles
             }
         } else {
             self.tile_concs[tile as usize]
@@ -2445,136 +2346,50 @@ impl KTAM {
         }
     }
 
-    /// Get the tile name to use for equiconc. For fake duple parts, returns the
-    /// name of the real tile. Falls back to index-based names if duplicates exist.
-    fn equiconc_tile_name(&self, tile: usize) -> String {
-        if self.has_duples && !self.should_be_counted[tile] {
-            match self.tile_shape(tile as Tile) {
-                TileShape::DupleToLeft(real_tile) => {
-                    return self.tile_names[real_tile as usize].clone()
-                }
-                TileShape::DupleToTop(real_tile) => {
-                    return self.tile_names[real_tile as usize].clone()
-                }
-                _ => {}
-            }
-        }
-        self.tile_names[tile].clone()
-    }
-
     /// Compute dimer equilibrium using equiconc.
     fn compute_dimer_equilibrium(&self) -> Result<equiconc::Equilibrium, GrowError> {
-        if self.tile_names.len() < self.tile_concs.len() {
-            return Err(GrowError::EquilibriumCalcError(
-                "Tile names not set".to_string(),
-            ));
-        }
-
         // T = 1/R makes ΔG° = -energy_dimensionless, producing K = exp(energy).
         let t_ref = 1.0 / equiconc::R;
         let mut sys = equiconc::System::new().temperature(t_ref);
 
-        // Check for duplicate tile names and use index-based names if needed
-        let mut seen_names = HashSetType::<&str>::default();
-        let mut has_duplicates = false;
-        for t in 1..self.tile_concs.len() {
-            if self.tile_concs[t] > 0.0
-                && self.should_be_counted[t]
-                && !seen_names.insert(&self.tile_names[t])
-            {
-                has_duplicates = true;
-                break;
-            }
-        }
-
-        let tile_name = |t: usize| -> String {
-            if has_duplicates {
-                format!("t{}", t)
-            } else {
-                self.equiconc_tile_name(t)
-            }
-        };
-
         // Add each real tile as a monomer
         for t in 1..self.tile_concs.len() {
-            if self.tile_concs[t] > 0.0 && self.should_be_counted[t] {
-                sys = sys.monomer(&tile_name(t), self.tile_concs[t]);
+            // We don't allow duples in dimers.
+            if self.tile_concs[t] > 0.0
+                && self.double_to_bottom[t] == 0
+                && self.double_to_right[t] == 0
+                && !self.is_fake_duple(t as u32)
+            {
+                sys = sys.monomer(&format!("{}", t), self.tile_concs[t]);
             }
-        }
 
-        // Add NS dimers
-        for ((t1, t2), e) in self.energy_ns.indexed_iter() {
-            if *e > 0.0 && t1 > 0 && t2 > 0 {
-                let conc1 = self.get_effective_concentration(t1 as Tile);
-                let conc2 = self.get_effective_concentration(t2 as Tile);
-                if conc1 <= 0.0 || conc2 <= 0.0 {
-                    continue;
-                }
-
-                let name1 = tile_name(if self.has_duples && !self.should_be_counted[t1] {
-                    match self.tile_shape(t1 as Tile) {
-                        TileShape::DupleToLeft(rt) | TileShape::DupleToTop(rt) => rt as usize,
-                        _ => t1,
-                    }
-                } else {
-                    t1
-                });
-                let name2 = tile_name(if self.has_duples && !self.should_be_counted[t2] {
-                    match self.tile_shape(t2 as Tile) {
-                        TileShape::DupleToLeft(rt) | TileShape::DupleToTop(rt) => rt as usize,
-                        _ => t2,
-                    }
-                } else {
-                    t2
-                });
-
-                // ΔG = -energy (energy is positive/favorable in kTAM convention)
-                // Plus alpha contribution: the naive formula is exp(e - alpha),
-                // so ΔG = -(e - alpha) = -e + alpha
-                let delta_g = -(*e - self.alpha);
-
-                let dimer_name = format!("{}_{}_NS", name1, name2);
-                if name1 == name2 {
-                    sys = sys.complex(&dimer_name, &[(&name1, 2)], delta_g);
-                } else {
-                    sys = sys.complex(&dimer_name, &[(&name1, 1), (&name2, 1)], delta_g);
+            for &t2 in &self.friends_n[t] {
+                if self.tile_concs[t2 as usize] > 0.0
+                    && self.double_to_bottom[t2 as usize] == 0
+                    && self.double_to_right[t2 as usize] == 0
+                    && !self.is_fake_duple(t2)
+                {
+                    let energy = self.get_energy_ns(t as u32, t2);
+                    sys = sys.complex(
+                        &format!("NS{}_{}", t, t2),
+                        &[(&format!("{}", t), 1), (&format!("{}", t2 as usize), 1)],
+                        -energy + self.alpha,
+                    );
                 }
             }
-        }
 
-        // Add WE dimers
-        for ((t1, t2), e) in self.energy_we.indexed_iter() {
-            if *e > 0.0 && t1 > 0 && t2 > 0 {
-                let conc1 = self.get_effective_concentration(t1 as Tile);
-                let conc2 = self.get_effective_concentration(t2 as Tile);
-                if conc1 <= 0.0 || conc2 <= 0.0 {
-                    continue;
-                }
-
-                let name1 = tile_name(if self.has_duples && !self.should_be_counted[t1] {
-                    match self.tile_shape(t1 as Tile) {
-                        TileShape::DupleToLeft(rt) | TileShape::DupleToTop(rt) => rt as usize,
-                        _ => t1,
-                    }
-                } else {
-                    t1
-                });
-                let name2 = tile_name(if self.has_duples && !self.should_be_counted[t2] {
-                    match self.tile_shape(t2 as Tile) {
-                        TileShape::DupleToLeft(rt) | TileShape::DupleToTop(rt) => rt as usize,
-                        _ => t2,
-                    }
-                } else {
-                    t2
-                });
-
-                let delta_g = -(*e - self.alpha);
-
-                let dimer_name = format!("{}_{}_WE", name1, name2);
-                if name1 == name2 {
-                    sys = sys.complex(&dimer_name, &[(&name1, 2)], delta_g);
-                } else {
-                    sys = sys.complex(&dimer_name, &[(&name1, 1), (&name2, 1)], delta_g);
+            for &t2 in &self.friends_w[t] {
+                if self.tile_concs[t2 as usize] > 0.0
+                    && self.double_to_bottom[t2 as usize] == 0
+                    && self.double_to_right[t2 as usize] == 0
+                    && !self.is_fake_duple(t2)
+                {
+                    let energy = self.get_energy_we(t as u32, t2);
+                    sys = sys.complex(
+                        &format!("WE{}_{}", t, t2),
+                        &[(&format!("{}", t2 as usize), 1), (&format!("{}", t), 1)],
+                        -energy + self.alpha,
+                    );
                 }
             }
         }
@@ -2584,89 +2399,121 @@ impl KTAM {
     }
 
     /// Compute dimer attachment rate at a point for all possible dimer attachments.
-    fn total_dimer_attachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate64 {
-        if self.ns_dimer_attachments.is_empty() && self.we_dimer_attachments.is_empty() {
-            return 0.0;
+    fn _find_dimer_attachment_possibilities_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        mut acc: Rate64,
+        just_calc: bool,
+    ) -> (bool, Rate64, Event, Rate64) {
+        if self.ns_dimers.is_empty() && self.we_dimers.is_empty() {
+            return (false, acc, Event::None, f64::NAN);
         }
 
-        let mut total = 0.0;
-
-        // This point is the north tile of a NS dimer (partner goes south)
-        let ps = state.move_sa_s(p);
-        if state.inbounds(ps.0) && state.tile_at_point(PointSafe2(ps.0)) == 0 {
-            for &(t1, t2, dimer_conc) in &self.ns_dimer_attachments {
-                if self.tile_compatible_at(state, p, t1)
-                    && self.tile_compatible_at(state, PointSafe2(ps.0), t2)
-                {
-                    total += self.kf * dimer_conc;
-                }
-            }
-        }
-
-        // This point is the south tile of a NS dimer (partner goes north)
-        let pn = state.move_sa_n(p);
-        if state.inbounds(pn.0) && state.tile_at_point(PointSafe2(pn.0)) == 0 {
-            for &(t1, t2, dimer_conc) in &self.ns_dimer_attachments {
-                if self.tile_compatible_at(state, PointSafe2(pn.0), t1)
-                    && self.tile_compatible_at(state, p, t2)
-                {
-                    total += self.kf * dimer_conc;
-                }
-            }
-        }
-
-        // This point is the west tile of a WE dimer (partner goes east)
-        let pe = state.move_sa_e(p);
-        if state.inbounds(pe.0) && state.tile_at_point(PointSafe2(pe.0)) == 0 {
-            for &(t1, t2, dimer_conc) in &self.we_dimer_attachments {
-                if self.tile_compatible_at(state, p, t1)
-                    && self.tile_compatible_at(state, PointSafe2(pe.0), t2)
-                {
-                    total += self.kf * dimer_conc;
-                }
-            }
-        }
-
-        // This point is the east tile of a WE dimer (partner goes west)
-        let pw = state.move_sa_w(p);
-        if state.inbounds(pw.0) && state.tile_at_point(PointSafe2(pw.0)) == 0 {
-            for &(t1, t2, dimer_conc) in &self.we_dimer_attachments {
-                if self.tile_compatible_at(state, PointSafe2(pw.0), t1)
-                    && self.tile_compatible_at(state, p, t2)
-                {
-                    total += self.kf * dimer_conc;
-                }
-            }
-        }
-
-        total
-    }
-
-    /// Check if a tile is compatible with its neighbors at a point.
-    /// A tile is compatible if every occupied neighbor has positive binding energy with it.
-    fn tile_compatible_at<S: State>(&self, state: &S, p: PointSafe2, t: Tile) -> bool {
         let tn = state.tile_to_n(p);
+        let tw = state.tile_to_w(p);
         let te = state.tile_to_e(p);
         let ts = state.tile_to_s(p);
-        let tw = state.tile_to_w(p);
+        let tss = state.tile_to_ss(p);
+        let tne = state.tile_to_ne(p);
+        let tee = state.tile_to_ee(p);
+        let tse = state.tile_to_se(p);
+        let tsw = state.tile_to_sw(p);
 
-        // Check the tile is in the friends list of at least one neighbor
-        // (same logic as _find_monomer_attachment_possibilities uses)
-        if tn.nonzero() && self.friends_n[tn as usize].contains(&t) {
-            return true;
+        // Optimization: if all neighbors are empty, then there is no attachment rate
+        if tn == 0 && tw == 0 && te == 0 && ts == 0 && tss == 0 && tne == 0 && tee == 0 && tse == 0
+        {
+            return (false, acc, Event::None, f64::NAN);
         }
-        if te.nonzero() && self.friends_e[te as usize].contains(&t) {
-            return true;
+
+        if te != 0 && ts != 0 {
+            // There's no way for a dimer to attach here.
+            return (false, acc, Event::None, f64::NAN);
         }
-        if ts.nonzero() && self.friends_s[ts as usize].contains(&t) {
-            return true;
+
+        let mut friends_here = HashSetType::<Tile>::default();
+        let mut friends_east = HashSetType::<Tile>::default();
+        let mut friends_south = HashSetType::<Tile>::default();
+
+        if tn.nonzero() {
+            friends_here.extend(&self.friends_n[tn as usize]);
         }
-        if tw.nonzero() && self.friends_w[tw as usize].contains(&t) {
-            return true;
+        if te.nonzero() {
+            friends_here.extend(&self.friends_e[te as usize]);
         }
-        // If no neighbor has this tile as a friend, but all neighbors are empty,
-        // the tile is also compatible (it's a free spot)
-        tn == 0 && te == 0 && ts == 0 && tw == 0
+        if ts.nonzero() {
+            friends_here.extend(&self.friends_s[ts as usize]);
+        }
+        if tw.nonzero() {
+            friends_here.extend(&self.friends_w[tw as usize]);
+        }
+
+        // FIXME: this iteration is inefficient.  We should precompute possible dimers based on friends,
+        // giving us the sort of behavior we have for monomers.
+
+        let pe = state.move_sa_e(p);
+        if te != 0 && state.inbounds(pe.0) {
+            let pe = PointSafe2(pe.0); // Safe because of inbounds check
+            if tne.nonzero() {
+                friends_east.extend(&self.friends_n[te as usize]);
+            }
+            if tee.nonzero() {
+                friends_east.extend(&self.friends_e[te as usize]);
+            }
+            if tse.nonzero() {
+                friends_east.extend(&self.friends_s[te as usize]);
+            }
+            for &(t1, t2, dimer_conc) in &self.we_dimers {
+                if friends_here.contains(&t1) || friends_east.contains(&t2) {
+                    let rate = self.kf * dimer_conc;
+                    acc -= rate;
+                    if !just_calc & (acc <= (0.)) {
+                        return (
+                            true,
+                            acc,
+                            Event::PolymerAttachment(vec![(p, t1), (pe, t2)]),
+                            rate,
+                        );
+                    }
+                }
+            }
+        }
+
+        let ps = state.move_sa_s(p);
+        if ts != 0 && state.inbounds(ps.0) {
+            let ps = PointSafe2(ps.0); // Safe because of inbounds check
+            if tss.nonzero() {
+                friends_south.extend(&self.friends_s[ts as usize]);
+            }
+            if tse.nonzero() {
+                friends_south.extend(&self.friends_e[ts as usize]);
+            }
+            if tsw.nonzero() {
+                friends_south.extend(&self.friends_w[ts as usize]);
+            }
+            for &(t1, t2, dimer_conc) in &self.ns_dimers {
+                if friends_here.contains(&t1) || friends_south.contains(&t2) {
+                    let rate = self.kf * dimer_conc;
+                    acc -= rate;
+                    if !just_calc & (acc <= (0.)) {
+                        return (
+                            true,
+                            acc,
+                            Event::PolymerAttachment(vec![(p, t1), (ps, t2)]),
+                            rate,
+                        ); // FIXME: unsafe
+                    }
+                }
+            }
+        }
+
+        (false, acc, Event::None, f64::NAN)
+    }
+
+    fn total_dimer_attachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate64 {
+        self._find_dimer_attachment_possibilities_at_point(state, p, 0., true)
+            .1
+        // FIXME: consider check for hopefully unreachable true return / early choice/break, as in monomer version.
     }
 
     /// Choose a dimer attachment event at a point using accumulated rate.
@@ -2674,93 +2521,9 @@ impl KTAM {
         &self,
         state: &S,
         p: PointSafe2,
-        mut acc: Rate64,
+        acc: Rate64,
     ) -> (bool, Rate64, Event, Rate64) {
-        // NS dimers: this point is the north tile
-        let ps = state.move_sa_s(p);
-        if state.inbounds(ps.0) && state.tile_at_point(PointSafe2(ps.0)) == 0 {
-            for &(t1, t2, dimer_conc) in &self.ns_dimer_attachments {
-                if self.tile_compatible_at(state, p, t1)
-                    && self.tile_compatible_at(state, PointSafe2(ps.0), t2)
-                {
-                    let rate = self.kf * dimer_conc;
-                    acc -= rate;
-                    if acc <= 0.0 {
-                        return (
-                            true,
-                            acc,
-                            Event::PolymerAttachment(vec![(p, t1), (PointSafe2(ps.0), t2)]),
-                            rate,
-                        );
-                    }
-                }
-            }
-        }
-
-        // NS dimers: this point is the south tile
-        let pn = state.move_sa_n(p);
-        if state.inbounds(pn.0) && state.tile_at_point(PointSafe2(pn.0)) == 0 {
-            for &(t1, t2, dimer_conc) in &self.ns_dimer_attachments {
-                if self.tile_compatible_at(state, PointSafe2(pn.0), t1)
-                    && self.tile_compatible_at(state, p, t2)
-                {
-                    let rate = self.kf * dimer_conc;
-                    acc -= rate;
-                    if acc <= 0.0 {
-                        return (
-                            true,
-                            acc,
-                            Event::PolymerAttachment(vec![(PointSafe2(pn.0), t1), (p, t2)]),
-                            rate,
-                        );
-                    }
-                }
-            }
-        }
-
-        // WE dimers: this point is the west tile
-        let pe = state.move_sa_e(p);
-        if state.inbounds(pe.0) && state.tile_at_point(PointSafe2(pe.0)) == 0 {
-            for &(t1, t2, dimer_conc) in &self.we_dimer_attachments {
-                if self.tile_compatible_at(state, p, t1)
-                    && self.tile_compatible_at(state, PointSafe2(pe.0), t2)
-                {
-                    let rate = self.kf * dimer_conc;
-                    acc -= rate;
-                    if acc <= 0.0 {
-                        return (
-                            true,
-                            acc,
-                            Event::PolymerAttachment(vec![(p, t1), (PointSafe2(pe.0), t2)]),
-                            rate,
-                        );
-                    }
-                }
-            }
-        }
-
-        // WE dimers: this point is the east tile
-        let pw = state.move_sa_w(p);
-        if state.inbounds(pw.0) && state.tile_at_point(PointSafe2(pw.0)) == 0 {
-            for &(t1, t2, dimer_conc) in &self.we_dimer_attachments {
-                if self.tile_compatible_at(state, PointSafe2(pw.0), t1)
-                    && self.tile_compatible_at(state, p, t2)
-                {
-                    let rate = self.kf * dimer_conc;
-                    acc -= rate;
-                    if acc <= 0.0 {
-                        return (
-                            true,
-                            acc,
-                            Event::PolymerAttachment(vec![(PointSafe2(pw.0), t1), (p, t2)]),
-                            rate,
-                        );
-                    }
-                }
-            }
-        }
-
-        (false, acc, Event::None, f64::NAN)
+        self._find_dimer_attachment_possibilities_at_point(state, p, acc, false)
     }
 }
 
@@ -3527,7 +3290,7 @@ mod tests {
         );
 
         assert!(
-            system.dimer_eq_concs.is_empty(),
+            system.ns_dimers.is_empty() && system.we_dimers.is_empty(),
             "Should have no dimers when no glues match"
         );
         // Free concs should equal total concs
@@ -3555,7 +3318,7 @@ mod tests {
 
         // There should be dimer attachments
         assert!(
-            !system.ns_dimer_attachments.is_empty(),
+            !system.ns_dimers.is_empty(),
             "Should have NS dimer attachments"
         );
 
