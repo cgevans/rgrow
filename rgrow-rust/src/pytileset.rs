@@ -12,6 +12,7 @@ use crate::{
     ffs::{FFSRunConfig, FFSRunResult},
     models::{atam::ATAM, ktam::KTAM, oldktam::OldKTAM},
     python::PyState,
+    rbffs::{RBFFSResult, RBFFSRunConfig},
     system::SystemEnum,
     tileset::{self, Bond, Tile, TileSet},
 };
@@ -197,6 +198,31 @@ impl TileSet {
         }
 
         let res = py.detach(|| self.run_ffs(&c));
+        match res {
+            Ok(res) => Ok(res),
+            Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                err.to_string(),
+            )),
+        }
+    }
+
+    /// Runs Rosenbluth-style Forward Flux Sampling.
+    #[pyo3(name = "run_rbffs", signature = (config = RBFFSRunConfig::default(), **kwargs))]
+    fn py_run_rbffs<'py>(
+        &self,
+        config: RBFFSRunConfig,
+        kwargs: Option<&Bound<'py, PyDict>>,
+        py: Python<'py>,
+    ) -> PyResult<RBFFSResult> {
+        let mut c = config;
+
+        if let Some(dict) = kwargs {
+            for (k, v) in dict.iter() {
+                c._py_set(&k.extract::<String>()?, v)?;
+            }
+        }
+
+        let res = py.detach(|| self.run_rbffs(&c));
         match res {
             Ok(res) => Ok(res),
             Err(err) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(

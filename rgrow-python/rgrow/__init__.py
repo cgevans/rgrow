@@ -9,6 +9,8 @@ __all__ = [
     "EvolveBounds",
     "FFSRunResult",
     "FFSRunConfig",
+    "RBFFSRunConfig",
+    "RBFFSResult",
 ]
 
 import numpy as np
@@ -23,6 +25,8 @@ from .rgrow import (
     FFSRunResult,
     FFSLevelRef,
     FFSRunConfig,
+    RBFFSRunConfig,
+    RBFFSResult,
     State,
     EvolveBounds,
     FFSStateRef,
@@ -320,6 +324,24 @@ class TileSet:
                 print(f"Warning: unknown key {k!r} in tileset")
                 del d[k]
         return cls(**d)
+
+    def run_rbffs(
+        self,
+        n_trials: int = 1000,
+        n_trajectories: int = 1000,
+        target_size: int = 100,
+        canvas_size: tuple[int, int] = (32, 32),
+        subseq_bound: EvolveBounds = EvolveBounds(for_time=1e7),
+        **kwargs: Any,
+    ) -> RBFFSResult:
+        return self._to_rg_tileset().run_rbffs(
+            n_trials=n_trials,
+            n_trajectories=n_trajectories,
+            target_size=target_size,
+            canvas_size=canvas_size,
+            subseq_bound=subseq_bound,
+            **kwargs,
+        )
 
     def run_ffs(
         self,

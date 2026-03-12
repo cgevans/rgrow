@@ -16,6 +16,7 @@ use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
 use crate::models::sdc1d_bindreplace::SDC1DBindReplace;
 use crate::painter::{SpriteSquare, TileStyle};
+use crate::rbffs::{RBFFSResult, RBFFSRunConfig};
 use crate::state::StateEnum;
 
 #[cfg(feature = "python")]
@@ -67,6 +68,8 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     fn system_info(&self) -> String;
 
     fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError>;
+
+    fn run_rbffs(&mut self, config: &RBFFSRunConfig) -> Result<RBFFSResult, RgrowError>;
 
     fn calc_committor(
         &mut self,
@@ -304,6 +307,10 @@ where
 
     fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {
         FFSRunResult::run_from_system(self, config)
+    }
+
+    fn run_rbffs(&mut self, config: &RBFFSRunConfig) -> Result<RBFFSResult, RgrowError> {
+        RBFFSResult::run_from_system(self, config)
     }
 
     fn system_info(&self) -> String {

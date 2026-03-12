@@ -1088,10 +1088,61 @@ class EvolveOutcome:
     ReachedSizeMax: EvolveOutcome
     ReachedZeroRate: EvolveOutcome
 
+class RBFFSRunConfig:
+    """Configuration for Rosenbluth-style Forward Flux Sampling."""
+    n_trials: int
+    n_trajectories: int
+    target_size: int
+    canvas_size: tuple[int, int]
+    subseq_bound: EvolveBounds
+    canvas_type: Any
+    tracking: str
+
+    def __init__(
+        self,
+        n_trials: int | None = None,
+        n_trajectories: int | None = None,
+        target_size: int | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        subseq_bound: EvolveBounds | None = None,
+        canvas_type: Any | None = None,
+        tracking: str | None = None,
+    ) -> None: ...
+
+class RBFFSResult:
+    """Result of a Rosenbluth-style Forward Flux Sampling run."""
+    @property
+    def forward_probabilities(self) -> NDArray[np.float64]:
+        """Forward probability vector."""
+    @property
+    def trajectory_weights(self) -> NDArray[np.float64]:
+        """Statistical weight of each trajectory."""
+    @property
+    def n_trials(self) -> int:
+        """Number of trials per surface."""
+    @property
+    def n_surfs(self) -> int:
+        """Number of surfaces."""
+    @property
+    def dimerization_rate(self) -> float:
+        """Dimerization rate in M/s."""
+    @property
+    def nucleation_rate(self) -> float:
+        """Nucleation rate in M/s."""
+    @property
+    def n_trajectories(self) -> int:
+        """Number of completed trajectories."""
+    @property
+    def n_failed_trajectories(self) -> int:
+        """Number of trajectories that failed (melted with 0 successes at some surface)."""
+    @property
+    def failed_at_size(self) -> NDArray[np.uint32]:
+        """For each failed trajectory, the target size it was trying to reach when it failed."""
+
 class FFSRunConfig:
     """
     Configuration options for Forward Flux Sampling (FFS) simulations.
-    
+
     FFS is a rare event sampling method that calculates nucleation rates by dividing
     the nucleation process into a series of surfaces (levels) based on cluster size,
     then computing the probability of crossing each surface.
@@ -2896,6 +2947,9 @@ class TileSet:
 
     def run_ffs(self, config: FFSRunConfig = ..., **kwargs: Any) -> FFSRunResult:
         """Runs FFS."""
+
+    def run_rbffs(self, config: RBFFSRunConfig = ..., **kwargs: Any) -> RBFFSResult:
+        """Runs Rosenbluth-style Forward Flux Sampling."""
 
     def run_window(self) -> State:
         """
