@@ -11,6 +11,7 @@ __all__ = [
     "FFSRunConfig",
     "RBFFSRunConfig",
     "RBFFSResult",
+    "RBFFSBootstrapResult",
 ]
 
 import numpy as np
@@ -27,6 +28,7 @@ from .rgrow import (
     FFSRunConfig,
     RBFFSRunConfig,
     RBFFSResult,
+    RBFFSBootstrapResult,
     State,
     EvolveBounds,
     FFSStateRef,
@@ -332,6 +334,9 @@ class TileSet:
         target_size: int = 100,
         canvas_size: tuple[int, int] = (32, 32),
         subseq_bound: EvolveBounds = EvolveBounds(for_time=1e7),
+        size_step: int = 1,
+        parallel: bool = False,
+        num_workers: int | None = None,
         **kwargs: Any,
     ) -> RBFFSResult:
         return self._to_rg_tileset().run_rbffs(
@@ -340,6 +345,9 @@ class TileSet:
             target_size=target_size,
             canvas_size=canvas_size,
             subseq_bound=subseq_bound,
+            size_step=size_step,
+            parallel=parallel,
+            num_workers=num_workers,
             **kwargs,
         )
 

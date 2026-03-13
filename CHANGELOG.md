@@ -8,6 +8,13 @@
 - SDC1DBindReplace: `allow_same_replacement` option for self-replacement cycles.
 - Tests for SDC1DBindReplace energy-based rates.
 - Example notebook comparing SDC bind/replace model variants (`bitcopy_model_progression.ipynb`).
+- Rosenbluth-style Forward Flux Sampling (`run_rbffs`).  This is slower than standard FFS, and does not generate an unbiased set of trajectories, but in exchange generates independent trajectories with weights.  This may be useful if you want many independently-generated trajectories.  It also allows for parallelization, bootstrapped confidence intervals, and extending the number of trajectories incrementally.
+  - Per-surface forward probabilities, trajectory weights, and weighted resampling
+    (`resample_trajectories`, `select_unique_trajectories`).
+  - Bootstrap confidence intervals via `bootstrap_ci()`, using trajectory deduplication
+    and multinomial resampling for efficiency.
+  - `extend()` to run additional trajectories and merge into an existing result
+    (requires `store_system=True`).
 
 ### Changed
 - SDC1DBindReplace replacement rates are now count-independent (boolean "has replacer" rather than counting replacers).

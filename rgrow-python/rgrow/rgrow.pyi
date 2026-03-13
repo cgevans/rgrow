@@ -1097,6 +1097,11 @@ class RBFFSRunConfig:
     subseq_bound: EvolveBounds
     canvas_type: Any
     tracking: str
+    keep_full_trajectories: bool
+    store_system: bool
+    size_step: int
+    parallel: bool
+    num_workers: int | None
 
     def __init__(
         self,
@@ -1107,6 +1112,11 @@ class RBFFSRunConfig:
         subseq_bound: EvolveBounds | None = None,
         canvas_type: Any | None = None,
         tracking: str | None = None,
+        keep_full_trajectories: bool | None = None,
+        store_system: bool | None = None,
+        size_step: int | None = None,
+        parallel: bool | None = None,
+        num_workers: int | None = None,
     ) -> None: ...
 
 class RBFFSResult:
@@ -1142,7 +1152,41 @@ class RBFFSResult:
     def trajectories(self) -> list[list[FFSStateRef]]:
         """Complete trajectories as lists of state references (one per surface)."""
     def resample_trajectories(self, n: int) -> list[list[FFSStateRef]]:
-        """Resample n trajectories with probability proportional to weight, yielding an evenly-weighted set."""
+        """Resample n trajectories with probability proportional to weight (with replacement)."""
+    def select_unique_trajectories(self, n: int) -> list[list[FFSStateRef]]:
+        """Select n unique trajectories via weighted sampling without replacement.
+
+        Higher-weight trajectories are more likely to be selected, producing a set
+        with approximately even effective weight that can be treated as uniformly
+        representative. Returns at most n trajectories (fewer if not enough exist).
+        """
+    def extend(self, n_trajectories: int) -> None:
+        """Run additional trajectories and merge into this result. Requires store_system=True in config."""
+    def bootstrap_ci(
+        self, n_bootstrap: int = 10000, confidence_level: float = 0.95
+    ) -> RBFFSBootstrapResult:
+        """Compute bootstrap confidence intervals by resampling trajectories."""
+
+class RBFFSBootstrapResult:
+    """Bootstrap confidence interval results for RBFFS."""
+    @property
+    def nucleation_rate_ci(self) -> tuple[float, float]:
+        """Confidence interval (lower, upper) for the nucleation rate."""
+    @property
+    def nucleation_rate_samples(self) -> NDArray[np.float64]:
+        """Bootstrap nucleation rate samples."""
+    @property
+    def forward_probability_cis(self) -> list[tuple[float, float]]:
+        """Per-surface confidence intervals for forward probabilities."""
+    @property
+    def forward_probability_samples(self) -> NDArray[np.float64]:
+        """Bootstrap forward probability samples, shape (n_bootstrap, n_surfs-1)."""
+    @property
+    def confidence_level(self) -> float:
+        """The confidence level used."""
+    @property
+    def nucleation_rate_median(self) -> float:
+        """Median nucleation rate across bootstrap samples."""
 
 class FFSRunConfig:
     """

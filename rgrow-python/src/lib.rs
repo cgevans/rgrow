@@ -23,6 +23,8 @@ mod rgrow {
     #[pymodule_export]
     use rgrow::ffs::FFSRunConfig;
     #[pymodule_export]
+    use rgrow::rbffs::RBFFSBootstrapResult;
+    #[pymodule_export]
     use rgrow::rbffs::RBFFSResult;
     #[pymodule_export]
     use rgrow::rbffs::RBFFSRunConfig;
