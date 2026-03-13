@@ -110,31 +110,40 @@ impl System for SDC1DBindReplace {
 
         let coord = PointSafe2(p.0);
         match state.tile_at_point(coord) {
-            0 => PerSecond::from(self.matching_tiles_at_site[coord.0 .1].len() as f64),
+            0 => {
+                if self.matching_tiles_at_site[coord.0 .1].is_empty() {
+                    PerSecond::from(0.0)
+                } else {
+                    PerSecond::from(1.0)
+                }
+            }
             s => {
                 let (glue_w, _, glue_e) = self.strand_glues[s as usize];
                 let (glue_to_e, _, _) = self.strand_glues[state.tile_to_e(coord) as usize];
                 let (_, _, glue_to_w) = self.strand_glues[state.tile_to_w(coord) as usize];
                 let ng = glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
 
-                let mut n_others = 0.;
-                for &possible_replace in &self.matching_tiles_at_site[coord.0 .1] {
-                    if s == possible_replace.0 {
-                        continue;
-                    }
-                    let (glue_w, _, glue_e) = self.strand_glues[possible_replace.0 as usize];
-                    let ng_replace =
-                        glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
-                    if ng_replace >= ng {
-                        n_others += 1.;
-                    }
-                }
+                let has_replacer =
+                    self.matching_tiles_at_site[coord.0 .1]
+                        .iter()
+                        .any(|&possible_replace| {
+                            if s == possible_replace.0 {
+                                return false;
+                            }
+                            let (glue_w, _, glue_e) =
+                                self.strand_glues[possible_replace.0 as usize];
+                            let ng_replace =
+                                glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
+                            ng_replace >= ng
+                        });
 
-                if self.account_for_energy && n_others > 0. {
+                if !has_replacer {
+                    PerSecond::from(0.0)
+                } else if self.account_for_energy {
                     let bond_energy = self.bond_energy_of_strand(state, coord, s);
-                    PerSecond::from(n_others * f64::from(self.kf) * bond_energy.exp())
+                    PerSecond::from(f64::from(self.kf) * bond_energy.exp())
                 } else {
-                    PerSecond::from(n_others)
+                    PerSecond::from(1.0)
                 }
             }
         }
@@ -151,10 +160,12 @@ impl System for SDC1DBindReplace {
 
         match t {
             Tile(0) => {
-                for t in &self.matching_tiles_at_site[p.0 .1] {
-                    mut_acc -= PerSecond::from(1.0);
+                let candidates = &self.matching_tiles_at_site[p.0 .1];
+                let per_tile = 1.0 / candidates.len() as f64;
+                for t in candidates {
+                    mut_acc -= PerSecond::from(per_tile);
                     if mut_acc.0 <= 0.0 {
-                        return (Event::MonomerAttachment(p, t.0), 1.0);
+                        return (Event::MonomerAttachment(p, t.0), per_tile);
                     }
                 }
                 panic!(
@@ -168,25 +179,33 @@ impl System for SDC1DBindReplace {
                 let (_, _, glue_to_w) = self.strand_glues[state.tile_to_w(p) as usize];
                 let ng = glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
 
-                let per_event_rate = if self.account_for_energy {
+                // Collect valid replacers to determine per-event rate
+                let valid_replacers: Vec<Tile> = self.matching_tiles_at_site[p.0 .1]
+                    .iter()
+                    .copied()
+                    .filter(|&possible_replace| {
+                        if t.0 == possible_replace.0 {
+                            return false;
+                        }
+                        let (glue_w, _, glue_e) = self.strand_glues[possible_replace.0 as usize];
+                        let ng_replace =
+                            glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
+                        ng_replace >= ng
+                    })
+                    .collect();
+
+                let total_rate = if self.account_for_energy {
                     let bond_energy = self.bond_energy_of_strand(state, p, t.0);
                     f64::from(self.kf) * bond_energy.exp()
                 } else {
                     1.0
                 };
+                let per_event_rate = total_rate / valid_replacers.len() as f64;
 
-                for &possible_replace in &self.matching_tiles_at_site[p.0 .1] {
-                    if t.0 == possible_replace.0 {
-                        continue;
-                    }
-                    let (glue_w, _, glue_e) = self.strand_glues[possible_replace.0 as usize];
-                    let ng_replace =
-                        glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
-                    if ng_replace >= ng {
-                        mut_acc -= PerSecond::from(per_event_rate);
-                        if mut_acc.0 <= 0.0 {
-                            return (Event::MonomerChange(p, possible_replace.0), per_event_rate);
-                        }
+                for &replacer in &valid_replacers {
+                    mut_acc -= PerSecond::from(per_event_rate);
+                    if mut_acc.0 <= 0.0 {
+                        return (Event::MonomerChange(p, replacer.0), per_event_rate);
                     }
                 }
                 panic!(

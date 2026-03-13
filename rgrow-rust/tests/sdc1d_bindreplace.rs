@@ -93,17 +93,13 @@ fn test_bitcopy_empty_state_rates() {
     .unwrap();
     sys.update_state(&mut state, &NeededUpdate::All);
 
-    // Input position: only 1 matching strand
-    let rate = sys.event_rate_at_point(&state, PointSafeHere((0, 0)));
-    assert_eq!(f64::from(rate), 1.0, "input position should have rate 1");
-
-    // Cascade positions: 2 matching strands each
-    for col in 1..n {
+    // All positions with matching strands should have rate 1
+    for col in 0..n {
         let rate = sys.event_rate_at_point(&state, PointSafeHere((0, col)));
         assert_eq!(
             f64::from(rate),
-            2.0,
-            "cascade position {col} should have rate 2"
+            1.0,
+            "empty position {col} should have rate 1"
         );
     }
 }
@@ -297,16 +293,13 @@ fn test_energy_empty_state_rates() {
     .unwrap();
     sys.update_state(&mut state, &NeededUpdate::All);
 
-    // Empty state rates should still be pure counts (energy doesn't affect empty sites)
-    let rate = sys.event_rate_at_point(&state, PointSafeHere((0, 0)));
-    assert_eq!(f64::from(rate), 1.0, "input position should have rate 1");
-
-    for col in 1..n {
+    // Empty state rates should be 1 (energy doesn't affect empty sites)
+    for col in 0..n {
         let rate = sys.event_rate_at_point(&state, PointSafeHere((0, col)));
         assert_eq!(
             f64::from(rate),
-            2.0,
-            "cascade position {col} should have rate 2"
+            1.0,
+            "empty position {col} should have rate 1"
         );
     }
 }
