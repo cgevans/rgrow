@@ -3,7 +3,7 @@
 use core::panic;
 use std::collections::HashMap;
 
-use super::sdc1d::{SDCParams, SDCStrand};
+use super::sdc1d::{gsorseq_to_gs, self_and_inverse, RefOrPair, SDCParams, SDCStrand};
 #[allow(unused_imports)]
 use crate::{
     canvas::{PointSafe2, PointSafeHere},
@@ -11,7 +11,10 @@ use crate::{
     models::sdc1d::{get_or_generate, SingleOrMultiScaffold},
     state::State,
     system::{Event, System, TileBondInfo},
-    units::{KcalPerMol, Kelvin, Molar, PerSecond},
+    units::{
+        Celsius, Energy, KcalPerMol, KcalPerMolKelvin, Kelvin, Molar, PerMolarSecond, PerSecond,
+        Temperature,
+    },
 };
 #[allow(unused_imports)]
 use ndarray::{Array1, Array2};
@@ -46,20 +49,18 @@ pub struct SDC1DBindReplace {
     pub scaffold: Vec<Glue>,
     pub strand_glues: Vec<(Glue, Glue, Glue)>,
 
-    // pub strand_concentrations: Array1<Molar>,
-    // pub delta_g_matrix: Array2<KcalPerMol>,
-    // pub entropy_matrix: Array2<KcalPerMol>,
-    // pub temperature: Kelvin,
+    pub kf: PerMolarSecond,
+    pub temperature: Celsius,
+    pub account_for_energy: bool,
+    pub delta_g_matrix: Array2<KcalPerMol>,
+    pub entropy_matrix: Array2<KcalPerMolKelvin>,
 
-    // pub allow_mismatch_creation: bool,
-    // pub account_for_concentration: bool,
-    // pub account_for_energy: bool,
     #[serde(skip)]
     matching_tiles_at_site: Vec<Vec<Tile>>,
-    // #[serde(skip)]
-    // strand_energy_bonds: Array2<f64>,
-    // #[serde(skip)]
-    // scaffold_energy_bonds: Array2<f64>,
+    #[serde(skip)]
+    strand_energy_bonds: Array2<f64>,
+    #[serde(skip)]
+    scaffold_energy_bonds: Array2<f64>,
 }
 
 impl TileBondInfo for SDC1DBindReplace {
@@ -128,7 +129,13 @@ impl System for SDC1DBindReplace {
                         n_others += 1.;
                     }
                 }
-                PerSecond::from(n_others)
+
+                if self.account_for_energy && n_others > 0. {
+                    let bond_energy = self.bond_energy_of_strand(state, coord, s);
+                    PerSecond::from(n_others * f64::from(self.kf) * bond_energy.exp())
+                } else {
+                    PerSecond::from(n_others)
+                }
             }
         }
     }
@@ -161,6 +168,13 @@ impl System for SDC1DBindReplace {
                 let (_, _, glue_to_w) = self.strand_glues[state.tile_to_w(p) as usize];
                 let ng = glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
 
+                let per_event_rate = if self.account_for_energy {
+                    let bond_energy = self.bond_energy_of_strand(state, p, t.0);
+                    f64::from(self.kf) * bond_energy.exp()
+                } else {
+                    1.0
+                };
+
                 for &possible_replace in &self.matching_tiles_at_site[p.0 .1] {
                     if t.0 == possible_replace.0 {
                         continue;
@@ -169,9 +183,9 @@ impl System for SDC1DBindReplace {
                     let ng_replace =
                         glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
                     if ng_replace >= ng {
-                        mut_acc -= PerSecond::from(1.0);
+                        mut_acc -= PerSecond::from(per_event_rate);
                         if mut_acc.0 <= 0.0 {
-                            return (Event::MonomerChange(p, possible_replace.0), 1.0);
+                            return (Event::MonomerChange(p, possible_replace.0), per_event_rate);
                         }
                     }
                 }
@@ -212,9 +226,62 @@ impl SDC1DBindReplace {
         state.update_multiple(&points);
     }
 
+    /// Compute β·ΔG for a glue pair (energy in units of kT).
+    fn glue_energy(&self, g1: Glue, g2: Glue) -> f64 {
+        let dg = self.delta_g_matrix[(g1.0 as usize, g2.0 as usize)];
+        let ds = self.entropy_matrix[(g1.0 as usize, g2.0 as usize)];
+        // ΔG(T) = ΔG(37°C) - (T - 37°C) × ΔS, then multiply by β = 1/(RT)
+        let temp_kelvin: Kelvin = self.temperature.into();
+        let glue_value = dg - (temp_kelvin - Celsius(37.0)) * ds;
+        glue_value.times_beta(self.temperature)
+    }
+
+    /// Precompute strand-strand and scaffold-strand energy bond arrays.
+    fn fill_energy_arrays(&mut self) {
+        let strand_count = self.strand_names.len();
+        let scaffold_len = self.scaffold.len();
+
+        self.strand_energy_bonds = Array2::zeros((strand_count, strand_count));
+        self.scaffold_energy_bonds = Array2::zeros((scaffold_len, strand_count));
+
+        // strand-strand: east glue of x bonds with west glue of y
+        for x in 0..strand_count {
+            let (_, _, glue_e_x) = self.strand_glues[x];
+            for y in 0..strand_count {
+                let (glue_w_y, _, _) = self.strand_glues[y];
+                self.strand_energy_bonds[(x, y)] = self.glue_energy(glue_e_x, glue_w_y);
+            }
+        }
+
+        // scaffold-strand: scaffold glue bonds with bottom glue of strand
+        for (pos, &scaffold_glue) in self.scaffold.iter().enumerate() {
+            for s in 0..strand_count {
+                let (_, glue_b, _) = self.strand_glues[s];
+                self.scaffold_energy_bonds[(pos, s)] = self.glue_energy(scaffold_glue, glue_b);
+            }
+        }
+    }
+
+    /// Sum of β·ΔG for all bonds of a strand at a given position.
+    fn bond_energy_of_strand<S: State>(&self, state: &S, point: PointSafe2, strand: u32) -> f64 {
+        let w = state.tile_to_w(point) as usize;
+        let e = state.tile_to_e(point) as usize;
+        let s = strand as usize;
+        self.scaffold_energy_bonds[(point.0 .1, s)]
+            + self.strand_energy_bonds[(w, s)]
+            + self.strand_energy_bonds[(s, e)]
+    }
+
     pub fn from_params(params: SDCParams) -> Self {
         let mut glue_name_map: HashMap<String, usize> = HashMap::new();
         let strand_count = params.strands.len() + 1; // to account for empty
+
+        // Extract energy params before consuming strands
+        let kf = PerMolarSecond::new(params.k_f);
+        let temperature = Celsius(params.temperature);
+        let glue_dg_s = params.glue_dg_s;
+        let junction_penalty_dg = params.junction_penalty_dg;
+        let junction_penalty_ds = params.junction_penalty_ds;
 
         let mut strand_names = Vec::with_capacity(strand_count);
         let mut strand_colors = Vec::with_capacity(strand_count);
@@ -261,6 +328,40 @@ impl SDC1DBindReplace {
             SingleOrMultiScaffold::Multi(_m) => todo!(),
         };
 
+        // Build energy matrices from glue_dg_s using glue_name_map (before consuming it)
+        let mut delta_g_matrix = Array2::<KcalPerMol>::zeros((gluenum, gluenum));
+        let mut entropy_matrix = Array2::<KcalPerMolKelvin>::zeros((gluenum, gluenum));
+
+        for (k, gs_or_dna_sequence) in glue_dg_s.iter() {
+            let gs = gsorseq_to_gs(gs_or_dna_sequence);
+
+            let (i, j) = match k {
+                RefOrPair::Ref(r) => {
+                    let (_, base, inverse) = self_and_inverse(r);
+                    (base, inverse)
+                }
+                RefOrPair::Pair(r1, r2) => {
+                    let (r1_is_from, r1f, r1t) = self_and_inverse(r1);
+                    let (r2_is_from, r2f, r2t) = self_and_inverse(r2);
+                    (
+                        if r1_is_from { r1f } else { r1t },
+                        if r2_is_from { r2f } else { r2t },
+                    )
+                }
+            };
+
+            let (i, j) = match (glue_name_map.get(&i), glue_name_map.get(&j)) {
+                (Some(&x), Some(&y)) => (x, y),
+                _ => continue,
+            };
+
+            delta_g_matrix[[i, j]] = gs.0 + junction_penalty_dg.unwrap_or(KcalPerMol(0.0));
+            delta_g_matrix[[j, i]] = gs.0 + junction_penalty_dg.unwrap_or(KcalPerMol(0.0));
+            entropy_matrix[[i, j]] = gs.1 + junction_penalty_ds.unwrap_or(KcalPerMolKelvin(0.0));
+            entropy_matrix[[j, i]] = gs.1 + junction_penalty_ds.unwrap_or(KcalPerMolKelvin(0.0));
+        }
+
+        // Now consume glue_name_map to build glue_names
         let mut glue_names = vec![String::default(); gluenum];
         for (sx, i) in glue_name_map.into_iter() {
             glue_names[i] = sx;
@@ -272,22 +373,20 @@ impl SDC1DBindReplace {
             glue_names,
             scaffold: scaffold.to_vec(),
             strand_glues: glues,
+            kf,
+            temperature,
+            account_for_energy: false,
+            delta_g_matrix,
+            entropy_matrix,
             matching_tiles_at_site: vec![vec![]; scaffold.len()],
-            // strand_concentrations: Array1::<Molar>::ones(strand_count),
-            // delta_g_matrix: Array2::<KcalPerMol>::zeros((gluenum, gluenum)),
-            // entropy_matrix: Array2::<KcalPerMol>::zeros((gluenum, gluenum)),
-            // temperature: Kelvin::new(298.15),
-            // allow_mismatch_creation: false,
-            // account_for_concentration: false,
-            // account_for_energy: false,
-            // strand_energy_bonds: Array2::<f64>::zeros((strand_count, strand_count)),
-            // scaffold_energy_bonds: Array2::<f64>::zeros((strand_count, strand_count)),
+            strand_energy_bonds: Array2::zeros((strand_count, strand_count)),
+            scaffold_energy_bonds: Array2::zeros((scaffold.len(), strand_count)),
         };
         sys.update();
         sys
     }
 
-    fn update(&mut self) {
+    pub fn update(&mut self) {
         for (i, &scaffold_glue) in self.scaffold.iter().enumerate() {
             let mut matching_tiles = vec![];
             for (tile_num, &(_glue_w, glue_b, _glue_e)) in self.strand_glues.iter().enumerate() {
@@ -298,7 +397,9 @@ impl SDC1DBindReplace {
             self.matching_tiles_at_site[i] = matching_tiles;
         }
 
-        // TODO: update arrays for energy and concentration effects when those are implemented
+        if self.account_for_energy {
+            self.fill_energy_arrays();
+        }
     }
 }
 
