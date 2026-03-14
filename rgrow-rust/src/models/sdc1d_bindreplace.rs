@@ -49,9 +49,19 @@ pub struct SDC1DBindReplace {
     pub scaffold: Vec<Glue>,
     pub strand_glues: Vec<(Glue, Glue, Glue)>,
 
+    pub strand_concentrations: Array1<f64>,
     pub kf: PerMolarSecond,
     pub temperature: Celsius,
     pub account_for_energy: bool,
+    pub allow_weak_replacement: bool,
+    pub physical_attachment_rate: bool,
+    /// When true (and `account_for_energy` is also true), the replacement rate
+    /// at a filled site accounts for both the expected detachment time *and*
+    /// the expected re-attachment time:
+    ///   r = 1 / (1/r_detach + 1/r_attach)
+    /// where r_detach = kf·exp(βΔG) and r_attach = Σ(kf·conc_i) over valid
+    /// replacers.  When false, the replacement rate is just r_detach.
+    pub physical_replacement_rate: bool,
     pub delta_g_matrix: Array2<KcalPerMol>,
     pub entropy_matrix: Array2<KcalPerMolKelvin>,
 
@@ -111,8 +121,15 @@ impl System for SDC1DBindReplace {
         let coord = PointSafe2(p.0);
         match state.tile_at_point(coord) {
             0 => {
-                if self.matching_tiles_at_site[coord.0 .1].is_empty() {
+                let candidates = &self.matching_tiles_at_site[coord.0 .1];
+                if candidates.is_empty() {
                     PerSecond::from(0.0)
+                } else if self.physical_attachment_rate {
+                    let total: f64 = candidates
+                        .iter()
+                        .map(|t| f64::from(self.kf) * self.strand_concentrations[t.0 as usize])
+                        .sum();
+                    PerSecond::from(total)
                 } else {
                     PerSecond::from(1.0)
                 }
@@ -130,6 +147,9 @@ impl System for SDC1DBindReplace {
                             if s == possible_replace.0 {
                                 return false;
                             }
+                            if self.allow_weak_replacement {
+                                return true;
+                            }
                             let (glue_w, _, glue_e) =
                                 self.strand_glues[possible_replace.0 as usize];
                             let ng_replace =
@@ -141,7 +161,29 @@ impl System for SDC1DBindReplace {
                     PerSecond::from(0.0)
                 } else if self.account_for_energy {
                     let bond_energy = self.bond_energy_of_strand(state, coord, s);
-                    PerSecond::from(f64::from(self.kf) * bond_energy.exp())
+                    let r_detach = f64::from(self.kf) * bond_energy.exp();
+                    if self.physical_replacement_rate {
+                        let r_attach: f64 = self.matching_tiles_at_site[coord.0 .1]
+                            .iter()
+                            .filter(|&&t| {
+                                if s == t.0 {
+                                    return false;
+                                }
+                                if self.allow_weak_replacement {
+                                    return true;
+                                }
+                                let (glue_w, _, glue_e) = self.strand_glues[t.0 as usize];
+                                let ng_replace = glue_w.matches(glue_to_w) as u8
+                                    + glue_e.matches(glue_to_e) as u8;
+                                ng_replace >= ng
+                            })
+                            .map(|t| f64::from(self.kf) * self.strand_concentrations[t.0 as usize])
+                            .sum();
+                        // Combined rate: 1 / (1/r_detach + 1/r_attach)
+                        PerSecond::from((r_detach * r_attach) / (r_detach + r_attach))
+                    } else {
+                        PerSecond::from(r_detach)
+                    }
                 } else {
                     PerSecond::from(1.0)
                 }
@@ -161,11 +203,25 @@ impl System for SDC1DBindReplace {
         match t {
             Tile(0) => {
                 let candidates = &self.matching_tiles_at_site[p.0 .1];
-                let per_tile = 1.0 / candidates.len() as f64;
-                for t in candidates {
-                    mut_acc -= PerSecond::from(per_tile);
-                    if mut_acc.0 <= 0.0 {
-                        return (Event::MonomerAttachment(p, t.0), per_tile);
+                if self.physical_attachment_rate {
+                    for t in candidates {
+                        let rate = f64::from(self.kf) * self.strand_concentrations[t.0 as usize];
+                        mut_acc -= PerSecond::from(rate);
+                        if mut_acc.0 <= 0.0 {
+                            return (Event::MonomerAttachment(p, t.0), rate);
+                        }
+                    }
+                } else {
+                    let total_conc: f64 = candidates
+                        .iter()
+                        .map(|t| self.strand_concentrations[t.0 as usize])
+                        .sum();
+                    for t in candidates {
+                        let frac = self.strand_concentrations[t.0 as usize] / total_conc;
+                        mut_acc -= PerSecond::from(frac);
+                        if mut_acc.0 <= 0.0 {
+                            return (Event::MonomerAttachment(p, t.0), frac);
+                        }
                     }
                 }
                 panic!(
@@ -179,13 +235,16 @@ impl System for SDC1DBindReplace {
                 let (_, _, glue_to_w) = self.strand_glues[state.tile_to_w(p) as usize];
                 let ng = glue_w.matches(glue_to_w) as u8 + glue_e.matches(glue_to_e) as u8;
 
-                // Collect valid replacers to determine per-event rate
+                // Collect valid replacers
                 let valid_replacers: Vec<Tile> = self.matching_tiles_at_site[p.0 .1]
                     .iter()
                     .copied()
                     .filter(|&possible_replace| {
                         if t.0 == possible_replace.0 {
                             return false;
+                        }
+                        if self.allow_weak_replacement {
+                            return true;
                         }
                         let (glue_w, _, glue_e) = self.strand_glues[possible_replace.0 as usize];
                         let ng_replace =
@@ -195,17 +254,34 @@ impl System for SDC1DBindReplace {
                     .collect();
 
                 let total_rate = if self.account_for_energy {
-                    let bond_energy = self.bond_energy_of_strand(state, p, t.0);
-                    f64::from(self.kf) * bond_energy.exp()
+                    let r_detach = {
+                        let bond_energy = self.bond_energy_of_strand(state, p, t.0);
+                        f64::from(self.kf) * bond_energy.exp()
+                    };
+                    if self.physical_replacement_rate {
+                        let r_attach: f64 = valid_replacers
+                            .iter()
+                            .map(|r| f64::from(self.kf) * self.strand_concentrations[r.0 as usize])
+                            .sum();
+                        (r_detach * r_attach) / (r_detach + r_attach)
+                    } else {
+                        r_detach
+                    }
                 } else {
                     1.0
                 };
-                let per_event_rate = total_rate / valid_replacers.len() as f64;
+
+                let total_conc: f64 = valid_replacers
+                    .iter()
+                    .map(|r| self.strand_concentrations[r.0 as usize])
+                    .sum();
 
                 for &replacer in &valid_replacers {
-                    mut_acc -= PerSecond::from(per_event_rate);
+                    let frac =
+                        total_rate * self.strand_concentrations[replacer.0 as usize] / total_conc;
+                    mut_acc -= PerSecond::from(frac);
                     if mut_acc.0 <= 0.0 {
-                        return (Event::MonomerChange(p, replacer.0), per_event_rate);
+                        return (Event::MonomerChange(p, replacer.0), frac);
                     }
                 }
                 panic!(
@@ -222,9 +298,102 @@ impl System for SDC1DBindReplace {
 
     fn calc_mismatch_locations<St: crate::state::State>(
         &self,
-        _state: &St,
+        state: &St,
     ) -> ndarray::Array2<usize> {
-        todo!()
+        let mut mismatch_locations =
+            ndarray::Array2::<usize>::zeros((state.nrows(), state.ncols()));
+
+        for i in 0..state.nrows() {
+            for j in 0..state.ncols() {
+                if !state.inbounds((i, j)) {
+                    continue;
+                }
+                let p = PointSafe2((i, j));
+                let t = state.tile_at_point(p);
+                if t == 0 {
+                    continue;
+                }
+
+                let te = state.tile_to_e(p);
+                let tw = state.tile_to_w(p);
+
+                let (_, _, glue_e) = self.strand_glues[t as usize];
+                let (glue_w, _, _) = self.strand_glues[t as usize];
+
+                let mm_e = ((te != 0) && {
+                    let (glue_w_te, _, _) = self.strand_glues[te as usize];
+                    !glue_e.matches(glue_w_te)
+                }) as usize;
+                let mm_w = ((tw != 0) && {
+                    let (_, _, glue_e_tw) = self.strand_glues[tw as usize];
+                    !glue_e_tw.matches(glue_w)
+                }) as usize;
+
+                mismatch_locations[(i, j)] = 4 * mm_e + mm_w;
+            }
+        }
+
+        mismatch_locations
+    }
+
+    fn set_param(
+        &mut self,
+        name: &str,
+        value: Box<dyn std::any::Any>,
+    ) -> Result<crate::system::NeededUpdate, crate::base::GrowError> {
+        use crate::base::GrowError;
+        use crate::system::NeededUpdate;
+        match name {
+            "kf" => {
+                let kf = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.kf = PerMolarSecond::from(*kf);
+                self.update();
+                Ok(NeededUpdate::NonZero)
+            }
+            "temperature" => {
+                let temperature = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.temperature = Celsius(*temperature);
+                self.update();
+                Ok(NeededUpdate::NonZero)
+            }
+            _ => Err(GrowError::NoParameter(name.to_string())),
+        }
+    }
+
+    fn get_param(&self, name: &str) -> Result<Box<dyn std::any::Any>, crate::base::GrowError> {
+        match name {
+            "kf" => Ok(Box::new(f64::from(self.kf))),
+            "temperature" => Ok(Box::new(self.temperature.0)),
+            _ => Err(crate::base::GrowError::NoParameter(name.to_string())),
+        }
+    }
+
+    fn list_parameters(&self) -> Vec<crate::system::ParameterInfo> {
+        use crate::system::ParameterInfo;
+        vec![
+            ParameterInfo {
+                name: "temperature".to_string(),
+                units: "°C".to_string(),
+                default_increment: 1.0,
+                min_value: Some(0.0),
+                max_value: Some(100.0),
+                description: Some("Simulation temperature".to_string()),
+                current_value: self.temperature.0,
+            },
+            ParameterInfo {
+                name: "kf".to_string(),
+                units: "M/s".to_string(),
+                default_increment: 1e5,
+                min_value: Some(0.0),
+                max_value: None,
+                description: Some("Forward reaction rate constant".to_string()),
+                current_value: f64::from(self.kf),
+            },
+        ]
     }
 }
 
@@ -304,11 +473,13 @@ impl SDC1DBindReplace {
 
         let mut strand_names = Vec::with_capacity(strand_count);
         let mut strand_colors = Vec::with_capacity(strand_count);
+        let mut strand_concs = Vec::with_capacity(strand_count);
         let mut glues = Vec::with_capacity(strand_count);
         let mut gluenum = 1;
 
         strand_names.push("empty".to_string());
         strand_colors.push([0, 0, 0, 0]);
+        strand_concs.push(0.0);
         glues.push((Glue(0), Glue(0), Glue(0)));
 
         for (
@@ -316,15 +487,16 @@ impl SDC1DBindReplace {
             SDCStrand {
                 name,
                 color,
+                concentration,
                 btm_glue,
                 left_glue,
                 right_glue,
-                ..
             },
         ) in params.strands.into_iter().enumerate()
         {
             strand_names.push(name.unwrap_or(format!("{}", id)));
             strand_colors.push(get_color_or_random(color.as_deref()).unwrap());
+            strand_concs.push(concentration);
 
             let s_glues = (
                 Glue(get_or_generate(&mut glue_name_map, &mut gluenum, left_glue) as u64),
@@ -392,9 +564,13 @@ impl SDC1DBindReplace {
             glue_names,
             scaffold: scaffold.to_vec(),
             strand_glues: glues,
+            strand_concentrations: Array1::from_vec(strand_concs),
             kf,
             temperature,
             account_for_energy: false,
+            allow_weak_replacement: false,
+            physical_attachment_rate: false,
+            physical_replacement_rate: false,
             delta_g_matrix,
             entropy_matrix,
             matching_tiles_at_site: vec![vec![]; scaffold.len()],
@@ -409,7 +585,7 @@ impl SDC1DBindReplace {
         for (i, &scaffold_glue) in self.scaffold.iter().enumerate() {
             let mut matching_tiles = vec![];
             for (tile_num, &(_glue_w, glue_b, _glue_e)) in self.strand_glues.iter().enumerate() {
-                if glue_b.matches(scaffold_glue) {
+                if glue_b.matches(scaffold_glue) && self.strand_concentrations[tile_num] > 0.0 {
                     matching_tiles.push(Tile(tile_num as u32));
                 }
             }
@@ -428,5 +604,46 @@ impl SDC1DBindReplace {
     #[new]
     fn py_new(params: SDCParams) -> Self {
         Self::from_params(params)
+    }
+
+    #[getter]
+    fn get_account_for_energy(&self) -> bool {
+        self.account_for_energy
+    }
+
+    #[setter]
+    fn set_account_for_energy(&mut self, value: bool) {
+        self.account_for_energy = value;
+        self.update();
+    }
+
+    #[getter]
+    fn get_allow_weak_replacement(&self) -> bool {
+        self.allow_weak_replacement
+    }
+
+    #[setter]
+    fn set_allow_weak_replacement(&mut self, value: bool) {
+        self.allow_weak_replacement = value;
+    }
+
+    #[getter]
+    fn get_physical_attachment_rate(&self) -> bool {
+        self.physical_attachment_rate
+    }
+
+    #[setter]
+    fn set_physical_attachment_rate(&mut self, value: bool) {
+        self.physical_attachment_rate = value;
+    }
+
+    #[getter]
+    fn get_physical_replacement_rate(&self) -> bool {
+        self.physical_replacement_rate
+    }
+
+    #[setter]
+    fn set_physical_replacement_rate(&mut self, value: bool) {
+        self.physical_replacement_rate = value;
     }
 }

@@ -1,6 +1,6 @@
 use crate::painter::SpriteSquare;
 
-use super::base::{GrowResult, NumTiles, Point, Tile};
+use super::base::{GrowError, GrowResult, NumTiles, Point, Tile};
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -345,6 +345,9 @@ impl CanvasCreate for CanvasSquare {
     type Params = (usize, usize);
 
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
+        if shape.0 < 5 || shape.1 < 5 {
+            return Err(GrowError::WrongCanvasSize(shape.0, shape.1));
+        }
         Ok(Self(Array2::zeros(shape)))
     }
 
@@ -451,6 +454,9 @@ impl CanvasCreate for CanvasPeriodic {
     type Params = (usize, usize);
 
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
+        if shape.0 == 0 || shape.1 == 0 {
+            return Err(GrowError::WrongCanvasSize(shape.0, shape.1));
+        }
         Ok(Self(Array2::zeros(shape)))
     }
 
@@ -543,6 +549,9 @@ impl CanvasCreate for CanvasSquareCompact {
     type Params = (usize, usize);
 
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
+        if shape.0 == 0 || shape.1 == 0 {
+            return Err(GrowError::WrongCanvasSize(shape.0, shape.1));
+        }
         Ok(Self(Array2::zeros((shape.0 + 2, shape.1 + 2))))
     }
 

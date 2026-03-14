@@ -2031,7 +2031,7 @@ impl SDC {
     ) -> Bound<'py, numpy::PyArray2<f64>> {
         self.fill_energy_array();
         self.scaffold_energy_bonds
-            .map(|x| *x.get().unwrap())
+            .map(|x| x.get().copied().unwrap_or(0.0))
             .to_pyarray(py)
     }
 
@@ -2042,7 +2042,7 @@ impl SDC {
     ) -> Bound<'py, numpy::PyArray2<f64>> {
         self.fill_energy_array();
         self.strand_energy_bonds
-            .map(|x| *x.get().unwrap())
+            .map(|x| x.get().copied().unwrap_or(0.0))
             .to_pyarray(py)
     }
 
