@@ -61,10 +61,10 @@ pub struct SDC1DBindReplace {
     ///   r = 1 / (1/r_detach + 1/r_attach)
     /// where r_detach = kf·exp(βΔG) and r_attach = Σ(kf·conc_i) over valid
     /// replacers.  When false, the replacement rate is just r_detach.
-    pub physical_replacement_rate: bool,
+    pub bindunbind_replacement_rate: bool,
     /// When true, a tile can be "replaced" by the same tile type (effectively
     /// a detach-then-reattach cycle that wastes time without changing state).
-    /// Combined with `physical_replacement_rate`, this makes the bind-replace
+    /// Combined with `bindunbind_replacement_rate`, this makes the bind-replace
     /// kinetics closely match the full SDC model.
     pub allow_same_replacement: bool,
     pub delta_g_matrix: Array2<KcalPerMol>,
@@ -167,7 +167,7 @@ impl System for SDC1DBindReplace {
                 } else if self.account_for_energy {
                     let bond_energy = self.bond_energy_of_strand(state, coord, s);
                     let r_detach = f64::from(self.kf) * bond_energy.exp();
-                    if self.physical_replacement_rate {
+                    if self.bindunbind_replacement_rate {
                         let r_attach: f64 = self.matching_tiles_at_site[coord.0 .1]
                             .iter()
                             .filter(|&&t| {
@@ -263,7 +263,7 @@ impl System for SDC1DBindReplace {
                         let bond_energy = self.bond_energy_of_strand(state, p, t.0);
                         f64::from(self.kf) * bond_energy.exp()
                     };
-                    if self.physical_replacement_rate {
+                    if self.bindunbind_replacement_rate {
                         let r_attach: f64 = valid_replacers
                             .iter()
                             .map(|r| f64::from(self.kf) * self.strand_concentrations[r.0 as usize])
@@ -575,7 +575,7 @@ impl SDC1DBindReplace {
             account_for_energy: false,
             allow_weak_replacement: false,
             physical_attachment_rate: false,
-            physical_replacement_rate: false,
+            bindunbind_replacement_rate: false,
             allow_same_replacement: false,
             delta_g_matrix,
             entropy_matrix,
@@ -644,13 +644,13 @@ impl SDC1DBindReplace {
     }
 
     #[getter]
-    fn get_physical_replacement_rate(&self) -> bool {
-        self.physical_replacement_rate
+    fn get_bindunbind_replacement_rate(&self) -> bool {
+        self.bindunbind_replacement_rate
     }
 
     #[setter]
-    fn set_physical_replacement_rate(&mut self, value: bool) {
-        self.physical_replacement_rate = value;
+    fn set_bindunbind_replacement_rate(&mut self, value: bool) {
+        self.bindunbind_replacement_rate = value;
     }
 
     #[getter]

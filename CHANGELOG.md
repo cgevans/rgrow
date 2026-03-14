@@ -3,7 +3,7 @@
 ### Added
 - SDC1DBindReplace: energy-based rate calculations with configurable `kf`, `temperature`, strand concentrations, and delta-G/entropy matrices.
 - SDC1DBindReplace: `physical_attachment_rate` option for concentration-weighted attachment rates.
-- SDC1DBindReplace: `physical_replacement_rate` option modeling combined detach/re-attach kinetics.
+- SDC1DBindReplace: `bindunbind_replacement_rate` option modeling combined detach/re-attach kinetics.
 - SDC1DBindReplace: `allow_weak_replacement` option to permit replacement regardless of bond strength.
 - SDC1DBindReplace: `allow_same_replacement` option for self-replacement cycles.
 - Canvas size validation: `new_sized()` now returns errors for degenerate sizes on all canvas types.
