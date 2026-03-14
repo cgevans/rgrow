@@ -1261,3 +1261,300 @@ impl TileSet {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── compute_surface_sizes ──────────────────────────────────────────
+
+    #[test]
+    fn test_compute_surface_sizes_step_1() {
+        assert_eq!(compute_surface_sizes(6, 1), vec![3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn test_compute_surface_sizes_step_2() {
+        assert_eq!(compute_surface_sizes(10, 2), vec![4, 6, 8, 10]);
+    }
+
+    #[test]
+    fn test_compute_surface_sizes_uneven() {
+        // 2+4=6, 6+4=10>9, so [6, 9]
+        assert_eq!(compute_surface_sizes(9, 4), vec![6, 9]);
+    }
+
+    #[test]
+    fn test_compute_surface_sizes_minimal() {
+        assert_eq!(compute_surface_sizes(3, 1), vec![3]);
+    }
+
+    #[test]
+    fn test_compute_surface_sizes_large_step() {
+        // 2+10=12>5, so only [5]
+        assert_eq!(compute_surface_sizes(5, 10), vec![5]);
+    }
+
+    #[test]
+    #[should_panic(expected = "size_step must be at least 1")]
+    fn test_compute_surface_sizes_step_zero_panics() {
+        compute_surface_sizes(5, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "target_size must be at least 3")]
+    fn test_compute_surface_sizes_target_two_panics() {
+        compute_surface_sizes(2, 1);
+    }
+
+    // ── percentile / percentile_ci ─────────────────────────────────────
+
+    #[test]
+    fn test_percentile_basic() {
+        let sorted = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        assert_eq!(percentile(&sorted, 0.0), 1.0);
+        assert_eq!(percentile(&sorted, 50.0), 3.0);
+        assert_eq!(percentile(&sorted, 100.0), 5.0);
+    }
+
+    #[test]
+    fn test_percentile_empty() {
+        assert!(percentile(&[], 50.0).is_nan());
+    }
+
+    #[test]
+    fn test_percentile_ci_basic() {
+        let mut samples: Vec<f64> = (1..=100).map(|x| x as f64).collect();
+        let (lo, hi) = percentile_ci(&mut samples, 0.90);
+        // 5th percentile ≈ 5.0, 95th percentile ≈ 95.0
+        assert_eq!(lo, 5.0);
+        assert_eq!(hi, 95.0);
+    }
+
+    // ── forward_probability_i_from_data ────────────────────────────────
+
+    #[test]
+    fn test_fwd_prob_uniform() {
+        // 3 trajectories, each with 2 surfaces, n_trials=10, all successes=5
+        let data = vec![vec![5u64, 5], vec![5, 5], vec![5, 5]];
+        let p0 = forward_probability_i_from_data(&data, 10, 0);
+        let p1 = forward_probability_i_from_data(&data, 10, 1);
+        assert!((p0 - 0.5).abs() < 1e-12);
+        assert!((p1 - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_fwd_prob_first_surface() {
+        // At surface 0, weight is always 1.0, so p0 = average of (successes[0]/n_trials)
+        let data = vec![vec![10u64, 5], vec![6, 5]];
+        let p0 = forward_probability_i_from_data(&data, 10, 0);
+        // (10/10 + 6/10) / 2 = 0.8
+        assert!((p0 - 0.8).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_fwd_prob_with_failed() {
+        // A failed trajectory has last entry 0 and contributes to that surface
+        let data = vec![
+            vec![10u64, 10], // complete
+            vec![5u64, 0],   // failed at surface 1
+        ];
+        let p1 = forward_probability_i_from_data(&data, 10, 1);
+        // weights at surface 1: traj0 = 10/10=1.0, traj1 = 5/10=0.5
+        // weighted success: 1.0*(10/10) + 0.5*(0/10) = 1.0
+        // total weight: 1.0 + 0.5 = 1.5
+        // p1 = 1.0/1.5 = 2/3
+        assert!((p1 - 2.0 / 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_fwd_prob_short_excluded() {
+        // A trajectory with only 1 entry can't contribute to surface 1
+        let data = vec![vec![10u64, 10], vec![5u64]];
+        let p1 = forward_probability_i_from_data(&data, 10, 1);
+        // Only first trajectory contributes
+        assert!((p1 - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_fwd_prob_empty() {
+        let data: Vec<Vec<u64>> = Vec::new();
+        assert_eq!(forward_probability_i_from_data(&data, 10, 0), 0.0);
+    }
+
+    // ── binomial_sample ────────────────────────────────────────────────
+
+    #[test]
+    fn test_binomial_edge_cases() {
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
+        assert_eq!(binomial_sample(&mut rng, 0, 0.5), 0);
+        assert_eq!(binomial_sample(&mut rng, 10, 0.0), 0);
+        assert_eq!(binomial_sample(&mut rng, 10, 1.0), 10);
+    }
+
+    #[test]
+    fn test_binomial_mean_small_np() {
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
+        let n = 10u32;
+        let p = 0.3;
+        let n_samples = 10000;
+        let sum: u64 = (0..n_samples)
+            .map(|_| binomial_sample(&mut rng, n, p) as u64)
+            .sum();
+        let mean = sum as f64 / n_samples as f64;
+        assert!(
+            (mean - 3.0).abs() < 0.3,
+            "mean {mean} too far from expected 3.0"
+        );
+    }
+
+    #[test]
+    fn test_binomial_mean_large_np() {
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
+        let n = 100u32;
+        let p = 0.5;
+        let n_samples = 10000;
+        let sum: u64 = (0..n_samples)
+            .map(|_| binomial_sample(&mut rng, n, p) as u64)
+            .sum();
+        let mean = sum as f64 / n_samples as f64;
+        assert!(
+            (mean - 50.0).abs() < 2.0,
+            "mean {mean} too far from expected 50.0"
+        );
+    }
+
+    #[test]
+    fn test_binomial_range() {
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
+        for _ in 0..1000 {
+            let x = binomial_sample(&mut rng, 20, 0.4);
+            assert!(x <= 20, "sample {x} out of range");
+        }
+    }
+
+    // ── RBFFSResult methods (synthetic data) ───────────────────────────
+
+    fn make_synthetic_result(
+        successes: Vec<Vec<u64>>,
+        n_trials: usize,
+        n_surfs: usize,
+    ) -> RBFFSResult {
+        RBFFSResult {
+            all_trajectory_successes: successes,
+            config_trajectories: Vec::new(),
+            n_trials,
+            n_surfs,
+            dimerization_rate: MolarPerSecond::new(1e-5),
+            n_failed_trajectories: 0,
+            failed_at_size: Vec::new(),
+            stored_system: None,
+            config: RBFFSRunConfig::default(),
+        }
+    }
+
+    #[test]
+    fn test_trajectory_weights() {
+        // n_surfs=3 means 2 surfaces of transitions, so complete trajectories have len >= 2
+        let result = make_synthetic_result(
+            vec![vec![100, 50], vec![80, 40]], // 2 complete trajectories
+            100,
+            3,
+        );
+        let weights = result.trajectory_weights();
+        assert_eq!(weights.len(), 2);
+        // weight = product of (successes[i]/n_trials)
+        // traj 0: (100/100) * (50/100) = 0.5
+        // traj 1: (80/100) * (40/100) = 0.32
+        assert!((weights[0] - 0.5).abs() < 1e-12);
+        assert!((weights[1] - 0.32).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_trajectory_weights_filters_short() {
+        // n_surfs=3, so trajectories with len < 2 are excluded
+        let result = make_synthetic_result(
+            vec![
+                vec![100, 50], // complete
+                vec![80],      // too short (failed)
+            ],
+            100,
+            3,
+        );
+        let weights = result.trajectory_weights();
+        assert_eq!(weights.len(), 1);
+        assert!((weights[0] - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_forward_probabilities() {
+        let result = make_synthetic_result(vec![vec![80, 60], vec![100, 40]], 100, 3);
+        let fps = result.forward_probabilities();
+        assert_eq!(fps.len(), 2);
+        // p0 = average of (80/100, 100/100) = 0.9
+        assert!((fps[0] - 0.9).abs() < 1e-12);
+        // p1: weighted by product up to index 0
+        // traj0: w=80/100=0.8, ws=0.8*(60/100)=0.48
+        // traj1: w=100/100=1.0, ws=1.0*(40/100)=0.40
+        // p1 = 0.88/1.8
+        assert!((fps[1] - 0.88 / 1.8).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_nucleation_rate() {
+        let result = make_synthetic_result(vec![vec![100, 100]], 100, 3);
+        let fps = result.forward_probabilities();
+        let nuc_rate: f64 = result.nucleation_rate().into();
+        let expected: f64 = 1e-5 * fps.iter().product::<f64>();
+        assert!((nuc_rate - expected).abs() < 1e-20);
+    }
+
+    #[test]
+    fn test_merge() {
+        let mut r1 = make_synthetic_result(vec![vec![100, 50]], 100, 3);
+        r1.n_failed_trajectories = 1;
+        r1.failed_at_size = vec![5];
+
+        let mut r2 = make_synthetic_result(vec![vec![80, 40]], 100, 3);
+        r2.n_failed_trajectories = 2;
+        r2.failed_at_size = vec![6, 7];
+
+        r1.merge(r2);
+        assert_eq!(r1.all_trajectory_successes.len(), 2);
+        assert_eq!(r1.n_failed_trajectories, 3);
+        assert_eq!(r1.failed_at_size, vec![5, 6, 7]);
+    }
+
+    #[test]
+    fn test_resample_zero_returns_empty() {
+        let result = make_synthetic_result(vec![vec![100, 50]], 100, 3);
+        assert!(result.resample_trajectories(0).is_empty());
+    }
+
+    #[test]
+    fn test_select_unique_zero_returns_empty() {
+        let result = make_synthetic_result(vec![vec![100, 50]], 100, 3);
+        assert!(result.select_unique_trajectories(0).is_empty());
+    }
+
+    // ── RBFFSRunConfig defaults ────────────────────────────────────────
+
+    #[test]
+    fn test_config_default() {
+        let c = RBFFSRunConfig::default();
+        assert_eq!(c.n_trials, 1000);
+        assert_eq!(c.n_trajectories, 1000);
+        assert_eq!(c.target_size, 100);
+        assert_eq!(c.canvas_size, (32, 32));
+        assert_eq!(c.size_step, 1);
+        assert!(!c.keep_full_trajectories || c.keep_full_trajectories); // just check it's bool
+        assert_eq!(c.keep_full_trajectories, true);
+        assert_eq!(c.store_system, false);
+        assert_eq!(c.parallel, false);
+        assert!(c.num_workers.is_none());
+    }
+}
