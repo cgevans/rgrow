@@ -2,10 +2,12 @@
 Test that SDC 1D simulations actually run.
 */
 
+use rgrow::canvas::PointSafeHere;
 use rgrow::models::sdc1d::{GsOrSeq, RefOrPair, SDCParams, SDCStrand, SingleOrMultiScaffold, SDC};
+use rgrow::ratestore::RateStore;
 use rgrow::state::{StateEnum, StateStatus};
 use rgrow::system::{EvolveBounds, NeededUpdate, System, TileBondInfo};
-use rgrow::tileset::CanvasType::Square;
+use rgrow::tileset::CanvasType::{Square, SquareCompact};
 use rgrow::tileset::TrackingType;
 use std::collections::HashMap;
 
@@ -186,4 +188,71 @@ fn run_sdc_system() {
     let bounds = EvolveBounds::default().for_time(1.0 * 60.0 * 60.0);
     let _eo = System::evolve(&sdc_sys, &mut state, bounds).unwrap();
     assert_ne!(state.total_events(), 0)
+}
+
+/// Verify SDC works with CanvasSquareCompact and a single scaffold (1, N).
+/// CanvasSquare requires a 2-tile border (nrows >= 5), so single-scaffold
+/// SDC simulations must use CanvasSquareCompact.
+#[test]
+fn sdc_single_scaffold_compact() {
+    let sdc_sys = make_system();
+    let n_tiles = sdc_sys.tile_names().len();
+    let scaffold_len = 9;
+
+    // Single scaffold: (1, 9) with CanvasSquareCompact
+    let mut state_1 = StateEnum::empty(
+        (1, scaffold_len),
+        SquareCompact,
+        TrackingType::None,
+        n_tiles,
+    )
+    .unwrap();
+    sdc_sys.update_state(&mut state_1, &NeededUpdate::All);
+
+    // Multiple scaffolds: (8, 9) with CanvasSquareCompact
+    let mut state_k = StateEnum::empty(
+        (8, scaffold_len),
+        SquareCompact,
+        TrackingType::None,
+        n_tiles,
+    )
+    .unwrap();
+    sdc_sys.update_state(&mut state_k, &NeededUpdate::All);
+
+    // Per-position rates along row 0 should be identical
+    for col in 0..scaffold_len {
+        let rate_1 = f64::from(sdc_sys.event_rate_at_point(&state_1, PointSafeHere((0, col))));
+        let rate_k = f64::from(sdc_sys.event_rate_at_point(&state_k, PointSafeHere((0, col))));
+        assert_eq!(
+            rate_1, rate_k,
+            "position {col}: single-scaffold rate {rate_1} != multi-scaffold rate {rate_k}"
+        );
+    }
+
+    // Total rate for single scaffold should be non-zero and equal to multi / k
+    let total_1 = f64::from(state_1.total_rate());
+    let total_k = f64::from(state_k.total_rate());
+    assert!(total_1 > 0.0, "single scaffold total rate should be > 0");
+    assert!(
+        (total_k - 8.0 * total_1).abs() < 1e-6,
+        "multi-scaffold total ({total_k}) should be 8x single ({total_1})"
+    );
+
+    // Verify simulation actually runs
+    let bounds = EvolveBounds::default().for_time(60.0);
+    let _eo = System::evolve(&sdc_sys, &mut state_1, bounds).unwrap();
+    assert_ne!(state_1.total_events(), 0);
+}
+
+/// CanvasSquare with fewer than 5 rows/cols should return an error,
+/// since its inbounds check requires a 2-tile border on all sides.
+#[test]
+fn sdc_canvas_square_rejects_small_dimensions() {
+    let sdc_sys = make_system();
+    let n_tiles = sdc_sys.tile_names().len();
+
+    assert!(StateEnum::empty((1, 9), Square, TrackingType::None, n_tiles).is_err());
+    assert!(StateEnum::empty((4, 9), Square, TrackingType::None, n_tiles).is_err());
+    assert!(StateEnum::empty((9, 4), Square, TrackingType::None, n_tiles).is_err());
+    assert!(StateEnum::empty((5, 9), Square, TrackingType::None, n_tiles).is_ok());
 }

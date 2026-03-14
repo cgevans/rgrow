@@ -1501,7 +1501,7 @@ pub enum GsOrSeq {
     Seq(String),
 }
 
-fn gsorseq_to_gs(gsorseq: &GsOrSeq) -> (KcalPerMol, KcalPerMolKelvin) {
+pub(super) fn gsorseq_to_gs(gsorseq: &GsOrSeq) -> (KcalPerMol, KcalPerMolKelvin) {
     match gsorseq {
         GsOrSeq::GS(x) => (KcalPerMol(x.0), KcalPerMolKelvin(x.1)),
         GsOrSeq::Seq(s) => crate::utils::string_dna_dg_ds(s.as_str()),
@@ -1540,7 +1540,7 @@ pub struct SDCParams {
 /// x: Original input but parsed so that there can be no errors in it (eg. No h**)
 /// y: From (eg. h)
 /// z: Inverse (eg. h*)
-fn self_and_inverse(value: &str) -> (bool, String, String) {
+pub(super) fn self_and_inverse(value: &str) -> (bool, String, String) {
     // Remove all the stars at the end
     let filtered = value.trim_end_matches("*");
     let star_count = value.len() - filtered.len();
@@ -2031,7 +2031,7 @@ impl SDC {
     ) -> Bound<'py, numpy::PyArray2<f64>> {
         self.fill_energy_array();
         self.scaffold_energy_bonds
-            .map(|x| *x.get().unwrap())
+            .map(|x| x.get().copied().unwrap_or(0.0))
             .to_pyarray(py)
     }
 
@@ -2042,7 +2042,7 @@ impl SDC {
     ) -> Bound<'py, numpy::PyArray2<f64>> {
         self.fill_energy_array();
         self.strand_energy_bonds
-            .map(|x| *x.get().unwrap())
+            .map(|x| x.get().copied().unwrap_or(0.0))
             .to_pyarray(py)
     }
 

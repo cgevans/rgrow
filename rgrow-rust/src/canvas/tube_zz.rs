@@ -18,10 +18,12 @@ impl CanvasCreate for CanvasTube {
     fn new_sized(shape: Self::Params) -> GrowResult<Self> {
         let width = shape.0;
         if !width.is_multiple_of(2) {
-            Err(GrowError::WrongCanvasSize(width, shape.1))
-        } else {
-            Ok(Self(Array2::zeros(shape)))
+            return Err(GrowError::WrongCanvasSize(width, shape.1));
         }
+        if shape.0 == 0 || shape.1 < 3 {
+            return Err(GrowError::WrongCanvasSize(shape.0, shape.1));
+        }
+        Ok(Self(Array2::zeros(shape)))
     }
 
     fn from_array(arr: Array2<Tile>) -> GrowResult<Self> {
