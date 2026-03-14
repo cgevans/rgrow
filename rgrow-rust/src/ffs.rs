@@ -1957,7 +1957,7 @@ impl FFSLevelRef {
 #[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[allow(dead_code)] // This is used in the python interface
 #[derive(Clone)]
-pub struct FFSStateRef(Weak<StateEnum>);
+pub struct FFSStateRef(pub(crate) Weak<StateEnum>);
 
 #[cfg(feature = "python")]
 #[pymethods]

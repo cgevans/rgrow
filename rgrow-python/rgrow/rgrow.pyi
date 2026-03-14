@@ -1088,10 +1088,110 @@ class EvolveOutcome:
     ReachedSizeMax: EvolveOutcome
     ReachedZeroRate: EvolveOutcome
 
+class RBFFSRunConfig:
+    """Configuration for Rosenbluth-style Forward Flux Sampling."""
+    n_trials: int
+    n_trajectories: int
+    target_size: int
+    canvas_size: tuple[int, int]
+    subseq_bound: EvolveBounds
+    canvas_type: Any
+    tracking: str
+    keep_full_trajectories: bool
+    store_system: bool
+    size_step: int
+    parallel: bool
+    num_workers: int | None
+
+    def __init__(
+        self,
+        n_trials: int | None = None,
+        n_trajectories: int | None = None,
+        target_size: int | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        subseq_bound: EvolveBounds | None = None,
+        canvas_type: Any | None = None,
+        tracking: str | None = None,
+        keep_full_trajectories: bool | None = None,
+        store_system: bool | None = None,
+        size_step: int | None = None,
+        parallel: bool | None = None,
+        num_workers: int | None = None,
+    ) -> None: ...
+
+class RBFFSResult:
+    """Result of a Rosenbluth-style Forward Flux Sampling run."""
+    @property
+    def forward_probabilities(self) -> NDArray[np.float64]:
+        """Forward probability vector."""
+    @property
+    def trajectory_weights(self) -> NDArray[np.float64]:
+        """Statistical weight of each trajectory."""
+    @property
+    def n_trials(self) -> int:
+        """Number of trials per surface."""
+    @property
+    def n_surfs(self) -> int:
+        """Number of surfaces."""
+    @property
+    def dimerization_rate(self) -> float:
+        """Dimerization rate in M/s."""
+    @property
+    def nucleation_rate(self) -> float:
+        """Nucleation rate in M/s."""
+    @property
+    def n_trajectories(self) -> int:
+        """Number of completed trajectories."""
+    @property
+    def n_failed_trajectories(self) -> int:
+        """Number of trajectories that failed (melted with 0 successes at some surface)."""
+    @property
+    def failed_at_size(self) -> NDArray[np.uint32]:
+        """For each failed trajectory, the target size it was trying to reach when it failed."""
+    @property
+    def trajectories(self) -> list[list[FFSStateRef]]:
+        """Complete trajectories as lists of state references (one per surface)."""
+    def resample_trajectories(self, n: int) -> list[list[FFSStateRef]]:
+        """Resample n trajectories with probability proportional to weight (with replacement)."""
+    def select_unique_trajectories(self, n: int) -> list[list[FFSStateRef]]:
+        """Select n unique trajectories via weighted sampling without replacement.
+
+        Higher-weight trajectories are more likely to be selected, producing a set
+        with approximately even effective weight that can be treated as uniformly
+        representative. Returns at most n trajectories (fewer if not enough exist).
+        """
+    def extend(self, n_trajectories: int) -> None:
+        """Run additional trajectories and merge into this result. Requires store_system=True in config."""
+    def bootstrap_ci(
+        self, n_bootstrap: int = 10000, confidence_level: float = 0.95
+    ) -> RBFFSBootstrapResult:
+        """Compute bootstrap confidence intervals by resampling trajectories."""
+
+class RBFFSBootstrapResult:
+    """Bootstrap confidence interval results for RBFFS."""
+    @property
+    def nucleation_rate_ci(self) -> tuple[float, float]:
+        """Confidence interval (lower, upper) for the nucleation rate."""
+    @property
+    def nucleation_rate_samples(self) -> NDArray[np.float64]:
+        """Bootstrap nucleation rate samples."""
+    @property
+    def forward_probability_cis(self) -> list[tuple[float, float]]:
+        """Per-surface confidence intervals for forward probabilities."""
+    @property
+    def forward_probability_samples(self) -> NDArray[np.float64]:
+        """Bootstrap forward probability samples, shape (n_bootstrap, n_surfs-1)."""
+    @property
+    def confidence_level(self) -> float:
+        """The confidence level used."""
+    @property
+    def nucleation_rate_median(self) -> float:
+        """Median nucleation rate across bootstrap samples."""
+
 class FFSRunConfig:
     """
     Configuration options for Forward Flux Sampling (FFS) simulations.
-    
+
     FFS is a rare event sampling method that calculates nucleation rates by dividing
     the nucleation process into a series of surfaces (levels) based on cluster size,
     then computing the probability of crossing each surface.
@@ -2896,6 +2996,9 @@ class TileSet:
 
     def run_ffs(self, config: FFSRunConfig = ..., **kwargs: Any) -> FFSRunResult:
         """Runs FFS."""
+
+    def run_rbffs(self, config: RBFFSRunConfig = ..., **kwargs: Any) -> RBFFSResult:
+        """Runs Rosenbluth-style Forward Flux Sampling."""
 
     def run_window(self) -> State:
         """

@@ -19,6 +19,7 @@ pub mod colors;
 pub mod base;
 pub mod canvas;
 pub mod ffs;
+pub mod rbffs;
 pub mod state;
 pub mod system;
 
