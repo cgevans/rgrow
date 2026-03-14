@@ -234,7 +234,7 @@ impl RBFFSResult {
     pub fn trajectory_weights(&self) -> Vec<f64> {
         self.all_trajectory_successes
             .iter()
-            .filter(|s| s.len() >= self.n_surfs - 1)
+            .filter(|s| s.len() >= self.n_surfs - 1 && *s.last().unwrap_or(&0) > 0)
             .map(|successes| {
                 successes
                     .iter()
@@ -1486,6 +1486,24 @@ mod tests {
             3,
         );
         let weights = result.trajectory_weights();
+        assert_eq!(weights.len(), 1);
+        assert!((weights[0] - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_trajectory_weights_excludes_last_surface_failure() {
+        // A trajectory that fails at the last surface has len == n_surfs-1
+        // but last entry is 0. It should NOT be included in weights.
+        let result = make_synthetic_result(
+            vec![
+                vec![100, 50], // complete (last entry > 0)
+                vec![80, 0],   // failed at last surface (last entry == 0)
+            ],
+            100,
+            3,
+        );
+        let weights = result.trajectory_weights();
+        // Only the first trajectory should be included
         assert_eq!(weights.len(), 1);
         assert!((weights[0] - 0.5).abs() < 1e-12);
     }
