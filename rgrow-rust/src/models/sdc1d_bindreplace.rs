@@ -62,6 +62,11 @@ pub struct SDC1DBindReplace {
     /// where r_detach = kf·exp(βΔG) and r_attach = Σ(kf·conc_i) over valid
     /// replacers.  When false, the replacement rate is just r_detach.
     pub physical_replacement_rate: bool,
+    /// When true, a tile can be "replaced" by the same tile type (effectively
+    /// a detach-then-reattach cycle that wastes time without changing state).
+    /// Combined with `physical_replacement_rate`, this makes the bind-replace
+    /// kinetics closely match the full SDC model.
+    pub allow_same_replacement: bool,
     pub delta_g_matrix: Array2<KcalPerMol>,
     pub entropy_matrix: Array2<KcalPerMolKelvin>,
 
@@ -144,7 +149,7 @@ impl System for SDC1DBindReplace {
                     self.matching_tiles_at_site[coord.0 .1]
                         .iter()
                         .any(|&possible_replace| {
-                            if s == possible_replace.0 {
+                            if s == possible_replace.0 && !self.allow_same_replacement {
                                 return false;
                             }
                             if self.allow_weak_replacement {
@@ -166,7 +171,7 @@ impl System for SDC1DBindReplace {
                         let r_attach: f64 = self.matching_tiles_at_site[coord.0 .1]
                             .iter()
                             .filter(|&&t| {
-                                if s == t.0 {
+                                if s == t.0 && !self.allow_same_replacement {
                                     return false;
                                 }
                                 if self.allow_weak_replacement {
@@ -240,7 +245,7 @@ impl System for SDC1DBindReplace {
                     .iter()
                     .copied()
                     .filter(|&possible_replace| {
-                        if t.0 == possible_replace.0 {
+                        if t.0 == possible_replace.0 && !self.allow_same_replacement {
                             return false;
                         }
                         if self.allow_weak_replacement {
@@ -571,6 +576,7 @@ impl SDC1DBindReplace {
             allow_weak_replacement: false,
             physical_attachment_rate: false,
             physical_replacement_rate: false,
+            allow_same_replacement: false,
             delta_g_matrix,
             entropy_matrix,
             matching_tiles_at_site: vec![vec![]; scaffold.len()],
@@ -645,5 +651,15 @@ impl SDC1DBindReplace {
     #[setter]
     fn set_physical_replacement_rate(&mut self, value: bool) {
         self.physical_replacement_rate = value;
+    }
+
+    #[getter]
+    fn get_allow_same_replacement(&self) -> bool {
+        self.allow_same_replacement
+    }
+
+    #[setter]
+    fn set_allow_same_replacement(&mut self, value: bool) {
+        self.allow_same_replacement = value;
     }
 }
