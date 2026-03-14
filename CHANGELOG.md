@@ -1,3 +1,23 @@
+# Unreleased
+
+### Added
+- SDC1DBindReplace: energy-based rate calculations with configurable `kf`, `temperature`, strand concentrations, and delta-G/entropy matrices.
+- SDC1DBindReplace: `physical_attachment_rate` option for concentration-weighted attachment rates.
+- SDC1DBindReplace: `physical_replacement_rate` option modeling combined detach/re-attach kinetics.
+- SDC1DBindReplace: `allow_weak_replacement` option to permit replacement regardless of bond strength.
+- SDC1DBindReplace: `allow_same_replacement` option for self-replacement cycles.
+- Canvas size validation: `new_sized()` now returns errors for degenerate sizes on all canvas types.
+- Tests for SDC1DBindReplace energy-based rates.
+- Example notebook comparing SDC bind/replace model variants (`bitcopy_model_progression.ipynb`).
+
+### Changed
+- SDC1DBindReplace replacement rates are now count-independent (boolean "has replacer" rather than counting replacers).
+- SDC1D: `gsorseq_to_gs` and `self_and_inverse` made `pub(super)` for reuse in bind/replace model.
+- SDC1D: energy bond Python accessors use `unwrap_or(0.0)` instead of panicking on missing values.
+
+### Fixed
+- Corrected license field in `Cargo.toml` to MIT (matching the LICENSE file).
+
 # 0.22.0
 
 This has a number of changes, and the documentation transition isn't complete, but I'm pushing this out now because it makes it much easier for me to use than to depend on the git version.
