@@ -1,10 +1,12 @@
+use rgrow::base::GrowError;
 use rgrow::canvas::{Canvas, PointSafe2, PointSafeHere};
 use rgrow::models::sdc1d::{GsOrSeq, RefOrPair, SDCParams, SDCStrand, SingleOrMultiScaffold};
 use rgrow::models::sdc1d_bindreplace::SDC1DBindReplace;
 use rgrow::state::StateEnum;
-use rgrow::system::{EvolveBounds, NeededUpdate, System, TileBondInfo};
+use rgrow::system::{Event, EvolveBounds, NeededUpdate, System, TileBondInfo};
 use rgrow::tileset::CanvasType::SquareCompact;
 use rgrow::tileset::TrackingType;
+use rgrow::units::PerSecond;
 use std::collections::HashMap;
 
 /// Build a bitcopy system of length `n` with a given `input_bit` (0 or 1).
@@ -622,6 +624,74 @@ fn test_weak_replacement_fills_and_evolves() {
     }
 }
 
+/// Build a bitcopy system with entropy (nonzero ΔS) for temperature-dependence tests.
+fn make_bitcopy_with_entropy(
+    n: usize,
+    input_bit: u32,
+    dg: f64,
+    ds: f64,
+) -> SDC1DBindReplace {
+    assert!(n >= 2);
+    assert!(input_bit <= 1);
+
+    let mut strands = Vec::new();
+
+    strands.push(SDCStrand {
+        name: Some(format!("input_{input_bit}")),
+        color: None,
+        concentration: 1e6,
+        btm_glue: Some("sc0".to_string()),
+        left_glue: None,
+        right_glue: Some(format!("c{input_bit}*")),
+    });
+
+    for i in 1..n {
+        for bit in 0..=1u32 {
+            strands.push(SDCStrand {
+                name: Some(format!("pos{i}_bit{bit}")),
+                color: None,
+                concentration: 1e6,
+                btm_glue: Some(format!("sc{i}")),
+                left_glue: Some(format!("c{bit}")),
+                right_glue: Some(format!("c{bit}*")),
+            });
+        }
+    }
+
+    let scaffold = (0..n).map(|i| Some(format!("sc{i}*"))).collect::<Vec<_>>();
+
+    let mut glue_dg_s: HashMap<RefOrPair, GsOrSeq> = HashMap::new();
+    for i in 0..n {
+        glue_dg_s.insert(RefOrPair::Ref(format!("sc{i}")), GsOrSeq::GS((dg, ds)));
+    }
+    for bit in 0..=1u32 {
+        glue_dg_s.insert(RefOrPair::Ref(format!("c{bit}")), GsOrSeq::GS((dg, ds)));
+    }
+
+    let params = SDCParams {
+        strands,
+        quencher_name: None,
+        quencher_concentration: 0.0,
+        reporter_name: None,
+        fluorophore_concentration: 0.0,
+        scaffold: SingleOrMultiScaffold::Single(scaffold),
+        scaffold_concentration: 1e-100,
+        glue_dg_s,
+        k_f: 1e6,
+        k_n: 0.0,
+        k_c: 0.0,
+        temperature: 37.0,
+        junction_penalty_dg: None,
+        junction_penalty_ds: None,
+    };
+
+    let mut sys = SDC1DBindReplace::from_params(params);
+    sys.account_for_energy = true;
+    sys.allow_weak_replacement = true;
+    sys.update();
+    sys
+}
+
 /// With `bindunbind_replacement_rate`, the filled-site rate should be
 /// 1/(1/r_detach + 1/r_attach) = r_detach·r_attach / (r_detach + r_attach).
 #[test]
@@ -689,5 +759,492 @@ fn test_bindunbind_replacement_rate() {
                 "pos {col}: combined rate should be <= detach rate"
             );
         }
+    }
+}
+
+// --- physical_attachment_rate on empty sites ---
+
+#[test]
+fn test_physical_attachment_rate_empty_sites() {
+    let n = 5;
+    let mut sys = make_bitcopy(n, 0);
+    sys.physical_attachment_rate = true;
+
+    let mut state = StateEnum::empty(
+        (1, n),
+        SquareCompact,
+        TrackingType::None,
+        sys.tile_names().len(),
+    )
+    .unwrap();
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    let kf = 1e6_f64;
+    let conc = 1e6_f64;
+
+    // Position 0: 1 matching tile (input strand) → kf * conc
+    let rate0 = f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, 0))));
+    assert!(
+        (rate0 - kf * conc).abs() < 1e-6 * (kf * conc),
+        "position 0: expected {}, got {rate0}",
+        kf * conc
+    );
+
+    // Positions 1..4: 2 matching tiles each → 2 * kf * conc
+    for col in 1..n {
+        let rate = f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, col))));
+        assert!(
+            (rate - 2.0 * kf * conc).abs() < 1e-6 * (2.0 * kf * conc),
+            "position {col}: expected {}, got {rate}",
+            2.0 * kf * conc
+        );
+    }
+}
+
+// --- allow_same_replacement ---
+
+#[test]
+fn test_allow_same_replacement_increases_rate() {
+    let n = 5;
+    let input_bit = 0;
+
+    let mut sys = make_bitcopy_with_energy(n, input_bit);
+    sys.allow_weak_replacement = true;
+    sys.bindunbind_replacement_rate = true;
+    sys.physical_attachment_rate = true;
+    sys.allow_same_replacement = false;
+    sys.update();
+
+    let mut state = StateEnum::empty(
+        (1, n),
+        SquareCompact,
+        TrackingType::None,
+        sys.tile_names().len(),
+    )
+    .unwrap();
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    for col in 0..n {
+        sys.place_tile(
+            &mut state,
+            PointSafe2((0, col)),
+            correct_tile(col, input_bit),
+            false,
+        )
+        .unwrap();
+    }
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    let rates_no_same: Vec<f64> = (0..n)
+        .map(|c| f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, c)))))
+        .collect();
+
+    // Position 0: only one matching strand (input), and it's the same tile → rate 0
+    assert_eq!(
+        rates_no_same[0], 0.0,
+        "pos 0: only one candidate (itself), should be filtered"
+    );
+
+    // Enable allow_same_replacement
+    sys.allow_same_replacement = true;
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    let rates_with_same: Vec<f64> = (0..n)
+        .map(|c| f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, c)))))
+        .collect();
+
+    // Position 0 now allows self-replacement → rate > 0
+    assert!(
+        rates_with_same[0] > 0.0,
+        "pos 0: self-replacement allowed, rate should be > 0"
+    );
+
+    // Cascade positions: rate with self-replacement >= rate without
+    // (r_attach doubles but since r_detach << r_attach the combined rate barely changes)
+    for col in 1..n {
+        assert!(
+            rates_with_same[col] >= rates_no_same[col],
+            "pos {col}: rate with same ({}) should be >= without ({})",
+            rates_with_same[col],
+            rates_no_same[col]
+        );
+    }
+}
+
+// --- calc_mismatch_locations ---
+
+#[test]
+fn test_mismatch_locations_all_correct() {
+    let n = 5;
+    let input_bit = 0;
+    let sys = make_bitcopy(n, input_bit);
+    let mut state = StateEnum::empty(
+        (1, n),
+        SquareCompact,
+        TrackingType::None,
+        sys.tile_names().len(),
+    )
+    .unwrap();
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    for col in 0..n {
+        sys.place_tile(
+            &mut state,
+            PointSafe2((0, col)),
+            correct_tile(col, input_bit),
+            false,
+        )
+        .unwrap();
+    }
+
+    let mm = sys.calc_mismatch_locations(&state);
+    for col in 0..n {
+        assert_eq!(
+            mm[(0, col)],
+            0,
+            "position {col} should have no mismatches when all correct"
+        );
+    }
+}
+
+#[test]
+fn test_mismatch_locations_single_mismatch() {
+    let n = 5;
+    let input_bit = 0;
+    let mismatch_pos = 2;
+    let sys = make_bitcopy(n, input_bit);
+    let mut state = StateEnum::empty(
+        (1, n),
+        SquareCompact,
+        TrackingType::None,
+        sys.tile_names().len(),
+    )
+    .unwrap();
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    for col in 0..n {
+        let tile = if col == mismatch_pos {
+            wrong_tile(col, input_bit)
+        } else {
+            correct_tile(col, input_bit)
+        };
+        sys.place_tile(&mut state, PointSafe2((0, col)), tile, false)
+            .unwrap();
+    }
+
+    let mm = sys.calc_mismatch_locations(&state);
+
+    // Position 0: correct tile, neighbor at pos 1 is correct → 0
+    assert_eq!(mm[(0, 0)], 0, "position 0 should have no mismatches");
+
+    // Position 1: correct tile, east neighbor (pos 2) is wrong → mm_e=1, mm_w=0 → 4*1+0=4
+    assert_eq!(
+        mm[(0, 1)],
+        4,
+        "position 1: east mismatch with wrong tile at pos 2"
+    );
+
+    // Position 2: wrong tile, west neighbor (pos 1) is correct → mm_w=1,
+    //             east neighbor (pos 3) is correct → mm_e=1 → 4*1+1=5
+    assert_eq!(
+        mm[(0, 2)],
+        5,
+        "position 2: both east and west mismatches"
+    );
+
+    // Position 3: correct tile, west neighbor (pos 2) is wrong → mm_w=1, mm_e=0 → 0*4+1=1
+    assert_eq!(
+        mm[(0, 3)],
+        1,
+        "position 3: west mismatch with wrong tile at pos 2"
+    );
+
+    // Position 4: correct tile, west neighbor (pos 3) is correct → 0
+    assert_eq!(mm[(0, 4)], 0, "position 4 should have no mismatches");
+}
+
+#[test]
+fn test_mismatch_locations_empty_neighbors() {
+    let n = 5;
+    let input_bit = 0;
+    let sys = make_bitcopy(n, input_bit);
+    let mut state = StateEnum::empty(
+        (1, n),
+        SquareCompact,
+        TrackingType::None,
+        sys.tile_names().len(),
+    )
+    .unwrap();
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    // Only fill positions 0 and 2 (leave 1, 3, 4 empty)
+    sys.place_tile(
+        &mut state,
+        PointSafe2((0, 0)),
+        correct_tile(0, input_bit),
+        false,
+    )
+    .unwrap();
+    sys.place_tile(
+        &mut state,
+        PointSafe2((0, 2)),
+        correct_tile(2, input_bit),
+        false,
+    )
+    .unwrap();
+
+    let mm = sys.calc_mismatch_locations(&state);
+
+    // Empty cells should be 0
+    assert_eq!(mm[(0, 1)], 0, "empty position 1 should be 0");
+    assert_eq!(mm[(0, 3)], 0, "empty position 3 should be 0");
+    assert_eq!(mm[(0, 4)], 0, "empty position 4 should be 0");
+
+    // Filled cells with empty neighbors: empty tile has Glue(0), so te/tw != 0 is false → 0
+    assert_eq!(
+        mm[(0, 0)],
+        0,
+        "position 0: east neighbor empty → no mismatch counted"
+    );
+    assert_eq!(
+        mm[(0, 2)],
+        0,
+        "position 2: both neighbors empty → no mismatch counted"
+    );
+}
+
+// --- set_param / get_param ---
+
+#[test]
+fn test_set_get_param_roundtrip() {
+    let mut sys = make_bitcopy(5, 0);
+
+    // kf: initial 1e6
+    let kf_val: f64 = *sys.get_param("kf").unwrap().downcast::<f64>().unwrap();
+    assert!((kf_val - 1e6).abs() < 1.0, "initial kf should be 1e6");
+
+    sys.set_param("kf", Box::new(2e6_f64)).unwrap();
+    let kf_val: f64 = *sys.get_param("kf").unwrap().downcast::<f64>().unwrap();
+    assert!((kf_val - 2e6).abs() < 1.0, "kf should be 2e6 after set");
+
+    // temperature: initial 37.0
+    let temp: f64 = *sys.get_param("temperature").unwrap().downcast::<f64>().unwrap();
+    assert!(
+        (temp - 37.0).abs() < 0.01,
+        "initial temperature should be 37.0"
+    );
+
+    sys.set_param("temperature", Box::new(50.0_f64)).unwrap();
+    let temp: f64 = *sys.get_param("temperature").unwrap().downcast::<f64>().unwrap();
+    assert!(
+        (temp - 50.0).abs() < 0.01,
+        "temperature should be 50.0 after set"
+    );
+}
+
+#[test]
+fn test_set_param_unknown_returns_error() {
+    let mut sys = make_bitcopy(5, 0);
+    let result = sys.set_param("nonexistent", Box::new(1.0_f64));
+    assert!(result.is_err(), "unknown param should return error");
+    match result.unwrap_err() {
+        GrowError::NoParameter(name) => assert_eq!(name, "nonexistent"),
+        other => panic!("expected NoParameter, got: {other:?}"),
+    }
+}
+
+#[test]
+fn test_set_param_kf_changes_rates() {
+    let n = 5;
+    let mut sys = make_bitcopy(n, 0);
+    sys.physical_attachment_rate = true;
+
+    let mut state = StateEnum::empty(
+        (1, n),
+        SquareCompact,
+        TrackingType::None,
+        sys.tile_names().len(),
+    )
+    .unwrap();
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    let rate_before = f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, 0))));
+
+    // Double kf
+    let needed = sys.set_param("kf", Box::new(2e6_f64)).unwrap();
+    sys.update_state(&mut state, &needed);
+
+    let rate_after = f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, 0))));
+
+    assert!(
+        (rate_after - 2.0 * rate_before).abs() < 1e-6 * rate_before,
+        "doubling kf should double rate: before={rate_before}, after={rate_after}"
+    );
+}
+
+// --- choose_event_at_point correctness ---
+
+#[test]
+fn test_choose_event_empty_site_returns_attachment() {
+    let n = 5;
+    let sys = make_bitcopy(n, 0);
+    let mut state = StateEnum::empty(
+        (1, n),
+        SquareCompact,
+        TrackingType::None,
+        sys.tile_names().len(),
+    )
+    .unwrap();
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    // Position 0 has one candidate: input strand (tile 1)
+    let (event, _rate) = sys.choose_event_at_point(&state, PointSafe2((0, 0)), PerSecond(0.0));
+    match event {
+        Event::MonomerAttachment(p, tile) => {
+            assert_eq!(p, PointSafe2((0, 0)));
+            assert_eq!(tile, 1, "should attach the input strand (tile 1)");
+        }
+        other => panic!("expected MonomerAttachment, got: {other:?}"),
+    }
+}
+
+#[test]
+fn test_choose_event_filled_site_returns_change() {
+    let n = 5;
+    let input_bit = 0;
+    let mismatch_pos = 2;
+    let sys = make_bitcopy(n, input_bit);
+    let mut state = StateEnum::empty(
+        (1, n),
+        SquareCompact,
+        TrackingType::None,
+        sys.tile_names().len(),
+    )
+    .unwrap();
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    for col in 0..n {
+        let tile = if col == mismatch_pos {
+            wrong_tile(col, input_bit)
+        } else {
+            correct_tile(col, input_bit)
+        };
+        sys.place_tile(&mut state, PointSafe2((0, col)), tile, false)
+            .unwrap();
+    }
+
+    // Position 2 has a wrong tile; the correct tile should replace it
+    let (event, _rate) = sys.choose_event_at_point(
+        &state,
+        PointSafe2((0, mismatch_pos)),
+        PerSecond(0.0),
+    );
+    match event {
+        Event::MonomerChange(p, tile) => {
+            assert_eq!(p, PointSafe2((0, mismatch_pos)));
+            assert_eq!(
+                tile,
+                correct_tile(mismatch_pos, input_bit),
+                "should change to the correct tile"
+            );
+        }
+        other => panic!("expected MonomerChange, got: {other:?}"),
+    }
+}
+
+// --- Minimum system size (n=2) ---
+
+#[test]
+fn test_n2_empty_rates_and_evolve() {
+    for input_bit in [0u32, 1] {
+        let n = 2;
+        let sys = make_bitcopy(n, input_bit);
+        let mut state = StateEnum::empty(
+            (1, n),
+            SquareCompact,
+            TrackingType::None,
+            sys.tile_names().len(),
+        )
+        .unwrap();
+        sys.update_state(&mut state, &NeededUpdate::All);
+
+        // Empty rates should both be 1.0
+        for col in 0..n {
+            let rate = f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, col))));
+            assert_eq!(
+                rate, 1.0,
+                "n=2 input_bit={input_bit}: empty position {col} rate should be 1.0"
+            );
+        }
+
+        // Evolve and check correctness
+        let bounds = EvolveBounds::default().for_events(1_000);
+        System::evolve(&sys, &mut state, bounds).unwrap();
+
+        for col in 0..n {
+            let tile = state.tile_at_point(PointSafe2((0, col)));
+            let expected = correct_tile(col, input_bit);
+            assert_eq!(
+                tile, expected,
+                "n=2 input_bit={input_bit}, position {col}: expected {expected}, got {tile}"
+            );
+        }
+    }
+}
+
+// --- Temperature-dependent energy with nonzero entropy ---
+
+#[test]
+fn test_entropy_temperature_dependence() {
+    let n = 5;
+    let input_bit = 0;
+    let dg = -10.0;
+    let ds = -0.03;
+
+    let mut sys = make_bitcopy_with_entropy(n, input_bit, dg, ds);
+
+    let mut state = StateEnum::empty(
+        (1, n),
+        SquareCompact,
+        TrackingType::None,
+        sys.tile_names().len(),
+    )
+    .unwrap();
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    // Fill all correctly
+    for col in 0..n {
+        sys.place_tile(
+            &mut state,
+            PointSafe2((0, col)),
+            correct_tile(col, input_bit),
+            false,
+        )
+        .unwrap();
+    }
+    sys.update_state(&mut state, &NeededUpdate::All);
+
+    // Record rates at T=37
+    let rates_37: Vec<f64> = (1..n)
+        .map(|c| f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, c)))))
+        .collect();
+
+    // Change temperature to 50
+    let needed = sys.set_param("temperature", Box::new(50.0_f64)).unwrap();
+    sys.update_state(&mut state, &needed);
+
+    let rates_50: Vec<f64> = (1..n)
+        .map(|c| f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, c)))))
+        .collect();
+
+    // With ds < 0, at higher T the ΔG term becomes less negative (weaker binding),
+    // so the detach rate increases → rates should be higher at T=50 vs T=37
+    for (i, col) in (1..n).enumerate() {
+        assert!(
+            rates_50[i] > rates_37[i],
+            "position {col}: rate at T=50 ({}) should exceed rate at T=37 ({})",
+            rates_50[i],
+            rates_37[i]
+        );
     }
 }
