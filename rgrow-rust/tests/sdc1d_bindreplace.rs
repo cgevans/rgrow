@@ -5,7 +5,7 @@ use rgrow::models::sdc1d_bindreplace::SDC1DBindReplace;
 use rgrow::state::StateEnum;
 use rgrow::system::{Event, EvolveBounds, NeededUpdate, System, TileBondInfo};
 use rgrow::tileset::CanvasType::SquareCompact;
-use rgrow::tileset::TrackingType;
+use rgrow::tileset::TrackingConfig;
 use rgrow::units::PerSecond;
 use std::collections::HashMap;
 
@@ -89,7 +89,7 @@ fn test_bitcopy_empty_state_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -114,7 +114,7 @@ fn test_bitcopy_perfect_filled_state_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -147,7 +147,7 @@ fn test_bitcopy_mismatched_filled_state_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -191,7 +191,7 @@ fn test_bitcopy_reaches_perfect_copy() {
         let mut state = StateEnum::empty(
             (1, n),
             SquareCompact,
-            TrackingType::None,
+            &TrackingConfig::default(),
             sys.tile_names().len(),
         )
         .unwrap();
@@ -289,7 +289,7 @@ fn test_energy_empty_state_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -314,7 +314,7 @@ fn test_energy_perfect_filled_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -346,7 +346,7 @@ fn test_energy_mismatched_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -391,7 +391,7 @@ fn test_energy_reaches_perfect_copy() {
         let mut state = StateEnum::empty(
             (1, n),
             SquareCompact,
-            TrackingType::None,
+            &TrackingConfig::default(),
             sys.tile_names().len(),
         )
         .unwrap();
@@ -429,14 +429,14 @@ fn test_no_energy_backward_compat() {
     let mut state1 = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys_no_energy.tile_names().len(),
     )
     .unwrap();
     let mut state2 = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys_with_data.tile_names().len(),
     )
     .unwrap();
@@ -480,7 +480,7 @@ fn test_weak_replacement_allows_less_matching() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -594,7 +594,7 @@ fn test_weak_replacement_fills_and_evolves() {
         let mut state = StateEnum::empty(
             (1, n),
             SquareCompact,
-            TrackingType::None,
+            &TrackingConfig::default(),
             sys.tile_names().len(),
         )
         .unwrap();
@@ -702,7 +702,7 @@ fn test_bindunbind_replacement_rate() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -768,7 +768,7 @@ fn test_physical_attachment_rate_empty_sites() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -813,7 +813,7 @@ fn test_allow_same_replacement_increases_rate() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -876,7 +876,7 @@ fn test_mismatch_locations_all_correct() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -911,7 +911,7 @@ fn test_mismatch_locations_single_mismatch() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -962,7 +962,7 @@ fn test_mismatch_locations_empty_neighbors() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -1061,7 +1061,7 @@ fn test_set_param_kf_changes_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -1090,7 +1090,7 @@ fn test_choose_event_empty_site_returns_attachment() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -1116,7 +1116,7 @@ fn test_choose_event_filled_site_returns_change() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -1158,7 +1158,7 @@ fn test_n2_empty_rates_and_evolve() {
         let mut state = StateEnum::empty(
             (1, n),
             SquareCompact,
-            TrackingType::None,
+            &TrackingConfig::default(),
             sys.tile_names().len(),
         )
         .unwrap();
@@ -1202,7 +1202,7 @@ fn test_entropy_temperature_dependence() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();

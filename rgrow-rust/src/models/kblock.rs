@@ -1276,10 +1276,7 @@ mod test_covtile {
 
 #[cfg(test)]
 mod test_kblock {
-    use crate::{
-        state::StateEnum,
-        tileset::{CanvasType, TrackingType},
-    };
+    use crate::{state::StateEnum, tileset::CanvasType};
 
     use super::*;
     use ndarray::array;
@@ -1434,7 +1431,7 @@ mod test_kblock {
         .into();
 
         let mut se =
-            StateEnum::empty((20, 20), CanvasType::Square, TrackingType::None, 40).unwrap();
+            StateEnum::empty((20, 20), CanvasType::Square, &Default::default(), 40).unwrap();
         // Add a seed tile (just one)
         kblock.add_seed(
             &mut se,

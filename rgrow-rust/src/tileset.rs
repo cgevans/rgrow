@@ -17,7 +17,8 @@ use base::{NumEvents, NumTiles};
 use bimap::BiMap;
 use core::fmt;
 use ndarray::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::de::{self, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
@@ -234,7 +235,7 @@ struct SerdeTileSet {
     pub(self) chunk_handling: Option<ChunkHandling>,
     pub(self) chunk_size: Option<ChunkSize>,
     pub(self) canvas_type: Option<CanvasType>,
-    pub(self) tracking: Option<TrackingType>,
+    pub(self) tracking: Option<TrackingConfig>,
     #[serde(alias = "doubletiles")]
     pub(self) hdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
     pub(self) vdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
@@ -270,7 +271,7 @@ pub struct TileSet {
     pub chunk_handling: Option<ChunkHandling>,
     pub chunk_size: Option<ChunkSize>,
     pub canvas_type: Option<CanvasType>,
-    pub tracking: Option<TrackingType>,
+    pub tracking: Option<TrackingConfig>,
     pub hdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
     pub vdoubletiles: Option<Vec<(TileIdent, TileIdent)>>,
     pub model: Option<Model>,
@@ -486,16 +487,6 @@ impl<'py> IntoPyObject<'py> for CanvasType {
     type Error = pyo3::PyErr;
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
-#[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow", eq, eq_int))]
-pub enum TrackingType {
-    None,
-    Order,
-    LastAttachTime,
-    PrintEvent,
-    Movie,
-}
-
 impl TryFrom<&str> for CanvasType {
     type Error = StringConvError;
 
@@ -511,20 +502,185 @@ impl TryFrom<&str> for CanvasType {
     }
 }
 
-impl TryFrom<&str> for TrackingType {
+use crate::state::DEFAULT_ENERGY_BIN_WIDTH;
+
+/// Tracking configuration with per-variant parameters.
+///
+/// Can be deserialized from either a string (e.g., `"movie"`) for defaults,
+/// or a map (e.g., `{type: energychanges, bin_width: 0.01}`) for custom params.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum TrackingConfig {
+    #[default]
+    None,
+    Order,
+    LastAttachTime,
+    PrintEvent,
+    Movie,
+    EnergyChanges {
+        bin_width: f64,
+    },
+}
+
+impl TryFrom<&str> for TrackingConfig {
     type Error = StringConvError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value.to_lowercase().as_str() {
-            "none" => Ok(TrackingType::None),
-            "order" => Ok(TrackingType::Order),
-            "lastattachtime" => Ok(TrackingType::LastAttachTime),
-            "printevent" => Ok(TrackingType::PrintEvent),
-            "movie" => Ok(TrackingType::Movie),
+            "none" => Ok(TrackingConfig::None),
+            "order" => Ok(TrackingConfig::Order),
+            "lastattachtime" => Ok(TrackingConfig::LastAttachTime),
+            "printevent" => Ok(TrackingConfig::PrintEvent),
+            "movie" => Ok(TrackingConfig::Movie),
+            "energychanges" => Ok(TrackingConfig::EnergyChanges {
+                bin_width: DEFAULT_ENERGY_BIN_WIDTH,
+            }),
             _ => Err(StringConvError(format!(
-                "Unknown tracking type {value}.  Valid options are \"none\", \"order\", \"lastattachtime\", \"printevent\", \"movie\"."
+                "Unknown tracking type {value}.  Valid options are \"none\", \"order\", \"lastattachtime\", \"printevent\", \"movie\", \"energychanges\"."
             ))),
         }
+    }
+}
+
+impl Serialize for TrackingConfig {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            TrackingConfig::None => serializer.serialize_str("None"),
+            TrackingConfig::Order => serializer.serialize_str("Order"),
+            TrackingConfig::LastAttachTime => serializer.serialize_str("LastAttachTime"),
+            TrackingConfig::PrintEvent => serializer.serialize_str("PrintEvent"),
+            TrackingConfig::Movie => serializer.serialize_str("Movie"),
+            TrackingConfig::EnergyChanges { bin_width } => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("type", "EnergyChanges")?;
+                map.serialize_entry("bin_width", bin_width)?;
+                map.end()
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for TrackingConfig {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct TrackingConfigVisitor;
+
+        impl<'de> Visitor<'de> for TrackingConfigVisitor {
+            type Value = TrackingConfig;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(
+                    "a tracking type string (e.g., \"movie\") or a map with \"type\" key",
+                )
+            }
+
+            fn visit_str<E: de::Error>(self, value: &str) -> Result<TrackingConfig, E> {
+                TrackingConfig::try_from(value).map_err(|e| de::Error::custom(e.0))
+            }
+
+            fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<TrackingConfig, M::Error> {
+                let mut tracking_type: Option<String> = Option::None;
+                let mut bin_width: Option<f64> = Option::None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "type" => tracking_type = Some(map.next_value()?),
+                        "bin_width" => bin_width = Some(map.next_value()?),
+                        other => {
+                            return Err(de::Error::unknown_field(other, &["type", "bin_width"]))
+                        }
+                    }
+                }
+
+                let tracking_type =
+                    tracking_type.ok_or_else(|| de::Error::missing_field("type"))?;
+
+                let mut config = TrackingConfig::try_from(tracking_type.as_str())
+                    .map_err(|e| de::Error::custom(e.0))?;
+
+                // Apply map params to the parsed config
+                if let Some(bw) = bin_width {
+                    match &mut config {
+                        TrackingConfig::EnergyChanges { bin_width } => {
+                            *bin_width = bw;
+                        }
+                        _ => {
+                            return Err(de::Error::custom(format!(
+                                "bin_width is not a valid parameter for tracking type \"{tracking_type}\""
+                            )));
+                        }
+                    }
+                }
+
+                Ok(config)
+            }
+        }
+
+        deserializer.deserialize_any(TrackingConfigVisitor)
+    }
+}
+
+#[cfg(feature = "python")]
+impl<'py> pyo3::IntoPyObject<'py> for TrackingConfig {
+    type Target = PyAny;
+    type Output = pyo3::Bound<'py, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        // Serialize as a string for simple variants, dict for parameterized ones
+        match self {
+            TrackingConfig::None => "None".into_bound_py_any(py),
+            TrackingConfig::Order => "Order".into_bound_py_any(py),
+            TrackingConfig::LastAttachTime => "LastAttachTime".into_bound_py_any(py),
+            TrackingConfig::PrintEvent => "PrintEvent".into_bound_py_any(py),
+            TrackingConfig::Movie => "Movie".into_bound_py_any(py),
+            TrackingConfig::EnergyChanges { bin_width } => {
+                let dict = pyo3::types::PyDict::new(py);
+                dict.set_item("type", "EnergyChanges")?;
+                dict.set_item("bin_width", bin_width)?;
+                Ok(dict.into_any())
+            }
+        }
+    }
+}
+
+#[cfg(feature = "python")]
+impl FromPyObject<'_, '_> for TrackingConfig {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
+        // 1. Try string
+        if let Ok(s) = ob.extract::<String>() {
+            return TrackingConfig::try_from(s.as_str())
+                .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.0));
+        }
+        // 2. Try dict
+        if let Ok(dict) = ob.cast::<pyo3::types::PyDict>() {
+            let type_obj = dict.get_item("type")?.ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err("tracking dict must have a \"type\" key")
+            })?;
+            let type_str: String = type_obj.extract()?;
+
+            let mut config = TrackingConfig::try_from(type_str.as_str())
+                .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.0))?;
+
+            // Apply dict params
+            if let Some(bw) = dict.get_item("bin_width")? {
+                match &mut config {
+                    TrackingConfig::EnergyChanges { bin_width } => {
+                        *bin_width = bw.extract()?;
+                    }
+                    _ => {
+                        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                            "bin_width is not a valid parameter for tracking type \"{type_str}\""
+                        )));
+                    }
+                }
+            }
+
+            return Ok(config);
+        }
+        Err(pyo3::exceptions::PyTypeError::new_err(
+            "tracking must be a str or dict with a \"type\" key",
+        ))
     }
 }
 
@@ -624,17 +780,17 @@ impl TileSet {
         };
 
         let kind = self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT);
-        let tracking = self.tracking.unwrap_or(TrackingType::None);
+        let tracking = self.tracking.clone().unwrap_or_default();
 
-        Ok(StateEnum::empty(shape, kind, tracking, 1)?) // FIXME
+        Ok(StateEnum::empty(shape, kind, &tracking, 1)?) // FIXME
     }
 
     /// Creates an empty state, without any setup by a System.
     pub fn create_state_from_canvas(&self, canvas: Array2<u32>) -> Result<StateEnum, RgrowError> {
         let kind = self.canvas_type.unwrap_or(CANVAS_TYPE_DEFAULT);
-        let tracking = self.tracking.unwrap_or(TrackingType::None);
+        let tracking = self.tracking.clone().unwrap_or_default();
 
-        let mut st = StateEnum::from_array(canvas.view(), kind, tracking, 1)?;
+        let mut st = StateEnum::from_array(canvas.view(), kind, &tracking, 1)?;
 
         let sys = self.create_system()?;
 

@@ -58,7 +58,7 @@ impl TileSet {
                     }
                     "chunk_size" => tileset.chunk_size = Some(v.extract::<&str>()?.try_into()?),
                     "canvas_type" => tileset.canvas_type = Some(v.extract::<&str>()?.try_into()?),
-                    "tracking" => tileset.tracking = Some(v.extract::<&str>()?.try_into()?),
+                    "tracking" => tileset.tracking = Some(v.extract()?),
                     "hdoubletiles" => tileset.hdoubletiles = Some(v.extract()?),
                     "vdoubletiles" => tileset.vdoubletiles = Some(v.extract()?),
                     "model" => tileset.model = Some(v.extract::<&str>()?.try_into()?),

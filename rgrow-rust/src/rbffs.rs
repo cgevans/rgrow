@@ -32,11 +32,11 @@ use crate::{
     models::ktam::KTAM,
     models::oldktam::OldKTAM,
     state::{
-        ClonableState, LastAttachTimeTracker, MovieTracker, NullStateTracker, OrderTracker,
-        PrintEventTracker, QuadTreeState, StateEnum, StateWithCreate,
+        ClonableState, EnergyChangesTracker, LastAttachTimeTracker, MovieTracker, NullStateTracker,
+        OrderTracker, PrintEventTracker, QuadTreeState, StateEnum, StateWithCreate,
     },
     system::{self, DimerInfo, EvolveBounds, EvolveOutcome, Orientation, System, SystemEnum},
-    tileset::{CanvasType, Model, Size, TileSet, TrackingType, SIZE_DEFAULT},
+    tileset::{CanvasType, Model, Size, TileSet, TrackingConfig, SIZE_DEFAULT},
     units::{MolarPerSecond, PerSecond},
 };
 
@@ -57,7 +57,7 @@ pub struct RBFFSRunConfig {
     /// Canvas boundary type.
     pub canvas_type: CanvasType,
     /// State tracking type.
-    pub tracking: TrackingType,
+    pub tracking: TrackingConfig,
     /// If true (default), store the state at every surface crossing.
     /// If false, store only the final state of each trajectory (saves memory with heavy trackers).
     pub keep_full_trajectories: bool,
@@ -82,7 +82,7 @@ impl Default for RBFFSRunConfig {
             canvas_size: (32, 32),
             subseq_bound: EvolveBounds::default().for_time(1e7),
             canvas_type: CanvasType::Periodic,
-            tracking: TrackingType::None,
+            tracking: TrackingConfig::default(),
             keep_full_trajectories: true,
             store_system: false,
             size_step: 1,
@@ -103,13 +103,7 @@ impl RBFFSRunConfig {
             "subseq_bound" => self.subseq_bound = v.extract()?,
             "canvas_type" => self.canvas_type = v.extract()?,
             "tracking" => {
-                if let Ok(s) = v.extract::<&str>() {
-                    self.tracking = TrackingType::try_from(s).map_err(|e| {
-                        PyTypeError::new_err(format!("Invalid tracking type: {}", e.0))
-                    })?;
-                } else {
-                    self.tracking = v.extract()?;
-                }
+                self.tracking = v.extract()?;
             }
             "keep_full_trajectories" => self.keep_full_trajectories = v.extract()?,
             "store_system" => self.store_system = v.extract()?,
@@ -178,14 +172,7 @@ impl RBFFSRunConfig {
             rc.canvas_type = x;
         }
         if let Some(x) = tracking {
-            if let Ok(s) = x.extract::<&str>() {
-                rc.tracking = TrackingType::try_from(s)
-                    .map_err(|e| PyTypeError::new_err(format!("Invalid tracking type: {}", e.0)))?;
-            } else if let Ok(t) = x.extract::<TrackingType>() {
-                rc.tracking = t;
-            } else {
-                return Err(PyTypeError::new_err("tracking must be str or TrackingType"));
-            }
+            rc.tracking = x.extract()?;
         }
         if let Some(x) = keep_full_trajectories {
             rc.keep_full_trajectories = x;
@@ -482,87 +469,109 @@ impl RBFFSResult {
     where
         SystemEnum: From<Sy>,
     {
-        Ok(match (config.canvas_type, config.tracking) {
-            (CanvasType::Square, TrackingType::None) => {
+        Ok(match (config.canvas_type, &config.tracking) {
+            (CanvasType::Square, TrackingConfig::None) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquare, NullStateTracker>>(sys, config)?
             }
-            (CanvasType::Square, TrackingType::Order) => {
+            (CanvasType::Square, TrackingConfig::Order) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquare, OrderTracker>>(sys, config)?
             }
-            (CanvasType::Square, TrackingType::LastAttachTime) => {
+            (CanvasType::Square, TrackingConfig::LastAttachTime) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquare, LastAttachTimeTracker>>(sys, config)?
             }
-            (CanvasType::Square, TrackingType::PrintEvent) => {
+            (CanvasType::Square, TrackingConfig::PrintEvent) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquare, PrintEventTracker>>(sys, config)?
             }
-            (CanvasType::Square, TrackingType::Movie) => {
+            (CanvasType::Square, TrackingConfig::Movie) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquare, MovieTracker>>(sys, config)?
             }
 
-            (CanvasType::SquareCompact, TrackingType::None) => {
+            (CanvasType::SquareCompact, TrackingConfig::None) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, NullStateTracker>>(sys, config)?
             }
-            (CanvasType::SquareCompact, TrackingType::Order) => {
+            (CanvasType::SquareCompact, TrackingConfig::Order) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, OrderTracker>>(sys, config)?
             }
-            (CanvasType::SquareCompact, TrackingType::LastAttachTime) => run_rbffs::<
-                Sy,
-                QuadTreeState<CanvasSquareCompact, LastAttachTimeTracker>,
-            >(sys, config)?,
-            (CanvasType::SquareCompact, TrackingType::PrintEvent) => {
+            (CanvasType::SquareCompact, TrackingConfig::LastAttachTime) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, LastAttachTimeTracker>>(
+                    sys, config,
+                )?
+            }
+            (CanvasType::SquareCompact, TrackingConfig::PrintEvent) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, PrintEventTracker>>(sys, config)?
             }
-            (CanvasType::SquareCompact, TrackingType::Movie) => {
+            (CanvasType::SquareCompact, TrackingConfig::Movie) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, MovieTracker>>(sys, config)?
             }
 
-            (CanvasType::Periodic, TrackingType::None) => {
+            (CanvasType::Periodic, TrackingConfig::None) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasPeriodic, NullStateTracker>>(sys, config)?
             }
-            (CanvasType::Periodic, TrackingType::Order) => {
+            (CanvasType::Periodic, TrackingConfig::Order) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasPeriodic, OrderTracker>>(sys, config)?
             }
-            (CanvasType::Periodic, TrackingType::LastAttachTime) => {
+            (CanvasType::Periodic, TrackingConfig::LastAttachTime) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>>(sys, config)?
             }
-            (CanvasType::Periodic, TrackingType::PrintEvent) => {
+            (CanvasType::Periodic, TrackingConfig::PrintEvent) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasPeriodic, PrintEventTracker>>(sys, config)?
             }
-            (CanvasType::Periodic, TrackingType::Movie) => {
+            (CanvasType::Periodic, TrackingConfig::Movie) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasPeriodic, MovieTracker>>(sys, config)?
             }
 
-            (CanvasType::Tube, TrackingType::None) => {
+            (CanvasType::Tube, TrackingConfig::None) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasTube, NullStateTracker>>(sys, config)?
             }
-            (CanvasType::Tube, TrackingType::Order) => {
+            (CanvasType::Tube, TrackingConfig::Order) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasTube, OrderTracker>>(sys, config)?
             }
-            (CanvasType::Tube, TrackingType::LastAttachTime) => {
+            (CanvasType::Tube, TrackingConfig::LastAttachTime) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasTube, LastAttachTimeTracker>>(sys, config)?
             }
-            (CanvasType::Tube, TrackingType::PrintEvent) => {
+            (CanvasType::Tube, TrackingConfig::PrintEvent) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasTube, PrintEventTracker>>(sys, config)?
             }
-            (CanvasType::Tube, TrackingType::Movie) => {
+            (CanvasType::Tube, TrackingConfig::Movie) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasTube, MovieTracker>>(sys, config)?
             }
 
-            (CanvasType::TubeDiagonals, TrackingType::None) => {
+            (CanvasType::TubeDiagonals, TrackingConfig::None) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasTubeDiagonals, NullStateTracker>>(sys, config)?
             }
-            (CanvasType::TubeDiagonals, TrackingType::Order) => {
+            (CanvasType::TubeDiagonals, TrackingConfig::Order) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasTubeDiagonals, OrderTracker>>(sys, config)?
             }
-            (CanvasType::TubeDiagonals, TrackingType::LastAttachTime) => run_rbffs::<
-                Sy,
-                QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>,
-            >(sys, config)?,
-            (CanvasType::TubeDiagonals, TrackingType::PrintEvent) => {
+            (CanvasType::TubeDiagonals, TrackingConfig::LastAttachTime) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>>(
+                    sys, config,
+                )?
+            }
+            (CanvasType::TubeDiagonals, TrackingConfig::PrintEvent) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>>(sys, config)?
             }
-            (CanvasType::TubeDiagonals, TrackingType::Movie) => {
+            (CanvasType::TubeDiagonals, TrackingConfig::Movie) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasTubeDiagonals, MovieTracker>>(sys, config)?
+            }
+
+            (CanvasType::Square, TrackingConfig::EnergyChanges { .. }) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasSquare, EnergyChangesTracker>>(sys, config)?
+            }
+            (CanvasType::SquareCompact, TrackingConfig::EnergyChanges { .. }) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, EnergyChangesTracker>>(
+                    sys, config,
+                )?
+            }
+            (CanvasType::Periodic, TrackingConfig::EnergyChanges { .. }) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasPeriodic, EnergyChangesTracker>>(sys, config)?
+            }
+            (CanvasType::Tube, TrackingConfig::EnergyChanges { .. }) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasTube, EnergyChangesTracker>>(sys, config)?
+            }
+            (CanvasType::TubeDiagonals, TrackingConfig::EnergyChanges { .. }) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasTubeDiagonals, EnergyChangesTracker>>(
+                    sys, config,
+                )?
             }
         })
     }
@@ -1235,7 +1244,7 @@ impl TileSet {
                 Size::Pair(p) => p,
             };
             c.canvas_type = self.canvas_type.unwrap_or(CanvasType::Periodic);
-            c.tracking = self.tracking.unwrap_or(TrackingType::None);
+            c.tracking = self.tracking.clone().unwrap_or_default();
             c
         };
 

@@ -40,33 +40,35 @@ pub struct PyState(pub(crate) StateEnum);
 #[pymethods]
 impl PyState {
     #[new]
-    #[pyo3(signature = (shape, kind="Square", tracking="None", n_tile_types=None))]
+    #[pyo3(signature = (shape, kind="Square", tracking=None, n_tile_types=None))]
     pub fn empty(
         shape: (usize, usize),
         kind: &str,
-        tracking: &str,
+        tracking: Option<crate::tileset::TrackingConfig>,
         n_tile_types: Option<usize>,
     ) -> PyResult<Self> {
+        let tracking = tracking.unwrap_or_default();
         Ok(PyState(StateEnum::empty(
             shape,
             kind.try_into()?,
-            tracking.try_into()?,
+            &tracking,
             n_tile_types.unwrap_or(1),
         )?))
     }
 
     #[staticmethod]
-    #[pyo3(signature = (array, kind="Square", tracking="None", n_tile_types=None))]
+    #[pyo3(signature = (array, kind="Square", tracking=None, n_tile_types=None))]
     pub fn from_array(
         array: PyReadonlyArray2<crate::base::Tile>,
         kind: &str,
-        tracking: &str,
+        tracking: Option<crate::tileset::TrackingConfig>,
         n_tile_types: Option<usize>,
     ) -> PyResult<Self> {
+        let tracking = tracking.unwrap_or_default();
         Ok(PyState(StateEnum::from_array(
             array.as_array(),
             kind.try_into()?,
-            tracking.try_into()?,
+            &tracking,
             n_tile_types.unwrap_or(1),
         )?))
     }
@@ -150,6 +152,43 @@ impl PyState {
         let ra = t.0.get_tracker_data();
 
         Ok(ra)
+    }
+
+    /// Return the energy changes histogram as a dict, or None if not using EnergyChanges tracking.
+    ///
+    /// Returns
+    /// -------
+    /// dict or None
+    ///     A dict with keys ``"energy_change"`` (list of float) and ``"count"`` (list of int),
+    ///     sorted by energy_change.  Returns ``None`` if the state does not use EnergyChanges tracking.
+    pub fn energy_histogram(&self) -> Option<std::collections::HashMap<String, Py<PyAny>>> {
+        let tracker = self.0.get_energy_changes_tracker()?;
+
+        let mut entries: Vec<(i64, u64)> = tracker.counts.iter().map(|(&k, &v)| (k, v)).collect();
+        entries.sort_by_key(|(k, _)| *k);
+
+        let energy_changes: Vec<f64> = entries
+            .iter()
+            .map(|(k, _)| *k as f64 * tracker.bin_width)
+            .collect();
+        let counts: Vec<u64> = entries.iter().map(|(_, v)| *v).collect();
+
+        Python::attach(|py| {
+            let mut result = std::collections::HashMap::new();
+            result.insert(
+                "energy_change".to_string(),
+                energy_changes
+                    .into_pyobject(py)
+                    .unwrap()
+                    .into_any()
+                    .unbind(),
+            );
+            result.insert(
+                "count".to_string(),
+                counts.into_pyobject(py).unwrap().into_any().unbind(),
+            );
+            Some(result)
+        })
     }
 
     /// int: the number of tiles in the state.
