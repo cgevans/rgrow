@@ -6,6 +6,7 @@ from rgrow import KTAM, State
 def test_ktam_growth():
     """A simple A/B checkerboard tile system, on a tube.  This should grow if two bonds are favorable, should shrink if two bonds are unfavorable,
     and should be at equilibrium at gmc=2*gse."""
+    import polars as pl
     tube_ts = TileSet(
         [
             Tile(["a","a","b","b"],),
@@ -16,11 +17,12 @@ def test_ktam_growth():
         size=(8, 256),
         alpha=-7.1,
         gse=5.05,
-        gmc=10.0
+        gmc=10.0,
+        tracking={"type": "energychanges", "bin_width": 1e-12}
     )
 
     sys, state = cast(tuple[KTAM, State], tube_ts.create_system_and_state())
-    
+
     # We'll start with some tiles:
     state.canvas_view[::2, 5:50] = 1
     state.canvas_view[1::2, 5:50] = 2
@@ -38,7 +40,39 @@ def test_ktam_growth():
     # We should have reached the max size:
     assert out == EvolveOutcome.ReachedSizeMax
 
+    t = cast(pl.DataFrame, state.tracking_copy())
+
+    # These comparison tolerances are quite important: default rel_tol is polars is 1e-9.
+    two_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - 2*tube_ts.gse, abs_tol=1e-13))[0,'count']
+    two_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - 2*tube_ts.gse), abs_tol=1e-13))[0,'count']
+    one_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - tube_ts.gse, abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+    one_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - tube_ts.gse), abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+    three_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - 3*tube_ts.gse, abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+    three_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - 3*tube_ts.gse), abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+    four_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - 4*tube_ts.gse, abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+    four_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - 4*tube_ts.gse), abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+
+    end_n = state.n_tiles
+    tiles_gained = end_n - start_n
+
+    # Most growth should come from net two-bond attachments
+    two_bond_net = two_bond_att - two_bond_det
+    assert two_bond_net > 0, f"Expected net two-bond growth, got net {two_bond_net}"
+    assert two_bond_net >= 0.8 * tiles_gained, (
+        f"Two-bond net ({two_bond_net}) should account for most growth ({tiles_gained})"
+    )
+
+    # One-bond attach and detach should be approximately equal
+    assert abs(one_bond_att - one_bond_det) < 0.1 * (one_bond_att + one_bond_det), (
+        f"One-bond should be roughly balanced: att={one_bond_att}, det={one_bond_det}"
+    )
+
+    # Three and four bond events should be rare compared to two-bond
+    assert three_bond_att + three_bond_det < 0.1 * (two_bond_att + two_bond_det)
+    assert four_bond_att + four_bond_det < 0.1 * (two_bond_att + two_bond_det)
+
 def test_ktam_melt():
+    import polars as pl
     tube_ts = TileSet(
         [
             Tile(["a","a","b","b"],),
@@ -49,7 +83,8 @@ def test_ktam_melt():
         size=(8, 256),
         alpha=-7.1,
         gse=4.95,
-        gmc=10.0
+        gmc=10.0,
+        tracking={"type": "energychanges", "bin_width": 1e-15}
     )
 
     sys, state = cast(tuple[KTAM, State], tube_ts.create_system_and_state())
@@ -66,16 +101,52 @@ def test_ktam_melt():
     start_n = state.n_tiles
 
     # We should melt in these conditions:
-    out = sys.evolve(state, for_events=100_000, size_min=0, size_max=2*start_n)
+    out = sys.evolve(state, for_events=100_000, size_min=1, size_max=2*start_n)
 
-    # We should have reached the max size:
+    t = cast(pl.DataFrame, state.tracking_copy())
+
+    two_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - 2*tube_ts.gse))[0,'count']
+    two_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - 2*tube_ts.gse)))[0,'count']
+    one_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - tube_ts.gse))[0,'count']
+    one_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - tube_ts.gse)))[0,'count']
+    three_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - 3*tube_ts.gse))[0,'count']
+    three_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - 3*tube_ts.gse)))[0,'count']
+    four_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - 4*tube_ts.gse))[0,'count']
+    four_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - 4*tube_ts.gse)))[0,'count']
+
+    end_n = state.n_tiles
+    tiles_lost = start_n - end_n
+
+    # We should have reached the min size:
     assert out == EvolveOutcome.ReachedSizeMin
+
+    end_n = state.n_tiles
+    tiles_lost = start_n - end_n
+
+    # Most melting should come from net two-bond detachments
+    two_bond_net = two_bond_att - two_bond_det
+    assert two_bond_net < 0, f"Expected net two-bond melting, got net {two_bond_net}"
+    assert abs(two_bond_net) >= 0.8 * tiles_lost, (
+        f"Two-bond net ({two_bond_net}) should account for most melting ({tiles_lost})"
+    )
+
+    # One-bond attach and detach should be approximately equal
+    # (tiles attach at frontier and quickly fall off)
+    assert abs(one_bond_att - one_bond_det) < 0.1 * (one_bond_att + one_bond_det), (
+        f"One-bond should be roughly balanced: att={one_bond_att}, det={one_bond_det}"
+    )
+
+    # Three and four bond events should be rare compared to two-bond
+    assert three_bond_att + three_bond_det < 0.1 * (two_bond_att + two_bond_det)
+    assert four_bond_att + four_bond_det < 0.1 * (two_bond_att + two_bond_det)
 
 def test_ktam_equilibrium():
     """A perfectly balanced system (gmc=2*gse) should remain stable: neither
     growing to max size nor melting completely.  We use a large starting
     structure so the boundaries are far from the random walk's reach
     (stddev ≈ sqrt(100k) ≈ 316, boundaries ~1560 tiles away)."""
+
+    import polars as pl
     tube_ts = TileSet(
         [
             Tile(["a","a","b","b"],),
@@ -85,8 +156,10 @@ def test_ktam_equilibrium():
         canvas_type="tube",
         size=(8, 512),
         alpha=-7.1,
-        gse=5.0,
-        gmc=10.0
+        gse=5.0 + 5e-11,  # We set an extremely small bias to make energy change show two bond att/det
+        gmc=10.0,
+        tracking={"type": "energychanges", "bin_width": 1e-12},
+        fission="no-fission"
     )
 
     sys, state = cast(tuple[KTAM, State], tube_ts.create_system_and_state())
@@ -101,6 +174,46 @@ def test_ktam_equilibrium():
     start_n = state.n_tiles
 
     out = sys.evolve(state, for_events=100_000, size_min=0, size_max=2*start_n)
+    
+    t = cast(pl.DataFrame, state.tracking_copy())
+
+
+    two_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - 2*tube_ts.gse, abs_tol=1e-13))[0,'count']
+    two_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - 2*tube_ts.gse), abs_tol=1e-13))[0,'count']
+    one_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - tube_ts.gse, abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+    one_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - tube_ts.gse), abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+    three_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - 3*tube_ts.gse, abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+    three_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - 3*tube_ts.gse), abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+    four_bond_att = t.filter(pl.col("energy_change").is_close(tube_ts.gmc - 4*tube_ts.gse, abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+    four_bond_det = t.filter(pl.col("energy_change").is_close(-(tube_ts.gmc - 4*tube_ts.gse), abs_tol=1e-15, rel_tol=1e-16))[0,'count']
+
+    assert out == EvolveOutcome.ReachedEventsMax
+
+    # At equilibrium, two-bond attach and detach should be roughly equal
+    assert two_bond_att > 0 and two_bond_det > 0
+    two_bond_ratio = two_bond_att / two_bond_det
+    assert 0.96 < two_bond_ratio < 1.04, (
+        f"Two-bond attach/detach should be ~equal at equilibrium: "
+        f"{two_bond_att}/{two_bond_det} = {two_bond_ratio:.4f}"
+    )
+
+    changerate = abs(two_bond_att-two_bond_det) / (two_bond_att + two_bond_det)
+
+    assert changerate < 0.01, (
+        f"Two-bond attach and detach should be within 1% of total events: att={two_bond_att}, det={two_bond_det}, {changerate:.4%} difference"
+    )
+
+    # Three and four bond events should be rare compared to two-bond
+    assert three_bond_att + three_bond_det < 0.1 * (two_bond_att + two_bond_det)
+    assert four_bond_att + four_bond_det < 0.1 * (two_bond_att + two_bond_det)
+
+    # One-bond should be frequent and roughtly balanced (tiles attach at frontier and quickly fall off)
+    assert one_bond_att > 0 and one_bond_det > 0
+    one_bond_ratio = one_bond_att / one_bond_det
+    assert 0.96 < one_bond_ratio < 1.04, (
+        f"One-bond attach/detach should be ~equal at equilibrium: "
+        f"{one_bond_att}/{one_bond_det} = {one_bond_ratio:.4f}"
+    )
 
     assert out == EvolveOutcome.ReachedEventsMax
 
