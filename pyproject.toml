@@ -58,6 +58,7 @@ dev = [
     "pytest-cov",
     "pytest-benchmark",
     "maturin>=1.11.2",
+    "polars"
 ]
 
 [tool.pytest.ini_options]
