@@ -1400,22 +1400,22 @@ impl KTAM {
             }
         }
 
-        // Depletion warning (when not using Equilibrium chunk handling)
-        if self.chunk_handling != ChunkHandling::Equilibrium {
-            for t in 1..self.tile_concs.len() {
-                if self.tile_concs[t] > 0.0 && self.should_be_counted[t] {
-                    let frac = 1.0 - self.free_tile_concs[t] / self.tile_concs[t];
-                    if frac > 0.1 {
-                        eprintln!(
-                            "Warning: Tile '{}' has {:.0}% depletion from dimerization. \
-                                        Consider chunk_handling: equilibrium.",
-                            self.tile_names[t],
-                            frac * 100.0
-                        );
-                    }
-                }
-            }
-        }
+        // // Depletion warning (when not using Equilibrium chunk handling)
+        // if self.chunk_handling != ChunkHandling::Equilibrium {
+        //     for t in 1..self.tile_concs.len() {
+        //         if self.tile_concs[t] > 0.0 && self.should_be_counted[t] {
+        //             let frac = 1.0 - self.free_tile_concs[t] / self.tile_concs[t];
+        //             if frac > 0.1 {
+        //                 eprintln!(
+        //                     "Warning: Tile '{}' has {:.0}% depletion from dimerization. \
+        //                                 Consider chunk_handling: equilibrium.",
+        //                     self.tile_names[t],
+        //                     frac * 100.0
+        //                 );
+        //             }
+        //         }
+        //     }
+        // }
     }
 
     pub fn is_seed(&self, p: PointSafe2) -> bool {
