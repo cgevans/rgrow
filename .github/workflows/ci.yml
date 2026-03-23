@@ -87,9 +87,10 @@ jobs:
           src: "./rgrow-python/rgrow"
       - name: Install carge llvm-cov
         run: cargo install cargo-llvm-cov
-      - name: Install maturin and pytest
+      - name: Install maturin and test dependencies
         run: |
-          uv pip install maturin pytest pytest-cov hypothesis
+          uv pip install maturin pytest-cov
+          uv pip install --group testing
       - name: Run tests and coverage
         run: just cov-python
       - name: Run ty
