@@ -1928,7 +1928,7 @@ impl KTAM {
         ts: Energy,
     ) -> Rate64 {
         let p2 = canvas.move_sh_s(p);
-        if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 }) | self.is_seed(PointSafe2(p2))
+        if (!canvas.inbounds(p2)) || unsafe { canvas.uv_p(p2) == 0 } || self.is_seed(PointSafe2(p2))
         {
             0.0
         } else {
@@ -1952,7 +1952,7 @@ impl KTAM {
         ts: Energy,
     ) -> Rate64 {
         let p2 = canvas.move_sh_e(p);
-        if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 } | self.is_seed(PointSafe2(p2)))
+        if (!canvas.inbounds(p2)) || unsafe { canvas.uv_p(p2) == 0 } || self.is_seed(PointSafe2(p2))
         {
             0.0
         } else {
@@ -2409,8 +2409,6 @@ impl KTAM {
         if self.ns_dimers.is_empty() && self.we_dimers.is_empty() {
             return (false, acc, Event::None, f64::NAN);
         }
-        println!("Finding dimer attachment possibilities at {p:?}");
-
         let tn = state.tile_to_n(p);
         let tw = state.tile_to_w(p);
         let te = state.tile_to_e(p);
@@ -2456,20 +2454,20 @@ impl KTAM {
         if te == 0 && state.inbounds(pe.0) {
             let pe = PointSafe2(pe.0); // Safe because of inbounds check
             if tne.nonzero() {
-                friends_east.extend(&self.friends_n[te as usize]);
+                friends_east.extend(&self.friends_n[tne as usize]);
             }
             if tee.nonzero() {
-                friends_east.extend(&self.friends_e[te as usize]);
+                friends_east.extend(&self.friends_e[tee as usize]);
             }
             if tse.nonzero() {
-                friends_east.extend(&self.friends_s[te as usize]);
+                friends_east.extend(&self.friends_s[tse as usize]);
             }
-            println!(
-                "Friends: here={:?}, east={:?}, south={:?}",
-                friends_here, friends_east, friends_south
-            );
+            // println!(
+            // "Friends: here={:?}, east={:?}, south={:?}",
+            // friends_here, friends_east, friends_south
+            // );
             for &(t1, t2, dimer_conc) in &self.we_dimers {
-                println!("Checking dimer attachment possibility at {p:?} with te={te}, tss={tss}, tne={tne}, tee={tee}, tse={tse}, tsw={tsw}");
+                // println!("Checking dimer attachment possibility at {p:?} with te={te}, tss={tss}, tne={tne}, tee={tee}, tse={tse}, tsw={tsw}");
                 if friends_here.contains(&t1) || friends_east.contains(&t2) {
                     let rate = self.kf * dimer_conc;
                     acc -= rate;
@@ -2489,13 +2487,13 @@ impl KTAM {
         if ts == 0 && state.inbounds(ps.0) {
             let ps = PointSafe2(ps.0); // Safe because of inbounds check
             if tss.nonzero() {
-                friends_south.extend(&self.friends_s[ts as usize]);
+                friends_south.extend(&self.friends_s[tss as usize]);
             }
             if tse.nonzero() {
-                friends_south.extend(&self.friends_e[ts as usize]);
+                friends_south.extend(&self.friends_e[tse as usize]);
             }
             if tsw.nonzero() {
-                friends_south.extend(&self.friends_w[ts as usize]);
+                friends_south.extend(&self.friends_w[tsw as usize]);
             }
             for &(t1, t2, dimer_conc) in &self.ns_dimers {
                 if friends_here.contains(&t1) || friends_south.contains(&t2) {
@@ -3340,8 +3338,6 @@ mod tests {
         // Check that the dimer attachment rate at the south of the seed is non-zero
         // (tile 1 has S=1 which can bind with tile 2's N=1)
         let ps = state.move_sa_s(center);
-        println!("{:?}, {:?}", center, ps);
-        println!("{:?}", system.we_dimers);
         let dimer_rate = system.total_dimer_attachment_rate_at_point(&state, PointSafe2(ps.0));
         let monomer_rate = system.total_monomer_attachment_rate_at_point(&state, PointSafe2(ps.0));
         assert!(

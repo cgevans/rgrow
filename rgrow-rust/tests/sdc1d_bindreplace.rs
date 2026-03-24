@@ -625,12 +625,7 @@ fn test_weak_replacement_fills_and_evolves() {
 }
 
 /// Build a bitcopy system with entropy (nonzero ΔS) for temperature-dependence tests.
-fn make_bitcopy_with_entropy(
-    n: usize,
-    input_bit: u32,
-    dg: f64,
-    ds: f64,
-) -> SDC1DBindReplace {
+fn make_bitcopy_with_entropy(n: usize, input_bit: u32, dg: f64, ds: f64) -> SDC1DBindReplace {
     assert!(n >= 2);
     assert!(input_bit <= 1);
 
@@ -946,11 +941,7 @@ fn test_mismatch_locations_single_mismatch() {
 
     // Position 2: wrong tile, west neighbor (pos 1) is correct → mm_w=1,
     //             east neighbor (pos 3) is correct → mm_e=1 → 4*1+1=5
-    assert_eq!(
-        mm[(0, 2)],
-        5,
-        "position 2: both east and west mismatches"
-    );
+    assert_eq!(mm[(0, 2)], 5, "position 2: both east and west mismatches");
 
     // Position 3: correct tile, west neighbor (pos 2) is wrong → mm_w=1, mm_e=0 → 0*4+1=1
     assert_eq!(
@@ -1028,14 +1019,22 @@ fn test_set_get_param_roundtrip() {
     assert!((kf_val - 2e6).abs() < 1.0, "kf should be 2e6 after set");
 
     // temperature: initial 37.0
-    let temp: f64 = *sys.get_param("temperature").unwrap().downcast::<f64>().unwrap();
+    let temp: f64 = *sys
+        .get_param("temperature")
+        .unwrap()
+        .downcast::<f64>()
+        .unwrap();
     assert!(
         (temp - 37.0).abs() < 0.01,
         "initial temperature should be 37.0"
     );
 
     sys.set_param("temperature", Box::new(50.0_f64)).unwrap();
-    let temp: f64 = *sys.get_param("temperature").unwrap().downcast::<f64>().unwrap();
+    let temp: f64 = *sys
+        .get_param("temperature")
+        .unwrap()
+        .downcast::<f64>()
+        .unwrap();
     assert!(
         (temp - 50.0).abs() < 0.01,
         "temperature should be 50.0 after set"
@@ -1134,11 +1133,8 @@ fn test_choose_event_filled_site_returns_change() {
     }
 
     // Position 2 has a wrong tile; the correct tile should replace it
-    let (event, _rate) = sys.choose_event_at_point(
-        &state,
-        PointSafe2((0, mismatch_pos)),
-        PerSecond(0.0),
-    );
+    let (event, _rate) =
+        sys.choose_event_at_point(&state, PointSafe2((0, mismatch_pos)), PerSecond(0.0));
     match event {
         Event::MonomerChange(p, tile) => {
             assert_eq!(p, PointSafe2((0, mismatch_pos)));
