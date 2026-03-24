@@ -53,18 +53,14 @@ bounds check before `&&`.
 
 ---
 
-### 1.4 HIGH: Glue links parsed but silently discarded
+### 1.4 ~~HIGH: Glue links parsed but silently discarded~~ FIXED
 
-**File:** `parser_xgrow.rs:329, 379`
-
-Xgrow `g(i,j)=strength` arguments are parsed into a `gluelinks` vector:
-```rust
-XgrowArgs::GlueLink(g1, g2, v) => gluelinks.push((g1.into(), g2.into(), v)),
-```
-
-The `gluelinks` are returned from the parser but never applied to the bond
-strength matrix anywhere in the code path. Users relying on glue links in their
-xgrow input files will get silently incorrect simulations.
+Glue links were wired through from parser to KTAM (`glue_links` field populated
+at `ktam.rs:2574`), but the energy calculation in `update_system()` **replaced**
+the cross-link value with the matching strength instead of **adding** them.
+In xgrow, the formula is `energy = (match ? strength : 0) + glue_link`, all
+times Gse. Fixed the energy calculation and added tests. See branch
+`fix-glue-links`.
 
 ---
 
