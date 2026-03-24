@@ -612,34 +612,6 @@ class ATAM:
             or None if no transition is found.
         """
 
-    def reconstruct_state_from_trajectory(
-        self,
-        trajectory: pl.DataFrame,
-        up_to_index: int,
-        config: CriticalStateConfig = ...,
-        filter_trajectory: bool = True,
-    ) -> State:
-        """
-        Reconstruct a state from trajectory data up to a given index.
-
-        Parameters
-        ----------
-        trajectory : pl.DataFrame
-            DataFrame with columns: row, col, new_tile
-        up_to_index : int
-            Index up to which to reconstruct (exclusive)
-        config : CriticalStateConfig, optional
-            Configuration for state creation
-        filter_trajectory : bool, optional
-            Whether to filter the trajectory first to remove transient events.
-            Default is True.
-
-        Returns
-        -------
-        State
-            The reconstructed state with rates updated.
-        """
-
 class SDC:
     def __init__(self, params: Any) -> None: ...
     def mfe_config(self) -> tuple[list[int], float]:
@@ -1111,14 +1083,6 @@ class SDC:
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
-
-    def reconstruct_state_from_trajectory(
-        self,
-        trajectory: pl.DataFrame,
-        up_to_index: int,
-        config: CriticalStateConfig | None = None,
-        filter_trajectory: bool = True,
-    ) -> State: ...
 
 class EvolveBounds:
     def __init__(
@@ -2129,14 +2093,6 @@ class KTAM:
         canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
 
-    def reconstruct_state_from_trajectory(
-        self,
-        trajectory: pl.DataFrame,
-        up_to_index: int,
-        config: CriticalStateConfig = ...,
-        filter_trajectory: bool = True,
-    ) -> State: ...
-
 class OldKTAM:
     @property
     def tile_names(self) -> list[str]: ...
@@ -2501,14 +2457,6 @@ class OldKTAM:
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
-
-    def reconstruct_state_from_trajectory(
-        self,
-        trajectory: pl.DataFrame,
-        up_to_index: int,
-        config: CriticalStateConfig | None = None,
-        filter_trajectory: bool = True,
-    ) -> State: ...
 
 class KBlock:
     @property
@@ -2897,14 +2845,6 @@ class KBlock:
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
-
-    def reconstruct_state_from_trajectory(
-        self,
-        trajectory: pl.DataFrame,
-        up_to_index: int,
-        config: CriticalStateConfig = ...,
-        filter_trajectory: bool = True,
-    ) -> State: ...
 
 
 System: TypeAlias = ATAM | KTAM | OldKTAM | KBlock | SDC
