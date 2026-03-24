@@ -353,7 +353,30 @@ pub trait StateWithCreate: State + Sized + Clone {
     fn empty_with_types(params: Self::Params, n_tile_types: usize) -> Result<Self, GrowError>;
     fn from_array(arr: Array2<Tile>) -> Result<Self, GrowError>;
     fn get_params(&self) -> Self::Params;
+
+    /// Sparse copy from a source state into a zeroed target, visiting only
+    /// quadtree branches with nonzero rates.
+    ///
+    /// # Safety contract
+    /// - The target (`self`) must be fully zeroed (all rates 0, canvas empty).
+    /// - Tiles with zero rate in unreachable quadrants are NOT copied.
     fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self);
+
+    /// Like [`zeroed_copy_from_state_nonzero_rate`], but also copies duple
+    /// companion tiles. When a tile at a leaf position has a nonzero entry in
+    /// `double_to_right` or `double_to_bottom`, the corresponding companion
+    /// tile is written to the adjacent canvas position (east or south).
+    ///
+    /// At the leaf level, tiles are also copied at zero-rate positions within
+    /// reached quadrants, which handles companions that share a quadrant with
+    /// their real half.
+    fn zeroed_copy_from_state_nonzero_rate_with_duples(
+        &mut self,
+        source: &Self,
+        double_to_right: &Array1<Tile>,
+        double_to_bottom: &Array1<Tile>,
+    );
+
     fn reset_state(&mut self);
     fn clone_empty(&self) -> Result<Self, GrowError>;
     fn clone_empty_no_tracker(&self)
@@ -619,27 +642,27 @@ where
         })
     }
 
-    /// Efficiently, but dangerously, copies a state into zeroed state, when certain conditions are satisfied:
-    ///
-    /// - The system must be fully unseeded kTAM: specifically, all locations with tiles must have a nonzero rate.
-    /// - The assignee state is assumed to have all zero rates, and an all zero canvas.  This is not checked!
-    ///
-    /// This is fast when the number of tiles << the size of the canvas, eg, when putting in dimers.
-    ///
-    /// If on debug, conditions should be checked (TODO)
     fn zeroed_copy_from_state_nonzero_rate(&mut self, source: &Self) {
         let max_level = self.rates.0.len() - 1; // FIXME: should not go into RateStore
-
         self.copy_level_quad(source, max_level, (0, 0));
+        self.copy_housekeeping(source);
+    }
 
-        // General housekeeping
-        self.n_tiles = source.n_tiles;
-        self.energy = source.energy;
-        self.total_events = source.total_events;
-        self.time = source.time;
-        self.tracker.clone_from(&source.tracker);
-        self.rates.1 = source.rates.1;
-        self.tile_counts.clone_from(&source.tile_counts);
+    fn zeroed_copy_from_state_nonzero_rate_with_duples(
+        &mut self,
+        source: &Self,
+        double_to_right: &Array1<Tile>,
+        double_to_bottom: &Array1<Tile>,
+    ) {
+        let max_level = self.rates.0.len() - 1; // FIXME: should not go into RateStore
+        self.copy_level_quad_with_duples(
+            source,
+            max_level,
+            (0, 0),
+            double_to_right,
+            double_to_bottom,
+        );
+        self.copy_housekeeping(source);
     }
 
     fn get_params(&self) -> Self::Params {
@@ -744,7 +767,17 @@ impl<C: Canvas, T: StateTracker> StateStatus for QuadTreeState<C, T> {
 }
 
 impl<C: Canvas + Canvas, T: StateTracker> QuadTreeState<C, T> {
-    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) -> &mut Self {
+    fn copy_housekeeping(&mut self, source: &Self) {
+        self.n_tiles = source.n_tiles;
+        self.energy = source.energy;
+        self.total_events = source.total_events;
+        self.time = source.time;
+        self.tracker.clone_from(&source.tracker);
+        self.rates.1 = source.rates.1;
+        self.tile_counts.clone_from(&source.tile_counts);
+    }
+
+    fn copy_level_quad(&mut self, source: &Self, level: usize, point: (usize, usize)) {
         // FIXME: should not go into ratestore
         let (y, x) = point;
 
@@ -759,18 +792,67 @@ impl<C: Canvas + Canvas, T: StateTracker> QuadTreeState<C, T> {
         } else {
             for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
                 let z = source.rates.0[level][(*yy, *xx)];
-                let t = unsafe { source.canvas.uv_p((*yy, *xx)) };
                 if z > PerSecond::new(0.) {
                     self.rates.0[level][(*yy, *xx)] = z;
+                    let t = unsafe { source.canvas.uv_p((*yy, *xx)) };
                     if t > 0 {
-                        // Tile must have nonzero rate, so we only check if the rate is nonzero.
-                        let v = unsafe { self.canvas.uvm_p((*yy, *xx)) };
-                        *v = t;
+                        *unsafe { self.canvas.uvm_p((*yy, *xx)) } = t;
                     }
                 }
             }
         };
-        self
+    }
+
+    fn copy_level_quad_with_duples(
+        &mut self,
+        source: &Self,
+        level: usize,
+        point: (usize, usize),
+        double_to_right: &Array1<Tile>,
+        double_to_bottom: &Array1<Tile>,
+    ) {
+        let (y, x) = point;
+
+        if level > 0 {
+            for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
+                let z = source.rates.0[level][(*yy, *xx)];
+                if z > PerSecond::new(0.) {
+                    self.rates.0[level][(*yy, *xx)] = z;
+                    self.copy_level_quad_with_duples(
+                        source,
+                        level - 1,
+                        (*yy * 2, *xx * 2),
+                        double_to_right,
+                        double_to_bottom,
+                    );
+                }
+            }
+        } else {
+            // At the leaf level, copy rates for nonzero-rate cells. Also copy
+            // any nonzero tile in a reached quadrant (handles fake duple halves
+            // that share a 2×2 quadrant with their real half). For real duple
+            // tiles, write the companion tile to the adjacent canvas position.
+            for (yy, xx) in &[(y, x), (y, x + 1), (y + 1, x), (y + 1, x + 1)] {
+                let z = source.rates.0[level][(*yy, *xx)];
+                let t = unsafe { source.canvas.uv_p((*yy, *xx)) };
+                if z > PerSecond::new(0.) {
+                    self.rates.0[level][(*yy, *xx)] = z;
+                }
+                if t > 0 {
+                    *unsafe { self.canvas.uvm_p((*yy, *xx)) } = t;
+                    let dr = double_to_right[t as usize];
+                    if dr > 0 {
+                        let cp = source.u_move_point_e((*yy, *xx));
+                        *unsafe { self.canvas.uvm_p(cp) } = dr;
+                    }
+                    let db = double_to_bottom[t as usize];
+                    if db > 0 {
+                        let cp = source.u_move_point_s((*yy, *xx));
+                        *unsafe { self.canvas.uvm_p(cp) } = db;
+                    }
+                }
+            }
+        };
     }
 }
 

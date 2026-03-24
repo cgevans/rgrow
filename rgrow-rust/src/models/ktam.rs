@@ -64,8 +64,6 @@ impl NonZero for Tile {
     }
 }
 
-const FAKE_EVENT_RATE: f64 = 1e-20;
-
 fn energy_exp_times_u0(x: Energy) -> Conc {
     x.exp()
 }
@@ -1036,7 +1034,7 @@ impl System for KTAM {
 
     fn clone_state<St: crate::state::StateWithCreate>(&self, initial_state: &St) -> St {
         let mut state = St::empty(initial_state.get_params()).unwrap();
-        state.zeroed_copy_from_state_nonzero_rate(initial_state);
+        self.clone_state_into_empty_state(initial_state, &mut state);
         state
     }
 
@@ -1045,7 +1043,37 @@ impl System for KTAM {
         initial_state: &St,
         target: &mut St,
     ) {
-        target.zeroed_copy_from_state_nonzero_rate(initial_state);
+        // Single-pass sparse copy. The duple variant handles companion tiles
+        // inline during the quadtree traversal — no second pass or allocation.
+        if self.has_duples {
+            target.zeroed_copy_from_state_nonzero_rate_with_duples(
+                initial_state,
+                &self.double_to_right,
+                &self.double_to_bottom,
+            );
+        } else {
+            target.zeroed_copy_from_state_nonzero_rate(initial_state);
+        }
+
+        // Patch seed tiles: seeds have rate 0 and may be in unreachable
+        // quadrants (no nearby tiles with nonzero rates). Write directly to
+        // the canvas via uvm_p to avoid the n_tiles bookkeeping in set_sa —
+        // the housekeeping already copied the correct count from the source.
+        for (p, _) in self._seed_locs() {
+            let t = initial_state.tile_at_point(p);
+            if t > 0 {
+                unsafe { *target.uvm_p(p.0) = t };
+                // If a seed tile is itself a real duple, copy its companion too.
+                if self.has_duples {
+                    if let Some(cp) = self.companion_point(initial_state, p, t) {
+                        let ct = initial_state.tile_at_point(cp);
+                        if ct > 0 {
+                            unsafe { *target.uvm_p(cp.0) = ct };
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1437,19 +1465,16 @@ impl KTAM {
     }
 
     pub fn monomer_detachment_rate_at_point<S: State>(&self, state: &S, p: PointSafe2) -> Rate64 {
-        // If the point is a seed, then there is no detachment rate.
-        // ODD HACK: we set a very low detachment rate for seeds and duple bottom/right, to allow
-        // rate-based copying.  We ignore these below.
         if self.is_seed(p) {
-            return FAKE_EVENT_RATE;
+            return 0.;
         }
 
         let t = state.tile_at_point(p);
         if t == 0 {
             return 0.;
         }
-        if (self.has_duples) && (self.is_fake_duple(t)) {
-            return FAKE_EVENT_RATE;
+        if self.has_duples && self.is_fake_duple(t) {
+            return 0.;
         }
         self.kf
             * energy_exp_times_u0(-self.bond_energy_of_tile_type_at_point(state, p, t) + self.alpha)
@@ -1483,11 +1508,11 @@ impl KTAM {
         let rate = self.monomer_detachment_rate_at_point(state, p);
         acc -= rate;
         if acc <= 0. {
-            // FIXME: may slow things down
-            if self.is_seed(p) || ((self.has_duples) && self.is_fake_duple(state.tile_at_point(p)))
+            debug_assert!(
+                !(self.is_seed(p) || self.has_duples && self.is_fake_duple(state.tile_at_point(p))),
+                "Seed or fake duple selected for detachment despite rate 0"
+            );
             {
-                return (true, acc, Event::None, rate);
-            } else {
                 let mut possible_starts = Vec::new();
                 let mut now_empty = Vec::new();
                 let tile = { state.tile_at_point(p) };
@@ -2600,6 +2625,7 @@ mod tests {
 
     use crate::{
         canvas::{Canvas, CanvasPeriodic, CanvasSquare, CanvasTube},
+        ratestore::RateStore,
         state::{NullStateTracker, QuadTreeState, State, StateStatus, StateWithCreate},
     };
 
@@ -3381,5 +3407,210 @@ mod tests {
             system.effective_monomer_conc(1) < system.tile_concs[1],
             "Depleted conc should be less than total"
         );
+    }
+
+    // --- Tests for FAKE_EVENT_RATE removal ---
+
+    #[test]
+    fn test_seed_detachment_rate_is_zero() {
+        let mut system = KTAM::new_sized(3, 2);
+        system.tile_edges = array![[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0],];
+        system.glue_strengths = array![0., 1.0];
+        system.tile_concs = array![0., 1e-7, 1e-7];
+        system.g_se = 8.0;
+        system.alpha = 7.1;
+        system.seed = Seed::SingleTile {
+            point: PointSafe2((5, 5)),
+            tile: 1,
+        };
+        system.update_system();
+
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
+            system.new_state((16, 16)).unwrap();
+        system.configure_empty_state(&mut state).unwrap();
+
+        let seed_point = PointSafe2((5, 5));
+        assert_eq!(state.tile_at_point(seed_point), 1);
+        assert_eq!(
+            system.monomer_detachment_rate_at_point(&state, seed_point),
+            0.
+        );
+    }
+
+    #[test]
+    fn test_fake_duple_detachment_rate_is_zero() {
+        let mut system = KTAM::new_sized(4, 2);
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [1, 0, 0, 0], // tile 1 (single)
+            [1, 0, 0, 0], // tile 2 (real duple half)
+            [0, 0, 1, 0], // tile 3 (fake duple half)
+        ];
+        system.glue_strengths = array![0., 1.0];
+        system.tile_concs = array![0., 1e-7, 1e-7, 1e-7];
+        system.g_se = 8.0;
+        system.alpha = 7.1;
+        system.set_duples(vec![(2, 3)], vec![]);
+
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
+            system.new_state((16, 16)).unwrap();
+        let center = state.center();
+        // Place real duple tile — its companion (fake) is placed at center+east
+        system.set_safe_point(&mut state, center, 2);
+
+        let fake_point = PointSafe2(state.move_sa_e(center).0);
+        assert_eq!(
+            state.tile_at_point(fake_point),
+            3,
+            "fake half should be placed"
+        );
+
+        // Real half should have nonzero detachment rate
+        assert!(system.monomer_detachment_rate_at_point(&state, center) > 0.);
+        // Fake half should have zero detachment rate
+        assert_eq!(
+            system.monomer_detachment_rate_at_point(&state, fake_point),
+            0.
+        );
+    }
+
+    #[test]
+    fn test_clone_state_copies_seed_tiles() {
+        let mut system = KTAM::new_sized(3, 2);
+        system.tile_edges = array![[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0],];
+        system.glue_strengths = array![0., 1.0];
+        system.tile_concs = array![0., 1e-7, 1e-7];
+        system.g_se = 8.0;
+        system.alpha = 7.1;
+        system.seed = Seed::SingleTile {
+            point: PointSafe2((5, 5)),
+            tile: 1,
+        };
+        system.update_system();
+
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
+            system.new_state((16, 16)).unwrap();
+        system.configure_empty_state(&mut state).unwrap();
+
+        // Clone the state
+        let cloned: QuadTreeState<CanvasSquare, NullStateTracker> = system.clone_state(&state);
+
+        // Seed must be present in clone
+        assert_eq!(cloned.tile_at_point(PointSafe2((5, 5))), 1);
+        assert_eq!(cloned.n_tiles(), state.n_tiles());
+    }
+
+    #[test]
+    fn test_clone_state_copies_duple_companions() {
+        let mut system = KTAM::new_sized(4, 2);
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [1, 0, 0, 0], // tile 1 (single)
+            [1, 0, 0, 0], // tile 2 (real duple half)
+            [0, 0, 1, 0], // tile 3 (fake duple half)
+        ];
+        system.glue_strengths = array![0., 1.0];
+        system.tile_concs = array![0., 1e-7, 1e-7, 1e-7];
+        system.g_se = 8.0;
+        system.alpha = 7.1;
+        system.set_duples(vec![(2, 3)], vec![]);
+
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
+            system.new_state((16, 16)).unwrap();
+
+        // Place at even column so both halves are in the same leaf quadrant
+        let p = PointSafe2((6, 6));
+        system.set_safe_point(&mut state, p, 2);
+        let fake_p = PointSafe2(state.move_sa_e(p).0);
+
+        let cloned: QuadTreeState<CanvasSquare, NullStateTracker> = system.clone_state(&state);
+        assert_eq!(cloned.tile_at_point(p), 2, "real half should be copied");
+        assert_eq!(
+            cloned.tile_at_point(fake_p),
+            3,
+            "fake half should be copied"
+        );
+        assert_eq!(cloned.n_tiles(), state.n_tiles());
+    }
+
+    #[test]
+    fn test_clone_state_duple_across_quadrant_boundary() {
+        let mut system = KTAM::new_sized(4, 2);
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [1, 0, 0, 0], // tile 1 (single)
+            [1, 0, 0, 0], // tile 2 (real duple half)
+            [0, 0, 1, 0], // tile 3 (fake duple half)
+        ];
+        system.glue_strengths = array![0., 1.0];
+        system.tile_concs = array![0., 1e-7, 1e-7, 1e-7];
+        system.g_se = 8.0;
+        system.alpha = 7.1;
+        system.set_duples(vec![(2, 3)], vec![]);
+
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
+            system.new_state((16, 16)).unwrap();
+
+        // Place at ODD column so the fake half (col+1) is in a different
+        // 2×2 leaf quadrant from the real half.
+        let p = PointSafe2((6, 5));
+        system.set_safe_point(&mut state, p, 2);
+        let fake_p = PointSafe2(state.move_sa_e(p).0); // (6, 6) — different quadrant
+
+        let cloned: QuadTreeState<CanvasSquare, NullStateTracker> = system.clone_state(&state);
+        assert_eq!(cloned.tile_at_point(p), 2, "real half should be copied");
+        assert_eq!(
+            cloned.tile_at_point(fake_p),
+            3,
+            "fake half across quadrant boundary should be copied"
+        );
+    }
+
+    #[test]
+    fn test_clone_into_empty_matches_original() {
+        let mut system = KTAM::new_sized(4, 2);
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [1, 0, 0, 0], // tile 1
+            [0, 0, 1, 0], // tile 2
+            [1, 1, 1, 1], // tile 3
+        ];
+        system.glue_strengths = array![0., 1.0];
+        system.tile_concs = array![0., 1e-7, 1e-7, 1e-7];
+        system.g_se = 8.0;
+        system.alpha = 7.1;
+        system.seed = Seed::SingleTile {
+            point: PointSafe2((5, 5)),
+            tile: 1,
+        };
+        system.update_system();
+
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
+            system.new_state((16, 16)).unwrap();
+        system.configure_empty_state(&mut state).unwrap();
+
+        // Place a few more tiles
+        system.set_safe_point(&mut state, PointSafe2((5, 6)), 2);
+        system.set_safe_point(&mut state, PointSafe2((6, 5)), 3);
+
+        // Clone into empty
+        let mut target: QuadTreeState<CanvasSquare, NullStateTracker> =
+            QuadTreeState::empty((16, 16)).unwrap();
+        system.clone_state_into_empty_state(&state, &mut target);
+
+        assert_eq!(target.n_tiles(), state.n_tiles());
+        assert_eq!(target.total_rate(), state.total_rate());
+
+        // Verify all tile positions match
+        for r in 2..14 {
+            for c in 2..14 {
+                let p = PointSafe2((r, c));
+                assert_eq!(
+                    target.tile_at_point(p),
+                    state.tile_at_point(p),
+                    "Mismatch at ({r}, {c})"
+                );
+            }
+        }
     }
 }
