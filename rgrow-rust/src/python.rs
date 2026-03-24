@@ -991,9 +991,9 @@ macro_rules! create_py_system {
             ///     - num_trials: Number of trials performed
             ///     - exceeded_max_trials: True if max_trials was exceeded (warning flag)
             #[allow(clippy::too_many_arguments)]
-            #[pyo3(name = "calc_committor_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false))]
+            #[pyo3(name = "calc_committor_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false, parallel=true))]
             fn py_calc_committor_threshold_test(
-                &mut self,
+                &self,
                 state: &mut PyState,
                 cutoff_size: NumTiles,
                 threshold: f64,
@@ -1002,6 +1002,7 @@ macro_rules! create_py_system {
                 max_events: Option<NumEvents>,
                 max_trials: Option<usize>,
                 return_on_max_trials: bool,
+                parallel: bool,
                 py: Python<'_>,
             ) -> PyResult<(bool, f64, usize, bool)> {
                 py.detach(|| {
@@ -1014,6 +1015,7 @@ macro_rules! create_py_system {
                         max_events,
                         max_trials,
                         return_on_max_trials,
+                        parallel,
                     )
                 })
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
@@ -1267,7 +1269,7 @@ macro_rules! create_py_system {
             // ///     The first critical state found, or None if no state is above threshold.
             #[pyo3(name = "find_first_critical_state", signature = (end_state, config=CriticalStateConfig::default(), **kwargs))]
             pub fn py_find_first_critical_state(
-                &mut self,
+                &self,
                 end_state: &PyState,
                 config: CriticalStateConfig,
                 kwargs: Option<&Bound<'_, PyDict>>,
@@ -1306,7 +1308,7 @@ macro_rules! create_py_system {
             // ///     or None if no transition is found.
             #[pyo3(name = "find_last_critical_state", signature = (end_state, config=CriticalStateConfig::default(), **kwargs))]
             pub fn py_find_last_critical_state(
-                &mut self,
+                &self,
                 end_state: &PyState,
                 config: CriticalStateConfig,
                 kwargs: Option<&Bound<'_, PyDict>>,

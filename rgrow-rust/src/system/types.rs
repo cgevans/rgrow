@@ -298,6 +298,8 @@ pub struct CriticalStateConfig {
     pub canvas_size: (usize, usize),
     /// Canvas type for state reconstruction.
     pub canvas_type: crate::tileset::CanvasType,
+    /// Whether to run committor trials in parallel (using rayon).
+    pub parallel: bool,
 }
 
 impl Default for CriticalStateConfig {
@@ -310,6 +312,7 @@ impl Default for CriticalStateConfig {
             ci_confidence_level: 0.95,
             canvas_size: (32, 32),
             canvas_type: crate::tileset::CanvasType::Periodic,
+            parallel: true,
         }
     }
 }
@@ -326,6 +329,7 @@ impl CriticalStateConfig {
             "ci_confidence_level" => self.ci_confidence_level = v.extract()?,
             "canvas_size" => self.canvas_size = v.extract()?,
             "canvas_type" => self.canvas_type = v.extract()?,
+            "parallel" => self.parallel = v.extract()?,
             _ => {
                 return Err(PyTypeError::new_err(format!(
                     "Unknown CriticalStateConfig setting: {k}"
@@ -348,6 +352,7 @@ impl CriticalStateConfig {
         ci_confidence_level=None,
         canvas_size=None,
         canvas_type=None,
+        parallel=None,
     ))]
     fn new(
         cutoff_size: Option<NumTiles>,
@@ -357,6 +362,7 @@ impl CriticalStateConfig {
         ci_confidence_level: Option<f64>,
         canvas_size: Option<(usize, usize)>,
         canvas_type: Option<crate::tileset::CanvasType>,
+        parallel: Option<bool>,
     ) -> Self {
         let mut config = Self::default();
         if let Some(x) = cutoff_size {
@@ -380,13 +386,16 @@ impl CriticalStateConfig {
         if let Some(x) = canvas_type {
             config.canvas_type = x;
         }
+        if let Some(x) = parallel {
+            config.parallel = x;
+        }
         config
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "CriticalStateConfig(cutoff_size={}, threshold={}, confidence_level={}, max_trials={}, ci_confidence_level={}, canvas_size={:?}, canvas_type={:?})",
-            self.cutoff_size, self.threshold, self.confidence_level, self.max_trials, self.ci_confidence_level, self.canvas_size, self.canvas_type
+            "CriticalStateConfig(cutoff_size={}, threshold={}, confidence_level={}, max_trials={}, ci_confidence_level={}, canvas_size={:?}, canvas_type={:?}, parallel={})",
+            self.cutoff_size, self.threshold, self.confidence_level, self.max_trials, self.ci_confidence_level, self.canvas_size, self.canvas_type, self.parallel
         )
     }
 }

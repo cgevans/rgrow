@@ -376,6 +376,7 @@ class ATAM:
         max_events: int | None = None,
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
+        parallel: bool = True,
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]:
         """
@@ -529,6 +530,7 @@ class ATAM:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None:
         """
         Find the first state in a trajectory above the critical threshold.
@@ -576,6 +578,7 @@ class ATAM:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None:
         """
         Find the last state not above threshold, return the next state.
@@ -1024,6 +1027,7 @@ class SDC:
         max_events: int | None = None,
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
+        parallel: bool = True,
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]: ...
 
@@ -1068,6 +1072,7 @@ class SDC:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
@@ -1082,6 +1087,7 @@ class SDC:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
 class EvolveBounds:
@@ -1529,6 +1535,8 @@ class CriticalStateConfig:
         Canvas size for state reconstruction. Default is (32, 32).
     canvas_type : str, optional
         Canvas type for state reconstruction. Default is "periodic".
+    parallel : bool, optional
+        Whether to run committor trials in parallel (using rayon). Default is True.
     """
     cutoff_size: int
     threshold: float
@@ -1537,7 +1545,8 @@ class CriticalStateConfig:
     ci_confidence_level: float
     canvas_size: tuple[int, int]
     canvas_type: str
-    
+    parallel: bool
+
     def __init__(
         self,
         cutoff_size: int | None = None,
@@ -1547,6 +1556,7 @@ class CriticalStateConfig:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> None: ...
 
 class CriticalStateResult:
@@ -2033,6 +2043,7 @@ class KTAM:
         max_events: int | None = None,
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
+        parallel: bool = True,
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]: ...
 
@@ -2077,6 +2088,7 @@ class KTAM:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
@@ -2091,6 +2103,7 @@ class KTAM:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
 class OldKTAM:
@@ -2398,6 +2411,7 @@ class OldKTAM:
         max_events: int | None = None,
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
+        parallel: bool = True,
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]: ...
 
@@ -2442,6 +2456,7 @@ class OldKTAM:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
@@ -2456,6 +2471,7 @@ class OldKTAM:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
 class KBlock:
@@ -2786,6 +2802,7 @@ class KBlock:
         max_events: int | None = None,
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
+        parallel: bool = True,
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]: ...
 
@@ -2830,6 +2847,7 @@ class KBlock:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
@@ -2844,6 +2862,7 @@ class KBlock:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
 
