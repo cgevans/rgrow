@@ -14,6 +14,8 @@ __all__ = [
     "RBFFSRunConfig",
     "RBFFSResult",
     "RBFFSBootstrapResult",
+    "CriticalStateConfig",
+    "CriticalStateResult",
 ]
 
 import numpy as np
@@ -31,6 +33,8 @@ from .rgrow import (
     RBFFSRunConfig,
     RBFFSResult,
     RBFFSBootstrapResult,
+    CriticalStateConfig,
+    CriticalStateResult,
     State,
     EvolveBounds,
     FFSStateRef,

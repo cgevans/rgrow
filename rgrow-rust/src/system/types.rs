@@ -315,6 +315,28 @@ impl Default for CriticalStateConfig {
 }
 
 #[cfg(feature = "python")]
+impl CriticalStateConfig {
+    pub fn _py_set(&mut self, k: &str, v: Bound<'_, PyAny>) -> PyResult<()> {
+        use pyo3::exceptions::PyTypeError;
+        match k {
+            "cutoff_size" => self.cutoff_size = v.extract()?,
+            "threshold" => self.threshold = v.extract()?,
+            "confidence_level" => self.confidence_level = v.extract()?,
+            "max_trials" => self.max_trials = v.extract()?,
+            "ci_confidence_level" => self.ci_confidence_level = v.extract()?,
+            "canvas_size" => self.canvas_size = v.extract()?,
+            "canvas_type" => self.canvas_type = v.extract()?,
+            _ => {
+                return Err(PyTypeError::new_err(format!(
+                    "Unknown CriticalStateConfig setting: {k}"
+                )))
+            }
+        };
+        Ok(())
+    }
+}
+
+#[cfg(feature = "python")]
 #[pymethods]
 impl CriticalStateConfig {
     #[new]

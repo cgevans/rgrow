@@ -1265,15 +1265,22 @@ macro_rules! create_py_system {
             // /// -------
             // /// CriticalStateResult | None
             // ///     The first critical state found, or None if no state is above threshold.
-            #[pyo3(name = "find_first_critical_state", signature = (end_state, config=CriticalStateConfig::default()))]
+            #[pyo3(name = "find_first_critical_state", signature = (end_state, config=CriticalStateConfig::default(), **kwargs))]
             pub fn py_find_first_critical_state(
                 &mut self,
                 end_state: &PyState,
                 config: CriticalStateConfig,
+                kwargs: Option<&Bound<'_, PyDict>>,
                 py: Python<'_>,
             ) -> PyResult<Option<CriticalStateResult>> {
+                let mut c = config;
+                if let Some(dict) = kwargs {
+                    for (k, v) in dict.iter() {
+                        c._py_set(&k.extract::<String>()?, v)?;
+                    }
+                }
                 py.detach(|| {
-                    self.find_first_critical_state(&end_state.0, &config)
+                    self.find_first_critical_state(&end_state.0, &c)
                 })
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }
@@ -1297,15 +1304,22 @@ macro_rules! create_py_system {
             // /// CriticalStateResult | None
             // ///     The first state above threshold (following the last subcritical state),
             // ///     or None if no transition is found.
-            #[pyo3(name = "find_last_critical_state", signature = (end_state, config=CriticalStateConfig::default()))]
+            #[pyo3(name = "find_last_critical_state", signature = (end_state, config=CriticalStateConfig::default(), **kwargs))]
             pub fn py_find_last_critical_state(
                 &mut self,
                 end_state: &PyState,
                 config: CriticalStateConfig,
+                kwargs: Option<&Bound<'_, PyDict>>,
                 py: Python<'_>,
             ) -> PyResult<Option<CriticalStateResult>> {
+                let mut c = config;
+                if let Some(dict) = kwargs {
+                    for (k, v) in dict.iter() {
+                        c._py_set(&k.extract::<String>()?, v)?;
+                    }
+                }
                 py.detach(|| {
-                    self.find_last_critical_state(&end_state.0, &config)
+                    self.find_last_critical_state(&end_state.0, &c)
                 })
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }

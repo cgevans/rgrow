@@ -165,7 +165,7 @@ class ATAM:
     def get_param(self, param_name: str) -> Any: ...
     def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> Self:
+    def read_json(filename: str) -> ATAM:
         """
         Read a system from a JSON file.
 
@@ -520,7 +520,15 @@ class ATAM:
     def find_first_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
     ) -> CriticalStateResult | None:
         """
         Find the first state in a trajectory above the critical threshold.
@@ -535,6 +543,20 @@ class ATAM:
             A state with Movie tracking that contains the trajectory to search.
         config : CriticalStateConfig, optional
             Configuration for the search (uses defaults if not provided)
+        cutoff_size : int, optional
+            Cutoff size for committor calculation.
+        threshold : float, optional
+            Probability threshold for determining criticality.
+        confidence_level : float, optional
+            Confidence level for the threshold test.
+        max_trials : int, optional
+            Maximum number of trials for committor calculation.
+        ci_confidence_level : float, optional
+            Confidence level for the confidence interval.
+        canvas_size : tuple[int, int], optional
+            Canvas size for state reconstruction.
+        canvas_type : str, optional
+            Canvas type for state reconstruction.
 
         Returns
         -------
@@ -545,7 +567,15 @@ class ATAM:
     def find_last_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
     ) -> CriticalStateResult | None:
         """
         Find the last state not above threshold, return the next state.
@@ -560,6 +590,20 @@ class ATAM:
             A state with Movie tracking that contains the trajectory to search.
         config : CriticalStateConfig, optional
             Configuration for the search (uses defaults if not provided)
+        cutoff_size : int, optional
+            Cutoff size for committor calculation.
+        threshold : float, optional
+            Probability threshold for determining criticality.
+        confidence_level : float, optional
+            Confidence level for the threshold test.
+        max_trials : int, optional
+            Maximum number of trials for committor calculation.
+        ci_confidence_level : float, optional
+            Confidence level for the confidence interval.
+        canvas_size : tuple[int, int], optional
+            Canvas size for state reconstruction.
+        canvas_type : str, optional
+            Canvas type for state reconstruction.
 
         Returns
         -------
@@ -783,7 +827,7 @@ class SDC:
     def get_param(self, param_name: str) -> Any: ...
     def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> Self:
+    def read_json(filename: str) -> SDC:
         """
         Read a system from a JSON file.
 
@@ -1043,20 +1087,36 @@ class SDC:
     def find_first_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
 
     def reconstruct_state_from_trajectory(
         self,
         trajectory: pl.DataFrame,
         up_to_index: int,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
         filter_trajectory: bool = True,
     ) -> State: ...
 
@@ -1811,11 +1871,11 @@ class KTAM:
         """
 
     @staticmethod
-    def from_tileset(tileset: Any) -> Self: ...
+    def from_tileset(tileset: Any) -> KTAM: ...
     def get_param(self, param_name: str) -> Any: ...
     def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> Self:
+    def read_json(filename: str) -> KTAM:
         """
         Read a system from a JSON file.
 
@@ -2045,12 +2105,28 @@ class KTAM:
         self,
         end_state: State,
         config: CriticalStateConfig = ...,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
         end_state: State,
         config: CriticalStateConfig = ...,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
 
     def reconstruct_state_from_trajectory(
@@ -2225,7 +2301,7 @@ class OldKTAM:
     def get_param(self, param_name: str) -> Any: ...
     def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> Self:
+    def read_json(filename: str) -> OldKTAM:
         """
         Read a system from a JSON file.
 
@@ -2401,20 +2477,36 @@ class OldKTAM:
     def find_first_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
 
     def reconstruct_state_from_trajectory(
         self,
         trajectory: pl.DataFrame,
         up_to_index: int,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
         filter_trajectory: bool = True,
     ) -> State: ...
 
@@ -2596,7 +2688,7 @@ class KBlock:
     def print_debug(self) -> None: ...
 
     @staticmethod
-    def read_json(filename: str) -> Self:
+    def read_json(filename: str) -> KBlock:
         """
         Read a system from a JSON file.
 
@@ -2782,12 +2874,28 @@ class KBlock:
         self,
         end_state: State,
         config: CriticalStateConfig = ...,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
         end_state: State,
         config: CriticalStateConfig = ...,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
     ) -> CriticalStateResult | None: ...
 
     def reconstruct_state_from_trajectory(
