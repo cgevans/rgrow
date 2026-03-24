@@ -10,7 +10,7 @@ use super::dispatch::SystemEnum;
 use super::types::*;
 
 pub(super) fn calc_committor<S: System>(
-    sys: &mut S,
+    sys: &S,
     initial_state: &StateEnum,
     cutoff_size: NumTiles,
     max_time: Option<f64>,
@@ -149,7 +149,7 @@ where
 }
 
 pub(super) fn calc_forward_probability<S: System>(
-    sys: &mut S,
+    sys: &S,
     initial_state: &StateEnum,
     forward_step: NumTiles,
     max_time: Option<f64>,

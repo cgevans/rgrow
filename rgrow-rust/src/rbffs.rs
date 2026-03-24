@@ -463,7 +463,7 @@ impl RBFFSResult {
 
     /// Dispatch to the correct state type based on canvas_type and tracking.
     pub fn run_from_system<Sy: System>(
-        sys: &mut Sy,
+        sys: &Sy,
         config: &RBFFSRunConfig,
     ) -> Result<RBFFSResult, RgrowError>
     where
@@ -1158,7 +1158,7 @@ where
 }
 
 pub fn run_rbffs<Sy: System, St: ClonableState + StateWithCreate<Params = (usize, usize)>>(
-    system: &mut Sy,
+    system: &Sy,
     config: &RBFFSRunConfig,
 ) -> Result<RBFFSResult, GrowError>
 where
@@ -1176,8 +1176,6 @@ where
 
     let weights: Vec<_> = dimers.iter().map(|d| f64::from(d.formation_rate)).collect();
     let chooser = WeightedIndex::new(weights).unwrap();
-
-    let system: &Sy = system;
 
     if config.parallel {
         run_rbffs_parallel::<Sy, St>(
@@ -1250,16 +1248,16 @@ impl TileSet {
 
         match model {
             Model::KTAM => {
-                let mut ktam = KTAM::try_from(self)?;
-                let mut r = RBFFSResult::run_from_system(&mut ktam, &config)?;
+                let ktam = KTAM::try_from(self)?;
+                let mut r = RBFFSResult::run_from_system(&ktam, &config)?;
                 if config.store_system {
                     r.stored_system = Some(SystemEnum::from(ktam));
                 }
                 Ok(r)
             }
             Model::OldKTAM => {
-                let mut oldktam = OldKTAM::try_from(self)?;
-                let mut r = RBFFSResult::run_from_system(&mut oldktam, &config)?;
+                let oldktam = OldKTAM::try_from(self)?;
+                let mut r = RBFFSResult::run_from_system(&oldktam, &config)?;
                 if config.store_system {
                     r.stored_system = Some(SystemEnum::from(oldktam));
                 }

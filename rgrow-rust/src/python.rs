@@ -634,7 +634,7 @@ macro_rules! create_py_system {
             /// ndarray
             ///   An array of the same shape as the state's canvas, with the values set as described above.
             fn calc_mismatch_locations<'py>(
-                &mut self,
+                &self,
                 state: PyStateOrRef,
                 py: Python<'py>,
             ) -> PyResult<Bound<'py, PyArray2<usize>>> {
@@ -792,7 +792,7 @@ macro_rules! create_py_system {
                 Ok(color_array.into_pyarray(py))
             }
 
-            fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
+            fn get_param(&self, param_name: &str) -> PyResult<RustAny> {
                 Ok(RustAny(System::get_param(self, param_name)?))
             }
 
@@ -847,7 +847,7 @@ macro_rules! create_py_system {
             ///     Probability of reaching cutoff_size (between 0.0 and 1.0)
             #[pyo3(name = "calc_committor", signature = (state, cutoff_size, num_trials, max_time=None, max_events=None))]
             fn py_calc_committor(
-                &mut self,
+                &self,
                 state: &PyState,
                 cutoff_size: NumTiles,
                 num_trials: usize,
@@ -1047,7 +1047,7 @@ macro_rules! create_py_system {
             ///     Probability of reaching forward_step additional tiles (between 0.0 and 1.0)
             #[pyo3(name = "calc_forward_probability", signature = (state, num_trials, forward_step=1, max_time=None, max_events=None))]
             fn py_calc_forward_probability(
-                &mut self,
+                &self,
                 state: &PyState,
                 num_trials: usize,
                 forward_step: NumTiles,
@@ -1157,7 +1157,7 @@ macro_rules! create_py_system {
             ///  The result of the FFS run.
             #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), **kwargs))]
             fn py_run_ffs(
-                &mut self,
+                &self,
                 config: FFSRunConfig,
                 kwargs: Option<Bound<PyDict>>,
                 py: Python<'_>,

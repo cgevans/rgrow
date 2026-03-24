@@ -67,12 +67,12 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
 
     fn system_info(&self) -> String;
 
-    fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError>;
+    fn run_ffs(&self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError>;
 
-    fn run_rbffs(&mut self, config: &RBFFSRunConfig) -> Result<RBFFSResult, RgrowError>;
+    fn run_rbffs(&self, config: &RBFFSRunConfig) -> Result<RBFFSResult, RgrowError>;
 
     fn calc_committor(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
         max_time: Option<f64>,
@@ -99,7 +99,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     ) -> Result<(Vec<f64>, Vec<usize>), GrowError>;
 
     fn calc_forward_probability(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         forward_step: NumTiles,
         max_time: Option<f64>,
@@ -306,11 +306,11 @@ where
         self.update_state(state, needed)
     }
 
-    fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {
+    fn run_ffs(&self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {
         FFSRunResult::run_from_system(self, config)
     }
 
-    fn run_rbffs(&mut self, config: &RBFFSRunConfig) -> Result<RBFFSResult, RgrowError> {
+    fn run_rbffs(&self, config: &RBFFSRunConfig) -> Result<RBFFSResult, RgrowError> {
         RBFFSResult::run_from_system(self, config)
     }
 
@@ -319,7 +319,7 @@ where
     }
 
     fn calc_committor(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
         max_time: Option<f64>,
@@ -373,7 +373,7 @@ where
     }
 
     fn calc_forward_probability(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         forward_step: NumTiles,
         max_time: Option<f64>,

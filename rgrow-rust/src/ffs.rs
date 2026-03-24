@@ -684,7 +684,7 @@ pub struct FFSRun<St: ClonableState> {
 }
 
 impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
-    pub fn create<Sy: System>(system: &mut Sy, config: &FFSRunConfig) -> Result<Self, GrowError> {
+    pub fn create<Sy: System>(system: &Sy, config: &FFSRunConfig) -> Result<Self, GrowError> {
         let level_list = Vec::new();
 
         let dimerization_rate: MolarPerSecond = system
@@ -778,7 +778,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
         tileset: &'a TileSet,
         config: &FFSRunConfig,
     ) -> Result<Self, RgrowError> {
-        let mut sys = Sy::try_from(tileset)?;
+        let sys = Sy::try_from(tileset)?;
         let c = {
             let mut c = config.clone();
             c.canvas_size = match tileset.size.unwrap_or(SIZE_DEFAULT) {
@@ -788,7 +788,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSRun<St> {
             c
         };
 
-        Ok(Self::create(&mut sys, &c)?)
+        Ok(Self::create(&sys, &c)?)
     }
 }
 
@@ -818,7 +818,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
 
     pub fn next_level<Sy: System>(
         &self,
-        system: &mut Sy,
+        system: &Sy,
         config: &FFSRunConfig,
         min_prob: Option<f64>,
         surface_index: u64,
@@ -937,7 +937,7 @@ impl<St: ClonableState + StateWithCreate<Params = (usize, usize)>> FFSLevel<St> 
     }
 
     pub fn nmers_from_dimers<Sy: System>(
-        system: &mut Sy,
+        system: &Sy,
         config: &FFSRunConfig,
     ) -> Result<(Self, Self), GrowError> {
         let mut rng = SmallRng::from_os_rng();
@@ -1341,7 +1341,7 @@ impl FFSRunResult {
     }
 
     pub fn run_from_system<Sy: System>(
-        sys: &mut Sy,
+        sys: &Sy,
         config: &FFSRunConfig,
     ) -> Result<FFSRunResult, RgrowError>
     where
