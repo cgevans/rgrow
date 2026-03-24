@@ -1260,14 +1260,22 @@ impl KTAM {
             for t2 in 0..(ntiles as usize) {
                 let t1r = self.tile_edges.row(t1);
                 let t2r = self.tile_edges.row(t2);
-                self.energy_ns[(t1, t2)] = self.g_se * self.glue_links[(t1r[2], t2r[0])];
-                if t1r[2] == t2r[0] {
-                    self.energy_ns[(t1, t2)] = self.g_se * self.glue_strengths[t1r[2]]
-                }
-                self.energy_we[(t1, t2)] = self.g_se * self.glue_links[(t1r[1], t2r[3])];
-                if t1r[1] == t2r[3] {
-                    self.energy_we[(t1, t2)] = self.g_se * self.glue_strengths[t1r[1]]
-                }
+                // Bond energy = (matching glue strength + cross-link strength) * g_se
+                // Matches xgrow's set_Gses: strength * match + glue_link, all * Gse
+                self.energy_ns[(t1, t2)] = self.g_se
+                    * (self.glue_links[(t1r[2], t2r[0])]
+                        + if t1r[2] == t2r[0] {
+                            self.glue_strengths[t1r[2]]
+                        } else {
+                            0.
+                        });
+                self.energy_we[(t1, t2)] = self.g_se
+                    * (self.glue_links[(t1r[1], t2r[3])]
+                        + if t1r[1] == t2r[3] {
+                            self.glue_strengths[t1r[1]]
+                        } else {
+                            0.
+                        });
             }
             self.should_be_counted[t1] = (t1 > 0) && (self.tile_concs[t1] > 0.);
         }
@@ -3720,5 +3728,64 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_glue_links_add_to_matching_strength() {
+        // Two tiles with matching glue 1 on their NS interface.
+        // glue_strengths[1] = 2.0, glue_links[(1,1)] = 0.5
+        // Expected NS energy = g_se * (2.0 + 0.5) = g_se * 2.5
+        let mut system = KTAM::new_sized(3, 2);
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [0, 0, 1, 0], // tile 1: S=1
+            [1, 0, 0, 0], // tile 2: N=1
+        ];
+        system.glue_strengths = array![0., 2.0];
+        system.tile_concs = array![0., 1e-7, 1e-7];
+        system.g_se = 1.0; // keep g_se=1 so energy = strength directly
+        system.alpha = 0.0;
+        system.glue_links = Array2::zeros((2, 2));
+        system.glue_links[(1, 1)] = 0.5; // cross-link between glue 1 and itself
+        system.update_system();
+
+        // tile 1 S=1, tile 2 N=1 → matching glue 1
+        // energy_ns[(1, 2)] = g_se * (glue_strengths[1] + glue_links[(1,1)])
+        assert!(
+            (system.energy_ns[(1, 2)] - 2.5).abs() < 1e-10,
+            "Matching glue energy should be strength + glue_link: got {}",
+            system.energy_ns[(1, 2)]
+        );
+    }
+
+    #[test]
+    fn test_glue_links_cross_binding_without_match() {
+        // Two tiles with non-matching glues: tile 1 S=1, tile 2 N=2
+        // glue_links[(1,2)] = 0.3
+        // Expected NS energy = g_se * 0.3 (no matching strength, only cross-link)
+        let mut system = KTAM::new_sized(3, 3);
+        system.tile_edges = array![
+            [0, 0, 0, 0], // tile 0 (empty)
+            [0, 0, 1, 0], // tile 1: S=1
+            [2, 0, 0, 0], // tile 2: N=2
+        ];
+        system.glue_strengths = array![0., 5.0, 5.0];
+        system.tile_concs = array![0., 1e-7, 1e-7];
+        system.g_se = 1.0;
+        system.alpha = 0.0;
+        system.glue_links = Array2::zeros((3, 3));
+        system.glue_links[(1, 2)] = 0.3;
+        system.glue_links[(2, 1)] = 0.3;
+        system.update_system();
+
+        // tile 1 S=1, tile 2 N=2 → non-matching, but glue_links[(1,2)] = 0.3
+        assert!(
+            (system.energy_ns[(1, 2)] - 0.3).abs() < 1e-10,
+            "Cross-link energy without match should be just glue_link: got {}",
+            system.energy_ns[(1, 2)]
+        );
+
+        // tile 1 S=1, tile 1 N=0 → no link
+        assert_eq!(system.energy_ns[(1, 1)], 0.0);
     }
 }
