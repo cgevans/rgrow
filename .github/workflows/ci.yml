@@ -175,9 +175,10 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist 
+          args: --release --out dist
           sccache: "true"
           manylinux: "auto"
+          rust-toolchain: stable
       - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -185,6 +186,7 @@ jobs:
           args: --release --out ../dist
           sccache: "true"
           manylinux: "auto"
+          rust-toolchain: stable
           working-directory: rgrow-cli
 
       - name: Upload wheels
@@ -217,6 +219,7 @@ jobs:
           args: --release --out dist --interpreter ${{ steps.interp.outputs.path }} --no-default-features
           sccache: "true"
           manylinux: "auto"
+          rust-toolchain: stable
       - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -224,6 +227,7 @@ jobs:
           args: --release --out ../dist --interpreter ${{ steps.interp.outputs.path }}
           sccache: "true"
           manylinux: "auto"
+          rust-toolchain: stable
           working-directory: rgrow-cli
       - name: Upload wheels
         uses: actions/upload-artifact@v4
