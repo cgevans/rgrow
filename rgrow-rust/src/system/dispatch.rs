@@ -187,6 +187,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     ///     None,    // max_events
     ///     None,    // max_trials (default: 100,000)
     ///     false,   // return_on_max_trials
+    ///     false,   // parallel
     /// )?;
     ///
     /// println!("Probability {} threshold 0.5", if is_above { "above" } else { "below" });
@@ -202,6 +203,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     ///     None,       // max_events
     ///     Some(1000), // max_trials
     ///     true,       // return_on_max_trials
+    ///     false,      // parallel
     /// )?;
     ///
     /// if exceeded {
