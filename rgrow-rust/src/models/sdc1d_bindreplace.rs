@@ -588,6 +588,18 @@ impl SDC1DBindReplace {
     }
 
     pub fn update(&mut self) {
+        // Rate-unit consistency: with `!physical_attachment_rate`, empty-site
+        // event rate is a dimensionless 1.0, while filled-site replacement
+        // rate (under `account_for_energy`) is kinetic `kf·exp(ΔG/RT)`. Mixing
+        // the two means evolve picks events at rates that are incomparable by
+        // orders of magnitude, which starves empty sites whenever any filled
+        // site has a weakly-bound strand. Reject the combination.
+        assert!(
+            !self.account_for_energy || self.physical_attachment_rate,
+            "SDC1DBindReplace: account_for_energy=true requires physical_attachment_rate=true \
+             (empty-site unit rate vs filled-site kinetic rate is inconsistent)"
+        );
+
         for (i, &scaffold_glue) in self.scaffold.iter().enumerate() {
             let mut matching_tiles = vec![];
             for (tile_num, &(_glue_w, glue_b, _glue_e)) in self.strand_glues.iter().enumerate() {

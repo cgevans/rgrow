@@ -277,6 +277,7 @@ fn make_bitcopy_with_energy(n: usize, input_bit: u32) -> SDC1DBindReplace {
 
     let mut sys = SDC1DBindReplace::from_params(params);
     sys.account_for_energy = true;
+    sys.physical_attachment_rate = true;
     // Re-run update to fill energy arrays
     sys.update();
     sys
@@ -295,13 +296,16 @@ fn test_energy_empty_state_rates() {
     .unwrap();
     sys.update_state(&mut state, &NeededUpdate::All);
 
-    // Empty state rates should be 1 (energy doesn't affect empty sites)
+    // Empty-site rate = kf * Σ concentrations of matching strands. Pos 0 has
+    // 1 matching strand; pos 1..n have 2.
+    let kf = 1e6_f64;
+    let conc = 1e6_f64;
     for col in 0..n {
-        let rate = sys.event_rate_at_point(&state, PointSafeHere((0, col)));
-        assert_eq!(
-            f64::from(rate),
-            1.0,
-            "empty position {col} should have rate 1"
+        let rate = f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, col))));
+        let expected = if col == 0 { kf * conc } else { 2.0 * kf * conc };
+        assert!(
+            (rate - expected).abs() < 1e-6 * expected,
+            "empty position {col}: expected {expected}, got {rate}"
         );
     }
 }
@@ -423,6 +427,9 @@ fn test_no_energy_backward_compat() {
     let sys_no_energy = make_bitcopy(n, input_bit);
     let mut sys_with_data = make_bitcopy_with_energy(n, input_bit);
     sys_with_data.account_for_energy = false;
+    // Also reset physical_attachment_rate so the two systems use the same
+    // empty-site convention; the helper turns it on alongside energy.
+    sys_with_data.physical_attachment_rate = false;
     // Note: energy arrays not filled since account_for_energy is false, but that's fine
     // because the rate code checks account_for_energy before using them
 
@@ -577,6 +584,7 @@ fn make_bitcopy_weak_replacement(n: usize, input_bit: u32, dg: f64) -> SDC1DBind
     let mut sys = SDC1DBindReplace::from_params(params);
     sys.account_for_energy = true;
     sys.allow_weak_replacement = true;
+    sys.physical_attachment_rate = true;
     sys.update();
     sys
 }
@@ -683,6 +691,7 @@ fn make_bitcopy_with_entropy(n: usize, input_bit: u32, dg: f64, ds: f64) -> SDC1
     let mut sys = SDC1DBindReplace::from_params(params);
     sys.account_for_energy = true;
     sys.allow_weak_replacement = true;
+    sys.physical_attachment_rate = true;
     sys.update();
     sys
 }
