@@ -87,9 +87,10 @@ jobs:
           src: "./rgrow-python/rgrow"
       - name: Install carge llvm-cov
         run: cargo install cargo-llvm-cov
-      - name: Install maturin and pytest
+      - name: Install maturin and test dependencies
         run: |
-          uv pip install maturin pytest pytest-cov hypothesis
+          uv pip install maturin pytest-cov
+          uv pip install --group testing
       - name: Run tests and coverage
         run: just cov-python
       - name: Run ty
@@ -174,9 +175,10 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist 
+          args: --release --out dist
           sccache: "true"
           manylinux: "auto"
+          rust-toolchain: stable
       - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -184,6 +186,7 @@ jobs:
           args: --release --out ../dist
           sccache: "true"
           manylinux: "auto"
+          rust-toolchain: stable
           working-directory: rgrow-cli
 
       - name: Upload wheels
@@ -216,6 +219,7 @@ jobs:
           args: --release --out dist --interpreter ${{ steps.interp.outputs.path }} --no-default-features
           sccache: "true"
           manylinux: "auto"
+          rust-toolchain: stable
       - name: Build CLI wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -223,6 +227,7 @@ jobs:
           args: --release --out ../dist --interpreter ${{ steps.interp.outputs.path }}
           sccache: "true"
           manylinux: "auto"
+          rust-toolchain: stable
           working-directory: rgrow-cli
       - name: Upload wheels
         uses: actions/upload-artifact@v4

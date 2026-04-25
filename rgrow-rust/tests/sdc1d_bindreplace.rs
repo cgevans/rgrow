@@ -5,7 +5,7 @@ use rgrow::models::sdc1d_bindreplace::SDC1DBindReplace;
 use rgrow::state::StateEnum;
 use rgrow::system::{Event, EvolveBounds, NeededUpdate, System, TileBondInfo};
 use rgrow::tileset::CanvasType::SquareCompact;
-use rgrow::tileset::TrackingType;
+use rgrow::tileset::TrackingConfig;
 use rgrow::units::PerSecond;
 use std::collections::HashMap;
 
@@ -89,7 +89,7 @@ fn test_bitcopy_empty_state_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -114,7 +114,7 @@ fn test_bitcopy_perfect_filled_state_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -147,7 +147,7 @@ fn test_bitcopy_mismatched_filled_state_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -191,7 +191,7 @@ fn test_bitcopy_reaches_perfect_copy() {
         let mut state = StateEnum::empty(
             (1, n),
             SquareCompact,
-            TrackingType::None,
+            &TrackingConfig::default(),
             sys.tile_names().len(),
         )
         .unwrap();
@@ -277,6 +277,7 @@ fn make_bitcopy_with_energy(n: usize, input_bit: u32) -> SDC1DBindReplace {
 
     let mut sys = SDC1DBindReplace::from_params(params);
     sys.account_for_energy = true;
+    sys.physical_attachment_rate = true;
     // Re-run update to fill energy arrays
     sys.update();
     sys
@@ -289,19 +290,22 @@ fn test_energy_empty_state_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
     sys.update_state(&mut state, &NeededUpdate::All);
 
-    // Empty state rates should be 1 (energy doesn't affect empty sites)
+    // Empty-site rate = kf * Σ concentrations of matching strands. Pos 0 has
+    // 1 matching strand; pos 1..n have 2.
+    let kf = 1e6_f64;
+    let conc = 1e6_f64;
     for col in 0..n {
-        let rate = sys.event_rate_at_point(&state, PointSafeHere((0, col)));
-        assert_eq!(
-            f64::from(rate),
-            1.0,
-            "empty position {col} should have rate 1"
+        let rate = f64::from(sys.event_rate_at_point(&state, PointSafeHere((0, col))));
+        let expected = if col == 0 { kf * conc } else { 2.0 * kf * conc };
+        assert!(
+            (rate - expected).abs() < 1e-6 * expected,
+            "empty position {col}: expected {expected}, got {rate}"
         );
     }
 }
@@ -314,7 +318,7 @@ fn test_energy_perfect_filled_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -346,7 +350,7 @@ fn test_energy_mismatched_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -391,7 +395,7 @@ fn test_energy_reaches_perfect_copy() {
         let mut state = StateEnum::empty(
             (1, n),
             SquareCompact,
-            TrackingType::None,
+            &TrackingConfig::default(),
             sys.tile_names().len(),
         )
         .unwrap();
@@ -423,20 +427,23 @@ fn test_no_energy_backward_compat() {
     let sys_no_energy = make_bitcopy(n, input_bit);
     let mut sys_with_data = make_bitcopy_with_energy(n, input_bit);
     sys_with_data.account_for_energy = false;
+    // Also reset physical_attachment_rate so the two systems use the same
+    // empty-site convention; the helper turns it on alongside energy.
+    sys_with_data.physical_attachment_rate = false;
     // Note: energy arrays not filled since account_for_energy is false, but that's fine
     // because the rate code checks account_for_energy before using them
 
     let mut state1 = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys_no_energy.tile_names().len(),
     )
     .unwrap();
     let mut state2 = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys_with_data.tile_names().len(),
     )
     .unwrap();
@@ -480,7 +487,7 @@ fn test_weak_replacement_allows_less_matching() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -577,6 +584,7 @@ fn make_bitcopy_weak_replacement(n: usize, input_bit: u32, dg: f64) -> SDC1DBind
     let mut sys = SDC1DBindReplace::from_params(params);
     sys.account_for_energy = true;
     sys.allow_weak_replacement = true;
+    sys.physical_attachment_rate = true;
     sys.update();
     sys
 }
@@ -594,7 +602,7 @@ fn test_weak_replacement_fills_and_evolves() {
         let mut state = StateEnum::empty(
             (1, n),
             SquareCompact,
-            TrackingType::None,
+            &TrackingConfig::default(),
             sys.tile_names().len(),
         )
         .unwrap();
@@ -683,6 +691,7 @@ fn make_bitcopy_with_entropy(n: usize, input_bit: u32, dg: f64, ds: f64) -> SDC1
     let mut sys = SDC1DBindReplace::from_params(params);
     sys.account_for_energy = true;
     sys.allow_weak_replacement = true;
+    sys.physical_attachment_rate = true;
     sys.update();
     sys
 }
@@ -702,7 +711,7 @@ fn test_bindunbind_replacement_rate() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -768,7 +777,7 @@ fn test_physical_attachment_rate_empty_sites() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -813,7 +822,7 @@ fn test_allow_same_replacement_increases_rate() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -876,7 +885,7 @@ fn test_mismatch_locations_all_correct() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -911,7 +920,7 @@ fn test_mismatch_locations_single_mismatch() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -962,7 +971,7 @@ fn test_mismatch_locations_empty_neighbors() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -1061,7 +1070,7 @@ fn test_set_param_kf_changes_rates() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -1090,7 +1099,7 @@ fn test_choose_event_empty_site_returns_attachment() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -1116,7 +1125,7 @@ fn test_choose_event_filled_site_returns_change() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();
@@ -1158,7 +1167,7 @@ fn test_n2_empty_rates_and_evolve() {
         let mut state = StateEnum::empty(
             (1, n),
             SquareCompact,
-            TrackingType::None,
+            &TrackingConfig::default(),
             sys.tile_names().len(),
         )
         .unwrap();
@@ -1202,7 +1211,7 @@ fn test_entropy_temperature_dependence() {
     let mut state = StateEnum::empty(
         (1, n),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sys.tile_names().len(),
     )
     .unwrap();

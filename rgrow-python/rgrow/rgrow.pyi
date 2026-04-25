@@ -165,7 +165,7 @@ class ATAM:
     def get_param(self, param_name: str) -> Any: ...
     def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> Self:
+    def read_json(filename: str) -> ATAM:
         """
         Read a system from a JSON file.
 
@@ -376,6 +376,7 @@ class ATAM:
         max_events: int | None = None,
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
+        parallel: bool = True,
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]:
         """
@@ -520,7 +521,16 @@ class ATAM:
     def find_first_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None:
         """
         Find the first state in a trajectory above the critical threshold.
@@ -535,6 +545,20 @@ class ATAM:
             A state with Movie tracking that contains the trajectory to search.
         config : CriticalStateConfig, optional
             Configuration for the search (uses defaults if not provided)
+        cutoff_size : int, optional
+            Cutoff size for committor calculation.
+        threshold : float, optional
+            Probability threshold for determining criticality.
+        confidence_level : float, optional
+            Confidence level for the threshold test.
+        max_trials : int, optional
+            Maximum number of trials for committor calculation.
+        ci_confidence_level : float, optional
+            Confidence level for the confidence interval.
+        canvas_size : tuple[int, int], optional
+            Canvas size for state reconstruction.
+        canvas_type : str, optional
+            Canvas type for state reconstruction.
 
         Returns
         -------
@@ -545,7 +569,16 @@ class ATAM:
     def find_last_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None:
         """
         Find the last state not above threshold, return the next state.
@@ -560,40 +593,26 @@ class ATAM:
             A state with Movie tracking that contains the trajectory to search.
         config : CriticalStateConfig, optional
             Configuration for the search (uses defaults if not provided)
+        cutoff_size : int, optional
+            Cutoff size for committor calculation.
+        threshold : float, optional
+            Probability threshold for determining criticality.
+        confidence_level : float, optional
+            Confidence level for the threshold test.
+        max_trials : int, optional
+            Maximum number of trials for committor calculation.
+        ci_confidence_level : float, optional
+            Confidence level for the confidence interval.
+        canvas_size : tuple[int, int], optional
+            Canvas size for state reconstruction.
+        canvas_type : str, optional
+            Canvas type for state reconstruction.
 
         Returns
         -------
         CriticalStateResult | None
             The first state above threshold (following the last subcritical state),
             or None if no transition is found.
-        """
-
-    def reconstruct_state_from_trajectory(
-        self,
-        trajectory: pl.DataFrame,
-        up_to_index: int,
-        config: CriticalStateConfig = ...,
-        filter_trajectory: bool = True,
-    ) -> State:
-        """
-        Reconstruct a state from trajectory data up to a given index.
-
-        Parameters
-        ----------
-        trajectory : pl.DataFrame
-            DataFrame with columns: row, col, new_tile
-        up_to_index : int
-            Index up to which to reconstruct (exclusive)
-        config : CriticalStateConfig, optional
-            Configuration for state creation
-        filter_trajectory : bool, optional
-            Whether to filter the trajectory first to remove transient events.
-            Default is True.
-
-        Returns
-        -------
-        State
-            The reconstructed state with rates updated.
         """
 
 class SDC:
@@ -783,7 +802,7 @@ class SDC:
     def get_param(self, param_name: str) -> Any: ...
     def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> Self:
+    def read_json(filename: str) -> SDC:
         """
         Read a system from a JSON file.
 
@@ -1008,6 +1027,7 @@ class SDC:
         max_events: int | None = None,
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
+        parallel: bool = True,
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]: ...
 
@@ -1043,22 +1063,32 @@ class SDC:
     def find_first_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
-
-    def reconstruct_state_from_trajectory(
-        self,
-        trajectory: pl.DataFrame,
-        up_to_index: int,
-        config: CriticalStateConfig = ...,
-        filter_trajectory: bool = True,
-    ) -> State: ...
 
 class EvolveBounds:
     def __init__(
@@ -1505,6 +1535,8 @@ class CriticalStateConfig:
         Canvas size for state reconstruction. Default is (32, 32).
     canvas_type : str, optional
         Canvas type for state reconstruction. Default is "periodic".
+    parallel : bool, optional
+        Whether to run committor trials in parallel (using rayon). Default is True.
     """
     cutoff_size: int
     threshold: float
@@ -1513,7 +1545,8 @@ class CriticalStateConfig:
     ci_confidence_level: float
     canvas_size: tuple[int, int]
     canvas_type: str
-    
+    parallel: bool
+
     def __init__(
         self,
         cutoff_size: int | None = None,
@@ -1523,6 +1556,7 @@ class CriticalStateConfig:
         ci_confidence_level: float | None = None,
         canvas_size: tuple[int, int] | None = None,
         canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> None: ...
 
 class CriticalStateResult:
@@ -1811,11 +1845,11 @@ class KTAM:
         """
 
     @staticmethod
-    def from_tileset(tileset: Any) -> Self: ...
+    def from_tileset(tileset: Any) -> KTAM: ...
     def get_param(self, param_name: str) -> Any: ...
     def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> Self:
+    def read_json(filename: str) -> KTAM:
         """
         Read a system from a JSON file.
 
@@ -2009,6 +2043,7 @@ class KTAM:
         max_events: int | None = None,
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
+        parallel: bool = True,
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]: ...
 
@@ -2045,21 +2080,31 @@ class KTAM:
         self,
         end_state: State,
         config: CriticalStateConfig = ...,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
         end_state: State,
         config: CriticalStateConfig = ...,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
-
-    def reconstruct_state_from_trajectory(
-        self,
-        trajectory: pl.DataFrame,
-        up_to_index: int,
-        config: CriticalStateConfig = ...,
-        filter_trajectory: bool = True,
-    ) -> State: ...
 
 class OldKTAM:
     @property
@@ -2225,7 +2270,7 @@ class OldKTAM:
     def get_param(self, param_name: str) -> Any: ...
     def print_debug(self) -> None: ...
     @staticmethod
-    def read_json(filename: str) -> Self:
+    def read_json(filename: str) -> OldKTAM:
         """
         Read a system from a JSON file.
 
@@ -2366,6 +2411,7 @@ class OldKTAM:
         max_events: int | None = None,
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
+        parallel: bool = True,
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]: ...
 
@@ -2401,22 +2447,32 @@ class OldKTAM:
     def find_first_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
         end_state: State,
-        config: CriticalStateConfig = ...,
+        config: CriticalStateConfig | None = None,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
-
-    def reconstruct_state_from_trajectory(
-        self,
-        trajectory: pl.DataFrame,
-        up_to_index: int,
-        config: CriticalStateConfig = ...,
-        filter_trajectory: bool = True,
-    ) -> State: ...
 
 class KBlock:
     @property
@@ -2596,7 +2652,7 @@ class KBlock:
     def print_debug(self) -> None: ...
 
     @staticmethod
-    def read_json(filename: str) -> Self:
+    def read_json(filename: str) -> KBlock:
         """
         Read a system from a JSON file.
 
@@ -2746,6 +2802,7 @@ class KBlock:
         max_events: int | None = None,
         max_trials: int | None = None,
         return_on_max_trials: bool = False,
+        parallel: bool = True,
         ci_confidence_level: float | None = None,
     ) -> tuple[bool, float, int, bool]: ...
 
@@ -2782,21 +2839,31 @@ class KBlock:
         self,
         end_state: State,
         config: CriticalStateConfig = ...,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
 
     def find_last_critical_state(
         self,
         end_state: State,
         config: CriticalStateConfig = ...,
+        *,
+        cutoff_size: int | None = None,
+        threshold: float | None = None,
+        confidence_level: float | None = None,
+        max_trials: int | None = None,
+        ci_confidence_level: float | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_type: str | None = None,
+        parallel: bool | None = None,
     ) -> CriticalStateResult | None: ...
-
-    def reconstruct_state_from_trajectory(
-        self,
-        trajectory: pl.DataFrame,
-        up_to_index: int,
-        config: CriticalStateConfig = ...,
-        filter_trajectory: bool = True,
-    ) -> State: ...
 
 
 System: TypeAlias = ATAM | KTAM | OldKTAM | KBlock | SDC

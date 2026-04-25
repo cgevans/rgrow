@@ -4,7 +4,7 @@ use crate::canvas::{
     CanvasTubeDiagonals,
 };
 use crate::painter::SpriteSquare;
-use crate::tileset::{CanvasType, TrackingType};
+use crate::tileset::{CanvasType, TrackingConfig};
 use crate::units::{PerSecond, Second};
 use crate::{
     canvas::PointSafe2,
@@ -19,6 +19,7 @@ use num_traits::Zero;
 #[cfg(feature = "polars")]
 use polars::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 #[enum_dispatch]
@@ -80,7 +81,13 @@ impl_clonable_state! {
     (CanvasPeriodic, MovieTracker) => PeriodicMovieTracking,
     (CanvasTube, MovieTracker) => TubeMovieTracking,
     (CanvasTubeDiagonals, MovieTracker) => TubeDiagonalsMovieTracking,
-    (CanvasSquareCompact, MovieTracker) => SquareCompactMovieTracking
+    (CanvasSquareCompact, MovieTracker) => SquareCompactMovieTracking,
+
+    (CanvasSquare, EnergyChangesTracker) => SquareEnergyChangesTracking,
+    (CanvasPeriodic, EnergyChangesTracker) => PeriodicEnergyChangesTracking,
+    (CanvasTube, EnergyChangesTracker) => TubeEnergyChangesTracking,
+    (CanvasTubeDiagonals, EnergyChangesTracker) => TubeDiagonalsEnergyChangesTracking,
+    (CanvasSquareCompact, EnergyChangesTracker) => SquareCompactEnergyChangesTracking
 }
 
 #[enum_dispatch(
@@ -121,13 +128,18 @@ pub enum StateEnum {
     TubeMovieTracking(QuadTreeState<CanvasTube, MovieTracker>),
     TubeDiagonalsMovieTracking(QuadTreeState<CanvasTubeDiagonals, MovieTracker>),
     SquareCompactMovieTracking(QuadTreeState<CanvasSquareCompact, MovieTracker>),
+    SquareEnergyChangesTracking(QuadTreeState<CanvasSquare, EnergyChangesTracker>),
+    PeriodicEnergyChangesTracking(QuadTreeState<CanvasPeriodic, EnergyChangesTracker>),
+    TubeEnergyChangesTracking(QuadTreeState<CanvasTube, EnergyChangesTracker>),
+    TubeDiagonalsEnergyChangesTracking(QuadTreeState<CanvasTubeDiagonals, EnergyChangesTracker>),
+    SquareCompactEnergyChangesTracking(QuadTreeState<CanvasSquareCompact, EnergyChangesTracker>),
 }
 
 impl StateEnum {
     pub fn from_array(
         array: ArrayView2<Tile>,
         kind: CanvasType,
-        tracking: TrackingType,
+        tracking: &TrackingConfig,
         n_tile_types: usize,
     ) -> Result<StateEnum, GrowError> {
         let shape = array.shape();
@@ -140,7 +152,7 @@ impl StateEnum {
     pub fn empty(
         shape: (usize, usize),
         kind: CanvasType,
-        tracking: TrackingType,
+        tracking: &TrackingConfig,
         n_tile_types: usize,
     ) -> Result<StateEnum, GrowError> {
         macro_rules! create_state {
@@ -152,22 +164,32 @@ impl StateEnum {
         macro_rules! match_tracking {
             ($canvas:ty) => {
                 match tracking {
-                    TrackingType::None => create_state!($canvas, NullStateTracker),
-                    TrackingType::Order => create_state!($canvas, OrderTracker),
-                    TrackingType::LastAttachTime => create_state!($canvas, LastAttachTimeTracker),
-                    TrackingType::PrintEvent => create_state!($canvas, PrintEventTracker),
-                    TrackingType::Movie => create_state!($canvas, MovieTracker),
+                    TrackingConfig::None => create_state!($canvas, NullStateTracker),
+                    TrackingConfig::Order => create_state!($canvas, OrderTracker),
+                    TrackingConfig::LastAttachTime => create_state!($canvas, LastAttachTimeTracker),
+                    TrackingConfig::PrintEvent => create_state!($canvas, PrintEventTracker),
+                    TrackingConfig::Movie => create_state!($canvas, MovieTracker),
+                    TrackingConfig::EnergyChanges { .. } => {
+                        create_state!($canvas, EnergyChangesTracker)
+                    }
                 }
             };
         }
 
-        Ok(match kind {
+        let mut state: StateEnum = match kind {
             CanvasType::Square => match_tracking!(CanvasSquare),
             CanvasType::Periodic => match_tracking!(CanvasPeriodic),
             CanvasType::Tube => match_tracking!(CanvasTube),
             CanvasType::TubeDiagonals => match_tracking!(CanvasTubeDiagonals),
             CanvasType::SquareCompact => match_tracking!(CanvasSquareCompact),
-        })
+        };
+
+        // Apply per-variant config
+        if let TrackingConfig::EnergyChanges { bin_width } = tracking {
+            state.set_energy_bin_width(*bin_width);
+        }
+
+        Ok(state)
     }
 
     pub fn get_movie_tracker(&self) -> Option<&MovieTracker> {
@@ -178,6 +200,34 @@ impl StateEnum {
             StateEnum::TubeDiagonalsMovieTracking(state) => Some(&state.tracker),
             StateEnum::SquareCompactMovieTracking(state) => Some(&state.tracker),
             _ => None,
+        }
+    }
+
+    pub fn get_energy_changes_tracker(&self) -> Option<&EnergyChangesTracker> {
+        match self {
+            StateEnum::SquareEnergyChangesTracking(state) => Some(&state.tracker),
+            StateEnum::PeriodicEnergyChangesTracking(state) => Some(&state.tracker),
+            StateEnum::TubeEnergyChangesTracking(state) => Some(&state.tracker),
+            StateEnum::TubeDiagonalsEnergyChangesTracking(state) => Some(&state.tracker),
+            StateEnum::SquareCompactEnergyChangesTracking(state) => Some(&state.tracker),
+            _ => None,
+        }
+    }
+
+    pub fn get_energy_changes_tracker_mut(&mut self) -> Option<&mut EnergyChangesTracker> {
+        match self {
+            StateEnum::SquareEnergyChangesTracking(state) => Some(&mut state.tracker),
+            StateEnum::PeriodicEnergyChangesTracking(state) => Some(&mut state.tracker),
+            StateEnum::TubeEnergyChangesTracking(state) => Some(&mut state.tracker),
+            StateEnum::TubeDiagonalsEnergyChangesTracking(state) => Some(&mut state.tracker),
+            StateEnum::SquareCompactEnergyChangesTracking(state) => Some(&mut state.tracker),
+            _ => None,
+        }
+    }
+
+    pub fn set_energy_bin_width(&mut self, width: f64) {
+        if let Some(tracker) = self.get_energy_changes_tracker_mut() {
+            tracker.bin_width = width;
         }
     }
 
@@ -1231,6 +1281,70 @@ impl StateTracker for MovieTracker {
             "energy_change" => &self.energy_change,
         }
         .expect("Failed to create DataFrame from MovieTracker data");
+
+        RustAny(Box::new(df))
+    }
+
+    #[cfg(not(feature = "polars"))]
+    fn get_tracker_data(&self) -> RustAny {
+        RustAny(Box::new(()))
+    }
+}
+
+pub const DEFAULT_ENERGY_BIN_WIDTH: f64 = 1e-6;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EnergyChangesTracker {
+    pub counts: HashMap<i64, u64>,
+    pub bin_width: f64,
+}
+
+impl StateTracker for EnergyChangesTracker {
+    fn default(_canvas: &dyn Canvas) -> Self {
+        EnergyChangesTracker {
+            counts: HashMap::new(),
+            bin_width: DEFAULT_ENERGY_BIN_WIDTH,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.counts.clear();
+    }
+
+    fn record_single_event(
+        &mut self,
+        event: &system::Event,
+        _time: Second,
+        _total_rate: PerSecond,
+        _chosen_event_rate: f64,
+        energy_change: f64,
+        _energy: Energy,
+        _n_tiles: NumTiles,
+    ) -> &mut Self {
+        if let system::Event::None = event {
+            return self;
+        }
+        let bin_key = (energy_change / self.bin_width).round() as i64;
+        *self.counts.entry(bin_key).or_insert(0) += 1;
+        self
+    }
+
+    #[cfg(feature = "polars")]
+    fn get_tracker_data(&self) -> RustAny {
+        let mut entries: Vec<(i64, u64)> = self.counts.iter().map(|(&k, &v)| (k, v)).collect();
+        entries.sort_by_key(|(k, _)| *k);
+
+        let energy_changes: Vec<f64> = entries
+            .iter()
+            .map(|(k, _)| *k as f64 * self.bin_width)
+            .collect();
+        let counts: Vec<u64> = entries.iter().map(|(_, v)| *v).collect();
+
+        let df = df! {
+            "energy_change" => &energy_changes,
+            "count" => &counts,
+        }
+        .expect("Failed to create DataFrame from EnergyChangesTracker data");
 
         RustAny(Box::new(df))
     }

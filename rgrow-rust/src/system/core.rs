@@ -124,7 +124,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 
     fn evolve_states<St: State>(
-        &mut self,
+        &self,
         states: &mut [St],
         bounds: EvolveBounds,
     ) -> Vec<Result<EvolveOutcome, GrowError>> {

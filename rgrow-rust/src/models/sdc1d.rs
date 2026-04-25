@@ -1940,7 +1940,7 @@ impl AnnealProtocol {
         StateEnum::empty(
             shape,
             crate::tileset::CanvasType::Square,
-            crate::tileset::TrackingType::None,
+            &Default::default(),
             n_tile_types,
         )
     }

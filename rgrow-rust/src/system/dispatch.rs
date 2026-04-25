@@ -40,7 +40,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
 
     /// Evolve a list of states, in parallel.
     fn evolve_states(
-        &mut self,
+        &self,
         states: &mut [&mut StateEnum],
         bounds: EvolveBounds,
     ) -> Vec<Result<EvolveOutcome, GrowError>>;
@@ -67,12 +67,12 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
 
     fn system_info(&self) -> String;
 
-    fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError>;
+    fn run_ffs(&self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError>;
 
-    fn run_rbffs(&mut self, config: &RBFFSRunConfig) -> Result<RBFFSResult, RgrowError>;
+    fn run_rbffs(&self, config: &RBFFSRunConfig) -> Result<RBFFSResult, RgrowError>;
 
     fn calc_committor(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
         max_time: Option<f64>,
@@ -99,7 +99,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     ) -> Result<(Vec<f64>, Vec<usize>), GrowError>;
 
     fn calc_forward_probability(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         forward_step: NumTiles,
         max_time: Option<f64>,
@@ -187,6 +187,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     ///     None,    // max_events
     ///     None,    // max_trials (default: 100,000)
     ///     false,   // return_on_max_trials
+    ///     false,   // parallel
     /// )?;
     ///
     /// println!("Probability {} threshold 0.5", if is_above { "above" } else { "below" });
@@ -202,6 +203,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     ///     None,       // max_events
     ///     Some(1000), // max_trials
     ///     true,       // return_on_max_trials
+    ///     false,      // parallel
     /// )?;
     ///
     /// if exceeded {
@@ -213,7 +215,7 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
     fn calc_committor_threshold_test(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
         threshold: f64,
@@ -222,18 +224,19 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
         max_events: Option<NumEvents>,
         max_trials: Option<usize>,
         return_on_max_trials: bool,
+        parallel: bool,
     ) -> Result<(bool, f64, usize, bool), GrowError>;
 
     // /// Find the first state in a trajectory that is above the critical threshold.
     fn find_first_critical_state(
-        &mut self,
+        &self,
         end_state: &StateEnum,
         config: &CriticalStateConfig,
     ) -> Result<Option<CriticalStateResult>, GrowError>;
 
     // /// Find the last state not above threshold, return the next state (first above threshold).
     fn find_last_critical_state(
-        &mut self,
+        &self,
         end_state: &StateEnum,
         config: &CriticalStateConfig,
     ) -> Result<Option<CriticalStateResult>, GrowError>;
@@ -252,7 +255,7 @@ where
     }
 
     fn evolve_states(
-        &mut self,
+        &self,
         states: &mut [&mut StateEnum],
         bounds: EvolveBounds,
     ) -> Vec<Result<EvolveOutcome, GrowError>> {
@@ -305,11 +308,11 @@ where
         self.update_state(state, needed)
     }
 
-    fn run_ffs(&mut self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {
+    fn run_ffs(&self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {
         FFSRunResult::run_from_system(self, config)
     }
 
-    fn run_rbffs(&mut self, config: &RBFFSRunConfig) -> Result<RBFFSResult, RgrowError> {
+    fn run_rbffs(&self, config: &RBFFSRunConfig) -> Result<RBFFSResult, RgrowError> {
         RBFFSResult::run_from_system(self, config)
     }
 
@@ -318,7 +321,7 @@ where
     }
 
     fn calc_committor(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
         max_time: Option<f64>,
@@ -372,7 +375,7 @@ where
     }
 
     fn calc_forward_probability(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         forward_step: NumTiles,
         max_time: Option<f64>,
@@ -426,7 +429,7 @@ where
     }
 
     fn calc_committor_threshold_test(
-        &mut self,
+        &self,
         initial_state: &StateEnum,
         cutoff_size: NumTiles,
         threshold: f64,
@@ -435,6 +438,7 @@ where
         max_events: Option<NumEvents>,
         max_trials: Option<usize>,
         return_on_max_trials: bool,
+        parallel: bool,
     ) -> Result<(bool, f64, usize, bool), GrowError> {
         analysis::calc_committor_threshold_test(
             self,
@@ -446,11 +450,12 @@ where
             max_events,
             max_trials,
             return_on_max_trials,
+            parallel,
         )
     }
 
     fn find_first_critical_state(
-        &mut self,
+        &self,
         end_state: &StateEnum,
         config: &CriticalStateConfig,
     ) -> Result<Option<CriticalStateResult>, GrowError> {
@@ -458,7 +463,7 @@ where
     }
 
     fn find_last_critical_state(
-        &mut self,
+        &self,
         end_state: &StateEnum,
         config: &CriticalStateConfig,
     ) -> Result<Option<CriticalStateResult>, GrowError> {

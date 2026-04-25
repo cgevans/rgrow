@@ -40,33 +40,35 @@ pub struct PyState(pub(crate) StateEnum);
 #[pymethods]
 impl PyState {
     #[new]
-    #[pyo3(signature = (shape, kind="Square", tracking="None", n_tile_types=None))]
+    #[pyo3(signature = (shape, kind="Square", tracking=None, n_tile_types=None))]
     pub fn empty(
         shape: (usize, usize),
         kind: &str,
-        tracking: &str,
+        tracking: Option<crate::tileset::TrackingConfig>,
         n_tile_types: Option<usize>,
     ) -> PyResult<Self> {
+        let tracking = tracking.unwrap_or_default();
         Ok(PyState(StateEnum::empty(
             shape,
             kind.try_into()?,
-            tracking.try_into()?,
+            &tracking,
             n_tile_types.unwrap_or(1),
         )?))
     }
 
     #[staticmethod]
-    #[pyo3(signature = (array, kind="Square", tracking="None", n_tile_types=None))]
+    #[pyo3(signature = (array, kind="Square", tracking=None, n_tile_types=None))]
     pub fn from_array(
         array: PyReadonlyArray2<crate::base::Tile>,
         kind: &str,
-        tracking: &str,
+        tracking: Option<crate::tileset::TrackingConfig>,
         n_tile_types: Option<usize>,
     ) -> PyResult<Self> {
+        let tracking = tracking.unwrap_or_default();
         Ok(PyState(StateEnum::from_array(
             array.as_array(),
             kind.try_into()?,
-            tracking.try_into()?,
+            &tracking,
             n_tile_types.unwrap_or(1),
         )?))
     }
@@ -150,6 +152,43 @@ impl PyState {
         let ra = t.0.get_tracker_data();
 
         Ok(ra)
+    }
+
+    /// Return the energy changes histogram as a dict, or None if not using EnergyChanges tracking.
+    ///
+    /// Returns
+    /// -------
+    /// dict or None
+    ///     A dict with keys ``"energy_change"`` (list of float) and ``"count"`` (list of int),
+    ///     sorted by energy_change.  Returns ``None`` if the state does not use EnergyChanges tracking.
+    pub fn energy_histogram(&self) -> Option<std::collections::HashMap<String, Py<PyAny>>> {
+        let tracker = self.0.get_energy_changes_tracker()?;
+
+        let mut entries: Vec<(i64, u64)> = tracker.counts.iter().map(|(&k, &v)| (k, v)).collect();
+        entries.sort_by_key(|(k, _)| *k);
+
+        let energy_changes: Vec<f64> = entries
+            .iter()
+            .map(|(k, _)| *k as f64 * tracker.bin_width)
+            .collect();
+        let counts: Vec<u64> = entries.iter().map(|(_, v)| *v).collect();
+
+        Python::attach(|py| {
+            let mut result = std::collections::HashMap::new();
+            result.insert(
+                "energy_change".to_string(),
+                energy_changes
+                    .into_pyobject(py)
+                    .unwrap()
+                    .into_any()
+                    .unbind(),
+            );
+            result.insert(
+                "count".to_string(),
+                counts.into_pyobject(py).unwrap().into_any().unbind(),
+            );
+            Some(result)
+        })
     }
 
     /// int: the number of tiles in the state.
@@ -595,7 +634,7 @@ macro_rules! create_py_system {
             /// ndarray
             ///   An array of the same shape as the state's canvas, with the values set as described above.
             fn calc_mismatch_locations<'py>(
-                &mut self,
+                &self,
                 state: PyStateOrRef,
                 py: Python<'py>,
             ) -> PyResult<Bound<'py, PyArray2<usize>>> {
@@ -753,7 +792,7 @@ macro_rules! create_py_system {
                 Ok(color_array.into_pyarray(py))
             }
 
-            fn get_param(&mut self, param_name: &str) -> PyResult<RustAny> {
+            fn get_param(&self, param_name: &str) -> PyResult<RustAny> {
                 Ok(RustAny(System::get_param(self, param_name)?))
             }
 
@@ -808,7 +847,7 @@ macro_rules! create_py_system {
             ///     Probability of reaching cutoff_size (between 0.0 and 1.0)
             #[pyo3(name = "calc_committor", signature = (state, cutoff_size, num_trials, max_time=None, max_events=None))]
             fn py_calc_committor(
-                &mut self,
+                &self,
                 state: &PyState,
                 cutoff_size: NumTiles,
                 num_trials: usize,
@@ -952,9 +991,9 @@ macro_rules! create_py_system {
             ///     - num_trials: Number of trials performed
             ///     - exceeded_max_trials: True if max_trials was exceeded (warning flag)
             #[allow(clippy::too_many_arguments)]
-            #[pyo3(name = "calc_committor_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false))]
+            #[pyo3(name = "calc_committor_threshold_test", signature = (state, cutoff_size, threshold, confidence_level, max_time=None, max_events=None, max_trials=None, return_on_max_trials=false, parallel=true))]
             fn py_calc_committor_threshold_test(
-                &mut self,
+                &self,
                 state: &mut PyState,
                 cutoff_size: NumTiles,
                 threshold: f64,
@@ -963,6 +1002,7 @@ macro_rules! create_py_system {
                 max_events: Option<NumEvents>,
                 max_trials: Option<usize>,
                 return_on_max_trials: bool,
+                parallel: bool,
                 py: Python<'_>,
             ) -> PyResult<(bool, f64, usize, bool)> {
                 py.detach(|| {
@@ -975,6 +1015,7 @@ macro_rules! create_py_system {
                         max_events,
                         max_trials,
                         return_on_max_trials,
+                        parallel,
                     )
                 })
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
@@ -1006,7 +1047,7 @@ macro_rules! create_py_system {
             ///     Probability of reaching forward_step additional tiles (between 0.0 and 1.0)
             #[pyo3(name = "calc_forward_probability", signature = (state, num_trials, forward_step=1, max_time=None, max_events=None))]
             fn py_calc_forward_probability(
-                &mut self,
+                &self,
                 state: &PyState,
                 num_trials: usize,
                 forward_step: NumTiles,
@@ -1116,7 +1157,7 @@ macro_rules! create_py_system {
             ///  The result of the FFS run.
             #[pyo3(name = "run_ffs", signature = (config = FFSRunConfig::default(), **kwargs))]
             fn py_run_ffs(
-                &mut self,
+                &self,
                 config: FFSRunConfig,
                 kwargs: Option<Bound<PyDict>>,
                 py: Python<'_>,
@@ -1226,15 +1267,22 @@ macro_rules! create_py_system {
             // /// -------
             // /// CriticalStateResult | None
             // ///     The first critical state found, or None if no state is above threshold.
-            #[pyo3(name = "find_first_critical_state", signature = (end_state, config=CriticalStateConfig::default()))]
+            #[pyo3(name = "find_first_critical_state", signature = (end_state, config=CriticalStateConfig::default(), **kwargs))]
             pub fn py_find_first_critical_state(
-                &mut self,
+                &self,
                 end_state: &PyState,
                 config: CriticalStateConfig,
+                kwargs: Option<&Bound<'_, PyDict>>,
                 py: Python<'_>,
             ) -> PyResult<Option<CriticalStateResult>> {
+                let mut c = config;
+                if let Some(dict) = kwargs {
+                    for (k, v) in dict.iter() {
+                        c._py_set(&k.extract::<String>()?, v)?;
+                    }
+                }
                 py.detach(|| {
-                    self.find_first_critical_state(&end_state.0, &config)
+                    self.find_first_critical_state(&end_state.0, &c)
                 })
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }
@@ -1258,15 +1306,22 @@ macro_rules! create_py_system {
             // /// CriticalStateResult | None
             // ///     The first state above threshold (following the last subcritical state),
             // ///     or None if no transition is found.
-            #[pyo3(name = "find_last_critical_state", signature = (end_state, config=CriticalStateConfig::default()))]
+            #[pyo3(name = "find_last_critical_state", signature = (end_state, config=CriticalStateConfig::default(), **kwargs))]
             pub fn py_find_last_critical_state(
-                &mut self,
+                &self,
                 end_state: &PyState,
                 config: CriticalStateConfig,
+                kwargs: Option<&Bound<'_, PyDict>>,
                 py: Python<'_>,
             ) -> PyResult<Option<CriticalStateResult>> {
+                let mut c = config;
+                if let Some(dict) = kwargs {
+                    for (k, v) in dict.iter() {
+                        c._py_set(&k.extract::<String>()?, v)?;
+                    }
+                }
                 py.detach(|| {
-                    self.find_last_critical_state(&end_state.0, &config)
+                    self.find_last_critical_state(&end_state.0, &c)
                 })
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
             }

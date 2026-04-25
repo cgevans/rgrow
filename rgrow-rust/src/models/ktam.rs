@@ -87,6 +87,21 @@ enum TileShape {
     DupleToTop(Tile),
 }
 
+/// Result of `compute_dimer_equilibrium`: solved equiconc system plus index
+/// maps needed to read the positional solution back into tile-indexed form.
+struct DimerEquilibrium {
+    system: equiconc::System,
+    /// `tile_to_monomer_idx[t]` is the row index of tile `t` in the solver
+    /// inputs, or `None` if the tile was not included as a monomer.
+    tile_to_monomer_idx: Vec<Option<u32>>,
+    /// Species index (into `eq.concentrations()`) for each NS dimer pair
+    /// that was submitted to equiconc. Pairs involving duples / fake duples
+    /// are not in this map.
+    ns_species_idx: HashMapType<(Tile, Tile), usize>,
+    /// Species index for each WE dimer pair submitted to equiconc.
+    we_species_idx: HashMapType<(Tile, Tile), usize>,
+}
+
 #[cfg_attr(feature = "python", pyclass(module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KTAM {
@@ -1327,8 +1342,8 @@ impl KTAM {
         self.ns_dimers.clear();
         self.we_dimers.clear();
 
-        let eq = match self.compute_dimer_equilibrium() {
-            Ok(eq) => Some(eq),
+        let de = match self.compute_dimer_equilibrium() {
+            Ok(de) => Some(de),
             Err(e) => {
                 if self.chunk_handling == ChunkHandling::Equilibrium {
                     panic!("Error computing dimer equilibrium: {:?}", e);
@@ -1342,38 +1357,45 @@ impl KTAM {
             }
         };
 
-        // Cache free monomer concentrations
-        for t in 1..self.tile_concs.len() {
-            self.free_tile_concs[t] = eq
-                .as_ref()
-                .map(|eq| {
-                    eq.concentration(&format!("{}", t))
-                        .unwrap_or(self.tile_concs[t])
-                })
-                .unwrap_or(self.tile_concs[t]);
+        // Snapshot the solution as an owned array so we can both iterate the
+        // energy matrices and read concs without tangling borrows. Fake-duple
+        // / duple tiles retain their original `tile_concs` entries.
+        let concs = de.as_ref().map(|de| {
+            de.system
+                .last_solution()
+                .expect("system is fresh after solve")
+                .concentrations()
+                .to_owned()
+        });
+
+        if let (Some(de), Some(concs)) = (de.as_ref(), concs.as_ref()) {
+            for t in 1..self.tile_concs.len() {
+                if let Some(i) = de.tile_to_monomer_idx[t] {
+                    self.free_tile_concs[t] = concs[i as usize];
+                }
+            }
         }
 
-        // Cache dimer concentrations
+        // Enumerate ns/we dimer entries by scanning the energy matrices (this
+        // includes pairs that touch duples or fake-duple halves, which are
+        // absent from the equiconc solve — those get equilibrium_conc = 0).
         for ((t1, t2), e) in self.energy_ns.indexed_iter() {
             if *e > 0.0 && t1 > 0 && t2 > 0 {
                 let conc1 = self.get_tile_concentration_of_real_part(t1 as Tile);
                 let conc2 = self.get_tile_concentration_of_real_part(t2 as Tile);
                 if conc1 <= 0.0 || conc2 <= 0.0 {
-                    continue; // FIXME: do we need this?
+                    continue;
                 }
-                let dimer_name = format!("NS{}_{}", t1, t2);
-                let conc = Molar(
-                    eq.as_ref()
-                        .map(|eq| eq.concentration(&dimer_name).unwrap_or(0.0))
-                        .unwrap_or(0.0),
-                );
-                // self.dimer_eq_concs.push((
-                //     t1 as Tile,
-                //     t2 as Tile,
-                //     Orientation::NS,
-                //     conc,
-                // ));
-                self.ns_dimers.push((t1 as Tile, t2 as Tile, conc.0));
+                let eq_conc = de
+                    .as_ref()
+                    .zip(concs.as_ref())
+                    .and_then(|(de, concs)| {
+                        de.ns_species_idx
+                            .get(&(t1 as Tile, t2 as Tile))
+                            .map(|&idx| concs[idx])
+                    })
+                    .unwrap_or(0.0);
+                self.ns_dimers.push((t1 as Tile, t2 as Tile, eq_conc));
             }
         }
 
@@ -1384,38 +1406,35 @@ impl KTAM {
                 if conc1 <= 0.0 || conc2 <= 0.0 {
                     continue;
                 }
-                let dimer_name = format!("WE{}_{}", t1, t2);
-                let conc = Molar(
-                    eq.as_ref()
-                        .map(|eq| eq.concentration(&dimer_name).unwrap_or(0.0))
-                        .unwrap_or(0.0),
-                );
-                // self.dimer_eq_concs.push((
-                //     t1 as Tile,
-                //     t2 as Tile,
-                //     Orientation::WE,
-                //     conc,
-                // ));
-                self.we_dimers.push((t1 as Tile, t2 as Tile, conc.0));
+                let eq_conc = de
+                    .as_ref()
+                    .zip(concs.as_ref())
+                    .and_then(|(de, concs)| {
+                        de.we_species_idx
+                            .get(&(t1 as Tile, t2 as Tile))
+                            .map(|&idx| concs[idx])
+                    })
+                    .unwrap_or(0.0);
+                self.we_dimers.push((t1 as Tile, t2 as Tile, eq_conc));
             }
         }
 
-        // Depletion warning (when not using Equilibrium chunk handling)
-        if self.chunk_handling != ChunkHandling::Equilibrium {
-            for t in 1..self.tile_concs.len() {
-                if self.tile_concs[t] > 0.0 && self.should_be_counted[t] {
-                    let frac = 1.0 - self.free_tile_concs[t] / self.tile_concs[t];
-                    if frac > 0.1 {
-                        eprintln!(
-                            "Warning: Tile '{}' has {:.0}% depletion from dimerization. \
-                                        Consider chunk_handling: equilibrium.",
-                            self.tile_names[t],
-                            frac * 100.0
-                        );
-                    }
-                }
-            }
-        }
+        // // Depletion warning (when not using Equilibrium chunk handling)
+        // if self.chunk_handling != ChunkHandling::Equilibrium {
+        //     for t in 1..self.tile_concs.len() {
+        //         if self.tile_concs[t] > 0.0 && self.should_be_counted[t] {
+        //             let frac = 1.0 - self.free_tile_concs[t] / self.tile_concs[t];
+        //             if frac > 0.1 {
+        //                 eprintln!(
+        //                     "Warning: Tile '{}' has {:.0}% depletion from dimerization. \
+        //                                 Consider chunk_handling: equilibrium.",
+        //                     self.tile_names[t],
+        //                     frac * 100.0
+        //                 );
+        //             }
+        //         }
+        //     }
+        // }
     }
 
     pub fn is_seed(&self, p: PointSafe2) -> bool {
@@ -2347,55 +2366,100 @@ impl KTAM {
     }
 
     /// Compute dimer equilibrium using equiconc.
-    fn compute_dimer_equilibrium(&self) -> Result<equiconc::Equilibrium, GrowError> {
-        // T = 1/R makes ΔG° = -energy_dimensionless, producing K = exp(energy).
-        let t_ref = 1.0 / equiconc::R;
-        let mut sys = equiconc::System::new().temperature(t_ref);
-
-        // Add each real tile as a monomer
-        for t in 1..self.tile_concs.len() {
-            // We don't allow duples in dimers.
-            if self.tile_concs[t] > 0.0
+    ///
+    /// Talks to equiconc in ndarray form directly (no string keys): monomers
+    /// are the subset of tiles eligible for dimerization, complexes are the
+    /// NS/WE friends pairs between eligible tiles.
+    fn compute_dimer_equilibrium(&self) -> Result<DimerEquilibrium, GrowError> {
+        // Eligible tiles: positive concentration, not a duple, not a fake duple.
+        let mut tile_to_monomer_idx: Vec<Option<u32>> =
+            Vec::with_capacity(self.tile_concs.len());
+        let mut monomers: Vec<usize> = Vec::new();
+        for (t, &conc) in self.tile_concs.iter().enumerate() {
+            let eligible = t > 0
+                && conc > 0.0
                 && self.double_to_bottom[t] == 0
                 && self.double_to_right[t] == 0
-                && !self.is_fake_duple(t as u32)
-            {
-                sys = sys.monomer(&format!("{}", t), self.tile_concs[t]);
+                && !self.is_fake_duple(t as u32);
+            if eligible {
+                tile_to_monomer_idx.push(Some(monomers.len() as u32));
+                monomers.push(t);
+            } else {
+                tile_to_monomer_idx.push(None);
             }
+        }
+        let n_mon = monomers.len();
 
+        // Enumerate NS / WE complexes between eligible tiles. With T = 1/R,
+        // R*T = 1, so log_q = -ΔG°/(RT) = energy - alpha (the current builder
+        // passes ΔG° = -energy + alpha to .complex()).
+        let mut ns_species_idx: HashMapType<(Tile, Tile), usize> = HashMapType::default();
+        let mut we_species_idx: HashMapType<(Tile, Tile), usize> = HashMapType::default();
+        let mut complex_log_q: Vec<f64> = Vec::new();
+        let mut complex_composition: Vec<(usize, usize)> = Vec::new();
+
+        for &t in &monomers {
+            let i = tile_to_monomer_idx[t].unwrap() as usize;
             for &t2 in &self.friends_n[t] {
-                if self.tile_concs[t2 as usize] > 0.0
-                    && self.double_to_bottom[t2 as usize] == 0
-                    && self.double_to_right[t2 as usize] == 0
-                    && !self.is_fake_duple(t2)
-                {
+                if let Some(j) = tile_to_monomer_idx[t2 as usize] {
                     let energy = self.get_energy_ns(t as u32, t2);
-                    sys = sys.complex(
-                        &format!("NS{}_{}", t, t2),
-                        &[(&format!("{}", t), 1), (&format!("{}", t2 as usize), 1)],
-                        -energy + self.alpha,
-                    );
+                    let species = n_mon + complex_composition.len();
+                    complex_log_q.push(energy - self.alpha);
+                    complex_composition.push((i, j as usize));
+                    ns_species_idx.insert((t as Tile, t2), species);
                 }
             }
-
+        }
+        for &t in &monomers {
+            let i = tile_to_monomer_idx[t].unwrap() as usize;
             for &t2 in &self.friends_w[t] {
-                if self.tile_concs[t2 as usize] > 0.0
-                    && self.double_to_bottom[t2 as usize] == 0
-                    && self.double_to_right[t2 as usize] == 0
-                    && !self.is_fake_duple(t2)
-                {
+                if let Some(j) = tile_to_monomer_idx[t2 as usize] {
                     let energy = self.get_energy_we(t as u32, t2);
-                    sys = sys.complex(
-                        &format!("WE{}_{}", t, t2),
-                        &[(&format!("{}", t2 as usize), 1), (&format!("{}", t), 1)],
-                        -energy + self.alpha,
-                    );
+                    let species = n_mon + complex_composition.len();
+                    complex_log_q.push(energy - self.alpha);
+                    complex_composition.push((i, j as usize));
+                    we_species_idx.insert((t as Tile, t2), species);
                 }
             }
         }
 
-        sys.equilibrium()
-            .map_err(|e| GrowError::EquilibriumCalcError(e.to_string()))
+        let n_complex = complex_composition.len();
+        let n_species = n_mon + n_complex;
+
+        // Stoichiometry is (n_species, n_mon): identity in the monomer rows,
+        // then a row per complex marking its two participating monomers.
+        let mut stoich = Array2::<f64>::zeros((n_species, n_mon));
+        for i in 0..n_mon {
+            stoich[[i, i]] = 1.0;
+        }
+        for (k, &(i, j)) in complex_composition.iter().enumerate() {
+            if i == j {
+                stoich[[n_mon + k, i]] = 2.0;
+            } else {
+                stoich[[n_mon + k, i]] = 1.0;
+                stoich[[n_mon + k, j]] = 1.0;
+            }
+        }
+
+        let mut log_q = Array1::<f64>::zeros(n_species);
+        for (k, &lq) in complex_log_q.iter().enumerate() {
+            log_q[n_mon + k] = lq;
+        }
+
+        let c0: Array1<f64> = monomers.iter().map(|&t| self.tile_concs[t]).collect();
+
+        let mut system = equiconc::System::from_arrays(stoich, log_q, c0)
+            .map_err(|e| GrowError::EquilibriumCalcError(e.to_string()))?;
+        system
+            .solve()
+            .map_err(|e| GrowError::EquilibriumCalcError(e.to_string()))?;
+
+        Ok(DimerEquilibrium {
+            system,
+            tile_to_monomer_idx,
+            ns_species_idx,
+            we_species_idx,
+        })
     }
 
     /// Compute dimer attachment rate at a point for all possible dimer attachments.

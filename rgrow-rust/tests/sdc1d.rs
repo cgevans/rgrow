@@ -8,7 +8,7 @@ use rgrow::ratestore::RateStore;
 use rgrow::state::{StateEnum, StateStatus};
 use rgrow::system::{EvolveBounds, NeededUpdate, System, TileBondInfo};
 use rgrow::tileset::CanvasType::{Square, SquareCompact};
-use rgrow::tileset::TrackingType;
+use rgrow::tileset::TrackingConfig;
 use std::collections::HashMap;
 
 fn strands() -> Vec<SDCStrand> {
@@ -180,7 +180,7 @@ fn run_sdc_system() {
     let mut state = StateEnum::empty(
         (100, 9),
         Square,
-        TrackingType::None,
+        &TrackingConfig::default(),
         sdc_sys.tile_names().len(),
     )
     .unwrap();
@@ -203,7 +203,7 @@ fn sdc_single_scaffold_compact() {
     let mut state_1 = StateEnum::empty(
         (1, scaffold_len),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         n_tiles,
     )
     .unwrap();
@@ -213,7 +213,7 @@ fn sdc_single_scaffold_compact() {
     let mut state_k = StateEnum::empty(
         (8, scaffold_len),
         SquareCompact,
-        TrackingType::None,
+        &TrackingConfig::default(),
         n_tiles,
     )
     .unwrap();
@@ -251,8 +251,8 @@ fn sdc_canvas_square_rejects_small_dimensions() {
     let sdc_sys = make_system();
     let n_tiles = sdc_sys.tile_names().len();
 
-    assert!(StateEnum::empty((1, 9), Square, TrackingType::None, n_tiles).is_err());
-    assert!(StateEnum::empty((4, 9), Square, TrackingType::None, n_tiles).is_err());
-    assert!(StateEnum::empty((9, 4), Square, TrackingType::None, n_tiles).is_err());
-    assert!(StateEnum::empty((5, 9), Square, TrackingType::None, n_tiles).is_ok());
+    assert!(StateEnum::empty((1, 9), Square, &TrackingConfig::default(), n_tiles).is_err());
+    assert!(StateEnum::empty((4, 9), Square, &TrackingConfig::default(), n_tiles).is_err());
+    assert!(StateEnum::empty((9, 4), Square, &TrackingConfig::default(), n_tiles).is_err());
+    assert!(StateEnum::empty((5, 9), Square, &TrackingConfig::default(), n_tiles).is_ok());
 }

@@ -10,7 +10,7 @@ use super::dispatch::SystemEnum;
 use super::types::*;
 
 pub(super) fn calc_committor<S: System>(
-    sys: &mut S,
+    sys: &S,
     initial_state: &StateEnum,
     cutoff_size: NumTiles,
     max_time: Option<f64>,
@@ -149,7 +149,7 @@ where
 }
 
 pub(super) fn calc_forward_probability<S: System>(
-    sys: &mut S,
+    sys: &S,
     initial_state: &StateEnum,
     forward_step: NumTiles,
     max_time: Option<f64>,
@@ -295,7 +295,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn calc_committor_threshold_test<S: System>(
-    sys: &mut S,
+    sys: &S,
     initial_state: &StateEnum,
     cutoff_size: NumTiles,
     threshold: f64,
@@ -304,13 +304,18 @@ pub(super) fn calc_committor_threshold_test<S: System>(
     max_events: Option<NumEvents>,
     max_trials: Option<usize>,
     return_on_max_trials: bool,
+    parallel: bool,
 ) -> Result<(bool, f64, usize, bool), GrowError>
 where
     SystemEnum: From<S>,
 {
     use bpci::NSuccessesSample;
 
-    let n_par = rayon::current_num_threads();
+    let n_par = if parallel {
+        rayon::current_num_threads()
+    } else {
+        1
+    };
 
     if !(0.0..=1.0).contains(&threshold) {
         return Err(GrowError::NotSupported(
@@ -338,7 +343,17 @@ where
     // Continue sampling until we can determine with confidence whether
     // the probability is above or below the threshold
     loop {
-        let outcomes = sys.evolve_states(&mut trial_states, bounds);
+        let outcomes: Vec<Result<EvolveOutcome, GrowError>> = if parallel {
+            trial_states
+                .par_iter_mut()
+                .map(|state| sys.evolve(state, bounds))
+                .collect()
+        } else {
+            trial_states
+                .iter_mut()
+                .map(|state| sys.evolve(state, bounds))
+                .collect::<Vec<_>>()
+        };
         for outcome in outcomes {
             match outcome? {
                 EvolveOutcome::ReachedSizeMax => {
@@ -410,7 +425,7 @@ where
 }
 
 pub(super) fn find_first_critical_state<S: System>(
-    sys: &mut S,
+    sys: &S,
     end_state: &StateEnum,
     config: &CriticalStateConfig,
 ) -> Result<Option<CriticalStateResult>, GrowError>
@@ -445,6 +460,7 @@ where
             None, // max_events
             Some(config.max_trials),
             true, // return_on_max_trials
+            config.parallel,
         )?;
 
         if is_above {
@@ -467,7 +483,7 @@ where
 }
 
 pub(super) fn find_last_critical_state<S: System>(
-    sys: &mut S,
+    sys: &S,
     end_state: &StateEnum,
     config: &CriticalStateConfig,
 ) -> Result<Option<CriticalStateResult>, GrowError>
@@ -502,6 +518,7 @@ where
             None, // max_events
             Some(config.max_trials),
             true, // return_on_max_trials
+            config.parallel,
         )?;
 
         if !is_above {
