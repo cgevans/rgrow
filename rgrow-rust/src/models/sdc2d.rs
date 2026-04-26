@@ -686,6 +686,84 @@ impl TileBondInfo for SDC2D {
     }
 }
 
+#[cfg(feature = "python")]
+#[pymethods]
+impl SDC2D {
+    #[new]
+    fn py_new(params: SDC2DParams) -> Self {
+        SDC2D::from_params(params)
+    }
+
+    #[getter(kf)]
+    fn py_get_kf(&self) -> f64 {
+        f64::from(self.kf)
+    }
+
+    #[setter(kf)]
+    fn py_set_kf(&mut self, kf: f64) {
+        self.kf = PerMolarSecond::from(kf);
+        self.update_system();
+    }
+
+    #[getter(temperature)]
+    fn py_get_temperature(&self) -> f64 {
+        self.temperature.to_celsius().0
+    }
+
+    #[setter(temperature)]
+    fn py_set_temperature(&mut self, temperature_c: f64) {
+        self.change_temperature_to(Celsius(temperature_c));
+    }
+
+    #[pyo3(name = "nrows")]
+    fn py_nrows(&self) -> usize {
+        self.nrows()
+    }
+
+    #[pyo3(name = "ncols")]
+    fn py_ncols(&self) -> usize {
+        self.ncols()
+    }
+
+    #[pyo3(name = "n_strands")]
+    fn py_n_strands(&self) -> usize {
+        self.n_strands()
+    }
+
+    #[getter(strand_names)]
+    fn py_strand_names(&self) -> Vec<String> {
+        self.strand_names.clone()
+    }
+
+    #[getter(glue_names)]
+    fn py_glue_names(&self) -> Vec<String> {
+        self.glue_names.clone()
+    }
+
+    #[pyo3(name = "scaffold_glue_at")]
+    fn py_scaffold_glue_at(&self, row: usize, col: usize) -> Option<String> {
+        let g = self.scaffold[(row, col)];
+        if g == 0 {
+            None
+        } else {
+            Some(self.glue_names[g].clone())
+        }
+    }
+
+    #[pyo3(name = "friends_at")]
+    fn py_friends_at(&self, row: usize, col: usize) -> Vec<u32> {
+        self.friends_btm[(row, col)].clone()
+    }
+
+    #[pyo3(name = "strand_concentrations")]
+    fn py_strand_concentrations(&self) -> Vec<f64> {
+        self.strand_concentration
+            .iter()
+            .map(|m| f64::from(*m))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

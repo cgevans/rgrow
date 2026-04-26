@@ -54,6 +54,8 @@ mod rgrow {
     #[pymodule_export]
     use rgrow::models::sdc1d_bindreplace::SDC1DBindReplace;
     #[pymodule_export]
+    use rgrow::models::sdc2d::SDC2D;
+    #[pymodule_export]
     use rgrow::system::DimerInfo;
     #[pymodule_export]
     use rgrow::system::NeededUpdate;
