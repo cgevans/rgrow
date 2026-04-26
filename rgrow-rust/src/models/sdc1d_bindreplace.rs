@@ -3,12 +3,14 @@
 use core::panic;
 use std::collections::HashMap;
 
-use super::sdc1d::{gsorseq_to_gs, self_and_inverse, RefOrPair, SDCParams, SDCStrand};
+use super::sdc1d::{SDCParams, SDCStrand};
+use super::sdc_common::{gsorseq_to_gs, self_and_inverse, RefOrPair};
 #[allow(unused_imports)]
 use crate::{
     canvas::{PointSafe2, PointSafeHere},
     colors::get_color_or_random,
-    models::sdc1d::{get_or_generate, SingleOrMultiScaffold},
+    models::sdc1d::SingleOrMultiScaffold,
+    models::sdc_common::get_or_generate,
     state::State,
     system::{Event, System, TileBondInfo},
     units::{
