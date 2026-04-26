@@ -13,9 +13,11 @@ use ndarray::prelude::{Array1, Array2};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
-use crate::base::{Glue, Tile};
-use crate::canvas::PointSafe2;
+use crate::base::{Glue, GrowError, Tile};
+use crate::canvas::{PointSafe2, PointSafeHere};
 use crate::colors::get_color_or_random;
+use crate::state::State;
+use crate::system::{Event, NeededUpdate, System, TileBondInfo};
 use crate::units::*;
 
 use super::sdc_common::{get_or_generate, gsorseq_to_gs, self_and_inverse, GsOrSeq, RefOrPair};
@@ -383,6 +385,307 @@ impl SDC2D {
     }
 }
 
+// ─── Hot path ────────────────────────────────────────────────────────────────
+
+impl SDC2D {
+    /// Sum of β·ΔG over scaffold + W + E + N + S bonds for a strand at `p`.
+    /// Out-of-bounds neighbors and empty (tile == 0) neighbors contribute 0.
+    fn bond_energy_of_strand<S: State>(&self, state: &S, p: PointSafe2, strand: Tile) -> f64 {
+        let (row, col) = p.0;
+        let mut e = self.bond_with_scaffold(row, col, strand);
+
+        let pw = state.move_sa_w(p);
+        if state.inbounds(pw.0) {
+            let n = state.v_sh(pw);
+            if n != 0 {
+                e += self.bond_we(n, strand);
+            }
+        }
+        let pe = state.move_sa_e(p);
+        if state.inbounds(pe.0) {
+            let n = state.v_sh(pe);
+            if n != 0 {
+                e += self.bond_we(strand, n);
+            }
+        }
+        let pn = state.move_sa_n(p);
+        if state.inbounds(pn.0) {
+            let n = state.v_sh(pn);
+            if n != 0 {
+                e += self.bond_ns(n, strand);
+            }
+        }
+        let ps = state.move_sa_s(p);
+        if state.inbounds(ps.0) {
+            let n = state.v_sh(ps);
+            if n != 0 {
+                e += self.bond_ns(strand, n);
+            }
+        }
+        e
+    }
+
+    pub fn monomer_detachment_rate_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+    ) -> PerSecond {
+        let strand = state.tile_at_point(p);
+        if strand == 0 {
+            return PerSecond::zero();
+        }
+        if self.is_seed(&p) {
+            return PerSecond::zero();
+        }
+        let bond_energy = self.bond_energy_of_strand(state, p, strand);
+        self.kf * Molar::u0_times(bond_energy.exp())
+    }
+
+    pub fn total_monomer_attachment_rate_at_point<S: State>(
+        &self,
+        _state: &S,
+        p: PointSafe2,
+    ) -> PerSecond {
+        let (row, col) = p.0;
+        let mut total = PerSecond::zero();
+        for &t in self.friends_btm[(row, col)].iter() {
+            total += self.kf * self.strand_concentration[t as usize];
+        }
+        total
+    }
+
+    fn choose_monomer_attachment_at_point<S: State>(
+        &self,
+        _state: &S,
+        p: PointSafe2,
+        mut acc: PerSecond,
+    ) -> (bool, PerSecond, Event, f64) {
+        let (row, col) = p.0;
+        for &strand in self.friends_btm[(row, col)].iter() {
+            let rate = self.kf * self.strand_concentration[strand as usize];
+            acc -= rate;
+            if acc <= PerSecond::zero() {
+                return (true, acc, Event::MonomerAttachment(p, strand), rate.into());
+            }
+        }
+        (false, acc, Event::None, f64::NAN)
+    }
+
+    fn choose_monomer_detachment_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        mut acc: PerSecond,
+    ) -> (bool, PerSecond, Event, f64) {
+        let rate = self.monomer_detachment_rate_at_point(state, p);
+        acc -= rate;
+        if acc > PerSecond::zero() {
+            return (false, acc, Event::None, rate.into());
+        }
+        (true, acc, Event::MonomerDetachment(p), rate.into())
+    }
+
+    fn update_monomer_point<S: State>(&self, state: &mut S, p: &PointSafe2) {
+        let mut points: Vec<(PointSafeHere, PerSecond)> = Vec::with_capacity(5);
+        let pw = state.move_sa_w(*p);
+        if state.inbounds(pw.0) {
+            points.push((pw, self.event_rate_at_point(state, pw)));
+        }
+        let pe = state.move_sa_e(*p);
+        if state.inbounds(pe.0) {
+            points.push((pe, self.event_rate_at_point(state, pe)));
+        }
+        let pn = state.move_sa_n(*p);
+        if state.inbounds(pn.0) {
+            points.push((pn, self.event_rate_at_point(state, pn)));
+        }
+        let ps = state.move_sa_s(*p);
+        if state.inbounds(ps.0) {
+            points.push((ps, self.event_rate_at_point(state, ps)));
+        }
+        let ph = PointSafeHere(p.0);
+        points.push((ph, self.event_rate_at_point(state, ph)));
+        state.update_multiple(&points);
+    }
+}
+
+impl System for SDC2D {
+    fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
+        match event {
+            Event::MonomerAttachment(p, _)
+            | Event::MonomerDetachment(p)
+            | Event::MonomerChange(p, _) => self.update_monomer_point(state, p),
+            _ => panic!("Event type not supported in SDC2D: {event:?}"),
+        }
+    }
+
+    fn perform_event<S: State>(&self, state: &mut S, event: &Event) -> f64 {
+        match event {
+            Event::None => panic!("Being asked to perform null event."),
+            Event::MonomerAttachment(p, strand) => {
+                state.update_attachment(*strand);
+                state.set_sa(p, strand);
+            }
+            Event::MonomerDetachment(p) => {
+                let strand = state.tile_at_point(*p);
+                state.update_detachment(strand);
+                state.set_sa(p, &0);
+            }
+            Event::MonomerChange(p, strand) => state.set_sa(p, strand),
+            _ => panic!("Event type not supported in SDC2D: {event:?}"),
+        };
+        f64::NAN
+    }
+
+    fn event_rate_at_point<S: State>(&self, state: &S, p: PointSafeHere) -> PerSecond {
+        if !state.inbounds(p.0) {
+            return PerSecond::zero();
+        }
+        let pp = PointSafe2(p.0);
+        match state.tile_at_point(pp) {
+            0 => self.total_monomer_attachment_rate_at_point(state, pp),
+            _ => self.monomer_detachment_rate_at_point(state, pp),
+        }
+    }
+
+    fn choose_event_at_point<S: State>(
+        &self,
+        state: &S,
+        p: PointSafe2,
+        acc: PerSecond,
+    ) -> (Event, f64) {
+        let (occur, acc, event, rate) = self.choose_monomer_detachment_at_point(state, p, acc);
+        if occur {
+            return (event, rate);
+        }
+        let (occur, _acc, event, rate) = self.choose_monomer_attachment_at_point(state, p, acc);
+        if occur {
+            return (event, rate);
+        }
+        panic!(
+            "SDC2D: no event chosen at {p:?} with accumulator residual {_acc:?} (state may be stale)"
+        );
+    }
+
+    fn seed_locs(&self) -> Vec<(PointSafe2, Tile)> {
+        self.seed.iter().map(|(&p, &t)| (p, t)).collect()
+    }
+
+    fn calc_mismatch_locations<S: State>(&self, state: &S) -> Array2<usize> {
+        let threshold = -0.1;
+        let mut out = Array2::<usize>::zeros((state.nrows(), state.ncols()));
+        for i in 0..state.nrows() {
+            for j in 0..state.ncols() {
+                if !state.inbounds((i, j)) {
+                    continue;
+                }
+                let p = PointSafe2((i, j));
+                let t = state.tile_at_point(p);
+                if t == 0 {
+                    continue;
+                }
+                let te = state.tile_to_e(p);
+                let tw = state.tile_to_w(p);
+                let tn = state.tile_to_n(p);
+                let ts = state.tile_to_s(p);
+                let mm_e = ((te != 0) & (self.bond_we(t, te) > threshold)) as usize;
+                let mm_w = ((tw != 0) & (self.bond_we(tw, t) > threshold)) as usize;
+                let mm_n = ((tn != 0) & (self.bond_ns(tn, t) > threshold)) as usize;
+                let mm_s = ((ts != 0) & (self.bond_ns(t, ts) > threshold)) as usize;
+                out[(i, j)] = 8 * mm_n + 4 * mm_e + 2 * mm_s + mm_w;
+            }
+        }
+        out
+    }
+
+    fn set_param(
+        &mut self,
+        name: &str,
+        value: Box<dyn std::any::Any>,
+    ) -> Result<NeededUpdate, GrowError> {
+        match name {
+            "kf" => {
+                let kf = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.kf = PerMolarSecond::from(*kf);
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
+            "strand_concentrations" => {
+                let concs = value
+                    .downcast_ref::<Array1<Molar>>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.strand_concentration.clone_from(concs);
+                self.update_system();
+                Ok(NeededUpdate::NonZero)
+            }
+            "temperature" => {
+                let t = value
+                    .downcast_ref::<f64>()
+                    .ok_or(GrowError::WrongParameterType(name.to_string()))?;
+                self.change_temperature_to(Celsius(*t));
+                Ok(NeededUpdate::NonZero)
+            }
+            _ => Err(GrowError::NoParameter(name.to_string())),
+        }
+    }
+
+    fn get_param(&self, name: &str) -> Result<Box<dyn std::any::Any>, GrowError> {
+        match name {
+            "kf" => Ok(Box::new(f64::from(self.kf))),
+            "strand_concentrations" => Ok(Box::new(self.strand_concentration.clone())),
+            "temperature" => Ok(Box::new(self.temperature.to_celsius().0)),
+            _ => Err(GrowError::NoParameter(name.to_string())),
+        }
+    }
+
+    fn list_parameters(&self) -> Vec<crate::system::ParameterInfo> {
+        use crate::system::ParameterInfo;
+        vec![
+            ParameterInfo {
+                name: "temperature".to_string(),
+                units: "°C".to_string(),
+                default_increment: 1.0,
+                min_value: Some(0.0),
+                max_value: Some(100.0),
+                description: Some("Simulation temperature".to_string()),
+                current_value: self.temperature.to_celsius().0,
+            },
+            ParameterInfo {
+                name: "kf".to_string(),
+                units: "M/s".to_string(),
+                default_increment: 1e5,
+                min_value: Some(0.0),
+                max_value: None,
+                description: Some("Forward reaction rate constant".to_string()),
+                current_value: f64::from(self.kf),
+            },
+        ]
+    }
+
+    fn system_info(&self) -> String {
+        format!(
+            "SDC2D with {}x{} scaffold and {} strands",
+            self.nrows(),
+            self.ncols(),
+            self.n_strands(),
+        )
+    }
+}
+
+impl TileBondInfo for SDC2D {
+    fn tile_colors(&self) -> &Vec<[u8; 4]> {
+        &self.colors
+    }
+    fn tile_names(&self) -> &[String] {
+        &self.strand_names
+    }
+    fn bond_names(&self) -> &[String] {
+        &self.glue_names
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -539,5 +842,199 @@ mod tests {
         let sys = SDC2D::from_params(params);
         assert!(sys.is_seed(&PointSafe2((0, 0))));
         assert!(!sys.is_seed(&PointSafe2((0, 1))));
+    }
+
+    use crate::canvas::{Canvas, CanvasSquare};
+    use crate::state::{NullStateTracker, QuadTreeState, StateWithCreate};
+
+    type TState = QuadTreeState<CanvasSquare, NullStateTracker>;
+
+    fn make_state(sys: &SDC2D, n: usize) -> TState {
+        TState::empty_with_types((n, n), sys.n_strands()).unwrap()
+    }
+
+    /// Build an `n x n` canvas-sized SDC2D with one strand A bound by a single
+    /// glue g everywhere on the interior. Border positions get null scaffold
+    /// glue (binding to nothing). Interior is `[2..n-2, 2..n-2]`.
+    fn padded_uniform_sys(n: usize, dg: f64, ds: f64) -> SDC2D {
+        let mut scaffold = vec![vec![None::<String>; n]; n];
+        for row in scaffold.iter_mut().take(n - 2).skip(2) {
+            for cell in row.iter_mut().take(n - 2).skip(2) {
+                *cell = Some("g*".into());
+            }
+        }
+        let mut glue_dg_s = HashMap::new();
+        glue_dg_s.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((dg, ds)));
+        SDC2D::from_params(SDC2DParams {
+            strands: vec![SDC2DStrand {
+                name: Some("A".into()),
+                color: None,
+                concentration: 1e-6,
+                west_glue: None,
+                north_glue: None,
+                east_glue: None,
+                south_glue: None,
+                bottom_glue: Some("g".into()),
+            }],
+            scaffold,
+            scaffold_concentration: 1e-9,
+            glue_dg_s,
+            k_f: 1e6,
+            temperature: 37.0,
+            seed: vec![],
+        })
+    }
+
+    #[test]
+    fn test_seed_does_not_detach() {
+        let mut sys = padded_uniform_sys(8, -10.0, 0.0);
+        // Pin A at (3, 3).
+        sys.seed.insert(PointSafe2((3, 3)), 1);
+        let mut state: TState = make_state(&sys, 8);
+        state.set_sa(&PointSafe2((3, 3)), &1u32);
+        let rate = sys.monomer_detachment_rate_at_point(&state, PointSafe2((3, 3)));
+        assert_eq!(rate, PerSecond::zero());
+        // A neighboring (non-seed) interior point with no tile should also have
+        // a non-zero attachment rate, confirming the rest of the engine works.
+        let att = sys.total_monomer_attachment_rate_at_point(&state, PointSafe2((4, 4)));
+        assert!(f64::from(att) > 0.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "not supported")]
+    fn test_no_fission_panic() {
+        let sys = padded_uniform_sys(8, -5.0, 0.0);
+        let mut state: TState = make_state(&sys, 8);
+        let evt = Event::PolymerDetachment(vec![PointSafe2((3, 3))]);
+        sys.update_after_event(&mut state, &evt);
+    }
+
+    #[test]
+    fn test_corner_vs_interior_binding() {
+        // Strand A binds itself on every edge with the same g/g* pair, so each
+        // bond is identical. With no neighbors, only the scaffold bond
+        // contributes; surround with neighbors, the full 5-bond sum applies.
+        let dg = -2.0;
+        let mut glue_dg_s = HashMap::new();
+        glue_dg_s.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((dg, 0.0)));
+        let mut scaffold = vec![vec![None::<String>; 8]; 8];
+        for row in scaffold.iter_mut().take(6).skip(2) {
+            for cell in row.iter_mut().take(6).skip(2) {
+                *cell = Some("g*".into());
+            }
+        }
+        let sys = SDC2D::from_params(SDC2DParams {
+            strands: vec![SDC2DStrand {
+                name: Some("A".into()),
+                color: None,
+                concentration: 1e-6,
+                west_glue: Some("g".into()),
+                north_glue: Some("g".into()),
+                east_glue: Some("g*".into()),
+                south_glue: Some("g*".into()),
+                bottom_glue: Some("g".into()),
+            }],
+            scaffold,
+            scaffold_concentration: 1e-9,
+            glue_dg_s,
+            k_f: 1e6,
+            temperature: 37.0,
+            seed: vec![],
+        });
+        let mut state: TState = make_state(&sys, 8);
+
+        // Place a strand at an isolated interior point.
+        let solo = PointSafe2((3, 3));
+        state.set_sa(&solo, &1u32);
+        let e_solo = sys.bond_energy_of_strand(&state, solo, 1);
+
+        // Surround a different strand on all four sides.
+        let center = PointSafe2((4, 4));
+        for &p in &[
+            PointSafe2((3, 4)),
+            PointSafe2((5, 4)),
+            PointSafe2((4, 3)),
+            PointSafe2((4, 5)),
+            center,
+        ] {
+            state.set_sa(&p, &1u32);
+        }
+        let e_full = sys.bond_energy_of_strand(&state, center, 1);
+
+        // Per-edge β·ΔG is the same for every bond. Solo = 1 bond, full = 5.
+        let per_bond = sys.bond_with_scaffold(3, 3, 1);
+        assert!((e_solo - per_bond).abs() < 1e-12);
+        assert!((e_full - 5.0 * per_bond).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_independence_we_ns() {
+        // Two independent glue families: "h" on W/E edges, "v" on N/S edges.
+        // Strand binds "h" west + "h*" east, and "v" north + "v*" south.
+        // Verify bond_energy_of_strand sums them with no cross-talk.
+        let mut glue_dg_s = HashMap::new();
+        glue_dg_s.insert(RefOrPair::Ref("h".into()), GsOrSeq::GS((-3.0, 0.0)));
+        glue_dg_s.insert(RefOrPair::Ref("v".into()), GsOrSeq::GS((-7.0, 0.0)));
+        glue_dg_s.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((-1.0, 0.0)));
+        let mut scaffold = vec![vec![None::<String>; 8]; 8];
+        for row in scaffold.iter_mut().take(6).skip(2) {
+            for cell in row.iter_mut().take(6).skip(2) {
+                *cell = Some("g*".into());
+            }
+        }
+        let sys = SDC2D::from_params(SDC2DParams {
+            strands: vec![SDC2DStrand {
+                name: Some("A".into()),
+                color: None,
+                concentration: 1e-6,
+                west_glue: Some("h".into()),
+                north_glue: Some("v".into()),
+                east_glue: Some("h*".into()),
+                south_glue: Some("v*".into()),
+                bottom_glue: Some("g".into()),
+            }],
+            scaffold,
+            scaffold_concentration: 1e-9,
+            glue_dg_s,
+            k_f: 1e6,
+            temperature: 37.0,
+            seed: vec![],
+        });
+        let mut state: TState = make_state(&sys, 8);
+        // Place a row of three: west, center, east. Center has W and E neighbors but no N/S.
+        for &p in &[PointSafe2((4, 3)), PointSafe2((4, 4)), PointSafe2((4, 5))] {
+            state.set_sa(&p, &1u32);
+        }
+        let center = PointSafe2((4, 4));
+        let e_we_only = sys.bond_energy_of_strand(&state, center, 1);
+        let scaffold_part = sys.bond_with_scaffold(4, 4, 1);
+        let we_part = sys.bond_we(1, 1) * 2.0; // both W and E neighbor present
+        assert!((e_we_only - (scaffold_part + we_part)).abs() < 1e-12);
+
+        // Now also add N and S neighbors.
+        for &p in &[PointSafe2((3, 4)), PointSafe2((5, 4))] {
+            state.set_sa(&p, &1u32);
+        }
+        let e_full = sys.bond_energy_of_strand(&state, center, 1);
+        let ns_part = sys.bond_ns(1, 1) * 2.0;
+        assert!((e_full - (scaffold_part + we_part + ns_part)).abs() < 1e-12);
+
+        // Sanity: W/E and N/S use different glue energies, so they can't be
+        // accidentally collapsed.
+        assert!((sys.bond_we(1, 1) - sys.bond_ns(1, 1)).abs() > 1e-6);
+    }
+
+    #[test]
+    fn test_run_minimal_evolve() {
+        // A small scaffold, briefly evolved, must accumulate at least one tile.
+        let sys = padded_uniform_sys(8, -8.0, 0.0);
+        let mut state: TState = make_state(&sys, 8);
+        sys.update_state(&mut state, &NeededUpdate::All);
+        let bounds = crate::system::EvolveBounds {
+            for_events: Some(50),
+            ..Default::default()
+        };
+        let _ = sys.evolve(&mut state, bounds).unwrap();
+        assert!(state.calc_n_tiles() > 0);
     }
 }

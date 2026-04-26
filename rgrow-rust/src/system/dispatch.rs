@@ -15,6 +15,7 @@ use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
 use crate::models::sdc1d_bindreplace::SDC1DBindReplace;
+use crate::models::sdc2d::SDC2D;
 use crate::painter::{SpriteSquare, TileStyle};
 use crate::rbffs::{RBFFSResult, RBFFSRunConfig};
 use crate::state::StateEnum;
@@ -481,6 +482,7 @@ pub enum SystemEnum {
     SDC, // StaticKTAMCover
     SDC1DBindReplace,
     KBlock,
+    SDC2D,
 }
 
 #[cfg(feature = "python")]
@@ -493,6 +495,7 @@ impl<'py> IntoPyObject<'py> for SystemEnum {
             SystemEnum::SDC(sdc) => sdc.into_bound_py_any(py),
             SystemEnum::KBlock(kblock) => kblock.into_bound_py_any(py),
             SystemEnum::SDC1DBindReplace(sdc1dbr) => sdc1dbr.into_bound_py_any(py),
+            SystemEnum::SDC2D(sdc2d) => sdc2d.into_bound_py_any(py),
         }
     }
 
