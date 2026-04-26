@@ -237,6 +237,7 @@ jobs:
 
   windows:
     name: Python Windows builds
+    if: startsWith(github.ref, 'refs/tags/')
     needs: [python_checks]
     runs-on: windows-latest
     strategy:
@@ -276,6 +277,7 @@ jobs:
 
   macos:
     name: Python MacOS builds
+    if: startsWith(github.ref, 'refs/tags/')
     needs: [python_checks]
     runs-on: macos-latest
     strategy:
@@ -314,6 +316,7 @@ jobs:
 
   macos-freethreaded:
     name: Python MacOS free-threaded builds
+    if: startsWith(github.ref, 'refs/tags/')
     needs: [python_checks]
     runs-on: macos-latest
     strategy:
@@ -353,6 +356,7 @@ jobs:
 
   windows-freethreaded:
     name: Python Windows free-threaded builds
+    if: startsWith(github.ref, 'refs/tags/')
     needs: [python_checks]
     runs-on: windows-latest
     strategy:
