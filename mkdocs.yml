@@ -51,6 +51,7 @@ nav:
       - TileSet & Tiles: reference/tileset.md
       - Forward Flux Sampling: reference/ffs.md
       - SDC: reference/sdc.md
+      - SDC2DSquare: reference/sdc2d.md
       - KBlock: reference/kblock.md
       - kTAM: reference/ktam.md
 
