@@ -8,8 +8,11 @@ use std::sync::Arc;
 
 use num_traits::Zero;
 use rand::distr::{weighted::WeightedIndex, Distribution};
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+
+use crate::maybe_into_par_iter;
 
 #[cfg(feature = "python")]
 use ndarray::Array2;
@@ -302,8 +305,7 @@ impl RBFFSResult {
             *last = 1.0;
         }
 
-        let results: Vec<(f64, Vec<f64>)> = (0..n_bootstrap)
-            .into_par_iter()
+        let results: Vec<(f64, Vec<f64>)> = maybe_into_par_iter!(0..n_bootstrap)
             .map(|_| {
                 use rand::prelude::SmallRng;
                 use rand::SeedableRng;
@@ -1107,22 +1109,44 @@ where
 
         while n_complete < config.n_trajectories {
             let remaining = config.n_trajectories - n_complete;
-            let batch_results: Result<Vec<TrajectoryOutcome<St>>, GrowError> = (0..remaining)
-                .into_par_iter()
-                .map_init(
-                    || St::empty(config.canvas_size).unwrap(),
-                    |trial_state, _| {
-                        run_single_trajectory(
-                            system,
-                            dimers,
-                            chooser,
-                            config,
-                            surface_sizes,
-                            trial_state,
+            let batch_results: Result<Vec<TrajectoryOutcome<St>>, GrowError> = {
+                #[cfg(feature = "parallel")]
+                {
+                    use rayon::prelude::*;
+                    (0..remaining)
+                        .into_par_iter()
+                        .map_init(
+                            || St::empty(config.canvas_size).unwrap(),
+                            |trial_state, _| {
+                                run_single_trajectory(
+                                    system,
+                                    dimers,
+                                    chooser,
+                                    config,
+                                    surface_sizes,
+                                    trial_state,
+                                )
+                            },
                         )
-                    },
-                )
-                .collect();
+                        .collect()
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    let mut trial_state = St::empty(config.canvas_size).unwrap();
+                    (0..remaining)
+                        .map(|_| {
+                            run_single_trajectory(
+                                system,
+                                dimers,
+                                chooser,
+                                config,
+                                surface_sizes,
+                                &mut trial_state,
+                            )
+                        })
+                        .collect()
+                }
+            };
 
             n_complete += collect_outcomes(
                 batch_results?,
@@ -1144,15 +1168,23 @@ where
         ))
     };
 
-    if let Some(n) = config.num_workers {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(n)
-            .build()
-            .map_err(|e| {
-                GrowError::NotImplemented(format!("Failed to create thread pool: {}", e))
-            })?;
-        pool.install(run_batches)
-    } else {
+    #[cfg(feature = "parallel")]
+    {
+        if let Some(n) = config.num_workers {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(n)
+                .build()
+                .map_err(|e| {
+                    GrowError::NotImplemented(format!("Failed to create thread pool: {}", e))
+                })?;
+            pool.install(run_batches)
+        } else {
+            run_batches()
+        }
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        let _ = config.num_workers;
         run_batches()
     }
 }

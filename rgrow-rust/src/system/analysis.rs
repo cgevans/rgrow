@@ -1,8 +1,10 @@
 use bpci::Interval;
 use bpci::WilsonScore;
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
 use crate::base::{GrowError, NumEvents, NumTiles};
+use crate::maybe_par_iter;
 use crate::state::{StateEnum, StateStatus};
 
 use super::core::System;
@@ -126,8 +128,7 @@ pub(super) fn calc_committors_adaptive<S: System>(
 where
     SystemEnum: From<S>,
 {
-    let results = initial_states
-        .par_iter()
+    let results = maybe_par_iter!(initial_states)
         .map(|initial_state| {
             calc_committor_adaptive(
                 sys,
@@ -271,8 +272,7 @@ pub(super) fn calc_forward_probabilities_adaptive<S: System>(
 where
     SystemEnum: From<S>,
 {
-    let results = initial_states
-        .par_iter()
+    let results = maybe_par_iter!(initial_states)
         .map(|initial_state| {
             calc_forward_probability_adaptive(
                 sys,
@@ -311,10 +311,16 @@ where
 {
     use bpci::NSuccessesSample;
 
+    #[cfg(feature = "parallel")]
     let n_par = if parallel {
         rayon::current_num_threads()
     } else {
         1
+    };
+    #[cfg(not(feature = "parallel"))]
+    let n_par = {
+        let _ = parallel;
+        1usize
     };
 
     if !(0.0..=1.0).contains(&threshold) {
@@ -343,16 +349,29 @@ where
     // Continue sampling until we can determine with confidence whether
     // the probability is above or below the threshold
     loop {
-        let outcomes: Vec<Result<EvolveOutcome, GrowError>> = if parallel {
-            trial_states
-                .par_iter_mut()
-                .map(|state| sys.evolve(state, bounds))
-                .collect()
-        } else {
-            trial_states
-                .iter_mut()
-                .map(|state| sys.evolve(state, bounds))
-                .collect::<Vec<_>>()
+        let outcomes: Vec<Result<EvolveOutcome, GrowError>> = {
+            #[cfg(feature = "parallel")]
+            {
+                use rayon::prelude::*;
+                if parallel {
+                    trial_states
+                        .par_iter_mut()
+                        .map(|state| sys.evolve(state, bounds))
+                        .collect()
+                } else {
+                    trial_states
+                        .iter_mut()
+                        .map(|state| sys.evolve(state, bounds))
+                        .collect::<Vec<_>>()
+                }
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                trial_states
+                    .iter_mut()
+                    .map(|state| sys.evolve(state, bounds))
+                    .collect::<Vec<_>>()
+            }
         };
         for outcome in outcomes {
             match outcome? {

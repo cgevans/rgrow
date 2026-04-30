@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
-use crate::base::{RgrowError, Tile};
-use crate::painter::{blit_sprite, render_blockers, render_mismatches, render_outlines};
+use crate::base::RgrowError;
+use crate::painter::render_frame;
 use crate::state::State;
 use crate::ui::find_gui_command;
 
@@ -245,72 +245,25 @@ pub(super) fn evolve_in_window_impl<S: System, St: State>(
 
         last_frame_time = Instant::now();
 
-        // Draw frame
+        // Draw frame via the shared painter so the desktop GUI and the
+        // wasm bindings stay in sync.
         let frame_width = (width * scale as u32) as usize;
         let frame_height = (height * scale as u32) as usize;
         frame_buffer.resize(frame_width * frame_height * 4, 0);
 
         let pixel_frame = &mut frame_buffer[..];
-
-        // Pre-compute per-tile-type data
-        let tiles = state.raw_array();
-        let max_tile = tiles.iter().copied().max().unwrap_or(0) as usize;
-        let sprites: Vec<_> = (0..=max_tile)
-            .map(|t| sys.tile_pixels(t as Tile, scale))
-            .collect();
-        let blocker_masks: Vec<u8> = (0..=max_tile)
-            .map(|t| sys.tile_blocker_mask(t as Tile))
-            .collect();
-
-        // Render tiles
-        for ((y, x), &tileid) in tiles.indexed_iter() {
-            if let Some(sprite) = sprites.get(tileid as usize) {
-                blit_sprite(pixel_frame, sprite, x, y, frame_width);
-            }
-        }
-
-        // Draw thin outlines around non-empty tiles
-        if scale >= 12 {
-            render_outlines(pixel_frame, tiles, scale, frame_width);
-        }
-
-        // Draw blocker rectangles
-        render_blockers(
-            pixel_frame,
-            tiles,
-            &blocker_masks,
-            scale,
-            frame_width,
-            frame_height,
-        );
-
-        // Compute mismatch locations and derive count
-        let (mismatch_count, mismatch_locs) = if show_mismatches {
-            let locs = sys.calc_mismatch_locations(state);
-            let count: u32 = locs
-                .iter()
-                .map(|x| ((x & 0b01) + ((x & 0b10) >> 1)) as u32)
-                .sum();
-            (count, Some(locs))
-        } else {
-            (sys.calc_mismatches(state) as u32, None)
-        };
-
-        // Draw mismatch markers if enabled
-        if let Some(ref locs) = mismatch_locs {
-            render_mismatches(pixel_frame, &locs.view(), scale, frame_width);
-        }
+        let stats = render_frame(sys, state, scale, show_mismatches, pixel_frame);
 
         let notification = UpdateNotification {
-            frame_width: frame_width as u32,
-            frame_height: frame_height as u32,
-            time: state.time().into(),
-            total_events: state.total_events(),
-            n_tiles: state.n_tiles(),
-            mismatches: mismatch_count,
-            energy: state.energy(),
+            frame_width: stats.frame_width,
+            frame_height: stats.frame_height,
+            time: stats.time,
+            total_events: stats.total_events,
+            n_tiles: stats.n_tiles,
+            mismatches: stats.mismatch_count,
+            energy: stats.energy,
             scale,
-            data_len: pixel_frame.len(),
+            data_len: stats.data_len,
         };
 
         let t_send = Instant::now();

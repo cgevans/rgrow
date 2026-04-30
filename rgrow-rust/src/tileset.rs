@@ -12,6 +12,7 @@ use self::system::{NeededUpdate, SystemEnum};
 use super::base::{CanvasLength, Glue};
 use super::system::FissionHandling;
 use super::*;
+#[cfg(not(target_arch = "wasm32"))]
 use anyhow::Context;
 use base::{NumEvents, NumTiles};
 use bimap::BiMap;
@@ -22,8 +23,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
-use std::io::{self, Read};
+use std::io;
+#[cfg(not(target_arch = "wasm32"))]
+use std::io::Read;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 use system::{ChunkHandling, ChunkSize};
 
@@ -732,6 +736,7 @@ impl TileSet {
         serde_saphyr::from_str(data)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, anyhow::Error> {
         let mut file = std::fs::File::open(path)?;
 

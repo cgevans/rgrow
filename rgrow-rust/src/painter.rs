@@ -303,6 +303,181 @@ pub fn render_mismatches(
     }
 }
 
+/// Result of `render_frame`. The frame buffer has been filled in place;
+/// these are the metadata the caller typically wants alongside.
+#[derive(Debug, Clone, Copy)]
+pub struct RenderStats {
+    pub frame_width: u32,
+    pub frame_height: u32,
+    pub data_len: usize,
+    pub mismatch_count: u32,
+    pub n_tiles: crate::base::NumTiles,
+    pub time: f64,
+    pub total_events: crate::base::NumEvents,
+    pub energy: crate::base::Energy,
+}
+
+/// Render the current state of `state` (under `sys`) into `frame` as RGBA8.
+///
+/// `frame` must be at least `frame_width * frame_height * 4` bytes, where
+/// `(frame_width, frame_height) = state.draw_size() * scale`. The frame is
+/// drawn in-place; existing contents may be overwritten in any order.
+///
+/// This is the canonical rendering entry point. Both the desktop GUI
+/// (`system::gui::evolve_in_window_impl`) and the WebAssembly bindings
+/// call this function so the two views cannot drift.
+pub fn render_frame<S, St>(
+    sys: &S,
+    state: &St,
+    scale: usize,
+    show_mismatches: bool,
+    frame: &mut [u8],
+) -> RenderStats
+where
+    S: crate::system::System,
+    St: crate::state::State,
+{
+    let (canvas_width, canvas_height) = state.draw_size();
+    let frame_width = (canvas_width * scale as u32) as usize;
+    let frame_height = (canvas_height * scale as u32) as usize;
+    let needed = frame_width * frame_height * 4;
+
+    let pixel_frame = &mut frame[..needed];
+
+    let tiles = state.raw_array();
+    let max_tile = tiles.iter().copied().max().unwrap_or(0) as usize;
+    let sprites: Vec<_> = (0..=max_tile)
+        .map(|t| sys.tile_pixels(t as Tile, scale))
+        .collect();
+    let blocker_masks: Vec<u8> = (0..=max_tile)
+        .map(|t| sys.tile_blocker_mask(t as Tile))
+        .collect();
+
+    for ((y, x), &tileid) in tiles.indexed_iter() {
+        if let Some(sprite) = sprites.get(tileid as usize) {
+            blit_sprite(pixel_frame, sprite, x, y, frame_width);
+        }
+    }
+
+    if scale >= 12 {
+        render_outlines(pixel_frame, tiles, scale, frame_width);
+    }
+
+    render_blockers(
+        pixel_frame,
+        tiles,
+        &blocker_masks,
+        scale,
+        frame_width,
+        frame_height,
+    );
+
+    let (mismatch_count, mismatch_locs) = if show_mismatches {
+        let locs = sys.calc_mismatch_locations(state);
+        let count: u32 = locs
+            .iter()
+            .map(|x| ((x & 0b01) + ((x & 0b10) >> 1)) as u32)
+            .sum();
+        (count, Some(locs))
+    } else {
+        (sys.calc_mismatches(state) as u32, None)
+    };
+
+    if let Some(ref locs) = mismatch_locs {
+        render_mismatches(pixel_frame, &locs.view(), scale, frame_width);
+    }
+
+    RenderStats {
+        frame_width: frame_width as u32,
+        frame_height: frame_height as u32,
+        data_len: needed,
+        mismatch_count,
+        n_tiles: state.n_tiles(),
+        time: state.time().into(),
+        total_events: state.total_events(),
+        energy: state.energy(),
+    }
+}
+
+/// Variant of `render_frame` for the dynamic dispatch types (`SystemEnum`
+/// + `StateEnum`). Used by the WebAssembly bindings.
+///
+/// Identical to `render_frame` other than the trait it dispatches through:
+/// `DynSystem` for `tile_pixels` / `tile_blocker_mask` / mismatch lookup,
+/// and `Canvas` / `StateStatus` (already on `StateEnum`) for state data.
+pub fn render_frame_dyn(
+    sys: &crate::system::SystemEnum,
+    state: &crate::state::StateEnum,
+    scale: usize,
+    show_mismatches: bool,
+    frame: &mut [u8],
+) -> RenderStats {
+    use crate::canvas::Canvas;
+    use crate::state::StateStatus;
+    use crate::system::{DynSystem, TileBondInfo};
+
+    let (canvas_width, canvas_height) = state.draw_size();
+    let frame_width = (canvas_width * scale as u32) as usize;
+    let frame_height = (canvas_height * scale as u32) as usize;
+    let needed = frame_width * frame_height * 4;
+
+    let pixel_frame = &mut frame[..needed];
+
+    let tiles = state.raw_array();
+    let max_tile = tiles.iter().copied().max().unwrap_or(0) as usize;
+    let sprites: Vec<_> = (0..=max_tile)
+        .map(|t| sys.tile_pixels(t as Tile, scale))
+        .collect();
+    let blocker_masks: Vec<u8> = (0..=max_tile)
+        .map(|t| sys.tile_blocker_mask(t as Tile))
+        .collect();
+
+    for ((y, x), &tileid) in tiles.indexed_iter() {
+        if let Some(sprite) = sprites.get(tileid as usize) {
+            blit_sprite(pixel_frame, sprite, x, y, frame_width);
+        }
+    }
+
+    if scale >= 12 {
+        render_outlines(pixel_frame, tiles, scale, frame_width);
+    }
+
+    render_blockers(
+        pixel_frame,
+        tiles,
+        &blocker_masks,
+        scale,
+        frame_width,
+        frame_height,
+    );
+
+    let (mismatch_count, mismatch_locs) = if show_mismatches {
+        let locs = sys.calc_mismatch_locations(state);
+        let count: u32 = locs
+            .iter()
+            .map(|x| ((x & 0b01) + ((x & 0b10) >> 1)) as u32)
+            .sum();
+        (count, Some(locs))
+    } else {
+        (sys.calc_mismatches(state) as u32, None)
+    };
+
+    if let Some(ref locs) = mismatch_locs {
+        render_mismatches(pixel_frame, &locs.view(), scale, frame_width);
+    }
+
+    RenderStats {
+        frame_width: frame_width as u32,
+        frame_height: frame_height as u32,
+        data_len: needed,
+        mismatch_count,
+        n_tiles: state.n_tiles(),
+        time: state.time().into(),
+        total_events: state.total_events(),
+        energy: state.energy(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

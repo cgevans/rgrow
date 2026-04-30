@@ -21,8 +21,10 @@ use std::{collections::HashMap, fmt::Debug, sync::OnceLock};
 use astro_float::{BigFloat, RoundingMode, Sign};
 use num_traits::Zero;
 use rand::Rng;
+#[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
+use crate::maybe_par_iter;
 use crate::{
     base::{Glue, GrowError, Tile},
     canvas::{PointSafe2, PointSafeHere},
@@ -1890,7 +1892,7 @@ impl AnnealProtocol {
         &self,
         sdcs: Vec<SDC>,
     ) -> Vec<Result<AnnealOutput, GrowError>> {
-        sdcs.par_iter()
+        maybe_par_iter!(sdcs)
             .map(|sdc| self.run_anneal_default_system(sdc.clone()))
             .collect()
     }

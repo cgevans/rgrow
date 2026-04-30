@@ -6,14 +6,17 @@ use rand::Rng;
 use std::any::Any;
 use std::fmt::Debug;
 
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
 use crate::base::{GrowError, NumTiles, Point, Tile};
 use crate::canvas::{PointSafe2, PointSafeHere};
+use crate::maybe_par_iter_mut;
 use crate::state::{State, StateWithCreate};
 use crate::units::{PerSecond, Rate, Second};
 
 use super::dispatch::TileBondInfo;
+#[cfg(not(target_arch = "wasm32"))]
 use super::gui::evolve_in_window_impl;
 use super::types::*;
 
@@ -86,8 +89,10 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             rtime = rtime.min(Second::new(t) - state.time());
         }
 
-        // If we have a for_wall_time, get an instant to compare to
-        let start_time = bounds.for_wall_time.map(|_| std::time::Instant::now());
+        // If we have a for_wall_time, get an instant to compare to.
+        // `web_time::Instant` is a drop-in replacement for `std::time::Instant`
+        // that uses `performance.now()` on wasm32-unknown-unknown.
+        let start_time = bounds.for_wall_time.map(|_| web_time::Instant::now());
 
         loop {
             if bounds.size_min.is_some_and(|ms| state.n_tiles() <= ms) {
@@ -128,8 +133,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         states: &mut [St],
         bounds: EvolveBounds,
     ) -> Vec<Result<EvolveOutcome, GrowError>> {
-        states
-            .par_iter_mut()
+        maybe_par_iter_mut!(states)
             .map(|state| self.evolve(state, bounds))
             .collect()
     }
@@ -350,6 +354,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn evolve_in_window<St: State>(
         &mut self,
         state: &mut St,
@@ -368,6 +373,25 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             initial_timescale,
             initial_max_events_per_sec,
         )
+    }
+
+    /// On `wasm32-unknown-unknown` the desktop subprocess GUI is not
+    /// available; the browser front-end is provided by the `rgrow-wasm`
+    /// crate instead.
+    #[cfg(target_arch = "wasm32")]
+    fn evolve_in_window<St: State>(
+        &mut self,
+        _state: &mut St,
+        _block: Option<usize>,
+        _start_paused: bool,
+        _bounds: EvolveBounds,
+        _initial_timescale: Option<f64>,
+        _initial_max_events_per_sec: Option<u64>,
+    ) -> Result<EvolveOutcome, RgrowError> {
+        Err(RgrowError::Grow(GrowError::NotSupported(
+            "evolve_in_window is not available on wasm; use the rgrow-wasm bindings instead"
+                .to_string(),
+        )))
     }
 
     /// Returns information on dimers that the system can form.

@@ -5,10 +5,12 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::fmt::Debug;
 
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
 use crate::base::{GrowError, NumEvents, NumTiles, RgrowError, Tile};
 use crate::ffs::{FFSRunConfig, FFSRunResult};
+use crate::maybe_par_iter_mut;
 use crate::models::atam::ATAM;
 use crate::models::kblock::KBlock;
 use crate::models::ktam::KTAM;
@@ -65,6 +67,8 @@ pub trait DynSystem: Sync + Send + TileBondInfo {
     fn get_param(&self, name: &str) -> Result<Box<dyn Any>, GrowError>;
 
     fn update_state(&self, state: &mut StateEnum, needed: &NeededUpdate);
+
+    fn list_parameters(&self) -> Vec<ParameterInfo>;
 
     fn system_info(&self) -> String;
 
@@ -260,8 +264,7 @@ where
         states: &mut [&mut StateEnum],
         bounds: EvolveBounds,
     ) -> Vec<Result<EvolveOutcome, GrowError>> {
-        states
-            .par_iter_mut()
+        maybe_par_iter_mut!(states)
             .map(|state| self.evolve(*state, bounds))
             .collect()
     }
@@ -307,6 +310,10 @@ where
 
     fn update_state(&self, state: &mut StateEnum, needed: &NeededUpdate) {
         self.update_state(state, needed)
+    }
+
+    fn list_parameters(&self) -> Vec<ParameterInfo> {
+        <Self as System>::list_parameters(self)
     }
 
     fn run_ffs(&self, config: &FFSRunConfig) -> Result<FFSRunResult, RgrowError> {
