@@ -16,6 +16,7 @@ __all__ = [
     "RBFFSBootstrapResult",
     "CriticalStateConfig",
     "CriticalStateResult",
+    "SDC2DSquare",
 ]
 
 import numpy as np
@@ -24,6 +25,7 @@ from .rgrow import (
     ATAM,
     KTAM,
     OldKTAM,
+    SDC2DSquare,
     TileSet as _TileSet,
     EvolveOutcome,
     # FFSLevel,

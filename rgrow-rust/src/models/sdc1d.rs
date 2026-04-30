@@ -51,12 +51,24 @@ const U0: Molar = Molar(1.0);
 fn bigfloat_to_f64(big_float: &BigFloat, rounding_mode: RoundingMode) -> f64 {
     let mut big_float = big_float.clone();
     big_float.set_precision(64, rounding_mode).unwrap();
+    if big_float.is_zero() {
+        return 0.0;
+    }
+    if big_float.is_inf_pos() {
+        return f64::INFINITY;
+    }
+    if big_float.is_inf_neg() {
+        return f64::NEG_INFINITY;
+    }
+    if big_float.is_nan() {
+        return f64::NAN;
+    }
     let sign = big_float.sign().unwrap();
-    let exponent = big_float.exponent().unwrap();
     let mantissa = big_float.mantissa_digits().unwrap()[0];
     if mantissa == 0 {
         return 0.0;
     }
+    let exponent = big_float.exponent().unwrap();
     let mut exponent: isize = exponent as isize + 0b1111111111;
     let mut ret = 0;
     if exponent >= 0b11111111111 {
@@ -1439,27 +1451,9 @@ impl TileBondInfo for SDC {
 
 // Here is potentially another way to process this, though not done.  Feel free to delete or modify.
 
-use std::hash::Hash;
 use std::slice::Iter;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
-pub enum RefOrPair {
-    Ref(String),
-    Pair(String, String),
-}
-
-impl From<String> for RefOrPair {
-    fn from(r: String) -> Self {
-        RefOrPair::Ref(r)
-    }
-}
-
-impl From<(String, String)> for RefOrPair {
-    fn from(p: (String, String)) -> Self {
-        RefOrPair::Pair(p.0, p.1)
-    }
-}
+pub use super::sdc_common::{get_or_generate, gsorseq_to_gs, self_and_inverse, GsOrSeq, RefOrPair};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
@@ -1496,20 +1490,6 @@ pub struct SDCStrand {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
-pub enum GsOrSeq {
-    GS((f64, f64)),
-    Seq(String),
-}
-
-pub(super) fn gsorseq_to_gs(gsorseq: &GsOrSeq) -> (KcalPerMol, KcalPerMolKelvin) {
-    match gsorseq {
-        GsOrSeq::GS(x) => (KcalPerMol(x.0), KcalPerMolKelvin(x.1)),
-        GsOrSeq::Seq(s) => crate::utils::string_dna_dg_ds(s.as_str()),
-    }
-}
-
-#[derive(Debug)]
-#[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
 pub struct SDCParams {
     pub strands: Vec<SDCStrand>,
     /// Identifies the strand that serves as a binding site for the quencher
@@ -1533,50 +1513,6 @@ pub struct SDCParams {
     // Meaning that negative penalty will make binding more likely
     pub junction_penalty_dg: Option<KcalPerMol>,
     pub junction_penalty_ds: Option<KcalPerMolKelvin>,
-}
-
-/// Triple (x, y, z)
-///
-/// x: Original input but parsed so that there can be no errors in it (eg. No h**)
-/// y: From (eg. h)
-/// z: Inverse (eg. h*)
-pub(super) fn self_and_inverse(value: &str) -> (bool, String, String) {
-    // Remove all the stars at the end
-    let filtered = value.trim_end_matches("*");
-    let star_count = value.len() - filtered.len();
-    let is_from = star_count.is_multiple_of(2);
-
-    (is_from, filtered.to_string(), format!("{filtered}*"))
-}
-
-pub(super) fn get_or_generate(
-    map: &mut HashMap<String, usize>,
-    count: &mut usize,
-    val: Option<String>,
-) -> usize {
-    // If the user didn't provide a glue value, we assume nothing will ever stick
-    let str = match val {
-        Some(x) => x,
-        None => return 0,
-    };
-
-    // If we have already generated an id for this glue, then we use it
-    let (is_from, fromval, toval) = self_and_inverse(&str);
-    let simpl = if is_from { &fromval } else { &toval };
-    let res = map.get(simpl);
-    if let Some(u) = res {
-        return *u;
-    }
-
-    map.insert(fromval, *count);
-    map.insert(toval, *count + 1);
-    *count += 2;
-
-    if is_from {
-        *count - 2
-    } else {
-        *count - 1
-    }
 }
 
 impl SDCParams {
@@ -2827,6 +2763,101 @@ mod test_sdc_model {
             relative_error < 1e-10,
             "partial_partition_function constrained to few states should equal sum of their Boltzmann functions. partial_pf={}, expected_pf={}, relative_error={}",
             partial_pf, expected_pf, relative_error
+        );
+    }
+
+    /// Regression test: `bigfloat_to_f64` panicked on zero BigFloat values
+    /// when scaffold domain energy was exactly 0.0, because `.exponent()`
+    /// returns `None` for zero and was unwrapped before the mantissa check.
+    #[test]
+    fn test_zero_scaffold_energy_constrained_prob() {
+        let mut strands = Vec::<SDCStrand>::new();
+
+        strands.push(SDCStrand {
+            name: Some("input0".to_string()),
+            color: None,
+            concentration: 1e-7,
+            btm_glue: Some("sc0".to_string()),
+            left_glue: Some("c0".to_string()),
+            right_glue: Some("c0*".to_string()),
+        });
+        strands.push(SDCStrand {
+            name: Some("input1".to_string()),
+            color: None,
+            concentration: 0.0,
+            btm_glue: Some("sc0".to_string()),
+            left_glue: Some("c1".to_string()),
+            right_glue: Some("c1*".to_string()),
+        });
+        for i in 1..4u32 {
+            strands.push(SDCStrand {
+                name: Some(format!("{i}_0")),
+                color: None,
+                concentration: 1e-7,
+                btm_glue: Some(format!("sc{i}")),
+                left_glue: Some("c0".to_string()),
+                right_glue: Some("c0*".to_string()),
+            });
+            strands.push(SDCStrand {
+                name: Some(format!("{i}_1")),
+                color: None,
+                concentration: 1e-7,
+                btm_glue: Some(format!("sc{i}")),
+                left_glue: Some("c1".to_string()),
+                right_glue: Some("c1*".to_string()),
+            });
+        }
+
+        let scaffold = SingleOrMultiScaffold::Single(vec![
+            Some("sc0*".to_string()),
+            Some("sc1*".to_string()),
+            Some("sc2*".to_string()),
+            Some("sc3*".to_string()),
+        ]);
+
+        // cd_energy = -12.5, sd_energy = 0.0 (the trigger for the bug)
+        let mut glue_dg_s: HashMap<RefOrPair, GsOrSeq> = HashMap::new();
+        glue_dg_s.insert(RefOrPair::Ref("c0".to_string()), GsOrSeq::GS((-12.5, 0.0)));
+        glue_dg_s.insert(RefOrPair::Ref("c1".to_string()), GsOrSeq::GS((-12.5, 0.0)));
+        for i in 0..4u32 {
+            glue_dg_s.insert(
+                RefOrPair::Ref(format!("sc{i}")),
+                GsOrSeq::GS((0.0, 0.0)), // zero energy: triggers the bug
+            );
+        }
+
+        let sdc_params = SDCParams {
+            strands,
+            scaffold,
+            temperature: 230.0, // ~RT = 1 kcal/mol
+            scaffold_concentration: 1e-100,
+            glue_dg_s,
+            k_f: 1e6,
+            k_n: 0.0,
+            k_c: 0.0,
+            junction_penalty_dg: None,
+            junction_penalty_ds: None,
+            quencher_name: None,
+            quencher_concentration: 0.0,
+            reporter_name: None,
+            fluorophore_concentration: 0.0,
+        };
+
+        let mut sdc = SDC::from_params(sdc_params);
+        sdc.update_system();
+
+        // This should not panic.  Before the fix, bigfloat_to_f64 would
+        // unwrap None from BigFloat::exponent() on a zero value.
+        let constraints: Vec<Vec<Tile>> = vec![
+            vec![],  // pos 0: unconstrained
+            vec![],  // pos 1: unconstrained
+            vec![],  // pos 2: unconstrained
+            vec![3], // pos 3: only tile 3 (the 3_0 tile)
+        ];
+        let p = sdc.probability_of_constrained_configurations(constraints);
+        assert!(
+            p >= 0.0 && p <= 1.0,
+            "probability should be in [0, 1], got {p}"
         );
     }
 }

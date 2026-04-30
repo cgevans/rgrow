@@ -1,0 +1,77 @@
+name: Docs
+
+# Builds the zensical/mkdocs site and deploys it directly to git-pages, which
+# Codeberg Pages serves at <user>.codeberg.page/<repo>.
+#
+# Runner expectation:
+#   - `docker` Linux runner.
+#
+# Secrets used:
+#   - forge.token : auto-provided by Forgejo and accepted by git-pages.
+#
+# Caching: see comment in ci.yml. The runner's config.yaml must allow the
+# `rgrow-*` named volumes via `container.valid_volumes`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'examples/**/*.ipynb'
+      - 'rgrow-python/rgrow/**'
+      - 'rgrow-rust/src/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+      volumes:
+        - rgrow-cargo:/cache/cargo
+        - rgrow-cargo-target:/cache/cargo-target
+        - rgrow-uv:/cache/uv
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target
+      UV_CACHE_DIR: /cache/uv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: https://github.com/astral-sh/setup-uv@v7
+      - uses: https://github.com/dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv pip install maturin zensical "mkdocstrings[python]" jupyter nbconvert
+      - name: Build and install rgrow
+        run: |
+          source .venv/bin/activate
+          maturin develop --manifest-path rgrow-python/Cargo.toml
+      - name: Convert notebooks
+        run: |
+          source .venv/bin/activate
+          bash docs/convert_notebooks.sh
+      - name: Build docs
+        run: |
+          source .venv/bin/activate
+          zensical build --clean
+      - name: Deploy to Codeberg Pages
+        uses: https://codeberg.org/git-pages/action@v2
+        with:
+          site: "https://${{ forge.repository_owner }}.codeberg.page/rgrow/"
+          token: ${{ forge.token }}
+          source: site/

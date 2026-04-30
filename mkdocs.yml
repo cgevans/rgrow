@@ -1,8 +1,8 @@
 site_name: rgrow
 site_description: Fast, extensible simulator for Tile Assembly Models
-site_url: https://cgevans.github.io/rgrow/
-repo_url: https://github.com/cgevans/rgrow
-repo_name: cgevans/rgrow
+site_url: https://cge.codeberg.page/rgrow/
+repo_url: https://codeberg.org/cge/rgrow
+repo_name: cge/rgrow
 
 theme:
   name: material
