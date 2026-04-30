@@ -274,9 +274,13 @@ jobs:
         target: [x64]
     steps:
       - uses: actions/checkout@v4
-      - uses: https://github.com/dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
+      - name: Install Rust
+        shell: pwsh
+        run: |
+          $rustup = Join-Path ([System.IO.Path]::GetTempPath()) "rustup-init.exe"
+          Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile $rustup
+          & $rustup --default-toolchain stable --profile minimal --no-modify-path -y
+          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Install uv
         uses: astral-sh/setup-uv@v7
       - name: Install Python interpreters
@@ -311,9 +315,13 @@ jobs:
         python-version: ['3.13t', '3.14t']
     steps:
       - uses: actions/checkout@v4
-      - uses: https://github.com/dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
+      - name: Install Rust
+        shell: pwsh
+        run: |
+          $rustup = Join-Path ([System.IO.Path]::GetTempPath()) "rustup-init.exe"
+          Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile $rustup
+          & $rustup --default-toolchain stable --profile minimal --no-modify-path -y
+          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Install uv
         uses: astral-sh/setup-uv@v7
       - name: Install Python interpreter
