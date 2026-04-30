@@ -615,6 +615,72 @@ class ATAM:
             or None if no transition is found.
         """
 
+class SDC2D:
+    def __init__(self, params: Any) -> None: ...
+
+    @property
+    def kf(self) -> float: ...
+    @kf.setter
+    def kf(self, value: float) -> None: ...
+
+    @property
+    def temperature(self) -> float:
+        """Temperature in degrees Celsius."""
+    @temperature.setter
+    def temperature(self, value: float) -> None: ...
+
+    @property
+    def strand_names(self) -> list[str]: ...
+    @property
+    def glue_names(self) -> list[str]: ...
+
+    def nrows(self) -> int: ...
+    def ncols(self) -> int: ...
+    def n_strands(self) -> int: ...
+    def scaffold_glue_at(self, row: int, col: int) -> str | None: ...
+    def friends_at(self, row: int, col: int) -> list[int]: ...
+    def strand_concentrations(self) -> list[float]: ...
+
+    def get_param(self, param_name: str) -> Any: ...
+    def set_param(self, param_name: str, value: Any) -> NeededUpdate: ...
+    def update_state(self, state: State, needed: NeededUpdate = ...) -> None: ...
+    def update_all(self, state: State, needed: NeededUpdate = ...) -> None: ...
+    def setup_state(self, state: State) -> None: ...
+    def evolve(
+        self,
+        state: State,
+        for_events: int | None = None,
+        total_events: int | None = None,
+        for_time: float | None = None,
+        total_time: float | None = None,
+        size_min: int | None = None,
+        size_max: int | None = None,
+        for_wall_time: float | None = None,
+        require_strong_bound: bool = True,
+        show_window: bool = False,
+        start_window_paused: bool = True,
+        parallel: bool = True,
+        initial_timescale: float | None = None,
+        initial_max_events_per_sec: int | None = None,
+    ) -> EvolveOutcome: ...
+
+    def mfe_config(self) -> tuple[list[list[int]], float]:
+        """Exact minimum free energy configuration and free energy."""
+    def state_g(self, state: list[list[int]]) -> float:
+        """Physical free energy of a 2D state."""
+    def log_partition_function(self) -> float:
+        """Exact log partition function, exponential in the smaller grid dimension."""
+    def partition_function(self) -> float:
+        """Exact partition function as a float."""
+    def log_partial_partition_function(self, constraints: list[list[list[int]]]) -> float:
+        """Exact log partition function under per-site tile constraints."""
+    def partial_partition_function(self, constraints: list[list[list[int]]]) -> float:
+        """Exact partition function under per-site tile constraints."""
+    def probability_of_state(self, state: list[list[int]]) -> float: ...
+    def probability_of_constrained_configurations(
+        self, constraints: list[list[list[int]]]
+    ) -> float: ...
+
 class SDC:
     def __init__(self, params: Any) -> None: ...
     def mfe_config(self) -> tuple[list[int], float]:

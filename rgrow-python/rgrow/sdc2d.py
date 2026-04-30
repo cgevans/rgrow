@@ -3,6 +3,13 @@
 Provides plain dataclasses (`SDC2DStrand`, `SDC2DParams`) that the Rust
 extension extracts via attribute access. The actual model class is the
 Rust `SDC2D` re-exported from `rgrow.rgrow`.
+
+`SDC2D` exposes exact finite-grid thermodynamics methods including
+``mfe_config()``, ``state_g()``, ``log_partition_function()``,
+``partition_function()``, ``log_partial_partition_function()``,
+``partial_partition_function()``, ``probability_of_state()``, and
+``probability_of_constrained_configurations()``. These calculations are exact
+but exponential in the smaller scaffold dimension.
 """
 
 from __future__ import annotations

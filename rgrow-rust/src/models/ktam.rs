@@ -2372,8 +2372,7 @@ impl KTAM {
     /// NS/WE friends pairs between eligible tiles.
     fn compute_dimer_equilibrium(&self) -> Result<DimerEquilibrium, GrowError> {
         // Eligible tiles: positive concentration, not a duple, not a fake duple.
-        let mut tile_to_monomer_idx: Vec<Option<u32>> =
-            Vec::with_capacity(self.tile_concs.len());
+        let mut tile_to_monomer_idx: Vec<Option<u32>> = Vec::with_capacity(self.tile_concs.len());
         let mut monomers: Vec<usize> = Vec::new();
         for (t, &conc) in self.tile_concs.iter().enumerate() {
             let eligible = t > 0

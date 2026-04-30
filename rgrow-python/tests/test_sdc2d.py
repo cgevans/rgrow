@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from rgrow import State
@@ -25,6 +27,24 @@ def _padded_uniform_params(n=8, dg=-8.0, ds=0.0, conc=1e-6, k_f=1e6, temperature
         glue_dg_s={"g": (dg, ds)},
         k_f=k_f,
         temperature=temperature,
+        seed=[],
+    )
+
+
+def _single_site_thermo_params(dg=-1.0, conc=1.0):
+    return SDC2DParams(
+        strands=[
+            SDC2DStrand(
+                concentration=conc,
+                bottom_glue="g",
+                name="A",
+            )
+        ],
+        scaffold=[["g*"]],
+        scaffold_concentration=1e-9,
+        glue_dg_s={"g": (dg, 0.0)},
+        k_f=1e6,
+        temperature=37.0,
         seed=[],
     )
 
@@ -111,3 +131,36 @@ def test_get_param_kf():
     assert sys.get_param("kf") == pytest.approx(2.5e6)
     sys.kf = 4.0e6
     assert sys.get_param("kf") == pytest.approx(4.0e6)
+
+
+def test_exact_thermodynamics_single_site():
+    sys = SDC2D(_single_site_thermo_params())
+
+    assert sys.state_g([[0]]) == pytest.approx(0.0)
+    assert sys.state_g([[1]]) == pytest.approx(-1.0)
+
+    z = sys.partition_function()
+    assert z == pytest.approx(math.exp(sys.log_partition_function()))
+    assert sys.partial_partition_function([[[]]]) == pytest.approx(z)
+    assert sys.log_partial_partition_function([[[]]]) == pytest.approx(
+        sys.log_partition_function()
+    )
+    assert sys.partial_partition_function([[[0]]]) == pytest.approx(1.0)
+
+    p_empty = sys.probability_of_state([[0]])
+    p_filled = sys.probability_of_state([[1]])
+    assert p_empty + p_filled == pytest.approx(1.0)
+    assert sys.probability_of_constrained_configurations([[[1]]]) == pytest.approx(p_filled)
+
+    mfe_state, mfe_g = sys.mfe_config()
+    assert mfe_state == [[1]]
+    assert mfe_g == pytest.approx(sys.state_g(mfe_state))
+
+
+def test_exact_thermodynamics_illegal_state_and_constraints():
+    sys = SDC2D(_single_site_thermo_params())
+
+    assert sys.probability_of_state([[2]]) == 0.0
+    assert sys.probability_of_state([[1, 0]]) == 0.0
+    assert sys.log_partial_partition_function([[[2]]]) == -math.inf
+    assert sys.partial_partition_function([[[2]]]) == 0.0

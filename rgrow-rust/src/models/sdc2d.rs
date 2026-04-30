@@ -762,6 +762,46 @@ impl SDC2D {
             .map(|m| f64::from(*m))
             .collect()
     }
+
+    #[pyo3(name = "mfe_config")]
+    fn py_mfe_config(&self) -> (Vec<Vec<Tile>>, f64) {
+        self.mfe_configuration()
+    }
+
+    #[pyo3(name = "state_g")]
+    fn py_state_g(&self, state: Vec<Vec<u32>>) -> f64 {
+        self.state_g(&state)
+    }
+
+    #[pyo3(name = "log_partition_function")]
+    fn py_log_partition_function(&self) -> f64 {
+        self.log_partition_function()
+    }
+
+    #[pyo3(name = "partition_function")]
+    fn py_partition_function(&self) -> f64 {
+        self.partition_function()
+    }
+
+    #[pyo3(name = "log_partial_partition_function")]
+    fn py_log_partial_partition_function(&self, constraints: Vec<Vec<Vec<u32>>>) -> f64 {
+        self.log_partial_partition_function(constraints)
+    }
+
+    #[pyo3(name = "partial_partition_function")]
+    fn py_partial_partition_function(&self, constraints: Vec<Vec<Vec<u32>>>) -> f64 {
+        self.partial_partition_function(constraints)
+    }
+
+    #[pyo3(name = "probability_of_state")]
+    fn py_probability_of_state(&self, state: Vec<Vec<u32>>) -> f64 {
+        self.probability_of_state(&state)
+    }
+
+    #[pyo3(name = "probability_of_constrained_configurations")]
+    fn py_probability_of_constrained_configurations(&self, constraints: Vec<Vec<Vec<u32>>>) -> f64 {
+        self.probability_of_constrained_configurations(constraints)
+    }
 }
 
 #[cfg(test)]
