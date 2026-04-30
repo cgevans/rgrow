@@ -14,6 +14,19 @@ name: CI
 #   - PYPI_TOKEN       : required for `python_release` job on tags.
 #   - CRATES_IO_TOKEN  : required for `rust_release` job on tags.
 #   - GITHUB_TOKEN     : auto-provided by Forgejo (used for the Forgejo release).
+#
+# Caching: the Forgejo runner's built-in cache server (used by
+# `actions/cache` / Swatinem/rust-cache / setup-uv enable-cache) typically
+# isn't reachable from inside the workflow container, so we cache via host
+# volumes mounted on the named volumes below. To allow these mounts the
+# runner's config.yaml must permit them, e.g.:
+#
+#   container:
+#     valid_volumes:
+#       - "rgrow-*"
+#
+# (or `["**"]` to allow any). Volumes persist across runs on the host and
+# are shared between jobs.
 
 on:
   push:
@@ -46,6 +59,12 @@ jobs:
     runs-on: docker
     container:
       image: docker.io/catthehacker/ubuntu:act-22.04
+      volumes:
+        - rgrow-cargo:/cache/cargo
+        - rgrow-cargo-target:/cache/cargo-target
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target
     steps:
       - uses: actions/checkout@v4
       - name: Clone tiny-xlib fork
@@ -56,7 +75,6 @@ jobs:
         with:
           toolchain: stable
           components: clippy,llvm-tools
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - name: Install just and cargo-llvm-cov
         uses: https://github.com/taiki-e/install-action@v2
         with:
@@ -84,6 +102,14 @@ jobs:
     runs-on: docker
     container:
       image: docker.io/catthehacker/ubuntu:act-22.04
+      volumes:
+        - rgrow-cargo:/cache/cargo
+        - rgrow-cargo-target:/cache/cargo-target
+        - rgrow-uv:/cache/uv
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target
+      UV_CACHE_DIR: /cache/uv
     steps:
       - uses: actions/checkout@v4
       - name: Clone tiny-xlib fork
@@ -92,14 +118,13 @@ jobs:
         with:
           toolchain: stable
           components: clippy,llvm-tools
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install uv
+        # Cache lives on the host volume mounted at $UV_CACHE_DIR; we don't
+        # use setup-uv's enable-cache (which talks to the runner cache server).
         uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
       - name: Install just and cargo-llvm-cov
         uses: https://github.com/taiki-e/install-action@v2
         with:
@@ -135,6 +160,12 @@ jobs:
     runs-on: docker
     container:
       image: quay.io/pypa/manylinux_2_28_x86_64
+      volumes:
+        - rgrow-cargo:/cache/cargo
+        - rgrow-cargo-target:/cache/cargo-target
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target
     strategy:
       matrix:
         target: [x86_64]
@@ -144,7 +175,6 @@ jobs:
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - name: Build wheels
         run: |
           PYTHONS="/opt/python/cp310-cp310/bin/python3 \
@@ -178,6 +208,12 @@ jobs:
     runs-on: docker
     container:
       image: quay.io/pypa/manylinux_2_28_x86_64
+      volumes:
+        - rgrow-cargo:/cache/cargo
+        - rgrow-cargo-target:/cache/cargo-target
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target
     strategy:
       matrix:
         target: [x86_64]
@@ -188,7 +224,6 @@ jobs:
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - name: Compute interpreter path
         id: interp
         run: |
@@ -229,7 +264,6 @@ jobs:
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - name: Build wheels
         uses: https://github.com/PyO3/maturin-action@v1
         with:
@@ -267,7 +301,6 @@ jobs:
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - name: Build wheels
         uses: https://github.com/PyO3/maturin-action@v1
         with:
@@ -306,7 +339,6 @@ jobs:
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - name: Build wheels
         uses: https://github.com/PyO3/maturin-action@v1
         with:
@@ -344,7 +376,6 @@ jobs:
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - name: Build wheels
         uses: https://github.com/PyO3/maturin-action@v1
         with:
@@ -371,12 +402,17 @@ jobs:
     runs-on: docker
     container:
       image: docker.io/catthehacker/ubuntu:act-22.04
+      volumes:
+        - rgrow-cargo:/cache/cargo
+        - rgrow-cargo-target:/cache/cargo-target
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target
     steps:
       - uses: actions/checkout@v4
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - name: Build sdist
         uses: https://github.com/PyO3/maturin-action@v1
         with:
@@ -423,6 +459,12 @@ jobs:
     runs-on: docker
     container:
       image: docker.io/catthehacker/ubuntu:act-22.04
+      volumes:
+        - rgrow-cargo:/cache/cargo
+        - rgrow-cargo-target:/cache/cargo-target
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target
     if: startsWith(github.ref, 'refs/tags/')
     needs: [rust_checks]
     steps:
@@ -430,7 +472,6 @@ jobs:
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}

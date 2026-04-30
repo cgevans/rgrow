@@ -10,6 +10,9 @@ name: Docs
 # Secrets used:
 #   - GITHUB_TOKEN : auto-provided by Forgejo; needs write access to push the
 #                    `pages` branch (granted via the `permissions:` block).
+#
+# Caching: see comment in ci.yml. The runner's config.yaml must allow the
+# `rgrow-*` named volumes via `container.valid_volumes`.
 
 on:
   push:
@@ -34,6 +37,14 @@ jobs:
     runs-on: docker
     container:
       image: docker.io/catthehacker/ubuntu:act-22.04
+      volumes:
+        - rgrow-cargo:/cache/cargo
+        - rgrow-cargo-target:/cache/cargo-target
+        - rgrow-uv:/cache/uv
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target
+      UV_CACHE_DIR: /cache/uv
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,7 +55,6 @@ jobs:
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
       - name: Install dependencies
         run: |
           uv venv
