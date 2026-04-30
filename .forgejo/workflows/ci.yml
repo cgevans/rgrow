@@ -13,7 +13,7 @@ name: CI
 #                        must include `git.exe` and `node.exe` — Forgejo
 #                        runs steps directly on the host and JS actions
 #                        won't work without them.
-#   - `macos`          : not configured yet — macOS jobs are below but disabled.
+#   - `macos-arm64`    : Apple Silicon macOS host runner for Python wheel builds.
 #
 # Secrets used (set in Codeberg → repo → Settings → Actions → Secrets):
 #   - CODECOV_TOKEN    : optional; coverage upload is best-effort.
@@ -343,16 +343,14 @@ jobs:
           name: wheels-windows-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
           path: dist
 
-  # macOS jobs — disabled until a macOS Forgejo runner is available.
-  # To re-enable: remove `if: false` (and ensure the runner registers a `macos` label).
+  # macOS jobs — run on the `macos-arm64` runner. x86_64 is not built (Apple Silicon only).
   macos:
     name: Python macOS builds
-    if: false
     needs: [python_checks]
-    runs-on: macos
+    runs-on: macos-arm64
     strategy:
       matrix:
-        target: [x86_64, aarch64]
+        target: [aarch64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -383,12 +381,11 @@ jobs:
 
   macos-freethreaded:
     name: Python macOS free-threaded builds
-    if: false
     needs: [python_checks]
-    runs-on: macos
+    runs-on: macos-arm64
     strategy:
       matrix:
-        target: [x86_64, aarch64]
+        target: [aarch64]
         python-version: ['3.13t', '3.14t']
     steps:
       - uses: actions/checkout@v4
