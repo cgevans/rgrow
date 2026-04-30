@@ -215,7 +215,6 @@ jobs:
 
   windows:
     name: Python Windows builds
-    if: startsWith(github.ref, 'refs/tags/')
     needs: [python_checks]
     runs-on: windows
     strategy:
@@ -253,7 +252,6 @@ jobs:
 
   windows-freethreaded:
     name: Python Windows free-threaded builds
-    if: startsWith(github.ref, 'refs/tags/')
     needs: [python_checks]
     runs-on: windows
     strategy:
@@ -294,7 +292,7 @@ jobs:
   # To re-enable: remove `if: false` (and ensure the runner registers a `macos` label).
   macos:
     name: Python macOS builds
-    if: false  # && startsWith(github.ref, 'refs/tags/')
+    if: false
     needs: [python_checks]
     runs-on: macos
     strategy:
@@ -331,7 +329,7 @@ jobs:
 
   macos-freethreaded:
     name: Python macOS free-threaded builds
-    if: false  # && startsWith(github.ref, 'refs/tags/')
+    if: false
     needs: [python_checks]
     runs-on: macos
     strategy:
