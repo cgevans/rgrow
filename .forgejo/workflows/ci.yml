@@ -350,38 +350,40 @@ jobs:
           name: wheels-windows-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
           path: dist
 
-  # macOS jobs run on the `macos-arm64` runner. Intel macOS wheels are intentionally deprecated.
+  # macOS jobs run on the `macos-arm64` runner. Intel macOS wheels are
+  # intentionally deprecated. Python is managed by uv (avoids the
+  # actions/setup-python@v5 ARM64 fetch failures on self-hosted runners),
+  # and Rust is installed via rustup directly (mirrors the Windows pattern).
   macos:
     name: Python macOS builds
     if: startsWith(forge.ref, 'refs/tags/') || inputs.build_wheels == 'true'
     needs: [python_checks]
     runs-on: macos-arm64
+    env:
+      UV_CACHE_DIR: .uv-cache
+      UV_MANAGED_PYTHON: "1"
     strategy:
       matrix:
         target: [aarch64]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      - uses: https://github.com/dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Install uv
+        uses: https://github.com/astral-sh/setup-uv@v7
+      - name: Install Python interpreters
+        run: uv python install 3.10 3.11 3.12 3.13 3.14
       - name: Build wheels
-        uses: https://github.com/PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
-          sccache: "true"
-          rust-toolchain: stable
+        run: |
+          pythons=$(for v in 3.10 3.11 3.12 3.13 3.14; do uv python find "$v"; done)
+          uvx maturin build --release --out dist --target ${{ matrix.target }}-apple-darwin --interpreter $pythons
       - name: Build CLI wheels
-        uses: https://github.com/PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out ../dist --find-interpreter
-          sccache: "true"
-          rust-toolchain: stable
-          working-directory: rgrow-cli
+        working-directory: rgrow-cli
+        run: |
+          pythons=$(for v in 3.10 3.11 3.12 3.13 3.14; do uv python find "$v"; done)
+          uvx maturin build --release --out ../dist --target ${{ matrix.target }}-apple-darwin --interpreter $pythons
       - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: wheels-macos-${{ matrix.target }}
@@ -392,33 +394,32 @@ jobs:
     if: startsWith(forge.ref, 'refs/tags/') || inputs.build_wheels == 'true'
     needs: [python_checks]
     runs-on: macos-arm64
+    env:
+      UV_CACHE_DIR: .uv-cache
+      UV_MANAGED_PYTHON: "1"
     strategy:
       matrix:
         target: [aarch64]
         python-version: ['3.13t', '3.14t']
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: https://github.com/dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Install uv
+        uses: https://github.com/astral-sh/setup-uv@v7
+      - name: Install Python interpreter
+        run: uv python install ${{ matrix.python-version }}
       - name: Build wheels
-        uses: https://github.com/PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out dist --interpreter python3 --no-default-features
-          sccache: "true"
-          rust-toolchain: stable
+        run: |
+          python=$(uv python find ${{ matrix.python-version }})
+          uvx maturin build --release --out dist --target ${{ matrix.target }}-apple-darwin --interpreter "$python" --no-default-features
       - name: Build CLI wheels
-        uses: https://github.com/PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out ../dist --interpreter python3
-          sccache: "true"
-          rust-toolchain: stable
-          working-directory: rgrow-cli
+        working-directory: rgrow-cli
+        run: |
+          python=$(uv python find ${{ matrix.python-version }})
+          uvx maturin build --release --out ../dist --target ${{ matrix.target }}-apple-darwin --interpreter "$python"
       - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: wheels-macos-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
