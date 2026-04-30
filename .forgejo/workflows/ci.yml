@@ -453,7 +453,7 @@ jobs:
     container:
       image: docker.io/catthehacker/ubuntu:act-22.04
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [linux, linux-freethreaded, windows, windows-freethreaded, sdist]
+    needs: [linux, linux-freethreaded, windows, windows-freethreaded, macos, macos-freethreaded, sdist]
     steps:
       - uses: https://code.forgejo.org/forgejo/download-artifact@v4
         with:
@@ -502,7 +502,7 @@ jobs:
     container:
       image: docker.io/catthehacker/ubuntu:act-22.04
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [linux, linux-freethreaded, windows, windows-freethreaded, sdist]
+    needs: [linux, linux-freethreaded, windows, windows-freethreaded, macos, macos-freethreaded, sdist]
     permissions:
       contents: write
     steps:
