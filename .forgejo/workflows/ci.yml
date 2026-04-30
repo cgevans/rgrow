@@ -1,0 +1,482 @@
+name: CI
+
+# Forgejo Actions workflow, mirroring .github/workflows/ci.yml.
+#
+# Runner expectations (adjust `runs-on:` labels if your runners use different ones):
+#   - `docker`         : Linux runner that executes jobs inside a container.
+#                        Wheel-build jobs use a manylinux container directly to
+#                        avoid docker-in-docker for the maturin step.
+#   - `windows`        : Windows host runner (no container).
+#   - `macos`          : not configured yet — macOS jobs are below but disabled.
+#
+# Secrets used (set in Codeberg → repo → Settings → Actions → Secrets):
+#   - CODECOV_TOKEN    : optional; coverage upload is best-effort.
+#   - PYPI_TOKEN       : required for `python_release` job on tags.
+#   - CRATES_IO_TOKEN  : required for `rust_release` job on tags.
+#   - GITHUB_TOKEN     : auto-provided by Forgejo (used for the Forgejo release).
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "*"
+    paths-ignore:
+      - CHANGELOG.md
+      - README.md
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # catthehacker images bundle the tooling that GitHub-hosted ubuntu-latest
+  # runners ship with; close to drop-in replacement for ubuntu-latest in
+  # Forgejo Actions.
+  LINUX_CONTAINER: docker.io/catthehacker/ubuntu:act-22.04
+  # manylinux container used directly for wheel builds (no DinD needed).
+  MANYLINUX_CONTAINER: quay.io/pypa/manylinux_2_28_x86_64
+
+jobs:
+  rust_checks:
+    name: Rust checks
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone tiny-xlib fork
+        # Cross-instance checkout (GitHub fork) — clone directly so we don't
+        # depend on the runner being configured to fetch actions/repos from GitHub.
+        run: git clone --depth 1 https://github.com/cgevans/tiny-xlib.git ./tiny-xlib
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy,llvm-tools
+      - uses: Swatinem/rust-cache@v2
+      - name: Install just and cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-llvm-cov
+      - name: Run clippy
+        run: just clippy
+      - name: Run tests with coverage
+        run: |
+          source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
+          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+          export CARGO_INCREMENTAL=1
+          cargo llvm-cov clean --workspace
+          cargo test -p rgrow
+          cargo llvm-cov --no-run --lcov --output-path coverage.lcov -p rgrow -p rgrow-python
+      - name: Upload coverage to Codecov
+        continue-on-error: true
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.lcov
+          name: rust-linux
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  python_checks:
+    name: Python checks
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone tiny-xlib fork
+        run: git clone --depth 1 https://github.com/cgevans/tiny-xlib.git ./tiny-xlib
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy,llvm-tools
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install just and cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-llvm-cov
+      - name: Setup virtual environment
+        run: |
+          uv venv
+          uv pip install -U pip setuptools wheel
+      - name: Run ruff on Python code
+        uses: astral-sh/ruff-action@v3
+        with:
+          src: "./rgrow-python/rgrow"
+      - name: Install maturin and test dependencies
+        run: |
+          uv pip install maturin pytest-cov
+          uv pip install --group testing
+      - name: Run tests and coverage
+        run: just cov-python
+      - name: Run ty
+        continue-on-error: true
+        run: uvx ty check rgrow-python/rgrow/
+      - name: Upload coverage to Codecov
+        continue-on-error: true
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml,coverage.lcov
+          name: python-linux
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  linux:
+    name: Python Linux builds
+    needs: [python_checks]
+    runs-on: docker
+    container:
+      image: quay.io/pypa/manylinux_2_28_x86_64
+    strategy:
+      matrix:
+        target: [x86_64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2
+      - name: Build wheels
+        run: |
+          PYTHONS="/opt/python/cp310-cp310/bin/python3 \
+                   /opt/python/cp311-cp311/bin/python3 \
+                   /opt/python/cp312-cp312/bin/python3 \
+                   /opt/python/cp313-cp313/bin/python3 \
+                   /opt/python/cp314-cp314/bin/python3"
+          /opt/python/cp312-cp312/bin/pip install maturin
+          /opt/python/cp312-cp312/bin/maturin build --release --out dist \
+            --manylinux 2_28 --target ${{ matrix.target }}-unknown-linux-gnu \
+            -i $PYTHONS
+      - name: Build CLI wheels
+        working-directory: rgrow-cli
+        run: |
+          PYTHONS="/opt/python/cp310-cp310/bin/python3 \
+                   /opt/python/cp311-cp311/bin/python3 \
+                   /opt/python/cp312-cp312/bin/python3 \
+                   /opt/python/cp313-cp313/bin/python3 \
+                   /opt/python/cp314-cp314/bin/python3"
+          /opt/python/cp312-cp312/bin/maturin build --release --out ../dist \
+            --manylinux 2_28 --target ${{ matrix.target }}-unknown-linux-gnu \
+            -i $PYTHONS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist
+
+  linux-freethreaded:
+    name: Python Linux free-threaded builds
+    needs: [python_checks]
+    runs-on: docker
+    container:
+      image: quay.io/pypa/manylinux_2_28_x86_64
+    strategy:
+      matrix:
+        target: [x86_64]
+        python-version: ['3.13t', '3.14t']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2
+      - name: Compute interpreter path
+        id: interp
+        run: |
+          VER="${{ matrix.python-version }}"
+          MM=$(echo "$VER" | tr -d '.t')
+          echo "path=/opt/python/cp${MM}-cp${MM}t/bin/python3" >> "$GITHUB_OUTPUT"
+      - name: Build wheels
+        run: |
+          /opt/python/cp312-cp312/bin/pip install maturin
+          /opt/python/cp312-cp312/bin/maturin build --release --out dist \
+            --interpreter ${{ steps.interp.outputs.path }} \
+            --manylinux 2_28 --target ${{ matrix.target }}-unknown-linux-gnu \
+            --no-default-features
+      - name: Build CLI wheels
+        working-directory: rgrow-cli
+        run: |
+          /opt/python/cp312-cp312/bin/maturin build --release --out ../dist \
+            --interpreter ${{ steps.interp.outputs.path }} \
+            --manylinux 2_28 --target ${{ matrix.target }}-unknown-linux-gnu
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
+          path: dist
+
+  windows:
+    name: Python Windows builds
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [python_checks]
+    runs-on: windows
+    strategy:
+      matrix:
+        target: [x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          architecture: ${{ matrix.target }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+          rust-toolchain: stable
+      - name: Build CLI wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out ../dist --find-interpreter
+          sccache: "true"
+          working-directory: rgrow-cli
+          rust-toolchain: stable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.target }}
+          path: dist
+
+  windows-freethreaded:
+    name: Python Windows free-threaded builds
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [python_checks]
+    runs-on: windows
+    strategy:
+      matrix:
+        target: [x64]
+        python-version: ['3.13t', '3.14t']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.target }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --interpreter python3 --no-default-features
+          sccache: "true"
+          rust-toolchain: stable
+      - name: Build CLI wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out ../dist --interpreter python3
+          sccache: "true"
+          rust-toolchain: stable
+          working-directory: rgrow-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
+          path: dist
+
+  # macOS jobs — disabled until a macOS Forgejo runner is available.
+  # To re-enable: remove `if: false` (and ensure the runner registers a `macos` label).
+  macos:
+    name: Python macOS builds
+    if: false  # && startsWith(github.ref, 'refs/tags/')
+    needs: [python_checks]
+    runs-on: macos
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+          rust-toolchain: stable
+      - name: Build CLI wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out ../dist --find-interpreter
+          sccache: "true"
+          rust-toolchain: stable
+          working-directory: rgrow-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: dist
+
+  macos-freethreaded:
+    name: Python macOS free-threaded builds
+    if: false  # && startsWith(github.ref, 'refs/tags/')
+    needs: [python_checks]
+    runs-on: macos
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+        python-version: ['3.13t', '3.14t']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --interpreter python3 --no-default-features
+          sccache: "true"
+          rust-toolchain: stable
+      - name: Build CLI wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out ../dist --interpreter python3
+          sccache: "true"
+          rust-toolchain: stable
+          working-directory: rgrow-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
+          path: dist
+
+  sdist:
+    name: Build sdist
+    needs: [python_checks]
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+      - name: Build CLI sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          working-directory: rgrow-cli
+          args: --out ../target/wheels
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: target/wheels
+
+  python_release:
+    name: Python PyPI release
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [linux, linux-freethreaded, windows, windows-freethreaded, sdist]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Publish rgrow to PyPI
+        # PyPI trusted publishing currently doesn't support Codeberg/Forgejo
+        # OIDC, so we use an API token. Set PYPI_TOKEN as a repo secret.
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: uv publish --check-url https://pypi.org/simple/ dist/rgrow-[0-9]*
+      - name: Publish rgrow-cli to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: uv publish --check-url https://pypi.org/simple/ dist/rgrow_cli-*
+
+  rust_release:
+    name: Rust crates.io release
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [rust_checks]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: cargo publish --allow-dirty -p rgrow
+
+  forgejo_release:
+    name: Forgejo release
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [linux, linux-freethreaded, windows, windows-freethreaded, sdist]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - name: Extract changelog for this version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          NOTES=$(awk -v ver="$VERSION" -v tag="$TAG" '
+            BEGIN { found=0 }
+            /^# / {
+              if (found) exit
+              header=$0; sub(/^# */, "", header)
+              if (header == ver || header == tag) found=1
+              next
+            }
+            found { print }
+          ' CHANGELOG.md)
+          echo "$NOTES" > /tmp/release-notes.md
+      - name: Create Forgejo release
+        uses: https://code.forgejo.org/actions/forgejo-release@v2
+        with:
+          direction: upload
+          url: ${{ github.server_url }}
+          repo: ${{ github.repository }}
+          tag: ${{ github.ref_name }}
+          title: ${{ github.ref_name }}
+          release-notes-file: /tmp/release-notes.md
+          release-dir: dist
+          token: ${{ secrets.GITHUB_TOKEN }}

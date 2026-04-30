@@ -1,0 +1,82 @@
+name: Docs
+
+# Builds the zensical/mkdocs site and deploys it to a `pages` branch in this
+# repo, which Codeberg Pages serves at <user>.codeberg.page/<repo> (or the
+# repo's configured Pages URL).
+#
+# Runner expectation:
+#   - `docker` Linux runner.
+#
+# Secrets used:
+#   - GITHUB_TOKEN : auto-provided by Forgejo; needs write access to push the
+#                    `pages` branch (granted via the `permissions:` block).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'examples/**/*.ipynb'
+      - 'rgrow-python/rgrow/**'
+      - 'rgrow-rust/src/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv pip install maturin zensical "mkdocstrings[python]" jupyter nbconvert
+      - name: Build and install rgrow
+        run: |
+          source .venv/bin/activate
+          maturin develop --manifest-path rgrow-python/Cargo.toml
+      - name: Convert notebooks
+        run: |
+          source .venv/bin/activate
+          bash docs/convert_notebooks.sh
+      - name: Build docs
+        run: |
+          source .venv/bin/activate
+          zensical build --clean
+      - name: Deploy to Codeberg Pages
+        env:
+          DEPLOY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euo pipefail
+          cd site
+          # Tell git the workspace is safe (containers run as root and may
+          # otherwise refuse the working tree).
+          git config --global --add safe.directory "$(pwd)"
+          git init -b pages
+          git config user.name "forgejo-actions[bot]"
+          git config user.email "forgejo-actions[bot]@noreply.codeberg.org"
+          git add .
+          git commit -m "Deploy docs from ${GITHUB_SHA}"
+          HOST="${SERVER_URL#https://}"
+          HOST="${HOST#http://}"
+          git remote add origin "https://x-access-token:${DEPLOY_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git"
+          git push --force origin pages
