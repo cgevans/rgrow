@@ -13,6 +13,12 @@ use super::sdc2d::SDC2D;
 
 const R: f64 = 1.98720425864083 / 1000.0; // kcal/mol/K
 
+/// One frontier slice (one row or column of the DP frontier).
+type Frontier = Vec<Tile>;
+/// MFE backpointer table for one DP step: maps the new frontier to the
+/// previous frontier and the tile that was placed.
+type BackpointerStep = HashMap<Frontier, (Frontier, Tile)>;
+
 #[derive(Debug, Clone, Copy)]
 struct ScanOrder {
     major_len: usize,
@@ -361,9 +367,9 @@ impl SDC2D {
         if !self.has_state_shape(state) {
             return 0.0;
         }
-        for row in 0..self.nrows() {
-            for col in 0..self.ncols() {
-                if !self.is_tile_allowed_at(row, col, state[row][col]) {
+        for (row, row_state) in state.iter().enumerate() {
+            for (col, &tile) in row_state.iter().enumerate() {
+                if !self.is_tile_allowed_at(row, col, tile) {
                     return 0.0;
                 }
             }
@@ -389,7 +395,7 @@ impl SDC2D {
 
         let order = ScanOrder::new(self.nrows(), self.ncols());
         let mut table: HashMap<Vec<Tile>, f64> = HashMap::new();
-        let mut backpointers: Vec<HashMap<Vec<Tile>, (Vec<Tile>, Tile)>> =
+        let mut backpointers: Vec<BackpointerStep> =
             Vec::with_capacity(self.nrows() * self.ncols());
         table.insert(vec![0; order.minor_len], 0.0);
 
@@ -405,7 +411,7 @@ impl SDC2D {
                 let pos = (row, col);
                 let mut next: HashMap<Vec<Tile>, f64> =
                     HashMap::with_capacity(table.len() * allowed.len());
-                let mut step_backpointers: HashMap<Vec<Tile>, (Vec<Tile>, Tile)> =
+                let mut step_backpointers: BackpointerStep =
                     HashMap::with_capacity(table.len() * allowed.len());
 
                 for (frontier, &energy) in table.iter() {
