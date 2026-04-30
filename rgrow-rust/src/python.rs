@@ -12,7 +12,7 @@ use crate::models::ktam::KTAM;
 use crate::models::oldktam::OldKTAM;
 use crate::models::sdc1d::SDC;
 use crate::models::sdc1d_bindreplace::SDC1DBindReplace;
-use crate::models::sdc2d::SDC2D;
+use crate::models::sdc2d::SDC2DSquare;
 use crate::ratestore::RateStore;
 use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{CriticalStateConfig, CriticalStateResult};
@@ -1336,7 +1336,7 @@ create_py_system!(OldKTAM);
 create_py_system!(SDC);
 create_py_system!(KBlock, |tile: u32| (tile >> 4) as usize);
 create_py_system!(SDC1DBindReplace);
-create_py_system!(SDC2D);
+create_py_system!(SDC2DSquare);
 
 #[pymethods]
 impl KBlock {

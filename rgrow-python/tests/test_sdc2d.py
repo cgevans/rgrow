@@ -3,7 +3,7 @@ import math
 import pytest
 
 from rgrow import State
-from rgrow.sdc2d import SDC2D, SDC2DParams, SDC2DStrand
+from rgrow.sdc2d import SDC2DSquare, SDC2DParams, SDC2DStrand
 
 
 def _padded_uniform_params(n=8, dg=-8.0, ds=0.0, conc=1e-6, k_f=1e6, temperature=37.0):
@@ -24,7 +24,7 @@ def _padded_uniform_params(n=8, dg=-8.0, ds=0.0, conc=1e-6, k_f=1e6, temperature
         ],
         scaffold=scaffold,
         scaffold_concentration=1e-9,
-        glue_dg_s={"g": (dg, ds)},
+        glue_dg37_ds={"g": (dg, ds)},
         k_f=k_f,
         temperature=temperature,
         seed=[],
@@ -42,7 +42,7 @@ def _single_site_thermo_params(dg=-1.0, conc=1.0):
         ],
         scaffold=[["g*"]],
         scaffold_concentration=1e-9,
-        glue_dg_s={"g": (dg, 0.0)},
+        glue_dg37_ds={"g": (dg, 0.0)},
         k_f=1e6,
         temperature=37.0,
         seed=[],
@@ -50,7 +50,7 @@ def _single_site_thermo_params(dg=-1.0, conc=1.0):
 
 
 def test_construct_minimal():
-    sys = SDC2D(_padded_uniform_params(n=6))
+    sys = SDC2DSquare(_padded_uniform_params(n=6))
     assert sys.nrows() == 6
     assert sys.ncols() == 6
     # null + A
@@ -63,7 +63,7 @@ def test_construct_minimal():
 
 
 def test_temperature_setter_changes_rates():
-    sys = SDC2D(_padded_uniform_params(n=6, dg=-8.0, ds=-0.01))
+    sys = SDC2DSquare(_padded_uniform_params(n=6, dg=-8.0, ds=-0.01))
     state = State((6, 6), kind="Square", tracking="None", n_tile_types=sys.n_strands())
     sys.update_state(state)
 
@@ -84,7 +84,7 @@ def test_temperature_setter_changes_rates():
 
 
 def test_evolve_grows_tiles():
-    sys = SDC2D(_padded_uniform_params(n=8, dg=-12.0, ds=0.0))
+    sys = SDC2DSquare(_padded_uniform_params(n=8, dg=-12.0, ds=0.0))
     state = State((8, 8), kind="Square", tracking="None", n_tile_types=sys.n_strands())
     sys.update_state(state)
     sys.evolve(state, for_events=200)
@@ -104,19 +104,19 @@ def test_dna_sequence_glue():
         ],
         scaffold=scaffold,
         scaffold_concentration=1e-9,
-        glue_dg_s={"g": "GGACTGAC"},
+        glue_dg37_ds={"g": "GGACTGAC"},
         k_f=1e6,
         temperature=37.0,
         seed=[],
     )
-    sys = SDC2D(params)
+    sys = SDC2DSquare(params)
     assert sys.friends_at(2, 2) == [1]
 
 
 def test_seed_pins_tile():
     params = _padded_uniform_params(n=8, dg=-15.0, ds=0.0)
     params.seed = [(3, 3, "A")]
-    sys = SDC2D(params)
+    sys = SDC2DSquare(params)
     state = State((8, 8), kind="Square", tracking="None", n_tile_types=sys.n_strands())
     sys.update_state(state)
     # configure_empty_state placed the seed at (3, 3); evolve briefly and
@@ -127,14 +127,14 @@ def test_seed_pins_tile():
 
 
 def test_get_param_kf():
-    sys = SDC2D(_padded_uniform_params(n=6, k_f=2.5e6))
+    sys = SDC2DSquare(_padded_uniform_params(n=6, k_f=2.5e6))
     assert sys.get_param("kf") == pytest.approx(2.5e6)
     sys.kf = 4.0e6
     assert sys.get_param("kf") == pytest.approx(4.0e6)
 
 
 def test_exact_thermodynamics_single_site():
-    sys = SDC2D(_single_site_thermo_params())
+    sys = SDC2DSquare(_single_site_thermo_params())
 
     assert sys.state_g([[0]]) == pytest.approx(0.0)
     assert sys.state_g([[1]]) == pytest.approx(-1.0)
@@ -158,7 +158,7 @@ def test_exact_thermodynamics_single_site():
 
 
 def test_exact_thermodynamics_illegal_state_and_constraints():
-    sys = SDC2D(_single_site_thermo_params())
+    sys = SDC2DSquare(_single_site_thermo_params())
 
     assert sys.probability_of_state([[2]]) == 0.0
     assert sys.probability_of_state([[1, 0]]) == 0.0

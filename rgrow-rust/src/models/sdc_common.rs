@@ -1,7 +1,7 @@
-//! Helpers shared between SDC1D and SDC2D models.
+//! Helpers shared between SDC1D and SDC2DSquare models.
 //!
 //! These were originally defined in `sdc1d.rs` and imported across SDC
-//! variants. They are extracted here so that SDC2D can use them without
+//! variants. They are extracted here so that SDC2DSquare can use them without
 //! depending on `sdc1d.rs` internals.
 
 use std::collections::HashMap;

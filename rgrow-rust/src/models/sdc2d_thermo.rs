@@ -1,4 +1,4 @@
-//! Exact finite-grid thermodynamics for SDC2D.
+//! Exact finite-grid thermodynamics for SDC2DSquare.
 //!
 //! These methods enumerate a frontier of length `min(nrows, ncols)`, so they
 //! are exact but exponential in the smaller scaffold dimension.
@@ -9,7 +9,7 @@ use crate::base::Tile;
 use crate::canvas::PointSafe2;
 use crate::units::Temperature;
 
-use super::sdc2d::SDC2D;
+use super::sdc2d::SDC2DSquare;
 
 const R: f64 = 1.98720425864083 / 1000.0; // kcal/mol/K
 
@@ -70,7 +70,7 @@ fn logsumexp(values: impl IntoIterator<Item = f64>) -> f64 {
     values.into_iter().fold(f64::NEG_INFINITY, logaddexp)
 }
 
-impl SDC2D {
+impl SDC2DSquare {
     #[inline(always)]
     fn rtval(&self) -> f64 {
         R * self.temperature().to_kelvin_m()
@@ -84,7 +84,7 @@ impl SDC2D {
         assert_eq!(
             state.len(),
             self.nrows(),
-            "SDC2D state has {} rows but system has {} rows",
+            "SDC2DSquare state has {} rows but system has {} rows",
             state.len(),
             self.nrows()
         );
@@ -92,7 +92,7 @@ impl SDC2D {
             assert_eq!(
                 row.len(),
                 self.ncols(),
-                "SDC2D state row {row_idx} has {} columns but system has {} columns",
+                "SDC2DSquare state row {row_idx} has {} columns but system has {} columns",
                 row.len(),
                 self.ncols()
             );
@@ -103,7 +103,7 @@ impl SDC2D {
         assert_eq!(
             constraints.len(),
             self.nrows(),
-            "SDC2D constraints have {} rows but system has {} rows",
+            "SDC2DSquare constraints have {} rows but system has {} rows",
             constraints.len(),
             self.nrows()
         );
@@ -111,7 +111,7 @@ impl SDC2D {
             assert_eq!(
                 row.len(),
                 self.ncols(),
-                "SDC2D constraints row {row_idx} has {} columns but system has {} columns",
+                "SDC2DSquare constraints row {row_idx} has {} columns but system has {} columns",
                 row.len(),
                 self.ncols()
             );
@@ -123,7 +123,7 @@ impl SDC2D {
             for (col_idx, &tile) in row.iter().enumerate() {
                 assert!(
                     (tile as usize) < self.n_strands(),
-                    "SDC2D state tile {tile} at ({row_idx}, {col_idx}) is out of range for {} strands",
+                    "SDC2DSquare state tile {tile} at ({row_idx}, {col_idx}) is out of range for {} strands",
                     self.n_strands()
                 );
             }
@@ -183,7 +183,7 @@ impl SDC2D {
         } else {
             assert!(
                 (tile as usize) < self.n_strands(),
-                "SDC2D tile {tile} at ({row}, {col}) is out of range for {} strands",
+                "SDC2DSquare tile {tile} at ({row}, {col}) is out of range for {} strands",
                 self.n_strands()
             );
             self.bond_with_scaffold(row, col, tile)
@@ -227,7 +227,9 @@ impl SDC2D {
                     self.bond_ns(b_tile, a_tile)
                 }
             }
-            _ => panic!("SDC2D thermo edge positions {a_pos:?} and {b_pos:?} are not adjacent"),
+            _ => {
+                panic!("SDC2DSquare thermo edge positions {a_pos:?} and {b_pos:?} are not adjacent")
+            }
         }
     }
 
@@ -344,7 +346,7 @@ impl SDC2D {
 
     /// Exact partition function as an `f64`.
     ///
-    /// Prefer [`SDC2D::log_partition_function`] for large systems, since this
+    /// Prefer [`SDC2DSquare::log_partition_function`] for large systems, since this
     /// value can overflow.
     pub fn partition_function(&self) -> f64 {
         self.log_partition_function().exp()
@@ -405,7 +407,7 @@ impl SDC2D {
                 let allowed = self.constrained_allowed_tiles_at(row, col, constraints);
                 assert!(
                     !allowed.is_empty(),
-                    "SDC2D MFE has no legal tile at ({row}, {col}) under constraints"
+                    "SDC2DSquare MFE has no legal tile at ({row}, {col}) under constraints"
                 );
 
                 let pos = (row, col);
@@ -463,13 +465,13 @@ impl SDC2D {
         let (mut frontier, min_energy_beta) = table
             .into_iter()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .expect("SDC2D MFE has no legal configuration");
+            .expect("SDC2DSquare MFE has no legal configuration");
 
         let mut tiles_reversed = Vec::with_capacity(backpointers.len());
         for step_backpointers in backpointers.iter().rev() {
             let (previous_frontier, tile) = step_backpointers
                 .get(&frontier)
-                .unwrap_or_else(|| panic!("SDC2D MFE backpointer missing for {frontier:?}"))
+                .unwrap_or_else(|| panic!("SDC2DSquare MFE backpointer missing for {frontier:?}"))
                 .clone();
             tiles_reversed.push(tile);
             frontier = previous_frontier;
@@ -572,14 +574,14 @@ mod tests {
         );
     }
 
-    fn empty_constraints(sys: &SDC2D) -> Vec<Vec<Vec<Tile>>> {
+    fn empty_constraints(sys: &SDC2DSquare) -> Vec<Vec<Vec<Tile>>> {
         vec![vec![Vec::new(); sys.ncols()]; sys.nrows()]
     }
 
-    fn independent_sys(nrows: usize, ncols: usize, dg: f64, concentration: f64) -> SDC2D {
-        let mut glue_dg_s = HashMap::new();
-        glue_dg_s.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((dg, 0.0)));
-        SDC2D::from_params(SDC2DParams {
+    fn independent_sys(nrows: usize, ncols: usize, dg: f64, concentration: f64) -> SDC2DSquare {
+        let mut glue_dg37_ds = HashMap::new();
+        glue_dg37_ds.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((dg, 0.0)));
+        SDC2DSquare::from_params(SDC2DParams {
             strands: vec![SDC2DStrand {
                 name: Some("A".into()),
                 color: None,
@@ -592,19 +594,19 @@ mod tests {
             }],
             scaffold: vec![vec![Some("g*".into()); ncols]; nrows],
             scaffold_concentration: 1e-9,
-            glue_dg_s,
+            glue_dg37_ds,
             k_f: 1e6,
             temperature: 37.0,
             seed: vec![],
         })
     }
 
-    fn lateral_sys(nrows: usize, ncols: usize) -> SDC2D {
-        let mut glue_dg_s = HashMap::new();
-        glue_dg_s.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((-1.0, 0.0)));
-        glue_dg_s.insert(RefOrPair::Ref("h".into()), GsOrSeq::GS((-0.7, 0.0)));
-        glue_dg_s.insert(RefOrPair::Ref("v".into()), GsOrSeq::GS((-1.3, 0.0)));
-        SDC2D::from_params(SDC2DParams {
+    fn lateral_sys(nrows: usize, ncols: usize) -> SDC2DSquare {
+        let mut glue_dg37_ds = HashMap::new();
+        glue_dg37_ds.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((-1.0, 0.0)));
+        glue_dg37_ds.insert(RefOrPair::Ref("h".into()), GsOrSeq::GS((-0.7, 0.0)));
+        glue_dg37_ds.insert(RefOrPair::Ref("v".into()), GsOrSeq::GS((-1.3, 0.0)));
+        SDC2DSquare::from_params(SDC2DParams {
             strands: vec![SDC2DStrand {
                 name: Some("A".into()),
                 color: None,
@@ -617,7 +619,7 @@ mod tests {
             }],
             scaffold: vec![vec![Some("g*".into()); ncols]; nrows],
             scaffold_concentration: 1e-9,
-            glue_dg_s,
+            glue_dg37_ds,
             k_f: 1e6,
             temperature: 37.0,
             seed: vec![],
@@ -689,10 +691,10 @@ mod tests {
 
     #[test]
     fn test_thermo_per_position_friends_and_impossible_constraints() {
-        let mut glue_dg_s = HashMap::new();
-        glue_dg_s.insert(RefOrPair::Ref("p".into()), GsOrSeq::GS((-1.0, 0.0)));
-        glue_dg_s.insert(RefOrPair::Ref("q".into()), GsOrSeq::GS((-2.0, 0.0)));
-        let sys = SDC2D::from_params(SDC2DParams {
+        let mut glue_dg37_ds = HashMap::new();
+        glue_dg37_ds.insert(RefOrPair::Ref("p".into()), GsOrSeq::GS((-1.0, 0.0)));
+        glue_dg37_ds.insert(RefOrPair::Ref("q".into()), GsOrSeq::GS((-2.0, 0.0)));
+        let sys = SDC2DSquare::from_params(SDC2DParams {
             strands: vec![
                 SDC2DStrand {
                     name: Some("P".into()),
@@ -717,7 +719,7 @@ mod tests {
             ],
             scaffold: vec![vec![Some("p*".into()), Some("q*".into())]],
             scaffold_concentration: 1e-9,
-            glue_dg_s,
+            glue_dg37_ds,
             k_f: 1e6,
             temperature: 37.0,
             seed: vec![],
@@ -743,8 +745,8 @@ mod tests {
     #[test]
     fn test_thermo_seed_constraints() {
         let mut params = {
-            let mut glue_dg_s = HashMap::new();
-            glue_dg_s.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((-1.0, 0.0)));
+            let mut glue_dg37_ds = HashMap::new();
+            glue_dg37_ds.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((-1.0, 0.0)));
             SDC2DParams {
                 strands: vec![SDC2DStrand {
                     name: Some("A".into()),
@@ -761,14 +763,14 @@ mod tests {
                     vec![Some("g*".into()), Some("g*".into())],
                 ],
                 scaffold_concentration: 1e-9,
-                glue_dg_s,
+                glue_dg37_ds,
                 k_f: 1e6,
                 temperature: 37.0,
                 seed: vec![],
             }
         };
         params.seed = vec![(0, 0, "A".into())];
-        let sys = SDC2D::from_params(params);
+        let sys = SDC2DSquare::from_params(params);
 
         assert_eq!(sys.base_allowed_tiles_at(0, 0), vec![1]);
         assert_eq!(sys.probability_of_state(&[vec![0, 0], vec![0, 0]]), 0.0);

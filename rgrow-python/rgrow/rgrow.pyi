@@ -615,7 +615,7 @@ class ATAM:
             or None if no transition is found.
         """
 
-class SDC2D:
+class SDC2DSquare:
     def __init__(self, params: Any) -> None: ...
 
     @property

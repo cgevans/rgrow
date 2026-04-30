@@ -1,7 +1,8 @@
-//! SDC2D — scaffolded DNA tile assembly in 2D.
+//! SDC2DSquare — scaffolded DNA tile assembly in 2D on a square grid.
 //!
-//! Strands have five glues: West, North, East, South, and Bottom (scaffold-
-//! facing). The scaffold is a 2D `Array2<Glue>` of shape `(nrows, ncols)`;
+//! Strands have five glues: North, East, South, West, and Bottom (scaffold-
+//! facing). The lateral glue order matches kTAM (clockwise from north).
+//! The scaffold is a 2D `Array2<Glue>` of shape `(nrows, ncols)`;
 //! one state simulates one scaffold. All four lateral edges share a single
 //! glue namespace. Energy uses the unitful (kcal/mol, Molar, Kelvin)
 //! convention with per-glue `(ΔG_37, ΔS)` parameters, mirroring SDC1D.
@@ -25,16 +26,16 @@ use super::sdc_common::{get_or_generate, gsorseq_to_gs, self_and_inverse, GsOrSe
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-pub(crate) const WEST_GLUE_INDEX: usize = 0;
-pub(crate) const NORTH_GLUE_INDEX: usize = 1;
-pub(crate) const EAST_GLUE_INDEX: usize = 2;
-pub(crate) const SOUTH_GLUE_INDEX: usize = 3;
+pub(crate) const NORTH_GLUE_INDEX: usize = 0;
+pub(crate) const EAST_GLUE_INDEX: usize = 1;
+pub(crate) const SOUTH_GLUE_INDEX: usize = 2;
+pub(crate) const WEST_GLUE_INDEX: usize = 3;
 pub(crate) const BOTTOM_GLUE_INDEX: usize = 4;
 pub(crate) const N_GLUES_PER_STRAND: usize = 5;
 
 #[cfg_attr(feature = "python", pyclass(subclass, module = "rgrow.rgrow"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SDC2D {
+pub struct SDC2DSquare {
     pub strand_names: Vec<String>,
     pub glue_names: Vec<String>,
     pub colors: Vec<[u8; 4]>,
@@ -44,7 +45,8 @@ pub struct SDC2D {
     pub scaffold_concentration: Molar,
 
     /// `(n_strands, 5)` glue table: rows = strand, cols indexed by
-    /// `WEST/NORTH/EAST/SOUTH/BOTTOM_GLUE_INDEX`.
+    /// `NORTH/EAST/SOUTH/WEST/BOTTOM_GLUE_INDEX` (clockwise from north,
+    /// matching kTAM, with bottom last).
     pub strand_glues: Array2<Glue>,
     pub strand_concentration: Array1<Molar>,
 
@@ -80,7 +82,7 @@ pub struct SDC2D {
     scaffold_energy_bonds: Array2<OnceLock<f64>>,
 }
 
-impl SDC2D {
+impl SDC2DSquare {
     #[inline(always)]
     pub fn nrows(&self) -> usize {
         self.scaffold.nrows()
@@ -203,10 +205,10 @@ pub struct SDC2DStrand {
     pub color: Option<String>,
     /// Strand concentration in Molar.
     pub concentration: f64,
-    pub west_glue: Option<String>,
     pub north_glue: Option<String>,
     pub east_glue: Option<String>,
     pub south_glue: Option<String>,
+    pub west_glue: Option<String>,
     pub bottom_glue: Option<String>,
 }
 
@@ -220,7 +222,7 @@ pub struct SDC2DParams {
     /// Scaffold concentration in Molar.
     pub scaffold_concentration: f64,
     /// (ΔG_37, ΔS) or DNA sequence per glue or glue-pair.
-    pub glue_dg_s: HashMap<RefOrPair, GsOrSeq>,
+    pub glue_dg37_ds: HashMap<RefOrPair, GsOrSeq>,
     /// Forward rate constant in 1/(M·s).
     pub k_f: f64,
     /// Temperature in Celsius.
@@ -230,13 +232,13 @@ pub struct SDC2DParams {
     pub seed: Vec<(usize, usize, String)>,
 }
 
-impl SDC2D {
+impl SDC2DSquare {
     pub fn from_params(params: SDC2DParams) -> Self {
         let SDC2DParams {
             strands,
             scaffold,
             scaffold_concentration,
-            glue_dg_s,
+            glue_dg37_ds,
             k_f,
             temperature,
             seed,
@@ -244,17 +246,17 @@ impl SDC2D {
 
         // Validate scaffold rectangularity.
         let nrows = scaffold.len();
-        assert!(nrows > 0, "SDC2D scaffold must have at least one row");
+        assert!(nrows > 0, "SDC2DSquare scaffold must have at least one row");
         let ncols = scaffold[0].len();
         assert!(
             ncols > 0,
-            "SDC2D scaffold rows must have at least one column"
+            "SDC2DSquare scaffold rows must have at least one column"
         );
         for (i, row) in scaffold.iter().enumerate() {
             assert_eq!(
                 row.len(),
                 ncols,
-                "SDC2D scaffold row {i} has length {} but row 0 has length {ncols}",
+                "SDC2DSquare scaffold row {i} has length {} but row 0 has length {ncols}",
                 row.len()
             );
         }
@@ -278,14 +280,14 @@ impl SDC2D {
             strand_colors.push(color);
             strand_concs[idx] = strand.concentration;
 
-            strand_glues[(idx, WEST_GLUE_INDEX)] =
-                get_or_generate(&mut glue_name_map, &mut gluenum, strand.west_glue);
             strand_glues[(idx, NORTH_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, strand.north_glue);
             strand_glues[(idx, EAST_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, strand.east_glue);
             strand_glues[(idx, SOUTH_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, strand.south_glue);
+            strand_glues[(idx, WEST_GLUE_INDEX)] =
+                get_or_generate(&mut glue_name_map, &mut gluenum, strand.west_glue);
             strand_glues[(idx, BOTTOM_GLUE_INDEX)] =
                 get_or_generate(&mut glue_name_map, &mut gluenum, strand.bottom_glue);
         }
@@ -300,7 +302,7 @@ impl SDC2D {
         let mut delta_g_matrix = Array2::<KcalPerMol>::zeros((gluenum, gluenum));
         let mut entropy_matrix = Array2::<KcalPerMolKelvin>::zeros((gluenum, gluenum));
 
-        for (key, gs_or_seq) in glue_dg_s.iter() {
+        for (key, gs_or_seq) in glue_dg37_ds.iter() {
             let (dg, ds) = gsorseq_to_gs(gs_or_seq);
             let (i_name, j_name) = match key {
                 RefOrPair::Ref(r) => {
@@ -362,7 +364,7 @@ impl SDC2D {
         let kf = PerMolarSecond::new(k_f);
         let temperature: Kelvin = Celsius(temperature).into();
         let scaffold_count = nrows * ncols;
-        let mut s = SDC2D {
+        let mut s = SDC2DSquare {
             strand_names,
             glue_names,
             colors: strand_colors,
@@ -387,7 +389,7 @@ impl SDC2D {
 
 // ─── Hot path ────────────────────────────────────────────────────────────────
 
-impl SDC2D {
+impl SDC2DSquare {
     /// Sum of β·ΔG over scaffold + W + E + N + S bonds for a strand at `p`.
     /// Out-of-bounds neighbors and empty (tile == 0) neighbors contribute 0.
     fn bond_energy_of_strand<S: State>(&self, state: &S, p: PointSafe2, strand: Tile) -> f64 {
@@ -509,13 +511,13 @@ impl SDC2D {
     }
 }
 
-impl System for SDC2D {
+impl System for SDC2DSquare {
     fn update_after_event<S: State>(&self, state: &mut S, event: &Event) {
         match event {
             Event::MonomerAttachment(p, _)
             | Event::MonomerDetachment(p)
             | Event::MonomerChange(p, _) => self.update_monomer_point(state, p),
-            _ => panic!("Event type not supported in SDC2D: {event:?}"),
+            _ => panic!("Event type not supported in SDC2DSquare: {event:?}"),
         }
     }
 
@@ -532,7 +534,7 @@ impl System for SDC2D {
                 state.set_sa(p, &0);
             }
             Event::MonomerChange(p, strand) => state.set_sa(p, strand),
-            _ => panic!("Event type not supported in SDC2D: {event:?}"),
+            _ => panic!("Event type not supported in SDC2DSquare: {event:?}"),
         };
         f64::NAN
     }
@@ -563,7 +565,7 @@ impl System for SDC2D {
             return (event, rate);
         }
         panic!(
-            "SDC2D: no event chosen at {p:?} with accumulator residual {_acc:?} (state may be stale)"
+            "SDC2DSquare: no event chosen at {p:?} with accumulator residual {_acc:?} (state may be stale)"
         );
     }
 
@@ -666,7 +668,7 @@ impl System for SDC2D {
 
     fn system_info(&self) -> String {
         format!(
-            "SDC2D with {}x{} scaffold and {} strands",
+            "SDC2DSquare with {}x{} scaffold and {} strands",
             self.nrows(),
             self.ncols(),
             self.n_strands(),
@@ -674,7 +676,7 @@ impl System for SDC2D {
     }
 }
 
-impl TileBondInfo for SDC2D {
+impl TileBondInfo for SDC2DSquare {
     fn tile_colors(&self) -> &Vec<[u8; 4]> {
         &self.colors
     }
@@ -688,10 +690,10 @@ impl TileBondInfo for SDC2D {
 
 #[cfg(feature = "python")]
 #[pymethods]
-impl SDC2D {
+impl SDC2DSquare {
     #[new]
     fn py_new(params: SDC2DParams) -> Self {
-        SDC2D::from_params(params)
+        SDC2DSquare::from_params(params)
     }
 
     #[getter(kf)]
@@ -811,8 +813,8 @@ mod tests {
     /// Build a trivial 2x2 system: one strand "A" with bottom glue "g",
     /// scaffold of "g*" everywhere, and a self-binding `gΔG = -5, ΔS = 0`.
     fn minimal_2x2_params() -> SDC2DParams {
-        let mut glue_dg_s = HashMap::new();
-        glue_dg_s.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((-5.0, 0.0)));
+        let mut glue_dg37_ds = HashMap::new();
+        glue_dg37_ds.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((-5.0, 0.0)));
         SDC2DParams {
             strands: vec![SDC2DStrand {
                 name: Some("A".into()),
@@ -829,7 +831,7 @@ mod tests {
                 vec![Some("g*".into()), Some("g*".into())],
             ],
             scaffold_concentration: 1e-9,
-            glue_dg_s,
+            glue_dg37_ds,
             k_f: 1e6,
             temperature: 37.0,
             seed: vec![],
@@ -838,7 +840,7 @@ mod tests {
 
     #[test]
     fn test_from_params_roundtrip() {
-        let sys = SDC2D::from_params(minimal_2x2_params());
+        let sys = SDC2DSquare::from_params(minimal_2x2_params());
         assert_eq!(sys.nrows(), 2);
         assert_eq!(sys.ncols(), 2);
         assert_eq!(sys.n_strands(), 2);
@@ -855,8 +857,8 @@ mod tests {
     #[test]
     fn test_glue_glue_dg_temperature_dependence() {
         // Set up two glues a/a* with ΔG_37 = -2, ΔS = -0.01 kcal/mol/K.
-        let mut glue_dg_s = HashMap::new();
-        glue_dg_s.insert(RefOrPair::Ref("a".into()), GsOrSeq::GS((-2.0, -0.01)));
+        let mut glue_dg37_ds = HashMap::new();
+        glue_dg37_ds.insert(RefOrPair::Ref("a".into()), GsOrSeq::GS((-2.0, -0.01)));
         let params = SDC2DParams {
             strands: vec![SDC2DStrand {
                 name: Some("X".into()),
@@ -870,12 +872,12 @@ mod tests {
             }],
             scaffold: vec![vec![Some("a*".into())]],
             scaffold_concentration: 1e-9,
-            glue_dg_s,
+            glue_dg37_ds,
             k_f: 1e6,
             temperature: 37.0,
             seed: vec![],
         };
-        let mut sys = SDC2D::from_params(params);
+        let mut sys = SDC2DSquare::from_params(params);
         let a = sys.glue_names.iter().position(|s| s == "a").unwrap();
         let astar = sys.glue_names.iter().position(|s| s == "a*").unwrap();
 
@@ -891,7 +893,7 @@ mod tests {
 
     #[test]
     fn test_bond_caches_lazy_init() {
-        let sys = SDC2D::from_params(minimal_2x2_params());
+        let sys = SDC2DSquare::from_params(minimal_2x2_params());
         let v1 = sys.bond_with_scaffold(0, 0, 1);
         let v2 = sys.bond_with_scaffold(0, 0, 1);
         assert_eq!(v1, v2);
@@ -913,9 +915,9 @@ mod tests {
     fn test_friends_btm_per_position() {
         // Two strands and a scaffold where the two positions match different
         // bottom glues. Verify per-position friends differ.
-        let mut glue_dg_s = HashMap::new();
-        glue_dg_s.insert(RefOrPair::Ref("p".into()), GsOrSeq::GS((-3.0, 0.0)));
-        glue_dg_s.insert(RefOrPair::Ref("q".into()), GsOrSeq::GS((-3.0, 0.0)));
+        let mut glue_dg37_ds = HashMap::new();
+        glue_dg37_ds.insert(RefOrPair::Ref("p".into()), GsOrSeq::GS((-3.0, 0.0)));
+        glue_dg37_ds.insert(RefOrPair::Ref("q".into()), GsOrSeq::GS((-3.0, 0.0)));
         let params = SDC2DParams {
             strands: vec![
                 SDC2DStrand {
@@ -941,12 +943,12 @@ mod tests {
             ],
             scaffold: vec![vec![Some("p*".into()), Some("q*".into())]],
             scaffold_concentration: 1e-9,
-            glue_dg_s,
+            glue_dg37_ds,
             k_f: 1e6,
             temperature: 37.0,
             seed: vec![],
         };
-        let sys = SDC2D::from_params(params);
+        let sys = SDC2DSquare::from_params(params);
         let p_id = sys.strand_names.iter().position(|n| n == "P").unwrap() as Tile;
         let q_id = sys.strand_names.iter().position(|n| n == "Q").unwrap() as Tile;
         assert_eq!(sys.friends_btm[(0, 0)], vec![p_id]);
@@ -957,7 +959,7 @@ mod tests {
     fn test_seed_recorded() {
         let mut params = minimal_2x2_params();
         params.seed = vec![(0, 0, "A".into())];
-        let sys = SDC2D::from_params(params);
+        let sys = SDC2DSquare::from_params(params);
         assert!(sys.is_seed(&PointSafe2((0, 0))));
         assert!(!sys.is_seed(&PointSafe2((0, 1))));
     }
@@ -967,23 +969,23 @@ mod tests {
 
     type TState = QuadTreeState<CanvasSquare, NullStateTracker>;
 
-    fn make_state(sys: &SDC2D, n: usize) -> TState {
+    fn make_state(sys: &SDC2DSquare, n: usize) -> TState {
         TState::empty_with_types((n, n), sys.n_strands()).unwrap()
     }
 
-    /// Build an `n x n` canvas-sized SDC2D with one strand A bound by a single
+    /// Build an `n x n` canvas-sized SDC2DSquare with one strand A bound by a single
     /// glue g everywhere on the interior. Border positions get null scaffold
     /// glue (binding to nothing). Interior is `[2..n-2, 2..n-2]`.
-    fn padded_uniform_sys(n: usize, dg: f64, ds: f64) -> SDC2D {
+    fn padded_uniform_sys(n: usize, dg: f64, ds: f64) -> SDC2DSquare {
         let mut scaffold = vec![vec![None::<String>; n]; n];
         for row in scaffold.iter_mut().take(n - 2).skip(2) {
             for cell in row.iter_mut().take(n - 2).skip(2) {
                 *cell = Some("g*".into());
             }
         }
-        let mut glue_dg_s = HashMap::new();
-        glue_dg_s.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((dg, ds)));
-        SDC2D::from_params(SDC2DParams {
+        let mut glue_dg37_ds = HashMap::new();
+        glue_dg37_ds.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((dg, ds)));
+        SDC2DSquare::from_params(SDC2DParams {
             strands: vec![SDC2DStrand {
                 name: Some("A".into()),
                 color: None,
@@ -996,7 +998,7 @@ mod tests {
             }],
             scaffold,
             scaffold_concentration: 1e-9,
-            glue_dg_s,
+            glue_dg37_ds,
             k_f: 1e6,
             temperature: 37.0,
             seed: vec![],
@@ -1033,15 +1035,15 @@ mod tests {
         // bond is identical. With no neighbors, only the scaffold bond
         // contributes; surround with neighbors, the full 5-bond sum applies.
         let dg = -2.0;
-        let mut glue_dg_s = HashMap::new();
-        glue_dg_s.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((dg, 0.0)));
+        let mut glue_dg37_ds = HashMap::new();
+        glue_dg37_ds.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((dg, 0.0)));
         let mut scaffold = vec![vec![None::<String>; 8]; 8];
         for row in scaffold.iter_mut().take(6).skip(2) {
             for cell in row.iter_mut().take(6).skip(2) {
                 *cell = Some("g*".into());
             }
         }
-        let sys = SDC2D::from_params(SDC2DParams {
+        let sys = SDC2DSquare::from_params(SDC2DParams {
             strands: vec![SDC2DStrand {
                 name: Some("A".into()),
                 color: None,
@@ -1054,7 +1056,7 @@ mod tests {
             }],
             scaffold,
             scaffold_concentration: 1e-9,
-            glue_dg_s,
+            glue_dg37_ds,
             k_f: 1e6,
             temperature: 37.0,
             seed: vec![],
@@ -1090,17 +1092,17 @@ mod tests {
         // Two independent glue families: "h" on W/E edges, "v" on N/S edges.
         // Strand binds "h" west + "h*" east, and "v" north + "v*" south.
         // Verify bond_energy_of_strand sums them with no cross-talk.
-        let mut glue_dg_s = HashMap::new();
-        glue_dg_s.insert(RefOrPair::Ref("h".into()), GsOrSeq::GS((-3.0, 0.0)));
-        glue_dg_s.insert(RefOrPair::Ref("v".into()), GsOrSeq::GS((-7.0, 0.0)));
-        glue_dg_s.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((-1.0, 0.0)));
+        let mut glue_dg37_ds = HashMap::new();
+        glue_dg37_ds.insert(RefOrPair::Ref("h".into()), GsOrSeq::GS((-3.0, 0.0)));
+        glue_dg37_ds.insert(RefOrPair::Ref("v".into()), GsOrSeq::GS((-7.0, 0.0)));
+        glue_dg37_ds.insert(RefOrPair::Ref("g".into()), GsOrSeq::GS((-1.0, 0.0)));
         let mut scaffold = vec![vec![None::<String>; 8]; 8];
         for row in scaffold.iter_mut().take(6).skip(2) {
             for cell in row.iter_mut().take(6).skip(2) {
                 *cell = Some("g*".into());
             }
         }
-        let sys = SDC2D::from_params(SDC2DParams {
+        let sys = SDC2DSquare::from_params(SDC2DParams {
             strands: vec![SDC2DStrand {
                 name: Some("A".into()),
                 color: None,
@@ -1113,7 +1115,7 @@ mod tests {
             }],
             scaffold,
             scaffold_concentration: 1e-9,
-            glue_dg_s,
+            glue_dg37_ds,
             k_f: 1e6,
             temperature: 37.0,
             seed: vec![],
