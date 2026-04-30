@@ -1,0 +1,37 @@
+[package]
+name = "rgrow-wasm"
+description = "WebAssembly bindings for the rgrow tile-assembly simulator."
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+serde-wasm-bindgen = "0.6"
+console_error_panic_hook = "0.1"
+serde = { workspace = true }
+
+[dependencies.rgrow]
+path = "../rgrow-rust"
+default-features = false
+
+[dependencies.web-sys]
+version = "0.3"
+features = ["Performance", "Window", "console"]
+
+# Force getrandom to use the JS-backed random source on the web. Both major
+# versions are pinned here because the dep tree pulls in 0.2 and 0.3 via
+# different transitive paths.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O3"]

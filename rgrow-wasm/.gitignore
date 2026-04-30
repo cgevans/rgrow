@@ -1,0 +1,4 @@
+# wasm-pack output. Built fresh by CI; not checked in.
+web/pkg/
+pkg-node/
+target/
