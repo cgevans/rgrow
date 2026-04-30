@@ -5,8 +5,14 @@ name: CI
 # Runner expectations (adjust `runs-on:` labels if your runners use different ones):
 #   - `docker`         : Linux runner that executes jobs inside a container.
 #                        Wheel-build jobs use a manylinux container directly to
-#                        avoid docker-in-docker for the maturin step.
-#   - `windows`        : Windows host runner (no container).
+#                        avoid docker-in-docker for the maturin step. The
+#                        manylinux image has no `node` so a first step installs
+#                        Node 20 from NodeSource (Forgejo Actions invokes JS
+#                        actions like actions/checkout via node).
+#   - `windows`        : Windows host runner (no container). The host PATH
+#                        must include `git.exe` and `node.exe` — Forgejo
+#                        runs steps directly on the host and JS actions
+#                        won't work without them.
 #   - `macos`          : not configured yet — macOS jobs are below but disabled.
 #
 # Secrets used (set in Codeberg → repo → Settings → Actions → Secrets):
@@ -170,6 +176,10 @@ jobs:
       matrix:
         target: [x86_64]
     steps:
+      - name: Install Node.js (manylinux image has no node, but JS actions need it)
+        run: |
+          curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+          dnf install -y nodejs
       - uses: actions/checkout@v4
       - name: Install Rust
         run: |
@@ -219,6 +229,10 @@ jobs:
         target: [x86_64]
         python-version: ['3.13t', '3.14t']
     steps:
+      - name: Install Node.js (manylinux image has no node, but JS actions need it)
+        run: |
+          curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+          dnf install -y nodejs
       - uses: actions/checkout@v4
       - name: Install Rust
         run: |
