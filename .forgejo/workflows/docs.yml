@@ -1,15 +1,13 @@
 name: Docs
 
-# Builds the zensical/mkdocs site and deploys it to a `pages` branch in this
-# repo, which Codeberg Pages serves at <user>.codeberg.page/<repo> (or the
-# repo's configured Pages URL).
+# Builds the zensical/mkdocs site and deploys it directly to git-pages, which
+# Codeberg Pages serves at <user>.codeberg.page/<repo>.
 #
 # Runner expectation:
 #   - `docker` Linux runner.
 #
 # Secrets used:
-#   - GITHUB_TOKEN : auto-provided by Forgejo; needs write access to push the
-#                    `pages` branch (granted via the `permissions:` block).
+#   - forge.token : auto-provided by Forgejo and accepted by git-pages.
 #
 # Caching: see comment in ci.yml. The runner's config.yaml must allow the
 # `rgrow-*` named volumes via `container.valid_volumes`.
@@ -26,7 +24,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: pages
@@ -51,7 +49,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: https://github.com/astral-sh/setup-uv@v7
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
@@ -72,21 +70,8 @@ jobs:
           source .venv/bin/activate
           zensical build --clean
       - name: Deploy to Codeberg Pages
-        env:
-          DEPLOY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SERVER_URL: ${{ github.server_url }}
-        run: |
-          set -euo pipefail
-          cd site
-          # Tell git the workspace is safe (containers run as root and may
-          # otherwise refuse the working tree).
-          git config --global --add safe.directory "$(pwd)"
-          git init -b pages
-          git config user.name "forgejo-actions[bot]"
-          git config user.email "forgejo-actions[bot]@noreply.codeberg.org"
-          git add .
-          git commit -m "Deploy docs from ${GITHUB_SHA}"
-          HOST="${SERVER_URL#https://}"
-          HOST="${HOST#http://}"
-          git remote add origin "https://x-access-token:${DEPLOY_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git"
-          git push --force origin pages
+        uses: https://codeberg.org/git-pages/action@v2
+        with:
+          site: "https://${{ forge.repository_owner }}.codeberg.page/rgrow/"
+          token: ${{ forge.token }}
+          source: site/

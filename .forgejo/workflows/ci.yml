@@ -19,7 +19,8 @@ name: CI
 #   - CODECOV_TOKEN    : optional; coverage upload is best-effort.
 #   - PYPI_TOKEN       : required for `python_release` job on tags.
 #   - CRATES_IO_TOKEN  : required for `rust_release` job on tags.
-#   - GITHUB_TOKEN     : auto-provided by Forgejo (used for the Forgejo release).
+#   - PACKAGE_TOKEN    : required for mirroring release artifacts to Packages.
+#   - forge.token      : auto-provided by Forgejo (used for the Forgejo release).
 #
 # Caching: the Forgejo runner's built-in cache server (used by
 # `actions/cache` / Swatinem/rust-cache / setup-uv enable-cache) typically
@@ -46,19 +47,21 @@ on:
       - README.md
   pull_request:
   workflow_dispatch:
+    inputs:
+      build_wheels:
+        description: "Build Python wheels and sdists without publishing"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
   contents: read
 
 env:
   CARGO_TERM_COLOR: always
-  # catthehacker images bundle the tooling that GitHub-hosted ubuntu-latest
-  # runners ship with; close to drop-in replacement for ubuntu-latest in
-  # Forgejo Actions.
-  LINUX_CONTAINER: docker.io/catthehacker/ubuntu:act-22.04
-  # manylinux container used directly for wheel builds (no DinD needed).
-  MANYLINUX_CONTAINER: quay.io/pypa/manylinux_2_28_x86_64
-
 jobs:
   rust_checks:
     name: Rust checks
@@ -130,7 +133,7 @@ jobs:
       - name: Install uv
         # Cache lives on the host volume mounted at $UV_CACHE_DIR; we don't
         # use setup-uv's enable-cache (which talks to the runner cache server).
-        uses: astral-sh/setup-uv@v7
+        uses: https://github.com/astral-sh/setup-uv@v7
       - name: Install just and cargo-llvm-cov
         uses: https://github.com/taiki-e/install-action@v2
         with:
@@ -162,6 +165,7 @@ jobs:
 
   linux:
     name: Python Linux builds
+    if: startsWith(forge.ref, 'refs/tags/') || inputs.build_wheels == 'true'
     needs: [python_checks]
     runs-on: docker
     container:
@@ -214,6 +218,7 @@ jobs:
 
   linux-freethreaded:
     name: Python Linux free-threaded builds
+    if: startsWith(forge.ref, 'refs/tags/') || inputs.build_wheels == 'true'
     needs: [python_checks]
     runs-on: docker
     container:
@@ -264,6 +269,7 @@ jobs:
 
   windows:
     name: Python Windows builds
+    if: startsWith(forge.ref, 'refs/tags/') || inputs.build_wheels == 'true'
     needs: [python_checks]
     runs-on: windows
     env:
@@ -282,7 +288,7 @@ jobs:
           & $rustup --default-toolchain stable --profile minimal --no-modify-path -y
           "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: https://github.com/astral-sh/setup-uv@v7
       - name: Install Python interpreters
         shell: pwsh
         run: uv python install 3.10 3.11 3.12 3.13 3.14
@@ -304,6 +310,7 @@ jobs:
 
   windows-freethreaded:
     name: Python Windows free-threaded builds
+    if: startsWith(forge.ref, 'refs/tags/') || inputs.build_wheels == 'true'
     needs: [python_checks]
     runs-on: windows
     env:
@@ -323,7 +330,7 @@ jobs:
           & $rustup --default-toolchain stable --profile minimal --no-modify-path -y
           "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: https://github.com/astral-sh/setup-uv@v7
       - name: Install Python interpreter
         shell: pwsh
         run: uv python install ${{ matrix.python-version }}
@@ -343,9 +350,10 @@ jobs:
           name: wheels-windows-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
           path: dist
 
-  # macOS jobs — run on the `macos-arm64` runner. x86_64 is not built (Apple Silicon only).
+  # macOS jobs run on the `macos-arm64` runner. Intel macOS wheels are intentionally deprecated.
   macos:
     name: Python macOS builds
+    if: startsWith(forge.ref, 'refs/tags/') || inputs.build_wheels == 'true'
     needs: [python_checks]
     runs-on: macos-arm64
     strategy:
@@ -381,6 +389,7 @@ jobs:
 
   macos-freethreaded:
     name: Python macOS free-threaded builds
+    if: startsWith(forge.ref, 'refs/tags/') || inputs.build_wheels == 'true'
     needs: [python_checks]
     runs-on: macos-arm64
     strategy:
@@ -417,6 +426,7 @@ jobs:
 
   sdist:
     name: Build sdist
+    if: startsWith(forge.ref, 'refs/tags/') || inputs.build_wheels == 'true'
     needs: [python_checks]
     runs-on: docker
     container:
@@ -452,7 +462,7 @@ jobs:
     runs-on: docker
     container:
       image: docker.io/catthehacker/ubuntu:act-22.04
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(forge.ref, 'refs/tags/')
     needs: [linux, linux-freethreaded, windows, windows-freethreaded, macos, macos-freethreaded, sdist]
     steps:
       - uses: https://code.forgejo.org/forgejo/download-artifact@v4
@@ -461,7 +471,7 @@ jobs:
           merge-multiple: true
           path: dist
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: https://github.com/astral-sh/setup-uv@v7
       - name: Publish rgrow to PyPI
         # PyPI trusted publishing currently doesn't support Codeberg/Forgejo
         # OIDC, so we use an API token. Set PYPI_TOKEN as a repo secret.
@@ -484,7 +494,7 @@ jobs:
     env:
       CARGO_HOME: /cache/cargo
       CARGO_TARGET_DIR: /cache/cargo-target
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(forge.ref, 'refs/tags/')
     needs: [rust_checks]
     steps:
       - uses: actions/checkout@v4
@@ -501,7 +511,7 @@ jobs:
     runs-on: docker
     container:
       image: docker.io/catthehacker/ubuntu:act-22.04
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(forge.ref, 'refs/tags/')
     needs: [linux, linux-freethreaded, windows, windows-freethreaded, macos, macos-freethreaded, sdist]
     permissions:
       contents: write
@@ -514,7 +524,7 @@ jobs:
           path: dist
       - name: Extract changelog for this version
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${{ forge.ref_name }}"
           VERSION="${TAG#v}"
           NOTES=$(awk -v ver="$VERSION" -v tag="$TAG" '
             BEGIN { found=0 }
@@ -531,10 +541,37 @@ jobs:
         uses: https://code.forgejo.org/actions/forgejo-release@v2
         with:
           direction: upload
-          url: ${{ github.server_url }}
-          repo: ${{ github.repository }}
-          tag: ${{ github.ref_name }}
-          title: ${{ github.ref_name }}
+          url: ${{ forge.server_url }}
+          repo: ${{ forge.repository }}
+          tag: ${{ forge.ref_name }}
+          title: ${{ forge.ref_name }}
           release-notes-file: /tmp/release-notes.md
           release-dir: dist
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ forge.token }}
+
+  package_release:
+    name: Codeberg Packages release mirror
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+    if: startsWith(forge.ref, 'refs/tags/')
+    needs: [linux, linux-freethreaded, windows, windows-freethreaded, macos, macos-freethreaded, sdist]
+    steps:
+      - uses: https://code.forgejo.org/forgejo/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - name: Upload release files to Generic Packages
+        env:
+          TOKEN: ${{ secrets.PACKAGE_TOKEN }}
+          OWNER: ${{ forge.repository_owner }}
+          VERSION: ${{ forge.ref_name }}
+          SERVER_URL: ${{ forge.server_url }}
+        run: |
+          set -euo pipefail
+          for file in dist/*; do
+            curl --fail --header "Authorization: token ${TOKEN}" \
+              --upload-file "$file" \
+              "${SERVER_URL}/api/packages/${OWNER}/generic/rgrow-dist/${VERSION}/$(basename "$file")"
+          done
