@@ -435,16 +435,16 @@ jobs:
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install maturin
+        run: pip install maturin
       - name: Build sdist
-        uses: https://github.com/PyO3/maturin-action@v1
-        with:
-          command: sdist
+        run: maturin sdist --out target/wheels
       - name: Build CLI sdist
-        uses: https://github.com/PyO3/maturin-action@v1
-        with:
-          command: sdist
-          working-directory: rgrow-cli
-          args: --out ../target/wheels
+        working-directory: rgrow-cli
+        run: maturin sdist --out ../target/wheels
       - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: wheels-sdist
