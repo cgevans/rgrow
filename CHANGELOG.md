@@ -1,6 +1,9 @@
 # Unreleased
 
+# 0.23.0
+
 ### Added
+- SDC2DSquare: 2D strand-displacement-cascade model on a square canvas, exposed in Python with full energy-model parameters and tests.
 - SDC1DBindReplace: energy-based rate calculations with configurable `kf`, `temperature`, strand concentrations, and delta-G/entropy matrices.
 - SDC1DBindReplace: `physical_attachment_rate` option for concentration-weighted attachment rates.
 - SDC1DBindReplace: `bindunbind_replacement_rate` option modeling combined detach/re-attach kinetics.
@@ -15,15 +18,21 @@
     and multinomial resampling for efficiency.
   - `extend()` to run additional trajectories and merge into an existing result
     (requires `store_system=True`).
+- `EnergyChangesTracker` and `TrackingConfig` for recording per-event energy changes.
+- Critical-state search and committor threshold test now accept `parallel` and `**kwargs` from Python.
 
 ### Changed
 - SDC1DBindReplace replacement rates are now count-independent (boolean "has replacer" rather than counting replacers).
 - SDC1D: `gsorseq_to_gs` and `self_and_inverse` made `pub(super)` for reuse in bind/replace model.
 - SDC1D: energy bond Python accessors use `unwrap_or(0.0)` instead of panicking on missing values.
 - Canvas size validation: `new_sized()` now returns errors for invalid sizes on all canvas types.
+- Upgraded `equiconc` to 0.2 and switched to its `from_arrays` API.
+- Releases (PyPI, crates.io, GitHub Releases) and docs deployment have moved from GitHub Actions to Codeberg's Forgejo Actions; GitHub CI is now PR-validation only. Docs are published via Codeberg Pages at <https://cge.codeberg.page/rgrow/>.
 
 ### Fixed
 - Corrected license field in `Cargo.toml` to MIT (matching the LICENSE file).
+- Dimer attach/detach bugs and Xgrow parser precedence issue.
+- `trajectory_weights` indexing for last-surface FFS failures.
 
 # 0.22.0
 

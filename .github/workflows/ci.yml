@@ -1,12 +1,15 @@
 name: CI
 
+# Releases (PyPI, crates.io, GitHub Releases) are now produced from Codeberg
+# via .forgejo/workflows/ci.yml. This file only validates pushes/PRs that
+# happen on the GitHub mirror. Do not re-add tag triggers or release jobs
+# here without first disabling the corresponding Codeberg jobs.
+
 on:
   push:
     branches:
       - main
       - master
-    tags:
-      - "*"
     paths-ignore:
       - CHANGELOG.md
       - README.md
@@ -52,6 +55,7 @@ jobs:
           files: coverage.lcov
           name: rust-linux
           token: ${{ secrets.CODECOV_TOKEN }}
+
   python_checks:
     name: Checks for Python
     runs-on: ubuntu-latest
@@ -103,63 +107,14 @@ jobs:
           name: python-linux
           token: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: true
-  # python_benchmarks:
-  #   name: Python Benchmarks
-  #   needs: [python_checks]
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: write
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         repository: cgevans/tiny-xlib
-  #         path: ./tiny-xlib
-  #     - uses: dtolnay/rust-toolchain@master
-  #       with:
-  #         toolchain: stable
-  #     - name: Set up Rust cache
-  #       uses: Swatinem/rust-cache@v2
-  #     - uses: actions/setup-python@v5
-  #       with:
-  #         python-version: "3.12"
-  #     - name: Install uv
-  #       uses: astral-sh/setup-uv@v7
-  #       with:
-  #         enable-cache: true
-  #     - name: Install just
-  #       uses: extractions/setup-just@v2
-  #     - name: Setup virtual environment
-  #       run: |
-  #         uv venv
-  #         uv pip install maturin pytest pytest-benchmark numpy hypothesis
-  #     - name: Build Python extension
-  #       run: |
-  #         source .venv/bin/activate
-  #         maturin develop --uv
-  #     - name: Run benchmarks
-  #       run: |
-  #         source .venv/bin/activate
-  #         pytest rgrow-python/tests/ --benchmark-only --benchmark-json output.json -v
-  #     - name: Store benchmark result
-  #       uses: benchmark-action/github-action-benchmark@v1
-  #       with:
-  #         tool: 'pytest'
-  #         output-file-path: output.json
-  #         github-token: ${{ secrets.GITHUB_TOKEN }}
-  #         auto-push: ${{ github.ref == 'refs/heads/main' }}
-  #         alert-threshold: '150%'
-  #         comment-on-alert: true
-  #         fail-on-alert: false
-  #         benchmark-data-dir-path: dev/bench
 
   linux:
-    name: Python Linux builds
+    name: Python Linux build (smoke test)
     needs: [python_checks]
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64] # aarch64, armv7l
+        target: [x86_64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -189,13 +144,8 @@ jobs:
           rust-toolchain: stable
           working-directory: rgrow-cli
 
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-linux-${{ matrix.target }}
-          path: dist
   linux-freethreaded:
-    name: Python Linux free-threaded builds
+    name: Python Linux free-threaded build (smoke test)
     needs: [python_checks]
     runs-on: ubuntu-latest
     strategy:
@@ -229,274 +179,3 @@ jobs:
           manylinux: "auto"
           rust-toolchain: stable
           working-directory: rgrow-cli
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-linux-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
-          path: dist
-
-  windows:
-    name: Python Windows builds
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [python_checks]
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        target: [x64]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-          architecture: ${{ matrix.target }}
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Set up Rust cache
-        uses: Swatinem/rust-cache@v2
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
-          sccache: "true"
-          rust-toolchain: stable
-      - name: Build CLI wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out ../dist --find-interpreter
-          sccache: "true"
-          working-directory: rgrow-cli
-          rust-toolchain: stable
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-windows-${{ matrix.target }}
-          path: dist
-
-  macos:
-    name: Python MacOS builds
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [python_checks]
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        target: [x86_64, aarch64]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Set up Rust cache
-        uses: Swatinem/rust-cache@v2
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
-          sccache: "true"
-          rust-toolchain: stable
-      - name: Build CLI wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out ../dist --find-interpreter
-          sccache: "true"
-          rust-toolchain: stable
-          working-directory: rgrow-cli
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-macos-${{ matrix.target }}
-          path: dist
-
-  macos-freethreaded:
-    name: Python MacOS free-threaded builds
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [python_checks]
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        target: [x86_64, aarch64]
-        python-version: ['3.13t', '3.14t']
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Set up Rust cache
-        uses: Swatinem/rust-cache@v2
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out dist --interpreter python3 --no-default-features
-          sccache: "true"
-          rust-toolchain: stable
-      - name: Build CLI wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out ../dist --interpreter python3
-          sccache: "true"
-          rust-toolchain: stable
-          working-directory: rgrow-cli
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-macos-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
-          path: dist
-
-  windows-freethreaded:
-    name: Python Windows free-threaded builds
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [python_checks]
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        target: [x64]
-        python-version: ['3.13t', '3.14t']
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          architecture: ${{ matrix.target }}
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Set up Rust cache
-        uses: Swatinem/rust-cache@v2
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out dist --interpreter python3 --no-default-features
-          sccache: "true"
-          rust-toolchain: stable
-      - name: Build CLI wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out ../dist --interpreter python3
-          sccache: "true"
-          rust-toolchain: stable
-          working-directory: rgrow-cli
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-windows-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
-          path: dist
-
-  sdist:
-    needs: [python_checks]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Set up Rust cache
-        uses: Swatinem/rust-cache@v2
-      - name: Build sdist
-        uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-      - name: Build CLI sdist
-        uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          working-directory: rgrow-cli
-          args: --out ../target/wheels
-      - name: Upload sdist
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-sdist
-          path: target/wheels
-
-  python_release:
-    name: Python PyPI Release
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [linux, linux-freethreaded, windows, windows-freethreaded, macos, macos-freethreaded, sdist]
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: wheels-*
-          merge-multiple: true
-          path: dist
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-      - name: Publish rgrow to PyPI
-        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/rgrow-[0-9]*
-      - name: Publish rgrow-cli to PyPI
-        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/rgrow_cli-*
-
-  rust_release:
-    name: Rust Crates.io Release
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [rust_checks]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Set up Rust cache
-        uses: Swatinem/rust-cache@v2
-      # - name: Install X components
-        # run: sudo apt-get install -y libxinerama-dev libxcursor-dev libxfixes-dev libxft-dev libpango1.0-dev libpangoxft-1.0-0 libpangocairo-1.0-0  
-      - name: Publish to crates.io
-        run: cargo publish --allow-dirty -p rgrow
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-
-  github_release:
-    name: GitHub Release
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [linux, linux-freethreaded, windows, windows-freethreaded, macos, macos-freethreaded, sdist]
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: wheels-*
-          merge-multiple: true
-          path: dist
-      - name: Extract changelog for this version
-        id: changelog
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          VERSION="${TAG#v}"
-          # Extract section between this version header and the next
-          NOTES=$(awk -v ver="$VERSION" -v tag="$TAG" '
-            BEGIN { found=0 }
-            /^# / {
-              if (found) exit
-              header=$0; sub(/^# */, "", header)
-              if (header == ver || header == tag) found=1
-              next
-            }
-            found { print }
-          ' CHANGELOG.md)
-          # Write to file to preserve newlines
-          echo "$NOTES" > /tmp/release-notes.md
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file /tmp/release-notes.md \
-            dist/*
