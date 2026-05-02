@@ -280,13 +280,28 @@ jobs:
         target: [x64]
     steps:
       - uses: actions/checkout@v4
+      - name: Configure persistent cargo cache
+        # Windows runs natively on the host (no container, so the rgrow-cargo
+        # volume mounts used by the Linux jobs don't apply). Point CARGO_HOME
+        # and CARGO_TARGET_DIR at a path under the runner user's profile so
+        # the cargo registry index, downloaded crates, and incremental build
+        # artifacts persist across jobs.
+        shell: pwsh
+        run: |
+          $cacheRoot = Join-Path $env:USERPROFILE ".rgrow-cache"
+          $cargoHome = Join-Path $cacheRoot "cargo"
+          $targetDir = Join-Path $cacheRoot "cargo-target"
+          New-Item -ItemType Directory -Force -Path $cargoHome | Out-Null
+          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+          "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CARGO_TARGET_DIR=$targetDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install Rust
         shell: pwsh
         run: |
           $rustup = Join-Path ([System.IO.Path]::GetTempPath()) "rustup-init.exe"
           Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile $rustup
           & $rustup --default-toolchain stable --profile minimal --no-modify-path -y
-          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "$env:CARGO_HOME\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Install uv
         uses: https://github.com/astral-sh/setup-uv@v7
       - name: Install Python interpreters
@@ -322,13 +337,23 @@ jobs:
         python-version: ['3.13t', '3.14t']
     steps:
       - uses: actions/checkout@v4
+      - name: Configure persistent cargo cache
+        shell: pwsh
+        run: |
+          $cacheRoot = Join-Path $env:USERPROFILE ".rgrow-cache"
+          $cargoHome = Join-Path $cacheRoot "cargo"
+          $targetDir = Join-Path $cacheRoot "cargo-target"
+          New-Item -ItemType Directory -Force -Path $cargoHome | Out-Null
+          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+          "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CARGO_TARGET_DIR=$targetDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install Rust
         shell: pwsh
         run: |
           $rustup = Join-Path ([System.IO.Path]::GetTempPath()) "rustup-init.exe"
           Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile $rustup
           & $rustup --default-toolchain stable --profile minimal --no-modify-path -y
-          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "$env:CARGO_HOME\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Install uv
         uses: https://github.com/astral-sh/setup-uv@v7
       - name: Install Python interpreter
