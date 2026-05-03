@@ -1,0 +1,47 @@
+# vim: ft=yaml
+# mode: yaml
+# 
+# A copy of the Sierpinski example, in STXG/YAML format.
+# Updated Dec 2014
+
+
+# bonds is a list of bond types. It's only necessary to specify bonds that are
+# unusual in some way (eg, not strength 1). Bond names that aren't specified
+# here are assumed to be strength 1.
+bonds:
+    - { name: B, strength: 2 }
+    - { name: v0, strength: 1 }
+
+
+# tiles is a list of tile types. The possible fields are name, edges, color, and
+# stoic. Name doesn't actually do anything in xgrow at the moment, but if you
+# use stxg.py to generate an xgrow input file, the name of the tilewill be put
+# in a comment.
+tiles:
+    - { name: corner, edges: [ B, 0, 0, B ], color: red, stoic: 0  }
+    - { name: topboundary, edges: [B, 0, B, v1], color: magenta }
+    - { name: leftboundary, edges: [v1, B, 0, B], color: purple }
+    - { edges: [ v0, v0, v0, v0 ], color: blue3 }
+    - { edges: [ v0, v1, v1, v0 ], color: green }
+    - { edges: [ v1, v0, v1, v1 ], color: yellow }
+    - { edges: [ v1, v1, v0, v1 ], color: tan }
+
+# xgrowargs - arguments for xgrow! In general, this should be intuitive, though
+# examine the source of stxg.py if you're unsure. The only ones that aren't
+# simple key-value, or true-false, are the following:
+# * fission - can be set to off, on, or chunk, corresponding with xgrow options
+# no_fission, fission, and chunk_fission.
+# * doubletiles - a list of two-item lists, specifying the names of double tile pairs.
+# * vdoubletiles - the same for vertical double tiles.
+xgrowargs:
+    size: 128
+    seed:
+    - [120,120,1]
+      #    smax: 500
+    update_rate: 1
+    Gse: 8.1
+    Gmc: 16.0
+      #threshold: 2.
+    canvas_type: Square
+    model: KTAM
+    fission: 'keep-seeded'
