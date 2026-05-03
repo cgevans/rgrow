@@ -39,7 +39,20 @@ jobs:
       - name: Install wasm-pack
         run: curl -fsSL https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
       - name: Install binaryen (wasm-opt)
-        run: sudo apt-get update && sudo apt-get install -y binaryen
+        # Don't use apt's binaryen on Ubuntu 22.04 — it ships v99, which
+        # has a table-reorder bug that mis-rewrites the externref table
+        # export produced by recent wasm-bindgen (the export ends up
+        # pointing at the funcref table instead of the externref table).
+        # Symptom in the browser at first sim load:
+        #   WebAssembly.Table.grow(): failed to grow table by 4
+        # at __wbindgen_init_externref_table. Pin a recent upstream
+        # binaryen release instead.
+        run: |
+          BINARYEN_VERSION=122
+          curl -fsSL "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz" \
+            | sudo tar xz -C /opt
+          echo "/opt/binaryen-version_${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
+          "/opt/binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt" --version
       - name: Build rgrow-wasm (release)
         run: |
           wasm-pack build rgrow-wasm \
