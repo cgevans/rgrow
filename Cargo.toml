@@ -1,5 +1,5 @@
 [workspace]
-members = ["rgrow-rust", "rgrow-python"]
+members = ["rgrow-rust", "rgrow-python", "rgrow-wasm"]
 default-members = ["rgrow-rust"]
 resolver = "2"
 
@@ -13,6 +13,7 @@ numpy = "^0.27.1"
 approx = "^0.5"
 pyo3-polars = "^0.26"
 polars = {version = "^0.53", features = ["lazy", "parquet", "product", "timezones"]}
+web-time = "1"
 
 [workspace.package]
 version = "0.23.0"

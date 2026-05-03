@@ -44,10 +44,11 @@ name = "rgrow"
 path = "src/main.rs"
 
 [features]
-python = ["pyo3", "numpy", "pyo3-polars", "polars"]
+python = ["pyo3", "numpy", "pyo3-polars", "polars", "parallel"]
 polars = ["dep:polars"]
 gui = ["dep:iced", "dep:tokio", "dep:image"]
-default = ["gui"]
+parallel = ["dep:rayon"]
+default = ["gui", "parallel"]
 
 [dependencies]
 num-format = "0.4"
@@ -57,13 +58,12 @@ serde-saphyr = "0.0"
 serde_json = "1"
 serde = { workspace = true }
 bincode = "1.3"
-memmap2 = "0.9"
 phf = { version = "^0", features = ["macros"] }
 nom = { version = "7", optional = false }
 # winit = { version = "^0", optional = true }
 # winit_input_helper = {version = "^0", optional = true}
 # winit-modular = {version = "^0", optional = true}
-rayon = { workspace = true }
+rayon = { workspace = true, optional = true }
 thiserror = "2"
 anyhow = "1"
 numpy = { workspace = true, optional = true }
@@ -78,6 +78,7 @@ astro-float = "0.9.4"
 equiconc = "0.2"
 paste="1.0.15"
 bpci = "0.1.0"
+web-time = { workspace = true }
 iced = { version = "0.13", features = ["wgpu", "image", "tokio"], optional = true }
 tokio = { version = "1", features = ["full"], optional = true }
 image = { version = "0.25", optional = true }
@@ -85,6 +86,13 @@ image = { version = "0.25", optional = true }
 [target.'cfg(windows)'.dependencies]
 named_pipe = "0.4"
 winapi = { version = "0.3", features = ["namedpipeapi"] }
+
+# wasm32-unknown-unknown needs explicit `js` features on getrandom so that
+# `rand` works in the browser. Both major versions are forced because
+# rgrow's transitive dep tree pulls in 0.2 (via older crates) and 0.3.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 
 [dependencies.clap]
 version = "4"
@@ -98,8 +106,11 @@ default-features = false
 [dependencies.num-traits]
 version = "^0.2"
 
-[dependencies.which]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.which]
 version = "6"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+memmap2 = "0.9"
 
 [package.metadata.docs.rs]
 no-default-features = true

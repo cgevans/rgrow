@@ -1,15 +1,29 @@
 // #![feature(stmt_expr_attributes)]
+
+#[cfg(target_arch = "wasm32")]
+fn main() {}
+
+#[cfg(not(target_arch = "wasm32"))]
 extern crate ndarray;
 
+#[cfg(not(target_arch = "wasm32"))]
 use clap::crate_version;
+#[cfg(not(target_arch = "wasm32"))]
 use clap::Parser;
 
+#[cfg(not(target_arch = "wasm32"))]
 use rgrow::base::RgrowError;
+#[cfg(not(target_arch = "wasm32"))]
 use rgrow::ffs;
+#[cfg(not(target_arch = "wasm32"))]
 use rgrow::tileset::TileSet;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::fs::File;
 
+// Everything past this line is the desktop CLI. The wasm target ships
+// only the library; `main` above is a no-op stub for that case.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Parser)]
 #[clap(version = crate_version!(), author = "Constantine Evans <cevans@costinet.org")]
 struct Opts {
@@ -17,6 +31,7 @@ struct Opts {
     subcmd: SubCommand,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Parser)]
 enum SubCommand {
     /// Run a tileset in the GUI
@@ -28,12 +43,14 @@ enum SubCommand {
     GuiSubprocess(GuiSubprocessArgs),
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Parser)]
 #[clap(version)]
 struct GuiSubprocessArgs {
     socket_path: Option<String>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Parser)]
 struct FFSOptions {
     /// Input tileset file
@@ -52,6 +69,7 @@ struct FFSOptions {
     min_cutoff_size: u32,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<FFSOptions> for ffs::FFSRunConfig {
     fn from(opts: FFSOptions) -> Self {
         Self {
@@ -66,15 +84,18 @@ impl From<FFSOptions> for ffs::FFSRunConfig {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Parser)]
 struct EO {}
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Parser)]
 struct PO {
     /// Input tileset file
     input: String,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> anyhow::Result<()> {
     let opts = Opts::parse();
 
@@ -104,6 +125,7 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn nucrate(po: FFSOptions) -> Result<(), RgrowError> {
     let tileset: TileSet =
         serde_saphyr::from_reader(File::open(po.input.clone()).expect("Input file not found."))

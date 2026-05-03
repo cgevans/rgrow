@@ -2,6 +2,60 @@ use std::fmt::{Display, Formatter};
 
 use std::any::Any;
 
+/// Iterator-switching macros: use rayon's parallel iterators when the
+/// `parallel` feature is on, otherwise fall back to sequential iteration.
+///
+/// Each file using these macros must also have rayon's traits in scope
+/// (when the feature is on), e.g. `#[cfg(feature = "parallel")] use rayon::prelude::*;`,
+/// because macro expansion does not extend the caller's import scope.
+///
+/// Sites that use rayon-specific combinators (`map_init`, `reduce` with
+/// identity, etc.) are written as per-site `#[cfg]` branches instead.
+#[cfg(feature = "parallel")]
+#[macro_export]
+macro_rules! maybe_par_iter_mut {
+    ($e:expr) => {
+        ($e).par_iter_mut()
+    };
+}
+#[cfg(not(feature = "parallel"))]
+#[macro_export]
+macro_rules! maybe_par_iter_mut {
+    ($e:expr) => {
+        ($e).iter_mut()
+    };
+}
+
+#[cfg(feature = "parallel")]
+#[macro_export]
+macro_rules! maybe_par_iter {
+    ($e:expr) => {
+        ($e).par_iter()
+    };
+}
+#[cfg(not(feature = "parallel"))]
+#[macro_export]
+macro_rules! maybe_par_iter {
+    ($e:expr) => {
+        ($e).iter()
+    };
+}
+
+#[cfg(feature = "parallel")]
+#[macro_export]
+macro_rules! maybe_into_par_iter {
+    ($e:expr) => {
+        ($e).into_par_iter()
+    };
+}
+#[cfg(not(feature = "parallel"))]
+#[macro_export]
+macro_rules! maybe_into_par_iter {
+    ($e:expr) => {
+        ($e).into_iter()
+    };
+}
+
 #[cfg(feature = "python")]
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
 #[cfg(feature = "python")]

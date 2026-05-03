@@ -1,0 +1,110 @@
+name: WASM
+
+# Builds the rgrow-wasm browser demo and (on push to main / on tags)
+# deploys it to a `wasm-pages` branch in this repo, which Codeberg
+# Pages serves at the repo's Pages URL.
+#
+# Runner expectation:
+#   - `docker` Linux runner. Same shape as ci.yml / docs.yml.
+#
+# Secrets used:
+#   - GITHUB_TOKEN : auto-provided by Forgejo; needs write access to
+#                    push the `wasm-pages` branch (granted via the
+#                    `permissions:` block).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rgrow-rust/**'
+      - 'rgrow-wasm/**'
+      - '.forgejo/workflows/wasm.yml'
+  pull_request:
+    paths:
+      - 'rgrow-rust/**'
+      - 'rgrow-wasm/**'
+      - '.forgejo/workflows/wasm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wasm-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+      volumes:
+        - rgrow-cargo:/cache/cargo
+        - rgrow-cargo-target:/cache/cargo-target
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target
+    steps:
+      - uses: actions/checkout@v4
+      - uses: https://github.com/dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: |
+          curl -fsSL https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+      - name: Install binaryen (wasm-opt)
+        run: |
+          apt-get update && apt-get install -y binaryen
+      - name: Build rgrow-wasm (release)
+        run: |
+          wasm-pack build rgrow-wasm \
+            --out-dir web/pkg \
+            --target web --release
+      - name: Verify wasm size
+        run: |
+          ls -la rgrow-wasm/web/pkg/
+          gzipped=$(gzip -c rgrow-wasm/web/pkg/rgrow_wasm_bg.wasm | wc -c)
+          echo "Gzipped wasm: ${gzipped} bytes"
+          # Soft budget: warn over 1 MB, fail over 2 MB
+          if [ "$gzipped" -gt 2000000 ]; then
+            echo "::error::Gzipped wasm exceeds 2 MB budget (${gzipped} bytes)"
+            exit 1
+          elif [ "$gzipped" -gt 1000000 ]; then
+            echo "::warning::Gzipped wasm exceeds 1 MB soft budget (${gzipped} bytes)"
+          fi
+      - name: Upload artifact
+        uses: https://code.forgejo.org/forgejo/upload-artifact@v4
+        with:
+          name: wasm-demo
+          path: rgrow-wasm/web/
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: https://code.forgejo.org/forgejo/download-artifact@v4
+        with:
+          name: wasm-demo
+          path: web
+      - name: Deploy to Codeberg Pages (wasm-pages branch)
+        env:
+          DEPLOY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euo pipefail
+          cd web
+          git config --global --add safe.directory "$(pwd)"
+          git init -b wasm-pages
+          git config user.name "forgejo-actions[bot]"
+          git config user.email "forgejo-actions[bot]@noreply.codeberg.org"
+          git add .
+          git commit -m "Deploy rgrow-wasm demo from ${GITHUB_SHA}"
+          HOST="${SERVER_URL#https://}"
+          HOST="${HOST#http://}"
+          git remote add origin "https://x-access-token:${DEPLOY_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git"
+          git push --force origin wasm-pages

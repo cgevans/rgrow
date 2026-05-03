@@ -1,0 +1,25 @@
+tiles:
+  - edges: [1,4,6,1]
+    color: green
+  - edges: [2,5,4,2]
+    color: teal
+  - edges: [3,6,5,3]
+    color: blue
+  - edges: [4,2,1,4]
+    color: red
+  - edges: [5,3,2,5]
+    color: orange
+  - edges: [6,1,3,6]
+    color: yellow
+options:
+  Gmc: 9.7
+  Gse: 5.4
+  alpha: -7.1
+  seed:
+  - [0,19,3]
+  - [2,18,2]
+  - [4,17,1]
+  size: [6, 64]
+  update_rate: 10
+  fission: keep-seeded
+  canvas_type: tube-diagonals

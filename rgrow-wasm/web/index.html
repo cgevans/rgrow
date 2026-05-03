@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>rgrow — tile assembly in the browser</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>rgrow</h1>
+        <p class="subtitle">Tile-assembly model simulator. Runs entirely in your browser.</p>
+      </header>
+
+      <main>
+        <section id="canvas-pane">
+          <canvas id="sim"></canvas>
+          <div id="stats">Loading…</div>
+        </section>
+
+        <aside id="controls">
+          <div class="control-block">
+            <h2>Tileset</h2>
+            <label for="example-select">Built-in:</label>
+            <select id="example-select">
+              <option value="">— pick one —</option>
+              <option value="sierpinski.yaml">Sierpinski</option>
+              <option value="barish-perfect.yaml">Barish (perfect)</option>
+              <option value="tube.yaml">Tube</option>
+            </select>
+            <label for="file-input">Or load from file:</label>
+            <input id="file-input" type="file" accept=".yaml,.yml,.json,.tiles" />
+            <details>
+              <summary>Or paste YAML/JSON</summary>
+              <textarea id="paste-input" rows="6" placeholder="Paste tileset here, then click Load"></textarea>
+              <button id="paste-load">Load pasted text</button>
+            </details>
+          </div>
+
+          <div class="control-block">
+            <h2>Run</h2>
+            <button id="pause" disabled>Pause</button>
+            <button id="step" disabled>Step (events)</button>
+            <button id="reset" disabled>Reload</button>
+            <label for="events-per-step">Events/step:</label>
+            <input id="events-per-step" type="number" value="10000" min="1" />
+            <label for="step-budget-ms">Per-frame budget (ms):</label>
+            <input id="step-budget-ms" type="number" value="8" min="1" max="200" step="1" />
+            <label for="scale">Tile size (px):</label>
+            <input id="scale" type="range" min="2" max="24" value="8" />
+            <span id="scale-value">8</span>
+            <label><input id="show-mismatches" type="checkbox" checked /> Show mismatches</label>
+          </div>
+
+          <div class="control-block">
+            <h2 id="parameters-heading">Parameters</h2>
+            <div id="parameter-list"><em>Load a tileset to see parameters.</em></div>
+          </div>
+        </aside>
+      </main>
+
+      <footer>
+        <p>
+          rgrow is a Rust-based tile-assembly simulator. The browser build runs
+          the same simulation code as the desktop GUI; rendering happens in
+          Rust, the bytes are blitted to the &lt;canvas&gt; via
+          <code>putImageData</code>.
+        </p>
+      </footer>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

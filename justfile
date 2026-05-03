@@ -164,6 +164,31 @@ docs-serve: docs-convert
 docs-build: docs-convert
     source .venv/bin/activate && zensical build --clean
 
+# --- WebAssembly browser demo ---
+
+# Build the rgrow-wasm browser demo (release, optimized).
+wasm-build:
+    wasm-pack build rgrow-wasm --out-dir web/pkg --target web --release
+
+# Build the rgrow-wasm browser demo (dev/unoptimized, faster build).
+wasm-build-dev:
+    wasm-pack build rgrow-wasm --out-dir web/pkg --target web --dev
+
+# Build the dev wasm and serve the demo at http://localhost:{{port}}.
+# Opens the URL in your default browser. Ctrl-C to stop the server.
+wasm-serve port="8765": wasm-build-dev
+    #!/usr/bin/env bash
+    set -euo pipefail
+    url="http://localhost:{{port}}/"
+    echo "Serving rgrow-wasm at ${url}"
+    (sleep 1 && (xdg-open "${url}" >/dev/null 2>&1 || open "${url}" >/dev/null 2>&1 || true)) &
+    source .venv/bin/activate && python -m http.server {{port}} -d rgrow-wasm/web
+
+# Smoke-test the wasm bindings under Node (separate Node-target build).
+wasm-test:
+    wasm-pack build rgrow-wasm --out-dir pkg-node --target nodejs --dev
+    node rgrow-wasm/smoke_test.cjs
+
 # --- Profiling ---
 # Prerequisites:
 #   cargo install samply

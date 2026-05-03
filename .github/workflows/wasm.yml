@@ -1,0 +1,73 @@
+name: WASM
+
+# Build the rgrow-wasm browser demo. On push to main, deploy to GitHub
+# Pages as a secondary mirror; the canonical Pages target is Codeberg
+# (see .forgejo/workflows/wasm.yml).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rgrow-rust/**'
+      - 'rgrow-wasm/**'
+      - '.github/workflows/wasm.yml'
+  pull_request:
+    paths:
+      - 'rgrow-rust/**'
+      - 'rgrow-wasm/**'
+      - '.github/workflows/wasm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "wasm-pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain (with wasm32 target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: curl -fsSL https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+      - name: Build rgrow-wasm (release)
+        run: |
+          wasm-pack build rgrow-wasm \
+            --out-dir web/pkg \
+            --target web --release
+      - name: Bundle-size check
+        run: |
+          ls -la rgrow-wasm/web/pkg/
+          gzipped=$(gzip -c rgrow-wasm/web/pkg/rgrow_wasm_bg.wasm | wc -c)
+          echo "Gzipped wasm: ${gzipped} bytes"
+          if [ "$gzipped" -gt 2000000 ]; then
+            echo "::error::Gzipped wasm exceeds 2 MB budget (${gzipped} bytes)"
+            exit 1
+          elif [ "$gzipped" -gt 1000000 ]; then
+            echo "::warning::Gzipped wasm exceeds 1 MB soft budget (${gzipped} bytes)"
+          fi
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: rgrow-wasm/web
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
