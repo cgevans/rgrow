@@ -10,6 +10,8 @@ rgrow (which may change name in the future) is a fast, extensible simulator for 
 
 Python documentation is available at [https://cge.codeberg.page/rgrow/](https://cge.codeberg.page/rgrow/).
 
+There is also an in-browser interface at [https://cge.codeberg.page/rgrow/app/](https://cge.codeberg.page/rgrow/app/), which runs rgrow directly in WebAssembly.
+
 Rust documentation is available at [https://docs.rs/rgrow/](https://docs.rs/rgrow/).
 
 For FFS examples, see the [examples/ffs](https://codeberg.org/cge/rgrow/src/branch/main/examples/ffs) folder.

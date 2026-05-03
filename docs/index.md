@@ -5,8 +5,9 @@ Rgrow is a fast, extensible simulator for Tile Assembly Models, primarily focuse
 - [Getting Started](getting-started.md)
 - [Examples](examples/index.md) 
 - [API Reference](reference/index.md)
+- [Browser interface](app/)
 - [Rust docs (docs.rs)](https://docs.rs/rgrow/)
-- [GitHub](https://github.com/cgevans/rgrow)
+- [Codeberg](https://codeberg.org/cge/rgrow)
 
 ## Models
 

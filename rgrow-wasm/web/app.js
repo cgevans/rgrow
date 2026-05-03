@@ -257,7 +257,7 @@ exampleSelect.addEventListener("change", async () => {
     const r = await fetch(`./examples/${v}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const text = await r.text();
-    await loadTilesetText(text, "yaml");
+    await loadTilesetText(text, v.endsWith(".json") ? "json" : "yaml");
   } catch (e) {
     statsEl.textContent = `Failed to fetch example: ${e.message || e}`;
   }

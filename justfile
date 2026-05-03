@@ -164,6 +164,11 @@ docs-serve: docs-convert
 docs-build: docs-convert
     source .venv/bin/activate && zensical build --clean
 
+# Build the full Codeberg Pages site: docs at root, wasm UI at /app/.
+pages-build: docs-build wasm-build
+    mkdir -p site/app
+    cp -a rgrow-wasm/web/. site/app/
+
 # --- WebAssembly browser demo ---
 
 # Build the rgrow-wasm browser demo (release, optimized).

@@ -6,8 +6,8 @@ desktop GUI, in a browser tab, with no server.
 
 ## Try it
 
-After CI publishes (Codeberg Pages, secondary on GitHub Pages), the demo
-URL is announced in the top-level project README. To run locally:
+After CI publishes, the interface is available at
+<https://cge.codeberg.page/rgrow/app/>. To run locally:
 
 ```sh
 # Build, serve, and open in your default browser:
@@ -29,7 +29,7 @@ just wasm-test
 - `web/index.html`, `web/app.js`, `web/style.css` — the UI. Parameter
   controls are generated dynamically from `sim.parameters()` so any
   model that lists tunable parameters works without UI changes.
-- `web/examples/*.yaml` — bundled tilesets so the demo runs on first
+- `web/examples/*.{yaml,json}` — bundled examples so the demo runs on first
   visit with no upload.
 
 ## Architecture

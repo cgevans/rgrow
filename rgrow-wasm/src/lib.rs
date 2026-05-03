@@ -9,19 +9,21 @@
 //! wasm module: stepping and rendering happen on the main thread, JS
 //! draws the bytes onto a `<canvas>`.
 
-use std::any::Any;
+use std::{any::Any, collections::HashMap};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use rgrow::base::Tile;
 use rgrow::canvas::Canvas;
+use rgrow::models::sdc2d::{SDC2DParams, SDC2DSquare, SDC2DStrand};
+use rgrow::models::sdc_common::{GsOrSeq, RefOrPair};
 use rgrow::painter::render_frame_dyn;
 use rgrow::state::{StateEnum, StateStatus};
 use rgrow::system::{
     DynSystem, EvolveBounds, EvolveOutcome, ParameterInfo, SystemEnum, TileBondInfo,
 };
-use rgrow::tileset::TileSet;
+use rgrow::tileset::{CanvasType, TileSet, TrackingConfig};
 
 /// Result of a step call. JS reads these fields after each tick.
 #[derive(Serialize)]
@@ -78,9 +80,20 @@ impl Sim {
     #[wasm_bindgen(js_name = fromJson)]
     pub fn from_json(json: &str) -> Result<Sim, JsError> {
         console_error_panic_hook::set_once();
-        let tileset = TileSet::from_json(json).map_err(js_err)?;
-        let (sys, state) = tileset.create_system_and_state().map_err(js_err)?;
-        Ok(Sim { sys, state })
+        match TileSet::from_json(json) {
+            Ok(tileset) => {
+                let (sys, state) = tileset.create_system_and_state().map_err(js_err)?;
+                Ok(Sim { sys, state })
+            }
+            Err(tileset_err) => WebExample::from_json(json)
+                .map_err(|example_err| {
+                    JsError::new(&format!(
+                        "JSON is neither a tileset nor a web example. tileset: {tileset_err}; web example: {example_err}"
+                    ))
+                })?
+                .into_sim()
+                .map_err(js_err),
+        }
     }
 
     // ── stepping ────────────────────────────────────────────────────────
@@ -286,5 +299,122 @@ impl Sim {
         let mut arr = self.state.raw_array_mut();
         arr[[y as usize, x as usize]] = tile as Tile;
         Ok(())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "model")]
+enum WebExample {
+    #[serde(rename = "sdc2d-square")]
+    Sdc2dSquare(WebSdc2dSquare),
+}
+
+impl WebExample {
+    fn from_json(json: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json)
+    }
+
+    fn into_sim(self) -> Result<Sim, rgrow::base::GrowError> {
+        match self {
+            WebExample::Sdc2dSquare(example) => example.into_sim(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct WebSdc2dSquare {
+    strands: Vec<WebSdc2dStrand>,
+    scaffold: Vec<Vec<Option<String>>>,
+    scaffold_concentration: f64,
+    glue_dg37_ds: Vec<WebGlueEnergy>,
+    k_f: f64,
+    temperature: f64,
+    seed: Vec<(usize, usize, String)>,
+    #[serde(default = "default_sdc2d_canvas_type")]
+    canvas_type: WebCanvasType,
+}
+
+impl WebSdc2dSquare {
+    fn into_sim(self) -> Result<Sim, rgrow::base::GrowError> {
+        let sys = SDC2DSquare::from_params(SDC2DParams {
+            strands: self.strands.into_iter().map(Into::into).collect(),
+            scaffold: self.scaffold,
+            scaffold_concentration: self.scaffold_concentration,
+            glue_dg37_ds: self
+                .glue_dg37_ds
+                .into_iter()
+                .map(|g| (RefOrPair::Ref(g.name), GsOrSeq::GS((g.dg37, g.ds))))
+                .collect::<HashMap<_, _>>(),
+            k_f: self.k_f,
+            temperature: self.temperature,
+            seed: self.seed,
+        });
+        let n_tile_types = sys.n_strands();
+        let mut state = StateEnum::empty(
+            (sys.nrows(), sys.ncols()),
+            self.canvas_type.into(),
+            &TrackingConfig::None,
+            n_tile_types,
+        )?;
+        let sys = SystemEnum::SDC2DSquare(sys);
+        sys.setup_state(&mut state)?;
+        sys.update_state(&mut state, &rgrow::system::NeededUpdate::All);
+        Ok(Sim { sys, state })
+    }
+}
+
+#[derive(Deserialize)]
+struct WebSdc2dStrand {
+    name: Option<String>,
+    color: Option<String>,
+    concentration: f64,
+    north_glue: Option<String>,
+    east_glue: Option<String>,
+    south_glue: Option<String>,
+    west_glue: Option<String>,
+    bottom_glue: Option<String>,
+}
+
+impl From<WebSdc2dStrand> for SDC2DStrand {
+    fn from(strand: WebSdc2dStrand) -> Self {
+        SDC2DStrand {
+            name: strand.name,
+            color: strand.color,
+            concentration: strand.concentration,
+            north_glue: strand.north_glue,
+            east_glue: strand.east_glue,
+            south_glue: strand.south_glue,
+            west_glue: strand.west_glue,
+            bottom_glue: strand.bottom_glue,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct WebGlueEnergy {
+    name: String,
+    dg37: f64,
+    #[serde(default)]
+    ds: f64,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum WebCanvasType {
+    Square,
+    #[default]
+    SquareCompact,
+}
+
+fn default_sdc2d_canvas_type() -> WebCanvasType {
+    WebCanvasType::SquareCompact
+}
+
+impl From<WebCanvasType> for CanvasType {
+    fn from(value: WebCanvasType) -> Self {
+        match value {
+            WebCanvasType::Square => CanvasType::Square,
+            WebCanvasType::SquareCompact => CanvasType::SquareCompact,
+        }
     }
 }
