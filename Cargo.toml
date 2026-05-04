@@ -20,7 +20,8 @@ web-time = "1"
 version = "0.23.0"
 authors = ["Constantine Evans <const@costi.net>"]
 edition = "2021"
-repository = "https://github.com/cgevans/rgrow"
+repository = "https://codeberg.org/cge/rgrow"
+documentation = "https://cge.codeberg.page/rgrow/"
 license = "MIT"
 categories = ["science", "simulation"]
 

@@ -14,7 +14,7 @@ Rgrow is designed with several uses in mind:
 
 The Python package has a number of pre-built wheels for Linux, MacOS, and Windows; in many cases, it should be easily installable via a command like `uv pip install rgrow` or `pip install rgrow`, depending on your preferred package manager.  The package includes both the Python library and the standalone executable.
 
-When installing from source, you will need a Rust installation.  Installing the latest commit directly from the repository can be done with `uv pip install git+https://github.com/cgevans/rgrow`.  Note that this may take much longer than most python package installations, while the underlying Rust library is compiled.
+When installing from source, you will need a Rust installation.  Installing the latest commit directly from the repository can be done with `uv pip install git+https://codeberg.org/cge/rgrow`.  Note that this may take much longer than most python package installations, while the underlying Rust library is compiled.
 
 ### Standalone executable
 

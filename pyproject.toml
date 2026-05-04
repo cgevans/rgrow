@@ -12,6 +12,11 @@ dependencies = [
 requires-python = ">=3.10"
 dynamic = ["version"]
 
+[project.urls]
+Homepage = "https://codeberg.org/cge/rgrow"
+Repository = "https://codeberg.org/cge/rgrow"
+Documentation = "https://cge.codeberg.page/rgrow/"
+
 [project.optional-dependencies]
 gui = ["rgrow-cli"]
 cli = ["rgrow-cli"]

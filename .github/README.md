@@ -1,3 +1,7 @@
+> **This repository is a mirror.** Primary development happens at
+> [codeberg.org/cge/rgrow](https://codeberg.org/cge/rgrow) —
+> please file issues and pull requests there.
+
 [![codecov](https://codecov.io/github/cgevans/rgrow/graph/badge.svg?token=GZLWKMQ2GZ)](https://codecov.io/github/cgevans/rgrow)
 [![PyPI](https://img.shields.io/pypi/v/rgrow)](https://pypi.org/project/rgrow/)
 [![Crates.io](https://img.shields.io/crates/v/rgrow)](https://crates.io/crates/rgrow)
