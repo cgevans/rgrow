@@ -51,6 +51,16 @@ pub struct CanvasSize {
     pub height: u32,
 }
 
+/// Per-cell info for hover/click tooltips on the web UI.
+#[derive(Serialize)]
+pub struct CellInfo {
+    pub x: u32,
+    pub y: u32,
+    pub tile: u32,
+    pub name: String,
+    pub color: [u8; 4],
+}
+
 #[wasm_bindgen]
 pub struct Sim {
     sys: SystemEnum,
@@ -317,6 +327,38 @@ impl Sim {
             flat.extend_from_slice(c);
         }
         js_sys::Uint8Array::from(&flat[..])
+    }
+
+    /// Tile names indexed by tile id (parallel to `tileColors`). Empty
+    /// strings are returned for ids the model does not name.
+    #[wasm_bindgen(js_name = tileNames)]
+    pub fn tile_names(&self) -> Vec<String> {
+        self.sys.tile_names().to_vec()
+    }
+
+    /// Information about the cell at grid `(x, y)`: which tile is there,
+    /// its name (if any), and its color. Returns `null` for out-of-bounds
+    /// coordinates so the JS side can no-op gracefully when the mouse
+    /// drifts outside the canvas during a hover update.
+    #[wasm_bindgen(js_name = cellInfo)]
+    pub fn cell_info(&self, x: u32, y: u32) -> Result<JsValue, JsError> {
+        let (w, h) = self.state.draw_size();
+        if x >= w || y >= h {
+            return Ok(JsValue::NULL);
+        }
+        let tile = self.state.raw_array()[[y as usize, x as usize]] as u32;
+        let names = self.sys.tile_names();
+        let colors = self.sys.tile_colors();
+        let name = names.get(tile as usize).cloned().unwrap_or_default();
+        let color = colors.get(tile as usize).copied().unwrap_or([0, 0, 0, 0]);
+        let info = CellInfo {
+            x,
+            y,
+            tile,
+            name,
+            color,
+        };
+        serde_wasm_bindgen::to_value(&info).map_err(js_err)
     }
 
     /// Place a specific tile id at grid `(x, y)`. Out-of-bounds returns

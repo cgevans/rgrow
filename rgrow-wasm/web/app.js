@@ -39,6 +39,7 @@ const importfileInput = $("importfile-input");
 const importfileOffsetI = $("importfile-offset-i");
 const importfileOffsetJ = $("importfile-offset-j");
 const importfileStatus = $("importfile-status");
+const tileInfoEl = $("tile-info");
 
 let wasm = null;     // wasm module exports (after init)
 let sim = null;      // current Sim instance
@@ -106,6 +107,8 @@ async function loadTilesetText(text, kind) {
 
   resizeCanvasFor(sim);
   rebuildParameterControls();
+  pinnedCell = null;
+  renderTileInfo(null);
   if (k === "xgrow") {
     showImportfilePromptFor(text);
   } else {
@@ -252,6 +255,10 @@ function frame(timestamp) {
     `tiles = ${sim.nTiles()}    mismatches = ${sim.mismatches()}    ` +
     `energy = ${fmt(sim.energy())}    fps ≈ ${smoothedFps.toFixed(1)}`;
 
+  // Refresh the pinned tile readout so it reflects the current state of
+  // the cell (which may have flipped tile types between frames).
+  if (pinnedCell) renderTileInfo(pinnedCell, { pinned: true });
+
   rafScheduled = true;
   requestAnimationFrame(frame);
 }
@@ -388,6 +395,111 @@ pasteLoadBtn.addEventListener("click", () => {
   const text = pasteInput.value;
   if (!text.trim()) return;
   loadTilesetText(text);
+});
+
+// ── Tile info on hover / click ────────────────────────────────────────
+//
+// `pinned` holds either null (track the cursor live) or a {x, y} cell.
+// While pinned, mousemove updates are suppressed; clicking the same
+// cell toggles pinning off, clicking a different cell re-pins there.
+let pinnedCell = null;
+
+function canvasToCell(event) {
+  if (!sim) return null;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+  // Translate CSS pixels → canvas pixels (canvas is `max-width: 100%`,
+  // so the on-screen size differs from canvas.width / canvas.height).
+  const cssX = event.clientX - rect.left;
+  const cssY = event.clientY - rect.top;
+  const px = (cssX / rect.width) * canvas.width;
+  const py = (cssY / rect.height) * canvas.height;
+  const scale = Math.max(1, Number(scaleInput.value));
+  const cellX = Math.floor(px / scale);
+  const cellY = Math.floor(py / scale);
+  const size = sim.canvasSize();
+  if (cellX < 0 || cellY < 0 || cellX >= size.width || cellY >= size.height) {
+    return null;
+  }
+  return { x: cellX, y: cellY };
+}
+
+function rgbaCss(c) {
+  // c is a 4-byte typed array or plain array; alpha 0 = transparent
+  // empty cell, render as a dim hatch instead of vanishing.
+  if (!c || c.length < 4) return "transparent";
+  return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${(c[3] / 255).toFixed(3)})`;
+}
+
+function renderTileInfo(cell, opts = {}) {
+  const pinned = !!opts.pinned;
+  if (!sim || !cell) {
+    tileInfoEl.classList.add("empty");
+    tileInfoEl.classList.remove("pinned");
+    tileInfoEl.textContent = sim
+      ? "Hover the canvas to inspect a tile."
+      : "Load a tileset to inspect tiles.";
+    return;
+  }
+  let info;
+  try {
+    info = sim.cellInfo(cell.x, cell.y);
+  } catch (e) {
+    tileInfoEl.classList.add("empty");
+    tileInfoEl.textContent = `cellInfo error: ${e.message || e}`;
+    return;
+  }
+  if (!info) {
+    tileInfoEl.classList.add("empty");
+    tileInfoEl.textContent = "(out of bounds)";
+    return;
+  }
+  tileInfoEl.classList.remove("empty");
+  tileInfoEl.classList.toggle("pinned", pinned);
+
+  const swatch = document.createElement("span");
+  swatch.className = "swatch";
+  swatch.style.background = info.tile === 0 ? "transparent" : rgbaCss(info.color);
+  if (info.tile === 0) {
+    swatch.style.background =
+      "repeating-linear-gradient(45deg, #2a2a30 0 4px, #1a1a1d 4px 8px)";
+  }
+
+  const text = document.createElement("span");
+  const name = info.name && info.name.length ? info.name : "(unnamed)";
+  text.textContent =
+    info.tile === 0
+      ? `(${info.x}, ${info.y}) — empty`
+      : `(${info.x}, ${info.y}) — tile #${info.tile} ${name}`;
+
+  tileInfoEl.replaceChildren(swatch, text);
+
+  const hint = document.createElement("span");
+  hint.className = "pin-hint";
+  hint.textContent = pinned ? "click to unpin" : "click to pin";
+  tileInfoEl.append(hint);
+}
+
+canvas.addEventListener("mousemove", (e) => {
+  if (pinnedCell) return;
+  renderTileInfo(canvasToCell(e), { pinned: false });
+});
+
+canvas.addEventListener("mouseleave", () => {
+  if (pinnedCell) return;
+  renderTileInfo(null);
+});
+
+canvas.addEventListener("click", (e) => {
+  const cell = canvasToCell(e);
+  if (!cell) return;
+  if (pinnedCell && pinnedCell.x === cell.x && pinnedCell.y === cell.y) {
+    pinnedCell = null;
+    renderTileInfo(cell, { pinned: false });
+  } else {
+    pinnedCell = cell;
+    renderTileInfo(cell, { pinned: true });
+  }
 });
 
 function readOptionalInt(input) {
