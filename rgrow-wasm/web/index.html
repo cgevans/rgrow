@@ -10,7 +10,6 @@
     <div id="app">
       <header>
         <h1>rgrow</h1>
-        <p class="subtitle">Tile-assembly model simulator. Runs entirely in your browser.</p>
       </header>
 
       <main>
@@ -22,13 +21,12 @@
         <aside id="controls">
           <div class="control-block">
             <h2>Tileset</h2>
-            <label for="example-select">Built-in:</label>
+            <label for="example-select">Examples:</label>
             <select id="example-select">
               <option value="">— pick one —</option>
               <option value="sierpinski.yaml">Sierpinski</option>
               <option value="barish-perfect.yaml">Barish (perfect)</option>
-              <option value="tube.yaml">Tube</option>
-              <option value="sdc2d-position.json">SDC2D position-addressed</option>
+              <option value="sdc2d-position.json">SDC2DSquare Bitcopy</option>
             </select>
             <label for="file-input">Or load from file:</label>
             <input id="file-input" type="file" accept=".yaml,.yml,.json,.tiles" />
@@ -62,12 +60,7 @@
       </main>
 
       <footer>
-        <p>
-          rgrow is a Rust-based tile-assembly simulator. The browser build runs
-          the same simulation code as the desktop GUI; rendering happens in
-          Rust, the bytes are blitted to the &lt;canvas&gt; via
-          <code>putImageData</code>.
-        </p>
+        <p><a href="https://codeberg.org/cge/rgrow">https://codeberg.org/cge/rgrow</a></p>
       </footer>
     </div>
 

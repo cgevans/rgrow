@@ -76,8 +76,8 @@ async function loadTilesetText(text, kind) {
   lastTilesetText = text;
   lastTilesetKind = k;
   setControlsEnabled(true);
-  paused = false;
-  pauseBtn.textContent = "Pause";
+  paused = true;
+  pauseBtn.textContent = "Resume";
 
   resizeCanvasFor(sim);
   rebuildParameterControls();
