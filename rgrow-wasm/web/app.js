@@ -22,6 +22,8 @@ const stepBtn = $("step");
 const resetBtn = $("reset");
 const eventsPerStepInput = $("events-per-step");
 const stepBudgetMsInput = $("step-budget-ms");
+const timescaleInput = $("timescale");
+const maxEventsPerSecInput = $("max-events-per-sec");
 const scaleInput = $("scale");
 const scaleValueEl = $("scale-value");
 const showMismatchesInput = $("show-mismatches");
@@ -39,6 +41,13 @@ let lastTilesetKind = null; // "yaml" | "json"
 let paused = false;
 let lastFrameTimestamp = 0;
 let smoothedFps = 0;
+
+// Per-real-second event counter for the max-events/sec limiter. Mirrors
+// the desktop GUI: count events in a 1-second window, cap the next
+// evolve's for_events to whatever budget is left, reset on the second
+// boundary.
+let eventsThisSecond = 0;
+let secondStart = 0;
 
 function fmt(n, digits = 4) {
   if (typeof n === "bigint") n = Number(n);
@@ -97,18 +106,59 @@ function resizeCanvasFor(s) {
 
 let rafScheduled = false;
 
+function readPositiveNumber(input) {
+  const s = input.value.trim();
+  if (s === "") return null;
+  const v = Number(s);
+  if (!Number.isFinite(v) || v <= 0) return null;
+  return v;
+}
+
 function frame(timestamp) {
   rafScheduled = false;
   if (!sim) return;
 
+  const now = performance.now();
+  const realDt = lastFrameTimestamp ? (now - lastFrameTimestamp) / 1000 : 0;
+
+  if (!secondStart || now - secondStart >= 1000) {
+    eventsThisSecond = 0;
+    secondStart = now;
+  }
+
   const budget = Math.max(1, Number(stepBudgetMsInput.value));
+  const timescale = readPositiveNumber(timescaleInput);
+  const maxEps = readPositiveNumber(maxEventsPerSecInput);
+
   if (!paused) {
-    try {
-      sim.stepForRealMs(budget);
-    } catch (e) {
-      statsEl.textContent = `Step error: ${e.message || e}`;
-      paused = true;
-      pauseBtn.textContent = "Resume";
+    let forEvents = null;
+    let forTime = timescale != null && realDt > 0 ? realDt * timescale : null;
+    let forWallMs = budget;
+    let skipEvolve = false;
+
+    if (maxEps != null) {
+      const remaining = maxEps - eventsThisSecond;
+      if (remaining <= 0) {
+        skipEvolve = true;
+      } else {
+        forEvents = remaining;
+      }
+    }
+
+    if (!skipEvolve) {
+      try {
+        const r = sim.stepWithBounds(forEvents, forTime, forWallMs);
+        if (r && typeof r.events_this_step !== "undefined") {
+          const n = typeof r.events_this_step === "bigint"
+            ? Number(r.events_this_step)
+            : r.events_this_step;
+          eventsThisSecond += n;
+        }
+      } catch (e) {
+        statsEl.textContent = `Step error: ${e.message || e}`;
+        paused = true;
+        pauseBtn.textContent = "Resume";
+      }
     }
   }
 
@@ -133,10 +183,8 @@ function frame(timestamp) {
   ctx.putImageData(img, 0, 0);
 
   // FPS smoothing.
-  const now = performance.now();
   if (lastFrameTimestamp) {
-    const dt = (now - lastFrameTimestamp) / 1000;
-    const inst = 1 / dt;
+    const inst = 1 / Math.max(realDt, 1e-6);
     smoothedFps = smoothedFps ? smoothedFps * 0.9 + inst * 0.1 : inst;
   }
   lastFrameTimestamp = now;

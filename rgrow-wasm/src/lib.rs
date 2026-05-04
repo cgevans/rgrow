@@ -128,6 +128,30 @@ impl Sim {
         })
     }
 
+    /// Run with a combination of bounds. Each argument may be `undefined`
+    /// to disable that bound. Used by the web UI to combine a per-frame
+    /// wall-time budget with optional timescale (sim-time) and
+    /// events-per-second caps.
+    ///
+    /// `for_events` is taken as `f64` for JS ergonomics — the integer
+    /// budgets used by the UI fit comfortably in f64's 53-bit mantissa.
+    #[wasm_bindgen(js_name = stepWithBounds)]
+    pub fn step_with_bounds(
+        &mut self,
+        for_events: Option<f64>,
+        for_time: Option<f64>,
+        for_wall_ms: Option<f64>,
+    ) -> Result<JsValue, JsError> {
+        let bounds = EvolveBounds {
+            for_events: for_events.map(|e| e.max(0.0) as u64),
+            for_time,
+            for_wall_time: for_wall_ms
+                .map(|ms| std::time::Duration::from_micros((ms.max(0.0) * 1000.0) as u64)),
+            ..Default::default()
+        };
+        self.run_bounds(bounds)
+    }
+
     fn run_bounds(&mut self, bounds: EvolveBounds) -> Result<JsValue, JsError> {
         let events_before = self.state.total_events();
         let outcome = self.sys.evolve(&mut self.state, bounds).map_err(js_err)?;

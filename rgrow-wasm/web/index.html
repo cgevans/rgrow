@@ -46,6 +46,10 @@
             <input id="events-per-step" type="number" value="10000" min="1" />
             <label for="step-budget-ms">Per-frame budget (ms):</label>
             <input id="step-budget-ms" type="number" value="8" min="1" max="200" step="1" />
+            <label for="timescale">Timescale (sim s / real s):</label>
+            <input id="timescale" type="number" placeholder="unlimited" min="0" step="any" />
+            <label for="max-events-per-sec">Max events/sec:</label>
+            <input id="max-events-per-sec" type="number" placeholder="unlimited" min="0" step="1" />
             <label for="scale">Tile size (px):</label>
             <input id="scale" type="range" min="2" max="24" value="8" />
             <span id="scale-value">8</span>
