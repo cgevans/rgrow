@@ -1,0 +1,2 @@
+- We should check to guard against surface-skipping in FFS.  
+- Formation rate of dimers for FFS is tricky with dimer equilibrium.
