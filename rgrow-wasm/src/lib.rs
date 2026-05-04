@@ -96,6 +96,15 @@ impl Sim {
         }
     }
 
+    /// Construct a simulation from an Xgrow-format tileset string.
+    #[wasm_bindgen(js_name = fromXgrow)]
+    pub fn from_xgrow(text: &str) -> Result<Sim, JsError> {
+        console_error_panic_hook::set_once();
+        let tileset = rgrow::parser_xgrow::parse_xgrow_string(text).map_err(js_err)?;
+        let (sys, state) = tileset.create_system_and_state().map_err(js_err)?;
+        Ok(Sim { sys, state })
+    }
+
     // ── stepping ────────────────────────────────────────────────────────
 
     /// Run for at most `events` events. Returns step stats (JsValue).
@@ -324,6 +333,111 @@ impl Sim {
         arr[[y as usize, x as usize]] = tile as Tile;
         Ok(())
     }
+
+    /// Load an Xgrow `importfile` (a `.seed` file produced by xgrow's
+    /// state dump) into the current canvas. The flake is centered on
+    /// the canvas, mirroring xgrow's `(size - flake_size) / 2`
+    /// translation, with optional `offset_i`/`offset_j` extra
+    /// translation. After applying, rates are recomputed for the whole
+    /// canvas. Returns the placed flake's edge length in cells.
+    #[wasm_bindgen(js_name = loadXgrowSeed)]
+    pub fn load_xgrow_seed(
+        &mut self,
+        text: &str,
+        offset_i: Option<i32>,
+        offset_j: Option<i32>,
+    ) -> Result<u32, JsError> {
+        let grid = parse_xgrow_seed(text).map_err(js_err)?;
+        let flake_size = grid.len();
+        if flake_size == 0 {
+            return Err(JsError::new("xgrow seed: empty flake"));
+        }
+        let (w, h) = self.state.draw_size();
+        let canvas_w = w as i32;
+        let canvas_h = h as i32;
+        let translate_i = (canvas_h - flake_size as i32) / 2 + offset_i.unwrap_or(0);
+        let translate_j = (canvas_w - flake_size as i32) / 2 + offset_j.unwrap_or(0);
+        {
+            let mut arr = self.state.raw_array_mut();
+            for (i, row) in grid.iter().enumerate() {
+                for (j, &t) in row.iter().enumerate() {
+                    let y = translate_i + i as i32;
+                    let x = translate_j + j as i32;
+                    if y < 0 || y >= canvas_h || x < 0 || x >= canvas_w {
+                        continue;
+                    }
+                    arr[[y as usize, x as usize]] = t;
+                }
+            }
+        }
+        self.sys
+            .update_state(&mut self.state, &rgrow::system::NeededUpdate::All);
+        Ok(flake_size as u32)
+    }
+}
+
+/// Parse the tile-grid out of an Xgrow saved-flake (`.seed`) file.
+///
+/// Format (per xgrow.c, `read_flake_file`):
+///
+/// ```text
+/// flake{N}={ ...
+/// [ ... stats ... ],...
+/// [ ... per-glue values ... ],...
+/// [ t11 t12 ... t1n ; ... ; tn1 ... tnn ] };
+/// ```
+///
+/// We skip the first two `],...`-terminated bracketed sections, then
+/// read the third bracketed section as a square grid. Rows are
+/// separated by `;`.
+fn parse_xgrow_seed(text: &str) -> Result<Vec<Vec<Tile>>, String> {
+    // Strip xgrow's `...` line-continuation markers — they're noise.
+    let cleaned = text.replace("...", " ");
+    // Skip everything up to the third `[`.
+    let mut rest = cleaned.as_str();
+    for n in 0..3 {
+        let start = rest
+            .find('[')
+            .ok_or_else(|| format!("xgrow seed: missing `[` (#{})", n + 1))?;
+        rest = &rest[start + 1..];
+        if n < 2 {
+            // Skip to the closing `]` of this section.
+            let end = rest
+                .find(']')
+                .ok_or_else(|| format!("xgrow seed: missing `]` (#{})", n + 1))?;
+            rest = &rest[end + 1..];
+        }
+    }
+    // `rest` is now the grid contents up to the closing `]`.
+    let end = rest
+        .find(']')
+        .ok_or_else(|| "xgrow seed: missing closing `]` for grid".to_string())?;
+    let grid_text = &rest[..end];
+
+    let mut grid: Vec<Vec<Tile>> = Vec::new();
+    for raw_row in grid_text.split(';') {
+        let row: Vec<Tile> = raw_row
+            .split_whitespace()
+            .map(|tok| {
+                tok.parse::<u64>()
+                    .map(|v| v as Tile)
+                    .map_err(|e| format!("xgrow seed: bad tile id `{tok}`: {e}"))
+            })
+            .collect::<Result<_, _>>()?;
+        if !row.is_empty() {
+            grid.push(row);
+        }
+    }
+    if grid.is_empty() {
+        return Err("xgrow seed: no rows parsed".into());
+    }
+    let w = grid[0].len();
+    if !grid.iter().all(|r| r.len() == w) {
+        return Err(format!(
+            "xgrow seed: rows are not all the same length (expected {w})"
+        ));
+    }
+    Ok(grid)
 }
 
 #[derive(Deserialize)]

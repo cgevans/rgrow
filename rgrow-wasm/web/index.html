@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>rgrow — tile assembly in the browser</title>
+    <title>rgrow tile assembly simulator</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -27,6 +27,8 @@
               <option value="sierpinski.yaml">Sierpinski</option>
               <option value="barish-perfect.yaml">Barish (perfect)</option>
               <option value="sdc2d-position.json">SDC2DSquare Bitcopy</option>
+              <option value="Rule110.tiles">Rule 110 (xgrow)</option>
+              <option value="sierpinski2x2-importfile.tiles">Sierpinski 2x2 + importfile (xgrow)</option>
             </select>
             <label for="file-input">Or load from file:</label>
             <input id="file-input" type="file" accept=".yaml,.yml,.json,.tiles" />
@@ -35,6 +37,18 @@
               <textarea id="paste-input" rows="6" placeholder="Paste tileset here, then click Load"></textarea>
               <button id="paste-load">Load pasted text</button>
             </details>
+          </div>
+
+          <div class="control-block" id="importfile-block" hidden>
+            <h2>Importfile</h2>
+            <p id="importfile-message"></p>
+            <label for="importfile-input">Load <code id="importfile-name"></code>:</label>
+            <input id="importfile-input" type="file" accept=".seed,.flake,.txt" />
+            <label for="importfile-offset-i">Offset i (rows):</label>
+            <input id="importfile-offset-i" type="number" value="0" step="1" />
+            <label for="importfile-offset-j">Offset j (cols):</label>
+            <input id="importfile-offset-j" type="number" value="0" step="1" />
+            <p id="importfile-status" class="muted"></p>
           </div>
 
           <div class="control-block">

@@ -32,6 +32,13 @@ const fileInput = $("file-input");
 const pasteInput = $("paste-input");
 const pasteLoadBtn = $("paste-load");
 const parameterList = $("parameter-list");
+const importfileBlock = $("importfile-block");
+const importfileMessage = $("importfile-message");
+const importfileNameEl = $("importfile-name");
+const importfileInput = $("importfile-input");
+const importfileOffsetI = $("importfile-offset-i");
+const importfileOffsetJ = $("importfile-offset-j");
+const importfileStatus = $("importfile-status");
 
 let wasm = null;     // wasm module exports (after init)
 let sim = null;      // current Sim instance
@@ -66,7 +73,13 @@ function setControlsEnabled(enabled) {
 
 function detectKind(text) {
   const t = text.trimStart();
-  return t.startsWith("{") ? "json" : "yaml";
+  if (t.startsWith("{")) return "json";
+  // Xgrow files start with this header line. The YAML parser would
+  // otherwise accept it as a string and then fail in less obvious ways.
+  if (/^tile edges(\s|=)/.test(t) || /^num tile types\s*=/.test(t)) {
+    return "xgrow";
+  }
+  return "yaml";
 }
 
 async function loadTilesetText(text, kind) {
@@ -75,7 +88,10 @@ async function loadTilesetText(text, kind) {
     sim.free?.();
   }
   try {
-    sim = k === "json" ? Sim.fromJson(text) : Sim.fromYaml(text);
+    sim =
+      k === "json" ? Sim.fromJson(text)
+      : k === "xgrow" ? Sim.fromXgrow(text)
+      : Sim.fromYaml(text);
   } catch (e) {
     statsEl.textContent = `Error loading tileset: ${e.message || e}`;
     sim = null;
@@ -90,11 +106,52 @@ async function loadTilesetText(text, kind) {
 
   resizeCanvasFor(sim);
   rebuildParameterControls();
+  if (k === "xgrow") {
+    showImportfilePromptFor(text);
+  } else {
+    hideImportfilePrompt();
+  }
   // Kick the RAF loop if it isn't running.
   if (!rafScheduled) {
     rafScheduled = true;
     requestAnimationFrame(frame);
   }
+}
+
+// Match `importfile=foo.seed` either as a real arg or inside the
+// recipe-style `% xgrow ... importfile=...` comments many .tiles files
+// carry. Capture the bare filename (no path / wrapping quotes).
+function findImportfileReference(text) {
+  const m = text.match(/importfile\s*=\s*([^\s&|;)<>"'`%]+)/i);
+  if (!m) return null;
+  // Strip any leading directory components — the user picks the file
+  // themselves, so only the basename is meaningful.
+  const raw = m[1];
+  const base = raw.split(/[\\/]/).pop();
+  return base || raw;
+}
+
+function showImportfilePromptFor(text) {
+  const name = findImportfileReference(text);
+  if (!name) {
+    hideImportfilePrompt();
+    return;
+  }
+  importfileBlock.hidden = false;
+  importfileNameEl.textContent = name;
+  importfileMessage.textContent =
+    "This xgrow tileset references an importfile (a saved-flake `.seed`). " +
+    "Pick the file below to load it as the initial canvas state.";
+  importfileStatus.textContent = "";
+  importfileInput.value = "";
+}
+
+function hideImportfilePrompt() {
+  importfileBlock.hidden = true;
+  importfileNameEl.textContent = "";
+  importfileMessage.textContent = "";
+  importfileStatus.textContent = "";
+  importfileInput.value = "";
 }
 
 function resizeCanvasFor(s) {
@@ -298,6 +355,13 @@ scaleInput.addEventListener("input", () => {
   if (sim) resizeCanvasFor(sim);
 });
 
+function kindFromName(name) {
+  if (name.endsWith(".json")) return "json";
+  if (name.endsWith(".tiles")) return "xgrow";
+  if (name.endsWith(".yaml") || name.endsWith(".yml")) return "yaml";
+  return null;
+}
+
 exampleSelect.addEventListener("change", async () => {
   const v = exampleSelect.value;
   if (!v) return;
@@ -305,7 +369,7 @@ exampleSelect.addEventListener("change", async () => {
     const r = await fetch(`./examples/${v}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const text = await r.text();
-    await loadTilesetText(text, v.endsWith(".json") ? "json" : "yaml");
+    await loadTilesetText(text, kindFromName(v));
   } catch (e) {
     statsEl.textContent = `Failed to fetch example: ${e.message || e}`;
   }
@@ -315,7 +379,8 @@ fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => loadTilesetText(String(reader.result));
+  reader.onload = () =>
+    loadTilesetText(String(reader.result), kindFromName(file.name));
   reader.readAsText(file);
 });
 
@@ -323,6 +388,40 @@ pasteLoadBtn.addEventListener("click", () => {
   const text = pasteInput.value;
   if (!text.trim()) return;
   loadTilesetText(text);
+});
+
+function readOptionalInt(input) {
+  const s = input.value.trim();
+  if (s === "") return null;
+  const v = Number(s);
+  if (!Number.isFinite(v)) return null;
+  return Math.trunc(v);
+}
+
+importfileInput.addEventListener("change", () => {
+  const file = importfileInput.files?.[0];
+  if (!file || !sim) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const oi = readOptionalInt(importfileOffsetI);
+      const oj = readOptionalInt(importfileOffsetJ);
+      const placed = sim.loadXgrowSeed(
+        String(reader.result),
+        oi == null ? undefined : oi,
+        oj == null ? undefined : oj,
+      );
+      importfileStatus.textContent = `Loaded ${placed}x${placed} flake from ${file.name}.`;
+      // Force one frame so the imported state shows immediately.
+      if (!rafScheduled) {
+        rafScheduled = true;
+        requestAnimationFrame(frame);
+      }
+    } catch (e) {
+      importfileStatus.textContent = `Failed to load importfile: ${e.message || e}`;
+    }
+  };
+  reader.readAsText(file);
 });
 
 (async () => {

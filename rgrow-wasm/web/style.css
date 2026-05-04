@@ -162,6 +162,13 @@ footer {
 footer p { margin: 0; }
 footer code { color: var(--accent); }
 
+.muted { color: var(--muted); font-size: 12px; margin: 0; }
+
+#importfile-block code {
+  color: var(--accent);
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+}
+
 @media (max-width: 900px) {
   main { grid-template-columns: 1fr; }
 }
