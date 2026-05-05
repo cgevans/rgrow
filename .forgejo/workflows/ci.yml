@@ -19,7 +19,6 @@ name: CI
 #   - CODECOV_TOKEN    : optional; coverage upload is best-effort.
 #   - PYPI_TOKEN       : required for `python_release` job on tags.
 #   - CRATES_IO_TOKEN  : required for `rust_release` job on tags.
-#   - PACKAGE_TOKEN    : required for mirroring release artifacts to Packages.
 #   - forge.token      : auto-provided by Forgejo (used for the Forgejo release).
 #
 # Caching: the Forgejo runner's built-in cache server (used by
@@ -215,6 +214,7 @@ jobs:
         with:
           name: wheels-linux-${{ matrix.target }}
           path: dist
+          retention-days: 1
 
   linux-freethreaded:
     name: Python Linux free-threaded builds
@@ -266,6 +266,7 @@ jobs:
         with:
           name: wheels-linux-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
           path: dist
+          retention-days: 1
 
   windows:
     name: Python Windows builds
@@ -322,6 +323,7 @@ jobs:
         with:
           name: wheels-windows-${{ matrix.target }}
           path: dist
+          retention-days: 1
 
   windows-freethreaded:
     name: Python Windows free-threaded builds
@@ -374,6 +376,7 @@ jobs:
         with:
           name: wheels-windows-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
           path: dist
+          retention-days: 1
 
   # macOS jobs run on the `macos-arm64` runner. Intel macOS wheels are
   # intentionally deprecated. Python is managed by uv (avoids the
@@ -413,6 +416,7 @@ jobs:
         with:
           name: wheels-macos-${{ matrix.target }}
           path: dist
+          retention-days: 1
 
   macos-freethreaded:
     name: Python macOS free-threaded builds
@@ -449,6 +453,7 @@ jobs:
         with:
           name: wheels-macos-freethreaded-${{ matrix.python-version }}-${{ matrix.target }}
           path: dist
+          retention-days: 1
 
   sdist:
     name: Build sdist
@@ -482,6 +487,7 @@ jobs:
         with:
           name: wheels-sdist
           path: target/wheels
+          retention-days: 1
 
   python_release:
     name: Python PyPI release
@@ -574,30 +580,3 @@ jobs:
           release-notes-file: /tmp/release-notes.md
           release-dir: dist
           token: ${{ forge.token }}
-
-  package_release:
-    name: Codeberg Packages release mirror
-    runs-on: docker
-    container:
-      image: docker.io/catthehacker/ubuntu:act-22.04
-    if: startsWith(forge.ref, 'refs/tags/')
-    needs: [linux, linux-freethreaded, windows, windows-freethreaded, macos, macos-freethreaded, sdist]
-    steps:
-      - uses: https://code.forgejo.org/forgejo/download-artifact@v4
-        with:
-          pattern: wheels-*
-          merge-multiple: true
-          path: dist
-      - name: Upload release files to Generic Packages
-        env:
-          TOKEN: ${{ secrets.PACKAGE_TOKEN }}
-          OWNER: ${{ forge.repository_owner }}
-          VERSION: ${{ forge.ref_name }}
-          SERVER_URL: ${{ forge.server_url }}
-        run: |
-          set -euo pipefail
-          for file in dist/*; do
-            curl --fail --header "Authorization: token ${TOKEN}" \
-              --upload-file "$file" \
-              "${SERVER_URL}/api/packages/${OWNER}/generic/rgrow-dist/${VERSION}/$(basename "$file")"
-          done

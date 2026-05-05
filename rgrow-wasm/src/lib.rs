@@ -16,6 +16,9 @@ use wasm_bindgen::prelude::*;
 
 use rgrow::base::Tile;
 use rgrow::canvas::Canvas;
+use rgrow::models::kblock::{
+    GlueIdentifier, KBlock, KBlockParams, KBlockTile, StrenOrSeq, TileIdentifier,
+};
 use rgrow::models::sdc1d::{SDCParams, SDCStrand, SingleOrMultiScaffold, SDC};
 use rgrow::models::sdc2d::{SDC2DParams, SDC2DSquare, SDC2DStrand};
 use rgrow::models::sdc_common::{GsOrSeq, RefOrPair};
@@ -400,6 +403,56 @@ impl Sim {
     #[wasm_bindgen(js_name = tileNames)]
     pub fn tile_names(&self) -> Vec<String> {
         self.sys.tile_names().to_vec()
+    }
+
+    /// Flat tile-id grid for the current canvas, row-major over the
+    /// underlying `raw_array` (length `rows * cols`). Use
+    /// `tileGridShape()` to recover the shape — for tube canvases the
+    /// raw array is smaller than `canvasSize()` and the painter only
+    /// fills the corresponding region.
+    #[wasm_bindgen(js_name = tileGrid)]
+    pub fn tile_grid(&self) -> js_sys::Uint32Array {
+        let arr = self.state.raw_array();
+        let nrows = arr.nrows();
+        let ncols = arr.ncols();
+        let mut flat = Vec::with_capacity(nrows * ncols);
+        for y in 0..nrows {
+            for x in 0..ncols {
+                flat.push(arr[[y, x]] as u32);
+            }
+        }
+        js_sys::Uint32Array::from(&flat[..])
+    }
+
+    /// Shape of `tileGrid()` as `{width: cols, height: rows}`.
+    #[wasm_bindgen(js_name = tileGridShape)]
+    pub fn tile_grid_shape(&self) -> Result<JsValue, JsError> {
+        let arr = self.state.raw_array();
+        let s = CanvasSize {
+            width: arr.ncols() as u32,
+            height: arr.nrows() as u32,
+        };
+        serde_wasm_bindgen::to_value(&s).map_err(js_err)
+    }
+
+    /// Display label for tile id `id`. Goes through `sys.tile_name` so
+    /// KBlock's blocker-state variants resolve to their underlying tile
+    /// name. Empty string for the empty tile (id 0) and for ids the
+    /// model does not name.
+    #[wasm_bindgen(js_name = tileLabel)]
+    pub fn tile_label(&self, id: u32) -> String {
+        if id == 0 {
+            return String::new();
+        }
+        match &self.sys {
+            // KBlock's `tile_name` maps the raw id through `tile_index`
+            // (id >> 4), so it's safe for any id the canvas can hold.
+            SystemEnum::KBlock(_) => self.sys.tile_name(id as Tile).to_string(),
+            _ => {
+                let names = self.sys.tile_names();
+                names.get(id as usize).cloned().unwrap_or_default()
+            }
+        }
     }
 
     /// Information about the cell at grid `(x, y)`: which tile is there,
@@ -940,6 +993,8 @@ enum WebExample {
     Sdc2dSquare(WebSdc2dSquare),
     #[serde(rename = "sdc1d")]
     Sdc1d(WebSdc1d),
+    #[serde(rename = "kblock")]
+    KBlock(WebKBlock),
 }
 
 impl WebExample {
@@ -951,6 +1006,7 @@ impl WebExample {
         match self {
             WebExample::Sdc2dSquare(example) => example.into_sim(),
             WebExample::Sdc1d(example) => example.into_sim(),
+            WebExample::KBlock(example) => example.into_sim(),
         }
     }
 }
@@ -1156,6 +1212,171 @@ impl WebSdc1d {
             n_tile_types,
         )?;
         let sys = SystemEnum::SDC(sys);
+        sys.setup_state(&mut state)?;
+        sys.update_state(&mut state, &rgrow::system::NeededUpdate::All);
+        Ok(Sim { sys, state })
+    }
+}
+
+#[derive(Deserialize)]
+struct WebKBlock {
+    tiles: Vec<WebKBlockTile>,
+    /// Map glue name → blocker concentration (M).
+    blocker_conc: HashMap<String, f64>,
+    /// Seed entries as `[row, col, "tile_name"]`.
+    seed: Vec<(usize, usize, String)>,
+    /// Glue name → either a DNA sequence (string, parsed for ΔG) or a
+    /// pre-computed ΔG in kcal/mol (number).
+    binding_strength: HashMap<String, WebStrenOrSeq>,
+    #[serde(default = "default_kblock_ds_lat")]
+    ds_lat: f64,
+    #[serde(default = "default_kblock_kf")]
+    kf: f64,
+    #[serde(default = "default_kblock_temp")]
+    temp: f64,
+    #[serde(default = "default_kblock_no_pba")]
+    no_partially_blocked_attachments: bool,
+    #[serde(default)]
+    blocker_energy_adj: f64,
+    /// Canvas shape `(rows, cols)`. Defaults to a 12-helix tube.
+    #[serde(default = "default_kblock_canvas_size")]
+    canvas_size: (usize, usize),
+    #[serde(default = "default_kblock_canvas_type")]
+    canvas_type: WebKBlockCanvasType,
+}
+
+#[derive(Deserialize)]
+struct WebKBlockTile {
+    name: String,
+    concentration: f64,
+    glues: [String; 4],
+    /// Color as `"#RRGGBB"`, an array `[r, g, b, a]`, or omitted for a
+    /// random color.
+    #[serde(default)]
+    color: Option<WebColor>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum WebColor {
+    Name(String),
+    Rgba([u8; 4]),
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum WebStrenOrSeq {
+    Sequence(String),
+    DG(f64),
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum WebKBlockCanvasType {
+    #[default]
+    Tube,
+    TubeDiagonals,
+}
+
+impl From<WebKBlockCanvasType> for CanvasType {
+    fn from(value: WebKBlockCanvasType) -> Self {
+        match value {
+            WebKBlockCanvasType::Tube => CanvasType::Tube,
+            WebKBlockCanvasType::TubeDiagonals => CanvasType::TubeDiagonals,
+        }
+    }
+}
+
+fn default_kblock_ds_lat() -> f64 {
+    -14.12 / 1000.0
+}
+
+fn default_kblock_kf() -> f64 {
+    1.0e6
+}
+
+fn default_kblock_temp() -> f64 {
+    40.0
+}
+
+fn default_kblock_no_pba() -> bool {
+    true
+}
+
+fn default_kblock_canvas_size() -> (usize, usize) {
+    (12, 256)
+}
+
+fn default_kblock_canvas_type() -> WebKBlockCanvasType {
+    WebKBlockCanvasType::Tube
+}
+
+impl WebKBlock {
+    fn into_sim(self) -> Result<Sim, rgrow::base::GrowError> {
+        let canvas_size = self.canvas_size;
+        let canvas_type: CanvasType = self.canvas_type.into();
+        let tiles: Vec<KBlockTile> = self
+            .tiles
+            .into_iter()
+            .map(|t| {
+                let color = match t.color {
+                    Some(WebColor::Name(s)) => {
+                        rgrow::colors::get_color(&s).unwrap_or([128, 128, 128, 255])
+                    }
+                    Some(WebColor::Rgba(c)) => c,
+                    None => {
+                        rgrow::colors::get_color_or_random(None).unwrap_or([128, 128, 128, 255])
+                    }
+                };
+                KBlockTile {
+                    name: t.name,
+                    concentration: t.concentration,
+                    glues: t.glues,
+                    color,
+                }
+            })
+            .collect();
+        let blocker_conc: HashMap<GlueIdentifier, rgrow::units::Molar> = self
+            .blocker_conc
+            .into_iter()
+            .map(|(k, v)| (GlueIdentifier::Name(k), rgrow::units::Molar::from(v)))
+            .collect();
+        let seed: HashMap<(usize, usize), TileIdentifier> = self
+            .seed
+            .into_iter()
+            .map(|(r, c, name)| ((r, c), TileIdentifier::Name(name)))
+            .collect();
+        let binding_strength: HashMap<String, StrenOrSeq> = self
+            .binding_strength
+            .into_iter()
+            .map(|(k, v)| {
+                let s = match v {
+                    WebStrenOrSeq::Sequence(seq) => StrenOrSeq::Sequence(seq),
+                    WebStrenOrSeq::DG(dg) => StrenOrSeq::DG(rgrow::units::KcalPerMol::from(dg)),
+                };
+                (k, s)
+            })
+            .collect();
+        let params = KBlockParams {
+            tiles,
+            blocker_conc,
+            seed,
+            binding_strength,
+            ds_lat: rgrow::units::KcalPerMolKelvin::from(self.ds_lat),
+            kf: rgrow::units::PerMolarSecond::from(self.kf),
+            temp: rgrow::units::Celsius::from(self.temp),
+            no_partially_blocked_attachments: self.no_partially_blocked_attachments,
+            blocker_energy_adj: rgrow::units::KcalPerMol::from(self.blocker_energy_adj),
+        };
+        let sys = KBlock::from(params);
+        let n_tile_types = sys.tile_names.len() * 16; // KBlock encodes blocker state in tile id
+        let mut state = StateEnum::empty(
+            canvas_size,
+            canvas_type,
+            &TrackingConfig::None,
+            n_tile_types,
+        )?;
+        let sys = SystemEnum::KBlock(sys);
         sys.setup_state(&mut state)?;
         sys.update_state(&mut state, &rgrow::system::NeededUpdate::All);
         Ok(Sim { sys, state })

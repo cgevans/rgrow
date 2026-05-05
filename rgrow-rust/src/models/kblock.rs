@@ -1481,7 +1481,7 @@ mod test_kblock {
 // Python Bindings
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct KBlockTile {
+pub struct KBlockTile {
     pub name: String,
     pub concentration: f64,
     /// Glues for the tiles North, East, South, West in that order
@@ -1535,7 +1535,7 @@ impl KBlockTile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
-enum StrenOrSeq {
+pub enum StrenOrSeq {
     DG(KcalPerMol),
     Sequence(String),
 }
@@ -1556,7 +1556,7 @@ pub enum GlueIdentifier {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject))]
-struct KBlockParams {
+pub struct KBlockParams {
     pub tiles: Vec<KBlockTile>,
     pub blocker_conc: HashMap<GlueIdentifier, Molar>,
     pub seed: HashMap<(usize, usize), TileIdentifier>,

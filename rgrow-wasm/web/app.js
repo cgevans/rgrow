@@ -24,8 +24,6 @@ const eventsPerStepInput = $("events-per-step");
 const stepBudgetMsInput = $("step-budget-ms");
 const timescaleInput = $("timescale");
 const maxEventsPerSecInput = $("max-events-per-sec");
-const scaleInput = $("scale");
-const scaleValueEl = $("scale-value");
 const showMismatchesInput = $("show-mismatches");
 const exampleSelect = $("example-select");
 const fileInput = $("file-input");
@@ -50,12 +48,19 @@ const glueTableBody = glueTable.querySelector("tbody");
 const glueCountEl = $("glue-count");
 
 const TILESET_SPRITE_PX = 22;
+// Don't bother annotating tile names below this cell size — the text
+// would be unreadable and the per-cell measureText calls aren't free.
+const TILE_LABEL_MIN_SCALE = 8;
 let editFeatures = {
   tile_concentration: false,
   tile_edge_glue: false,
   glue_interaction: false,
 };
 let currentGlueList = null;
+// id -> displayed label string (empty if no name). Refilled lazily as we
+// see new tile ids during rendering; reset when a new sim is loaded
+// because the id space (and KBlock blocker variants) is per-model.
+let tileLabelCache = new Map();
 
 let wasm = null;     // wasm module exports (after init)
 let sim = null;      // current Sim instance
@@ -124,6 +129,7 @@ async function loadTilesetText(text, kind) {
   pauseBtn.textContent = "Resume";
 
   resizeCanvasFor(sim);
+  tileLabelCache = new Map();
   refreshEditableFeatures();
   refreshGlueList();
   rebuildTileSetPanel();
@@ -180,11 +186,35 @@ function hideImportfilePrompt() {
   importfileInput.value = "";
 }
 
+// Auto-picked cell size in canvas pixels. Recomputed from the canvas
+// container's CSS width on tileset load and on window resize. The
+// `image-rendering: pixelated` style means we want this to match (or be
+// an integer multiple of) the on-screen cell size, otherwise the
+// browser does fractional scaling and we lose crispness.
+let currentScale = 8;
+
+function computeAutoScale(s) {
+  const cs = s.canvasSize();
+  const cols = Math.max(1, cs.width);
+  const rows = Math.max(1, cs.height);
+  // Container's content-box width (excluding canvas's 1px border).
+  const parent = canvas.parentElement;
+  const availW = Math.max(64, (parent?.clientWidth ?? 800) - 2);
+  // Bound the height too so a tube canvas with rows ≪ cols doesn't get
+  // a giant scale that overflows the viewport vertically.
+  const availH = Math.max(64, window.innerHeight - 200);
+  const sW = Math.floor(availW / cols);
+  const sH = Math.floor(availH / rows);
+  return Math.max(2, Math.min(32, Math.min(sW, sH)));
+}
+
 function resizeCanvasFor(s) {
-  const scale = Number(scaleInput.value);
-  const fs = s.frameSize(scale);
-  canvas.width = fs.width;
-  canvas.height = fs.height;
+  currentScale = computeAutoScale(s);
+  const fs = s.frameSize(currentScale);
+  if (canvas.width !== fs.width || canvas.height !== fs.height) {
+    canvas.width = fs.width;
+    canvas.height = fs.height;
+  }
 }
 
 let rafScheduled = false;
@@ -209,6 +239,7 @@ function frame(timestamp) {
     secondStart = now;
   }
 
+  const scale = currentScale;
   const budget = Math.max(1, Number(stepBudgetMsInput.value));
   const timescale = readPositiveNumber(timescaleInput);
   const maxEps = readPositiveNumber(maxEventsPerSecInput);
@@ -245,7 +276,6 @@ function frame(timestamp) {
     }
   }
 
-  const scale = Number(scaleInput.value);
   const fs = sim.frameSize(scale);
   if (fs.width !== canvas.width || fs.height !== canvas.height) {
     canvas.width = fs.width;
@@ -264,6 +294,8 @@ function frame(timestamp) {
   // cheap; the typed array itself is the data buffer.
   const img = new ImageData(bytes, canvas.width, canvas.height);
   ctx.putImageData(img, 0, 0);
+
+  drawTileLabels(scale);
 
   // FPS smoothing.
   if (lastFrameTimestamp) {
@@ -284,6 +316,77 @@ function frame(timestamp) {
 
   rafScheduled = true;
   requestAnimationFrame(frame);
+}
+
+// Look up the displayed name for a tile id, caching wasm results. The
+// cache is reset on each sim load (`tileLabelCache = new Map()`) so the
+// id space and KBlock blocker-variant mappings stay in sync.
+function getTileLabel(id) {
+  if (id === 0) return "";
+  let s = tileLabelCache.get(id);
+  if (s === undefined) {
+    try {
+      s = sim.tileLabel(id) || "";
+    } catch {
+      s = "";
+    }
+    tileLabelCache.set(id, s);
+  }
+  return s;
+}
+
+// Overlay tile names on the canvas where the cell is large enough and
+// the name actually fits. We measure each unique label once per frame
+// and skip cells whose label would overflow ~90% of the cell width.
+// Black text with a translucent white outline reads well over both
+// dark and light tile colors without needing a per-tile contrast check.
+function drawTileLabels(scale) {
+  if (!sim || scale < TILE_LABEL_MIN_SCALE) return;
+  let grid;
+  let shape;
+  try {
+    grid = sim.tileGrid();
+    shape = sim.tileGridShape();
+  } catch {
+    return;
+  }
+  const cols = shape.width;
+  const rows = shape.height;
+  if (!cols || !rows || grid.length < cols * rows) return;
+
+  const fontSize = Math.max(8, Math.min(16, Math.round(scale * 0.55)));
+  const maxWidth = scale * 0.92;
+  const widthCache = new Map();
+
+  ctx.save();
+  ctx.font = `${fontSize}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = Math.max(2, Math.round(fontSize / 4));
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+  ctx.fillStyle = "rgba(0, 0, 0, 1)";
+
+  for (let y = 0; y < rows; y++) {
+    const yOff = y * cols;
+    const cy = (y + 0.5) * scale;
+    for (let x = 0; x < cols; x++) {
+      const id = grid[yOff + x];
+      if (id === 0) continue;
+      const label = getTileLabel(id);
+      if (!label) continue;
+      let w = widthCache.get(label);
+      if (w === undefined) {
+        w = ctx.measureText(label).width;
+        widthCache.set(label, w);
+      }
+      if (w > maxWidth) continue;
+      const cx = (x + 0.5) * scale;
+      ctx.strokeText(label, cx, cy);
+      ctx.fillText(label, cx, cy);
+    }
+  }
+  ctx.restore();
 }
 
 function rebuildParameterControls() {
@@ -977,9 +1080,22 @@ resetBtn.addEventListener("click", () => {
   }
 });
 
-scaleInput.addEventListener("input", () => {
-  scaleValueEl.textContent = scaleInput.value;
-  if (sim) resizeCanvasFor(sim);
+// Auto-fit the cell size when the viewport changes. Debounce so a
+// drag-resize doesn't thrash the canvas (each `canvas.width` write
+// clears the buffer; the next frame will repaint, but at 60 Hz a wide
+// drag can briefly flash empty).
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  if (!sim) return;
+  if (resizeTimer != null) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    resizeTimer = null;
+    resizeCanvasFor(sim);
+    if (!rafScheduled) {
+      rafScheduled = true;
+      requestAnimationFrame(frame);
+    }
+  }, 80);
 });
 
 function kindFromName(name) {
@@ -1034,7 +1150,7 @@ function canvasToCell(event) {
   const cssY = event.clientY - rect.top;
   const px = (cssX / rect.width) * canvas.width;
   const py = (cssY / rect.height) * canvas.height;
-  const scale = Math.max(1, Number(scaleInput.value));
+  const scale = Math.max(1, currentScale);
   const cellX = Math.floor(px / scale);
   const cellY = Math.floor(py / scale);
   const size = sim.canvasSize();
