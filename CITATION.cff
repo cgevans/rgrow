@@ -12,4 +12,5 @@ license: MIT
 doi: 10.5281/zenodo.15270474
 url: "https://doi.org/10.5281/zenodo.15270474"
 repository-code: "https://codeberg.org/cge/rgrow"
-version: "0.22.0"
+version: "0.23.0"
+date-released: "2026-05-02"

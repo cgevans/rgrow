@@ -1,0 +1,133 @@
+name: Zenodo release
+
+# Publishes a new version of the rgrow Zenodo record on tag push.
+#
+# Concept record: https://zenodo.org/records/15270474 (DOI 10.5281/zenodo.15270474)
+# The latest version is resolved dynamically from the concept id, so this
+# workflow does not need updating between releases.
+#
+# Secrets (Codeberg → repo → Settings → Actions → Secrets):
+#   - ZENODO_TOKEN          : production token; scopes deposit:write,deposit:actions
+#   - ZENODO_SANDBOX_TOKEN  : optional; same scopes on sandbox.zenodo.org for testing
+#
+# Pre-tag checklist (the workflow verifies the first item and fails fast if missed):
+#   1. Bump `version:` and `date-released:` in CITATION.cff to match the new tag.
+#   2. Add a `# <version>` section to CHANGELOG.md with release notes.
+#
+# Manual sandbox dry-runs: trigger via workflow_dispatch with target=sandbox and
+# dry_run=true. The script will create a draft on sandbox.zenodo.org with the
+# tarball uploaded but won't publish — review at the URL printed in the job log.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.23.0)"
+        required: true
+        type: string
+      target:
+        description: "Zenodo target host"
+        required: true
+        default: "sandbox"
+        type: choice
+        options:
+          - sandbox
+          - production
+      dry_run:
+        description: "Create draft but don't publish"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+jobs:
+  zenodo:
+    name: Publish to Zenodo
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install requests
+        run: pip install --quiet requests
+
+      - name: Compute parameters
+        id: params
+        shell: bash
+        run: |
+          if [ "${{ forge.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+            TARGET="${{ inputs.target }}"
+            DRY="${{ inputs.dry_run }}"
+          else
+            TAG="${{ forge.ref_name }}"
+            TARGET="production"
+            DRY="false"
+          fi
+          if [ "$TARGET" = "sandbox" ]; then
+            HOST="sandbox.zenodo.org"
+          else
+            HOST="zenodo.org"
+          fi
+          REPO="${{ forge.server_url }}/${{ forge.repository }}"
+          {
+            echo "tag=$TAG"
+            echo "host=$HOST"
+            echo "dry_run=$DRY"
+            echo "repo=$REPO"
+            echo "archive=${REPO}/archive/${TAG}.tar.gz"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify CITATION.cff matches tag
+        # Fails fast if CITATION.cff wasn't bumped as part of the release prep.
+        # Bump `version:` and `date-released:` before tagging.
+        shell: bash
+        run: |
+          TAG="${{ steps.params.outputs.tag }}"
+          EXPECTED="${TAG#v}"
+          ACTUAL=$(grep -E '^version:' CITATION.cff | sed -E 's/^version:[[:space:]]*"?([^"]+)"?[[:space:]]*$/\1/')
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::CITATION.cff version is '$ACTUAL' but tag is '$TAG' (expected '$EXPECTED')." >&2
+            echo "::error::Bump 'version' and 'date-released' in CITATION.cff before tagging." >&2
+            exit 1
+          fi
+
+      - name: Publish
+        env:
+          ZENODO_HOST: ${{ steps.params.outputs.host }}
+          ZENODO_TOKEN_PROD: ${{ secrets.ZENODO_TOKEN }}
+          ZENODO_TOKEN_SANDBOX: ${{ secrets.ZENODO_SANDBOX_TOKEN }}
+        run: |
+          set -e
+          if [ "$ZENODO_HOST" = "sandbox.zenodo.org" ]; then
+            export ZENODO_TOKEN="$ZENODO_TOKEN_SANDBOX"
+          else
+            export ZENODO_TOKEN="$ZENODO_TOKEN_PROD"
+          fi
+          if [ -z "$ZENODO_TOKEN" ]; then
+            echo "::error::No Zenodo token configured for host $ZENODO_HOST" >&2
+            exit 1
+          fi
+          DRY_FLAG=""
+          if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+          python tools/zenodo_release.py \
+            --tag "${{ steps.params.outputs.tag }}" \
+            --archive-url "${{ steps.params.outputs.archive }}" \
+            --concept-id 15270474 \
+            --repo-url "${{ steps.params.outputs.repo }}" \
+            $DRY_FLAG
