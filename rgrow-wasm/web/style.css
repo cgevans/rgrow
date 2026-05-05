@@ -289,8 +289,56 @@ footer code { color: var(--accent); }
 
 #tileset-table.no-conc th.col-conc,
 #tileset-table.no-conc td.col-conc { display: none; }
+#tileset-table.no-free-conc th.col-free-conc,
+#tileset-table.no-free-conc td.col-free-conc { display: none; }
 #tileset-table.no-glues th.col-glue,
 #tileset-table.no-glues td.col-glue { display: none; }
+
+#tileset-table td.col-free-conc { color: var(--muted); }
+
+#blocker-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+#blocker-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  z-index: 1;
+}
+
+#blocker-table tbody td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #2a2a2f;
+  vertical-align: middle;
+}
+
+#blocker-table tbody tr:last-child td { border-bottom: none; }
+
+#blocker-table td.col-glue-name { color: var(--accent); }
+#blocker-table td.col-free-conc { color: var(--muted); }
+
+#blocker-table input[type="number"] {
+  width: 96px;
+  padding: 1px 4px;
+  font: inherit;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+#blocker-table input[type="number"]::-webkit-outer-spin-button,
+#blocker-table input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 
 #tileset-table input[type="number"],
 #glue-table input[type="number"] {

@@ -69,20 +69,37 @@ pub struct CellInfo {
 ///
 /// `concentration` and `stoic` are `None` for models that do not expose
 /// per-tile concentration data (currently anything other than KTAM).
-/// `edge_glues` is `[N, E, S, W]`; an entry is `None` when the tile has
-/// no glue on that side or the model has no notion of one. `edge_glue_ids`
-/// carries the same information as numeric ids, which the editing UI
-/// uses to drive per-side glue dropdowns without having to round-trip
-/// names back through `bond_names`.
+/// `free_concentration` is the model-derived "available" concentration —
+/// for KBlock, the unblocked-tile concentration after blockers bind
+/// (`tile_concentration` × Π(1 − blocker_perc)); `None` for models that
+/// have no such concept. `edge_glues` is `[N, E, S, W]`; an entry is
+/// `None` when the tile has no glue on that side or the model has no
+/// notion of one. `edge_glue_ids` carries the same information as
+/// numeric ids, which the editing UI uses to drive per-side glue
+/// dropdowns without having to round-trip names back through
+/// `bond_names`.
 #[derive(Serialize)]
 pub struct TileInfo {
     pub id: u32,
     pub name: String,
     pub color: [u8; 4],
     pub concentration: Option<f64>,
+    pub free_concentration: Option<f64>,
     pub stoic: Option<f64>,
     pub edge_glues: [Option<String>; 4],
     pub edge_glue_ids: [Option<u32>; 4],
+}
+
+/// Per-glue blocker info for the KBlock blocker panel. `concentration`
+/// is the user-set total blocker concentration (M); `free_concentration`
+/// is the equilibrium free-blocker concentration computed from the
+/// tile/glue usages and the blocker–glue ΔG.
+#[derive(Serialize)]
+pub struct BlockerInfo {
+    pub glue_id: u32,
+    pub glue_name: String,
+    pub concentration: f64,
+    pub free_concentration: f64,
 }
 
 /// Per-glue info for the per-side glue dropdown in the tileset table.
@@ -564,13 +581,24 @@ impl Sim {
         // Concentrations are only available on models that implement
         // `SystemInfo`. `bond_names` is `todo!()` on ATAM, so we only call
         // it when we know it's safe (KTAM, SDC2DSquare).
-        let (concs, stoics, has_bond_names) = match &self.sys {
+        let (concs, free_concs, stoics, has_bond_names) = match &self.sys {
             SystemEnum::KTAM(k) => {
                 use rgrow::system::SystemInfo;
-                (Some(k.tile_concs()), None, true)
+                (Some(k.tile_concs()), None, None, true)
             }
-            SystemEnum::SDC2DSquare(_) => (None, None, true),
-            _ => (None, None, false),
+            SystemEnum::SDC2DSquare(_) => (None, None, None, true),
+            SystemEnum::KBlock(k) => {
+                let totals: Vec<f64> = k.tile_concentration.iter().map(|c| f64::from(*c)).collect();
+                // `unblocked_tile_concentration` adjusts the raw conc by
+                // the equilibrium blocker occupancy on each side, so the
+                // result is the "available" (fully-unblocked) tile
+                // concentration shown in the UI.
+                let frees: Vec<f64> = (0..totals.len())
+                    .map(|i| f64::from(k.unblocked_tile_concentration(i)))
+                    .collect();
+                (Some(totals), Some(frees), None, false)
+            }
+            _ => (None, None, None, false),
         };
         let bond_names: &[String] = if has_bond_names {
             self.sys.bond_names()
@@ -590,12 +618,77 @@ impl Sim {
                 name: names.get(id).cloned().unwrap_or_default(),
                 color: colors.get(id).copied().unwrap_or([0, 0, 0, 0]),
                 concentration: concs.as_ref().and_then(|v| v.get(id).copied()),
+                free_concentration: free_concs.as_ref().and_then(|v| v.get(id).copied()),
                 stoic: stoics.as_ref().and_then(|v: &Vec<f64>| v.get(id).copied()),
                 edge_glues,
                 edge_glue_ids,
             });
         }
         serde_wasm_bindgen::to_value(&out).map_err(js_err)
+    }
+
+    /// KBlock blocker inventory: one `BlockerInfo` per glue index that
+    /// has a non-empty glue name (id 0 is the null glue and is always
+    /// omitted). For non-KBlock models, returns an empty list. The
+    /// `free_concentration` is read from the cached
+    /// `free_blocker_concentrations` array (refreshed by `update`),
+    /// so it stays consistent with the rates the simulator is using.
+    #[wasm_bindgen(js_name = blockerList)]
+    pub fn blocker_list(&self) -> Result<JsValue, JsError> {
+        let mut out: Vec<BlockerInfo> = Vec::new();
+        if let SystemEnum::KBlock(k) = &self.sys {
+            let frees = k.free_blocker_concentrations();
+            let n = k
+                .glue_names
+                .len()
+                .min(k.blocker_concentrations.len())
+                .min(frees.len());
+            for gi in 1..n {
+                let name = &k.glue_names[gi];
+                if name.is_empty() {
+                    continue;
+                }
+                out.push(BlockerInfo {
+                    glue_id: gi as u32,
+                    glue_name: name.clone(),
+                    concentration: f64::from(k.blocker_concentrations[gi]),
+                    free_concentration: f64::from(frees[gi]),
+                });
+            }
+        }
+        serde_wasm_bindgen::to_value(&out).map_err(js_err)
+    }
+
+    /// Set the total blocker concentration for glue `glue_id` (KBlock
+    /// only). Triggers a system update so rates and the cached free
+    /// blocker concentrations stay consistent.
+    #[wasm_bindgen(js_name = setBlockerConcentration)]
+    pub fn set_blocker_concentration(&mut self, glue_id: u32, value: f64) -> Result<(), JsError> {
+        if !value.is_finite() || value < 0.0 {
+            return Err(JsError::new(
+                "setBlockerConcentration: value must be a non-negative finite number",
+            ));
+        }
+        let gi = glue_id as usize;
+        match &mut self.sys {
+            SystemEnum::KBlock(k) => {
+                if gi == 0 || gi >= k.blocker_concentrations.len() {
+                    return Err(JsError::new(
+                        "setBlockerConcentration: glue id out of range",
+                    ));
+                }
+                k.blocker_concentrations[gi] = rgrow::units::Molar::from(value);
+                k.update();
+            }
+            _ => {
+                return Err(JsError::new(
+                    "setBlockerConcentration: not supported for this model",
+                ));
+            }
+        }
+        self.sys
+            .update_state(&mut self.state, &rgrow::system::NeededUpdate::NonZero);
+        Ok(())
     }
 
     /// All glues defined by the loaded tileset (id 0 is omitted). Used to
@@ -757,7 +850,7 @@ impl Sim {
                 glue_interaction: true,
             },
             SystemEnum::KBlock(_) => EditableFeatures {
-                tile_concentration: false,
+                tile_concentration: true,
                 tile_edge_glue: false,
                 glue_interaction: true,
             },
@@ -789,6 +882,15 @@ impl Sim {
                 }
                 s.strand_concentration[idx] = rgrow::units::Molar::from(value);
                 s.update_system();
+            }
+            SystemEnum::KBlock(k) => {
+                if idx == 0 || idx >= k.tile_concentration.len() {
+                    return Err(JsError::new("setTileConcentration: tile id out of range"));
+                }
+                k.tile_concentration[idx] = rgrow::units::Molar::from(value);
+                // Recompute energies / free-blocker concentrations so
+                // attachment rates stay consistent with the new total.
+                k.update();
             }
             _ => {
                 return Err(JsError::new(

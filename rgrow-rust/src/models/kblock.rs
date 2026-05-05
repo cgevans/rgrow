@@ -226,6 +226,26 @@ impl KBlock {
         &self.glue_links
     }
 
+    /// Read-only view of the per-glue free blocker concentration cache,
+    /// computed from `blocker_concentrations` and the relevant tile-glue
+    /// usages. Refreshed by `fill_free_blocker_concentrations` (called
+    /// from `update`).
+    pub fn free_blocker_concentrations(&self) -> &Array1<Molar> {
+        &self.free_blocker_concentrations
+    }
+
+    /// Equilibrium "free" (fully-unblocked) concentration of tile index
+    /// `idx`: `tile_concentration[idx]` scaled by the probability that
+    /// every side of the tile is unblocked at the current free-blocker
+    /// concentrations. This is the concentration that drives unblocked
+    /// attachment events. Returns zero for out-of-range indices.
+    pub fn unblocked_tile_concentration(&self, idx: usize) -> Molar {
+        if idx >= self.tile_concentration.len() {
+            return Molar::zero();
+        }
+        self.tile_concentration(TileType(idx).unblocked())
+    }
+
     /// Set the binding ΔG for the (a, b) glue pair, mirrored to (b, a)
     /// to keep the matrix symmetric. Caller must invoke `update()` (or
     /// `fill_energy_pairs()`) afterwards to refresh the cached energies.

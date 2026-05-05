@@ -46,6 +46,10 @@ const gluePanel = $("glue-panel");
 const glueTable = $("glue-table");
 const glueTableBody = glueTable.querySelector("tbody");
 const glueCountEl = $("glue-count");
+const blockerPanel = $("blocker-panel");
+const blockerTable = $("blocker-table");
+const blockerTableBody = blockerTable.querySelector("tbody");
+const blockerCountEl = $("blocker-count");
 
 const TILESET_SPRITE_PX = 22;
 // Don't bother annotating tile names below this cell size — the text
@@ -120,6 +124,7 @@ async function loadTilesetText(text, kind) {
     setControlsEnabled(false);
     tilesetPanel.hidden = true;
     gluePanel.hidden = true;
+    blockerPanel.hidden = true;
     return;
   }
   lastTilesetText = text;
@@ -134,6 +139,7 @@ async function loadTilesetText(text, kind) {
   refreshGlueList();
   rebuildTileSetPanel();
   rebuildGlueInteractionsPanel();
+  rebuildBlockerPanel();
   rebuildParameterControls();
   pinnedCell = null;
   pinnedTilesetId = null;
@@ -492,10 +498,12 @@ function rebuildTileSetPanel() {
   tilesetCountEl.textContent = `${tiles.length} tile${tiles.length === 1 ? "" : "s"}`;
 
   const anyConc = tiles.some((t) => t.concentration != null);
+  const anyFreeConc = tiles.some((t) => t.free_concentration != null);
   const anyGlue = tiles.some((t) =>
     Array.isArray(t.edge_glues) && t.edge_glues.some((g) => g != null && g !== "")
   );
   tilesetTable.classList.toggle("no-conc", !anyConc);
+  tilesetTable.classList.toggle("no-free-conc", !anyFreeConc);
   tilesetTable.classList.toggle("no-glues", !anyGlue);
 
   for (const t of tiles) {
@@ -531,7 +539,15 @@ function rebuildTileSetPanel() {
     if (editFeatures.tile_concentration && t.concentration != null) {
       const input = makeNumberInput(t.concentration, 3, (v, revert) => {
         applyEdit(
-          () => sim.setTileConcentration(t.id, v),
+          () => {
+            sim.setTileConcentration(t.id, v);
+            // Editing a tile's total concentration shifts the
+            // equilibrium free-blocker concentrations, which in turn
+            // shifts every tile's "free" concentration. Refresh both
+            // dependent panels so what's displayed stays consistent
+            // with what the simulator is using.
+            refreshDerivedConcentrationDisplays();
+          },
           revert,
           `Failed to set tile #${t.id} concentration`,
         );
@@ -540,6 +556,12 @@ function rebuildTileSetPanel() {
     } else {
       tdConc.textContent = t.concentration != null ? fmt(t.concentration, 3) : "";
     }
+
+    const tdFreeConc = document.createElement("td");
+    tdFreeConc.className = "col-free-conc";
+    tdFreeConc.dataset.tileId = String(t.id);
+    tdFreeConc.textContent =
+      t.free_concentration != null ? fmt(t.free_concentration, 3) : "";
 
     const glueCells = (t.edge_glue_ids || [null, null, null, null]).map(
       (gid, sideIdx) => {
@@ -562,7 +584,7 @@ function rebuildTileSetPanel() {
       },
     );
 
-    tr.append(tdSprite, tdId, tdName, tdConc, ...glueCells);
+    tr.append(tdSprite, tdId, tdName, tdConc, tdFreeConc, ...glueCells);
 
     tr.addEventListener("mouseenter", () => {
       if (pinnedCell || pinnedTilesetId != null) return;
@@ -989,7 +1011,13 @@ function rebuildGlueInteractionsPanel() {
         4,
         (v, revert) => {
           applyEdit(
-            () => sim.setGlueInteraction(iax.a, iax.b, v, schema.has_ds ? iax.ds : undefined),
+            () => {
+              sim.setGlueInteraction(iax.a, iax.b, v, schema.has_ds ? iax.ds : undefined);
+              // For KBlock, changing a glue ΔG (especially the
+              // self-pair, which is the blocker–glue binding energy)
+              // shifts free-blocker and free-tile concentrations.
+              refreshDerivedConcentrationDisplays();
+            },
             revert,
             `Failed to set ${schema.label_dg} for pair (#${iax.a}, #${iax.b})`,
           );
@@ -1027,6 +1055,109 @@ function rebuildGlueInteractionsPanel() {
 
     tr.append(tdPair, tdDg, tdDs);
     glueTableBody.append(tr);
+  }
+}
+
+// ── Blocker panel (KBlock) ────────────────────────────────────────────
+//
+// One row per glue that has a blocker definition (any glue with a name).
+// Total blocker concentration is editable; free concentration is
+// computed by the model and read back after each edit. Hidden for
+// non-KBlock models, which return an empty list from `blockerList()`.
+
+function rebuildBlockerPanel() {
+  blockerTableBody.replaceChildren();
+  if (!sim) {
+    blockerPanel.hidden = true;
+    return;
+  }
+  let blockers;
+  try {
+    blockers = sim.blockerList();
+  } catch (e) {
+    blockerPanel.hidden = true;
+    console.warn("blockerList() failed:", e);
+    return;
+  }
+  if (!Array.isArray(blockers) || blockers.length === 0) {
+    blockerPanel.hidden = true;
+    return;
+  }
+  blockerPanel.hidden = false;
+  blockerCountEl.textContent = `${blockers.length} glue${blockers.length === 1 ? "" : "s"}`;
+
+  for (const b of blockers) {
+    const tr = document.createElement("tr");
+
+    const tdGlue = document.createElement("td");
+    tdGlue.className = "col-glue-name";
+    const glueName = b.glue_name && b.glue_name.length ? b.glue_name : `#${b.glue_id}`;
+    tdGlue.append(document.createTextNode(glueName));
+    const idHint = document.createElement("span");
+    idHint.className = "glue-id";
+    idHint.textContent = `(#${b.glue_id})`;
+    tdGlue.append(idHint);
+
+    const tdConc = document.createElement("td");
+    tdConc.className = "col-conc";
+    const input = makeNumberInput(b.concentration, 3, (v, revert) => {
+      applyEdit(
+        () => {
+          sim.setBlockerConcentration(b.glue_id, v);
+          // Changing one blocker shifts every tile's free concentration
+          // (and other glues' free-blocker concentrations through the
+          // shared tile-glue usage), so refresh both panels.
+          refreshDerivedConcentrationDisplays();
+        },
+        revert,
+        `Failed to set blocker concentration for glue #${b.glue_id}`,
+      );
+    });
+    tdConc.append(input);
+
+    const tdFree = document.createElement("td");
+    tdFree.className = "col-free-conc";
+    tdFree.dataset.glueId = String(b.glue_id);
+    tdFree.textContent = fmt(b.free_concentration, 3);
+
+    tr.append(tdGlue, tdConc, tdFree);
+    blockerTableBody.append(tr);
+  }
+}
+
+// Re-read free-concentration values from the wasm side and patch the
+// existing tileset / blocker rows in place. Avoids a full panel rebuild
+// (which would re-render every input and steal focus from the user
+// mid-edit). Called after any edit that perturbs the blocker
+// equilibrium — tile concentration, blocker concentration, or glue ΔG.
+function refreshDerivedConcentrationDisplays() {
+  if (!sim) return;
+  try {
+    const tiles = sim.tileSet();
+    if (Array.isArray(tiles)) {
+      for (const t of tiles) {
+        if (t.free_concentration == null) continue;
+        const cell = tilesetTableBody.querySelector(
+          `td.col-free-conc[data-tile-id="${t.id}"]`,
+        );
+        if (cell) cell.textContent = fmt(t.free_concentration, 3);
+      }
+    }
+  } catch (e) {
+    console.warn("tileSet refresh failed:", e);
+  }
+  try {
+    const blockers = sim.blockerList();
+    if (Array.isArray(blockers)) {
+      for (const b of blockers) {
+        const cell = blockerTableBody.querySelector(
+          `td.col-free-conc[data-glue-id="${b.glue_id}"]`,
+        );
+        if (cell) cell.textContent = fmt(b.free_concentration, 3);
+      }
+    }
+  } catch (e) {
+    console.warn("blockerList refresh failed:", e);
   }
 }
 
