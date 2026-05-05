@@ -113,6 +113,13 @@ def new_version(s: requests.Session, host: str, parent_id: str) -> dict[str, Any
     return r.json()
 
 
+def create_deposit(s: requests.Session, host: str) -> dict[str, Any]:
+    """Create a brand-new deposit (no concept chain). Used on sandbox."""
+    r = s.post(f"https://{host}/api/deposit/depositions", json={}, timeout=60)
+    r.raise_for_status()
+    return r.json()
+
+
 def replace_files(s: requests.Session, draft: dict[str, Any], archive: Path) -> None:
     """Drop files copied over from the prior version, then upload the new one."""
     for f in draft.get("files", []):
@@ -178,7 +185,12 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--tag", required=True, help="Git tag, e.g. v0.23.0")
     p.add_argument("--archive-url", required=True, help="URL to source tarball")
-    p.add_argument("--concept-id", required=True, help="Zenodo concept record ID")
+    p.add_argument(
+        "--concept-id",
+        default="",
+        help="Zenodo concept record ID; if omitted, creates a brand-new deposit "
+        "(useful on sandbox.zenodo.org which has its own database).",
+    )
     p.add_argument("--repo-url", required=True, help="Repository web URL")
     p.add_argument("--zenodo-json", default=".zenodo.json")
     p.add_argument("--changelog", default="CHANGELOG.md")
@@ -208,12 +220,15 @@ def main() -> int:
 
     s = session(token)
 
-    print(f"Resolving latest version of concept {args.concept_id} on {args.host}...")
-    parent_id = latest_version_id(args.host, args.concept_id)
-    print(f"  parent record: {parent_id}")
-
-    print("Creating new version draft...")
-    draft = new_version(s, args.host, parent_id)
+    if args.concept_id:
+        print(f"Resolving latest version of concept {args.concept_id} on {args.host}...")
+        parent_id = latest_version_id(args.host, args.concept_id)
+        print(f"  parent record: {parent_id}")
+        print("Creating new version draft...")
+        draft = new_version(s, args.host, parent_id)
+    else:
+        print(f"No concept id supplied; creating fresh deposit on {args.host}...")
+        draft = create_deposit(s, args.host)
     new_id = draft["id"]
     print(f"  draft id: {new_id}")
 

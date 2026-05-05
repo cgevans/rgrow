@@ -121,13 +121,18 @@ jobs:
             echo "::error::No Zenodo token configured for host $ZENODO_HOST" >&2
             exit 1
           fi
-          DRY_FLAG=""
+          EXTRA=""
           if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
-            DRY_FLAG="--dry-run"
+            EXTRA="$EXTRA --dry-run"
+          fi
+          # Sandbox has its own database, so concept 15270474 doesn't exist
+          # there. Omit --concept-id on sandbox to create a fresh draft each
+          # time (review/delete in the sandbox UI).
+          if [ "$ZENODO_HOST" = "zenodo.org" ]; then
+            EXTRA="$EXTRA --concept-id 15270474"
           fi
           python tools/zenodo_release.py \
             --tag "${{ steps.params.outputs.tag }}" \
             --archive-url "${{ steps.params.outputs.archive }}" \
-            --concept-id 15270474 \
             --repo-url "${{ steps.params.outputs.repo }}" \
-            $DRY_FLAG
+            $EXTRA
