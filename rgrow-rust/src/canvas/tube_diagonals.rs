@@ -111,25 +111,6 @@ impl Canvas for CanvasTubeDiagonals {
         self.0.ncols()
     }
 
-    fn draw_size(&self) -> (u32, u32) {
-        let s = (self.nrows() + self.ncols()) as u32;
-        (s, s)
-    }
-
-    fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
-        let s = self.nrows() + self.ncols();
-        let mut pi: usize;
-        let mut pj: usize;
-        let mut pos: usize;
-
-        for ((i, j), t) in self.0.indexed_iter() {
-            pj = j;
-            pi = i + j;
-            pos = 4 * (pi * s + pj);
-            frame[pos..pos + 4].copy_from_slice(&colors[*t as usize])
-        }
-    }
-
     fn center(&self) -> PointSafe2 {
         PointSafe2((self.nrows() / 2, self.ncols() / 2))
     }
@@ -140,5 +121,111 @@ impl Canvas for CanvasTubeDiagonals {
 
     fn ncols_usable(&self) -> usize {
         self.0.ncols() // FIXME: is this correct?
+    }
+
+    // ── Display geometry ──────────────────────────────────────────────────
+    //
+    // Storage `(i, j)` represents the tile in storage row `i`, column `j`,
+    // but on the actual tube the south direction also moves the tile one
+    // column right (helical winding). Mapping `(i, j) → (j, i+j)` in
+    // physical coordinates makes NSEW point straight up/right/down/left in
+    // screen space.
+    //
+    // Storage range: `i ∈ [0, nrows-1]`, `j ∈ [0, ncols-1]`. So the physical
+    // x range is `[0, ncols-1]` and the physical y range is `[0, nrows+ncols-2]`.
+
+    fn frame_size_subcells(&self) -> (u32, u32) {
+        let w = self.ncols() as u32;
+        let h = (self.nrows() + self.ncols()).saturating_sub(1) as u32;
+        (w, h)
+    }
+
+    fn tile_origin_px(&self, p: crate::canvas::PointSafe2, scale: u32) -> (u32, u32) {
+        let (i, j) = p.0;
+        let s = self.subcell_size_px(scale);
+        ((j as u32) * s, ((i + j) as u32) * s)
+    }
+
+    fn pixel_to_storage(&self, px: u32, py: u32, scale: u32) -> Option<crate::canvas::PointSafe2> {
+        let s = self.subcell_size_px(scale);
+        if s == 0 {
+            return None;
+        }
+        let phys_x = (px / s) as usize;
+        let phys_y = (py / s) as usize;
+        // Inverse: phys_x = j, phys_y = i + j → j = phys_x, i = phys_y - j
+        let j = phys_x;
+        if phys_y < j {
+            return None; // upper-left empty triangle
+        }
+        let i = phys_y - j;
+        if i >= self.nrows() || j >= self.ncols() {
+            return None; // lower-right empty triangle / out-of-bounds
+        }
+        Some(crate::canvas::PointSafe2((i, j)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::canvas::{Canvas, PointSafe2, TileShape};
+
+    #[test]
+    fn tile_shape_is_square() {
+        let c = CanvasTubeDiagonals::new_sized((4, 12)).unwrap();
+        assert_eq!(c.tile_shape(), TileShape::Square);
+    }
+
+    #[test]
+    fn frame_size_is_sheared_parallelogram() {
+        // 4×12 storage, sheared: physical x ∈ [0, 11], y ∈ [0, 4+12-2] = [0, 14].
+        let c = CanvasTubeDiagonals::new_sized((4, 12)).unwrap();
+        assert_eq!(c.frame_size_subcells(), (12, 15));
+    }
+
+    #[test]
+    fn tile_origin_shears_storage() {
+        let c = CanvasTubeDiagonals::new_sized((6, 16)).unwrap();
+        let scale = 8;
+        // Storage (0, 0) → physical (0, 0).
+        assert_eq!(c.tile_origin_px(PointSafe2((0, 0)), scale), (0, 0));
+        // Storage (0, 5) → physical (5, 5) → pixels (40, 40).
+        assert_eq!(c.tile_origin_px(PointSafe2((0, 5)), scale), (40, 40));
+        // Storage (3, 2) → physical (2, 5) → pixels (16, 40).
+        assert_eq!(c.tile_origin_px(PointSafe2((3, 2)), scale), (16, 40));
+    }
+
+    #[test]
+    fn pixel_to_storage_round_trips() {
+        let c = CanvasTubeDiagonals::new_sized((4, 12)).unwrap();
+        let scale = 10;
+        for i in 0..4 {
+            for j in 0..12 {
+                let p = PointSafe2((i, j));
+                let (px, py) = c.tile_origin_px(p, scale);
+                // Probe the center of each cell so rounding doesn't fall on
+                // a boundary.
+                let center_px = px + scale / 2;
+                let center_py = py + scale / 2;
+                let recovered = c.pixel_to_storage(center_px, center_py, scale);
+                assert_eq!(recovered, Some(p), "round-trip failed for ({i}, {j})");
+            }
+        }
+    }
+
+    #[test]
+    fn pixel_to_storage_returns_none_for_empty_triangles() {
+        let c = CanvasTubeDiagonals::new_sized((4, 12)).unwrap();
+        let scale = 10;
+        // Pixel near (0, 30): physical_y=3, physical_x=0 → j=0, i=3 (in
+        // bounds, fine). But pixel (0, 100): physical_y=10, physical_x=0
+        // → j=0, i=10 (i >= nrows=4 → None).
+        let result = c.pixel_to_storage(0, 100, scale);
+        assert_eq!(result, None);
+        // Upper-left empty triangle: pixel (50, 0) → physical_x=5,
+        // physical_y=0, i = 0 - 5 < 0 → None.
+        let result = c.pixel_to_storage(50, 0, scale);
+        assert_eq!(result, None);
     }
 }

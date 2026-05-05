@@ -194,9 +194,14 @@ function hideImportfilePrompt() {
 let currentScale = 8;
 
 function computeAutoScale(s) {
-  const cs = s.canvasSize();
-  const cols = Math.max(1, cs.width);
-  const rows = Math.max(1, cs.height);
+  // canvasSize is in pre-scale subcells. For diamond canvases, multiplying
+  // by `scale` gives `frame_pixels = subcells * scale * (subcells_per_tile/2)`
+  // — i.e., subcells absorb half the scale. Probe `frameSize(2)` and divide
+  // by 2 to recover the per-scale-unit pixel ratio without having to know
+  // the canvas's subcell convention.
+  const probe = s.frameSize(2);
+  const cols = Math.max(1, Math.round(probe.width / 2));
+  const rows = Math.max(1, Math.round(probe.height / 2));
   // Container's content-box width (excluding canvas's 1px border).
   const parent = canvas.parentElement;
   const availW = Math.max(64, (parent?.clientWidth ?? 800) - 2);
@@ -342,20 +347,27 @@ function getTileLabel(id) {
 // dark and light tile colors without needing a per-tile contrast check.
 function drawTileLabels(scale) {
   if (!sim || scale < TILE_LABEL_MIN_SCALE) return;
-  let grid;
-  let shape;
+  // `labelAnchors(scale)` returns a flat Float32Array of triples
+  // (cx_px, cy_px, tile_id) covering every non-empty cell at its
+  // canvas-aware pixel position. Tube canvases shear/stagger inside this
+  // call so JS doesn't need to know about storage→physical layout.
+  let anchors;
   try {
-    grid = sim.tileGrid();
-    shape = sim.tileGridShape();
+    anchors = sim.labelAnchors(scale);
   } catch {
     return;
   }
-  const cols = shape.width;
-  const rows = shape.height;
-  if (!cols || !rows || grid.length < cols * rows) return;
+  if (!anchors || anchors.length === 0) return;
 
-  const fontSize = Math.max(8, Math.min(16, Math.round(scale * 0.55)));
-  const maxWidth = scale * 0.92;
+  // Tile bounding-box pixel size — diamond canvases use 2× scale per tile
+  // because each tile occupies a 2×2 subcell block.
+  const subcellsPerTile = (() => {
+    try { return sim.subcellsPerTile() || 1; } catch { return 1; }
+  })();
+  const tilePx = scale * subcellsPerTile;
+
+  const fontSize = Math.max(8, Math.min(16, Math.round(tilePx * 0.55)));
+  const maxWidth = tilePx * 0.92;
   const widthCache = new Map();
 
   ctx.save();
@@ -367,24 +379,20 @@ function drawTileLabels(scale) {
   ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
   ctx.fillStyle = "rgba(0, 0, 0, 1)";
 
-  for (let y = 0; y < rows; y++) {
-    const yOff = y * cols;
-    const cy = (y + 0.5) * scale;
-    for (let x = 0; x < cols; x++) {
-      const id = grid[yOff + x];
-      if (id === 0) continue;
-      const label = getTileLabel(id);
-      if (!label) continue;
-      let w = widthCache.get(label);
-      if (w === undefined) {
-        w = ctx.measureText(label).width;
-        widthCache.set(label, w);
-      }
-      if (w > maxWidth) continue;
-      const cx = (x + 0.5) * scale;
-      ctx.strokeText(label, cx, cy);
-      ctx.fillText(label, cx, cy);
+  for (let i = 0; i < anchors.length; i += 3) {
+    const cx = anchors[i];
+    const cy = anchors[i + 1];
+    const id = anchors[i + 2] | 0;
+    const label = getTileLabel(id);
+    if (!label) continue;
+    let w = widthCache.get(label);
+    if (w === undefined) {
+      w = ctx.measureText(label).width;
+      widthCache.set(label, w);
     }
+    if (w > maxWidth) continue;
+    ctx.strokeText(label, cx, cy);
+    ctx.fillText(label, cx, cy);
   }
   ctx.restore();
 }
@@ -1140,24 +1148,22 @@ pasteLoadBtn.addEventListener("click", () => {
 // cell toggles pinning off, clicking a different cell re-pins there.
 let pinnedCell = null;
 
-function canvasToCell(event) {
+// Returns the canvas-pixel coordinates under the pointer, or null if the
+// pointer is outside the canvas. Use with `sim.cellInfoAtPixel(...)` to
+// get the storage cell — for tube canvases the storage coords are not a
+// simple `floor(px/scale)` of the pixel position.
+function canvasToPixel(event) {
   if (!sim) return null;
   const rect = canvas.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return null;
-  // Translate CSS pixels → canvas pixels (canvas is `max-width: 100%`,
-  // so the on-screen size differs from canvas.width / canvas.height).
   const cssX = event.clientX - rect.left;
   const cssY = event.clientY - rect.top;
   const px = (cssX / rect.width) * canvas.width;
   const py = (cssY / rect.height) * canvas.height;
-  const scale = Math.max(1, currentScale);
-  const cellX = Math.floor(px / scale);
-  const cellY = Math.floor(py / scale);
-  const size = sim.canvasSize();
-  if (cellX < 0 || cellY < 0 || cellX >= size.width || cellY >= size.height) {
+  if (px < 0 || py < 0 || px >= canvas.width || py >= canvas.height) {
     return null;
   }
-  return { x: cellX, y: cellY };
+  return { px: Math.floor(px), py: Math.floor(py) };
 }
 
 function rgbaCss(c) {
@@ -1167,6 +1173,9 @@ function rgbaCss(c) {
   return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${(c[3] / 255).toFixed(3)})`;
 }
 
+// `cell` is either { px, py } (pixel coords from a hover/click event) or
+// { x, y } (storage coords for a pinned cell that we want to re-display
+// each frame as its tile may flip).
 function renderTileInfo(cell, opts = {}) {
   const pinned = !!opts.pinned;
   if (!sim || !cell) {
@@ -1179,7 +1188,11 @@ function renderTileInfo(cell, opts = {}) {
   }
   let info;
   try {
-    info = sim.cellInfo(cell.x, cell.y);
+    if (cell.px !== undefined) {
+      info = sim.cellInfoAtPixel(cell.px, cell.py, currentScale);
+    } else {
+      info = sim.cellInfo(cell.x, cell.y);
+    }
   } catch (e) {
     tileInfoEl.classList.add("empty");
     tileInfoEl.textContent = `cellInfo error: ${e.message || e}`;
@@ -1218,7 +1231,8 @@ function renderTileInfo(cell, opts = {}) {
 
 canvas.addEventListener("mousemove", (e) => {
   if (pinnedCell) return;
-  renderTileInfo(canvasToCell(e), { pinned: false });
+  const px = canvasToPixel(e);
+  renderTileInfo(px, { pinned: false });
 });
 
 canvas.addEventListener("mouseleave", () => {
@@ -1235,8 +1249,16 @@ canvas.addEventListener("mouseleave", () => {
 });
 
 canvas.addEventListener("click", (e) => {
-  const cell = canvasToCell(e);
-  if (!cell) return;
+  const px = canvasToPixel(e);
+  if (!px) return;
+  let info;
+  try {
+    info = sim.cellInfoAtPixel(px.px, px.py, currentScale);
+  } catch {
+    return;
+  }
+  if (!info) return; // empty triangle — ignore click
+  const cell = { x: info.x, y: info.y };
   if (pinnedCell && pinnedCell.x === cell.x && pinnedCell.y === cell.y) {
     pinnedCell = null;
     renderTileInfo(cell, { pinned: false });

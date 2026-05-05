@@ -1,9 +1,8 @@
 use super::base::*;
 use crate::canvas::{
     Canvas, CanvasCreate, CanvasPeriodic, CanvasSquare, CanvasSquareCompact, CanvasTube,
-    CanvasTubeDiagonals,
+    CanvasTubeDiagonals, TileShape,
 };
-use crate::painter::SpriteSquare;
 use crate::tileset::{CanvasType, TrackingConfig};
 use crate::units::{PerSecond, Second};
 use crate::{
@@ -602,8 +601,32 @@ impl<C: Canvas, T: StateTracker> Canvas for QuadTreeState<C, T> {
         self.canvas.draw_size()
     }
 
-    fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
-        self.canvas.draw(frame, colors)
+    fn tile_shape(&self) -> TileShape {
+        self.canvas.tile_shape()
+    }
+
+    fn frame_size_subcells(&self) -> (u32, u32) {
+        self.canvas.frame_size_subcells()
+    }
+
+    fn subcell_size_px(&self, scale: u32) -> u32 {
+        self.canvas.subcell_size_px(scale)
+    }
+
+    fn frame_size_px(&self, scale: u32) -> (u32, u32) {
+        self.canvas.frame_size_px(scale)
+    }
+
+    fn tile_size_px(&self, scale: u32) -> u32 {
+        self.canvas.tile_size_px(scale)
+    }
+
+    fn tile_origin_px(&self, p: PointSafe2, scale: u32) -> (u32, u32) {
+        self.canvas.tile_origin_px(p, scale)
+    }
+
+    fn pixel_to_storage(&self, px: u32, py: u32, scale: u32) -> Option<PointSafe2> {
+        self.canvas.pixel_to_storage(px, py, scale)
     }
 }
 

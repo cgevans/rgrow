@@ -1,6 +1,7 @@
 use ndarray::ArrayView2;
 
 use crate::base::Tile;
+use crate::canvas::{Canvas, PointSafe2, TileShape};
 use crate::colors::Color;
 
 /// Draw a filled rectangle into an RGBA frame buffer.
@@ -104,6 +105,136 @@ pub fn blit_sprite(
     for (e, pixel_row) in sprite.pixels.chunks(tile_width_bytes).enumerate() {
         let from = start + e * frame_stride;
         frame[from..from + tile_width_bytes].copy_from_slice(pixel_row);
+    }
+}
+
+/// Blit a sprite at pixel offset `(dst_x, dst_y)`, only writing pixels with
+/// non-zero alpha. Used for diamond sprites whose bounding-box corners are
+/// transparent so adjacent diamonds interlock without erasing each other.
+pub fn blit_sprite_at_px_alpha(
+    frame: &mut [u8],
+    sprite: &SpriteSquare,
+    dst_x: u32,
+    dst_y: u32,
+    frame_width_px: u32,
+    frame_height_px: u32,
+) {
+    let tile_size = sprite.size;
+    let frame_w = frame_width_px as usize;
+    let frame_h = frame_height_px as usize;
+    let dst_y = dst_y as usize;
+    let dst_x = dst_x as usize;
+    for sy in 0..tile_size {
+        let dy = dst_y + sy;
+        if dy >= frame_h {
+            break;
+        }
+        for sx in 0..tile_size {
+            let dx = dst_x + sx;
+            if dx >= frame_w {
+                break;
+            }
+            let src_idx = 4 * (sy * tile_size + sx);
+            let alpha = sprite.pixels[src_idx + 3];
+            if alpha == 0 {
+                continue;
+            }
+            let dst_idx = 4 * (dy * frame_w + dx);
+            frame[dst_idx..dst_idx + 4].copy_from_slice(&sprite.pixels[src_idx..src_idx + 4]);
+        }
+    }
+}
+
+/// Blit a sprite at arbitrary pixel offset (no alpha keying). Like `blit_sprite`
+/// but takes pixel coordinates directly instead of grid coordinates.
+pub fn blit_sprite_at_px(
+    frame: &mut [u8],
+    sprite: &SpriteSquare,
+    dst_x: u32,
+    dst_y: u32,
+    frame_width_px: u32,
+    frame_height_px: u32,
+) {
+    let tile_size = sprite.size;
+    let frame_w = frame_width_px as usize;
+    let frame_h = frame_height_px as usize;
+    let dst_y = dst_y as usize;
+    let dst_x = dst_x as usize;
+    let row_bytes = tile_size * 4;
+    for sy in 0..tile_size {
+        let dy = dst_y + sy;
+        if dy >= frame_h {
+            break;
+        }
+        if dst_x >= frame_w {
+            break;
+        }
+        let copy_w = (frame_w - dst_x).min(tile_size);
+        let src_start = 4 * sy * tile_size;
+        let dst_start = 4 * (dy * frame_w + dst_x);
+        let copy_bytes = copy_w * 4;
+        debug_assert!(copy_bytes <= row_bytes);
+        frame[dst_start..dst_start + copy_bytes]
+            .copy_from_slice(&sprite.pixels[src_start..src_start + copy_bytes]);
+    }
+}
+
+/// Convert a square NSEW-quadrant sprite into a diamond inscribed in the same
+/// bounding box. Storage-NSEW colors map to the diamond's NW/NE/SE/SW edges:
+/// the same NSEW edge information, just rotated 45° clockwise to match the
+/// zigzag-tube neighbor lattice. Pixels outside the inscribed diamond are
+/// transparent (alpha 0) so adjacent diamonds tile without overlap.
+pub fn square_to_diamond(square: &SpriteSquare) -> SpriteSquare {
+    let n = square.size;
+    if n == 0 {
+        return SpriteSquare {
+            size: 0,
+            pixels: Vec::new().into_boxed_slice(),
+        };
+    }
+    let mut out = vec![0u8; n * n * 4];
+    let half = (n / 2) as isize;
+    let n_isize = n as isize;
+    // Edge representatives in the source square sprite.
+    let n_idx = (n / 2, 0);
+    let e_idx = (n - 1, n / 2);
+    let s_idx = (n / 2, n - 1);
+    let w_idx = (0, n / 2);
+    let lookup = |sx: usize, sy: usize| -> [u8; 4] {
+        let i = 4 * (sy * n + sx);
+        [
+            square.pixels[i],
+            square.pixels[i + 1],
+            square.pixels[i + 2],
+            square.pixels[i + 3],
+        ]
+    };
+    let nw_color = lookup(n_idx.0, n_idx.1);
+    let ne_color = lookup(e_idx.0, e_idx.1);
+    let se_color = lookup(s_idx.0, s_idx.1);
+    let sw_color = lookup(w_idx.0, w_idx.1);
+    for py in 0..n_isize {
+        for px in 0..n_isize {
+            let dx = px - half;
+            let dy = py - half;
+            // Inside the inscribed diamond? |dx| + |dy| < half (strict so
+            // adjacent diamonds don't both claim the boundary pixel).
+            if dx.abs() + dy.abs() >= half {
+                continue;
+            }
+            let color = match (dx >= 0, dy >= 0) {
+                (false, false) => nw_color,
+                (true, false) => ne_color,
+                (true, true) => se_color,
+                (false, true) => sw_color,
+            };
+            let dst_idx = 4 * ((py as usize) * n + (px as usize));
+            out[dst_idx..dst_idx + 4].copy_from_slice(&color);
+        }
+    }
+    SpriteSquare {
+        size: n,
+        pixels: out.into_boxed_slice(),
     }
 }
 
@@ -317,10 +448,415 @@ pub struct RenderStats {
     pub energy: crate::base::Energy,
 }
 
+/// Render `state`'s tiles into `frame`, dispatching through the canvas's
+/// geometry so that tube canvases place tiles at the correct physical
+/// (display-screen) coordinates rather than at raw storage positions.
+///
+/// This is the shared core of `render_frame` and `render_frame_dyn` — the
+/// only difference between those two is which trait family (`System` vs
+/// `SystemEnum::DynSystem`) builds the sprites and reads mismatches.
+#[allow(clippy::too_many_arguments)]
+fn render_into_with_canvas(
+    canvas: &dyn Canvas,
+    tiles: ArrayView2<Tile>,
+    sprites: &[SpriteSquare],
+    blocker_masks: &[u8],
+    mismatch_locs: Option<&ArrayView2<usize>>,
+    scale: usize,
+    pixel_frame: &mut [u8],
+    frame_width: u32,
+    frame_height: u32,
+) {
+    let scale_u = scale as u32;
+    let tile_shape = canvas.tile_shape();
+
+    // Tile placement: ask the canvas where each storage cell lives in pixel
+    // space. For square canvases this is identity (col*scale, row*scale);
+    // tube canvases shear or stagger.
+    for ((y, x), &tileid) in tiles.indexed_iter() {
+        let Some(sprite) = sprites.get(tileid as usize) else {
+            continue;
+        };
+        let p = PointSafe2((y, x));
+        let (px, py) = canvas.tile_origin_px(p, scale_u);
+        match tile_shape {
+            TileShape::Square => {
+                // Skip tile 0 (empty) when its sprite is fully zero — keeps
+                // the frame's zero-init showing through, no behavior change
+                // for square canvases vs the previous painter.
+                blit_sprite_at_px(pixel_frame, sprite, px, py, frame_width, frame_height);
+            }
+            TileShape::Diamond => {
+                if tileid == 0 {
+                    continue;
+                }
+                blit_sprite_at_px_alpha(pixel_frame, sprite, px, py, frame_width, frame_height);
+            }
+        }
+    }
+
+    // Outlines, blockers, and mismatches: tube-aware versions live below
+    // and dispatch through `tile_origin_px` like the tile-blit loop above.
+    if scale >= 12 {
+        render_outlines_via_canvas(pixel_frame, canvas, tiles, scale_u, frame_width);
+    }
+    render_blockers_via_canvas(
+        pixel_frame,
+        canvas,
+        tiles,
+        blocker_masks,
+        scale_u,
+        frame_width,
+        frame_height,
+    );
+    if let Some(locs) = mismatch_locs {
+        render_mismatches_via_canvas(pixel_frame, canvas, locs, scale_u, frame_width);
+    }
+}
+
+/// Outline non-empty tiles by drawing a 1px frame around each tile's
+/// bounding box. For square canvases this is identical to the original
+/// `render_outlines`; for diamond canvases it outlines the bounding box
+/// (which is the right thing here — the inscribed diamond's edges are
+/// already implicit in the alpha-keyed sprite).
+fn render_outlines_via_canvas(
+    frame: &mut [u8],
+    canvas: &dyn Canvas,
+    tiles: ArrayView2<Tile>,
+    scale: u32,
+    frame_width_px: u32,
+) {
+    let outline_color = [0u8, 0, 0, 255];
+    let tile_size = canvas.tile_size_px(scale) as usize;
+    let frame_w = frame_width_px as usize;
+    let shape = canvas.tile_shape();
+    for ((y, x), &tileid) in tiles.indexed_iter() {
+        if tileid == 0 {
+            continue;
+        }
+        let p = PointSafe2((y, x));
+        let (ox, oy) = canvas.tile_origin_px(p, scale);
+        let tx = ox as usize;
+        let ty = oy as usize;
+        match shape {
+            TileShape::Square => {
+                draw_rect(
+                    frame,
+                    tx,
+                    tx + tile_size,
+                    ty,
+                    ty + 1,
+                    outline_color,
+                    frame_w,
+                );
+                draw_rect(
+                    frame,
+                    tx,
+                    tx + tile_size,
+                    ty + tile_size - 1,
+                    ty + tile_size,
+                    outline_color,
+                    frame_w,
+                );
+                draw_rect(
+                    frame,
+                    tx,
+                    tx + 1,
+                    ty,
+                    ty + tile_size,
+                    outline_color,
+                    frame_w,
+                );
+                draw_rect(
+                    frame,
+                    tx + tile_size - 1,
+                    tx + tile_size,
+                    ty,
+                    ty + tile_size,
+                    outline_color,
+                    frame_w,
+                );
+            }
+            TileShape::Diamond => {
+                // Outline along the inscribed diamond's four edges.
+                let half = tile_size / 2;
+                let cx = tx + half;
+                let cy = ty + half;
+                for k in 0..half {
+                    // NW edge
+                    draw_pixel(frame, cx - half + k, cy - k, outline_color, frame_w);
+                    // NE edge
+                    draw_pixel(frame, cx + k, cy - half + k, outline_color, frame_w);
+                    // SE edge
+                    draw_pixel(frame, cx + half - k, cy + k, outline_color, frame_w);
+                    // SW edge
+                    draw_pixel(frame, cx - k, cy + half - k, outline_color, frame_w);
+                }
+            }
+        }
+    }
+}
+
+#[inline]
+fn draw_pixel(frame: &mut [u8], x: usize, y: usize, color: [u8; 4], frame_width_px: usize) {
+    let idx = (y * frame_width_px + x) * 4;
+    if idx + 4 <= frame.len() {
+        frame[idx..idx + 4].copy_from_slice(&color);
+    }
+}
+
+fn render_blockers_via_canvas(
+    frame: &mut [u8],
+    canvas: &dyn Canvas,
+    tiles: ArrayView2<Tile>,
+    blocker_masks: &[u8],
+    scale: u32,
+    frame_width_px: u32,
+    frame_height_px: u32,
+) {
+    let tile_size = canvas.tile_size_px(scale) as usize;
+    let depth = (tile_size / 3).max(2);
+    let half_len = (tile_size / 3).max(2);
+    let blocker_color = [140, 140, 140, 255];
+    let frame_w = frame_width_px as usize;
+    let frame_h = frame_height_px as usize;
+    // Diamond blockers don't have a clean bar-shape representation; draw a
+    // small dot at the relevant edge midpoint instead.
+    let shape = canvas.tile_shape();
+    for ((y, x), &tileid) in tiles.indexed_iter() {
+        let mask = blocker_masks.get(tileid as usize).copied().unwrap_or(0);
+        if mask == 0 {
+            continue;
+        }
+        let p = PointSafe2((y, x));
+        let (ox, oy) = canvas.tile_origin_px(p, scale);
+        let tile_x = ox as usize;
+        let tile_y = oy as usize;
+        let mid_x = tile_x + tile_size / 2;
+        let mid_y = tile_y + tile_size / 2;
+        match shape {
+            TileShape::Square => {
+                if mask & 0b0001 != 0 {
+                    draw_rect(
+                        frame,
+                        mid_x.saturating_sub(half_len),
+                        mid_x + half_len,
+                        tile_y.saturating_sub(depth),
+                        tile_y,
+                        blocker_color,
+                        frame_w,
+                    );
+                }
+                if mask & 0b0010 != 0 {
+                    let right = tile_x + tile_size;
+                    draw_rect(
+                        frame,
+                        right,
+                        (right + depth).min(frame_w),
+                        mid_y.saturating_sub(half_len),
+                        mid_y + half_len,
+                        blocker_color,
+                        frame_w,
+                    );
+                }
+                if mask & 0b0100 != 0 {
+                    let bottom = tile_y + tile_size;
+                    draw_rect(
+                        frame,
+                        mid_x.saturating_sub(half_len),
+                        mid_x + half_len,
+                        bottom,
+                        (bottom + depth).min(frame_h),
+                        blocker_color,
+                        frame_w,
+                    );
+                }
+                if mask & 0b1000 != 0 {
+                    draw_rect(
+                        frame,
+                        tile_x.saturating_sub(depth),
+                        tile_x,
+                        mid_y.saturating_sub(half_len),
+                        mid_y + half_len,
+                        blocker_color,
+                        frame_w,
+                    );
+                }
+            }
+            TileShape::Diamond => {
+                let dot = (tile_size / 8).max(2);
+                // Small filled square on each side of the diamond's
+                // outer corner, indicating a blocker on that storage edge.
+                if mask & 0b0001 != 0 {
+                    // N edge → diamond NW corner area
+                    let cx = tile_x + tile_size / 4;
+                    let cy = tile_y + tile_size / 4;
+                    draw_rect(
+                        frame,
+                        cx.saturating_sub(dot),
+                        (cx + dot).min(frame_w),
+                        cy.saturating_sub(dot),
+                        (cy + dot).min(frame_h),
+                        blocker_color,
+                        frame_w,
+                    );
+                }
+                if mask & 0b0010 != 0 {
+                    let cx = tile_x + 3 * tile_size / 4;
+                    let cy = tile_y + tile_size / 4;
+                    draw_rect(
+                        frame,
+                        cx.saturating_sub(dot),
+                        (cx + dot).min(frame_w),
+                        cy.saturating_sub(dot),
+                        (cy + dot).min(frame_h),
+                        blocker_color,
+                        frame_w,
+                    );
+                }
+                if mask & 0b0100 != 0 {
+                    let cx = tile_x + 3 * tile_size / 4;
+                    let cy = tile_y + 3 * tile_size / 4;
+                    draw_rect(
+                        frame,
+                        cx.saturating_sub(dot),
+                        (cx + dot).min(frame_w),
+                        cy.saturating_sub(dot),
+                        (cy + dot).min(frame_h),
+                        blocker_color,
+                        frame_w,
+                    );
+                }
+                if mask & 0b1000 != 0 {
+                    let cx = tile_x + tile_size / 4;
+                    let cy = tile_y + 3 * tile_size / 4;
+                    draw_rect(
+                        frame,
+                        cx.saturating_sub(dot),
+                        (cx + dot).min(frame_w),
+                        cy.saturating_sub(dot),
+                        (cy + dot).min(frame_h),
+                        blocker_color,
+                        frame_w,
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn render_mismatches_via_canvas(
+    frame: &mut [u8],
+    canvas: &dyn Canvas,
+    mismatch_locs: &ArrayView2<usize>,
+    scale: u32,
+    frame_width_px: u32,
+) {
+    let tile_size = canvas.tile_size_px(scale) as usize;
+    let thick = (tile_size / 4).max(1);
+    let long = (tile_size / 3).max(1);
+    let color = [255, 0, 0, 255];
+    let frame_w = frame_width_px as usize;
+    let shape = canvas.tile_shape();
+    for ((y, x), &mm) in mismatch_locs.indexed_iter() {
+        if mm == 0 {
+            continue;
+        }
+        let p = PointSafe2((y, x));
+        let (ox, oy) = canvas.tile_origin_px(p, scale);
+        let tx = ox as usize;
+        let ty = oy as usize;
+        match shape {
+            TileShape::Square => {
+                if mm & 0b0010 != 0 {
+                    let edge_y = ty + tile_size;
+                    let mid_x = tx + tile_size / 2;
+                    draw_rect(
+                        frame,
+                        mid_x.saturating_sub(long),
+                        mid_x + long,
+                        edge_y.saturating_sub(thick),
+                        edge_y + thick,
+                        color,
+                        frame_w,
+                    );
+                }
+                if mm & 0b0001 != 0 {
+                    let edge_x = tx;
+                    let mid_y = ty + tile_size / 2;
+                    draw_rect(
+                        frame,
+                        edge_x.saturating_sub(thick),
+                        edge_x + thick,
+                        mid_y.saturating_sub(long),
+                        mid_y + long,
+                        color,
+                        frame_w,
+                    );
+                }
+            }
+            TileShape::Diamond => {
+                // S mismatch → diamond's SE edge midpoint
+                if mm & 0b0010 != 0 {
+                    let cx = tx + 3 * tile_size / 4;
+                    let cy = ty + 3 * tile_size / 4;
+                    draw_rect(
+                        frame,
+                        cx.saturating_sub(thick),
+                        cx + thick,
+                        cy.saturating_sub(thick),
+                        cy + thick,
+                        color,
+                        frame_w,
+                    );
+                }
+                // W mismatch → diamond's SW edge midpoint
+                if mm & 0b0001 != 0 {
+                    let cx = tx + tile_size / 4;
+                    let cy = ty + 3 * tile_size / 4;
+                    draw_rect(
+                        frame,
+                        cx.saturating_sub(thick),
+                        cx + thick,
+                        cy.saturating_sub(thick),
+                        cy + thick,
+                        color,
+                        frame_w,
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Build per-tile-id sprites in the right shape for `canvas`.
+fn build_sprites_for_canvas<F>(
+    canvas: &dyn Canvas,
+    max_tile: usize,
+    scale: usize,
+    mut tile_pixels: F,
+) -> Vec<SpriteSquare>
+where
+    F: FnMut(Tile, usize) -> SpriteSquare,
+{
+    let tile_size = canvas.tile_size_px(scale as u32) as usize;
+    match canvas.tile_shape() {
+        TileShape::Square => (0..=max_tile)
+            .map(|t| tile_pixels(t as Tile, tile_size))
+            .collect(),
+        TileShape::Diamond => (0..=max_tile)
+            .map(|t| {
+                let square = tile_pixels(t as Tile, tile_size);
+                square_to_diamond(&square)
+            })
+            .collect(),
+    }
+}
+
 /// Render the current state of `state` (under `sys`) into `frame` as RGBA8.
 ///
 /// `frame` must be at least `frame_width * frame_height * 4` bytes, where
-/// `(frame_width, frame_height) = state.draw_size() * scale`. The frame is
+/// `(frame_width, frame_height) = state.frame_size_px(scale)`. The frame is
 /// drawn in-place; existing contents may be overwritten in any order.
 ///
 /// This is the canonical rendering entry point. Both the desktop GUI
@@ -337,40 +873,19 @@ where
     S: crate::system::System,
     St: crate::state::State,
 {
-    let (canvas_width, canvas_height) = state.draw_size();
-    let frame_width = (canvas_width * scale as u32) as usize;
-    let frame_height = (canvas_height * scale as u32) as usize;
+    let scale_u = scale as u32;
+    let (frame_w, frame_h) = state.frame_size_px(scale_u);
+    let frame_width = frame_w as usize;
+    let frame_height = frame_h as usize;
     let needed = frame_width * frame_height * 4;
-
     let pixel_frame = &mut frame[..needed];
 
     let tiles = state.raw_array();
     let max_tile = tiles.iter().copied().max().unwrap_or(0) as usize;
-    let sprites: Vec<_> = (0..=max_tile)
-        .map(|t| sys.tile_pixels(t as Tile, scale))
-        .collect();
+    let sprites = build_sprites_for_canvas(state, max_tile, scale, |t, sz| sys.tile_pixels(t, sz));
     let blocker_masks: Vec<u8> = (0..=max_tile)
         .map(|t| sys.tile_blocker_mask(t as Tile))
         .collect();
-
-    for ((y, x), &tileid) in tiles.indexed_iter() {
-        if let Some(sprite) = sprites.get(tileid as usize) {
-            blit_sprite(pixel_frame, sprite, x, y, frame_width);
-        }
-    }
-
-    if scale >= 12 {
-        render_outlines(pixel_frame, tiles, scale, frame_width);
-    }
-
-    render_blockers(
-        pixel_frame,
-        tiles,
-        &blocker_masks,
-        scale,
-        frame_width,
-        frame_height,
-    );
 
     let (mismatch_count, mismatch_locs) = if show_mismatches {
         let locs = sys.calc_mismatch_locations(state);
@@ -383,13 +898,21 @@ where
         (sys.calc_mismatches(state) as u32, None)
     };
 
-    if let Some(ref locs) = mismatch_locs {
-        render_mismatches(pixel_frame, &locs.view(), scale, frame_width);
-    }
+    render_into_with_canvas(
+        state,
+        tiles,
+        &sprites,
+        &blocker_masks,
+        mismatch_locs.as_ref().map(|a| a.view()).as_ref(),
+        scale,
+        pixel_frame,
+        frame_w,
+        frame_h,
+    );
 
     RenderStats {
-        frame_width: frame_width as u32,
-        frame_height: frame_height as u32,
+        frame_width: frame_w,
+        frame_height: frame_h,
         data_len: needed,
         mismatch_count,
         n_tiles: state.n_tiles(),
@@ -401,10 +924,6 @@ where
 
 /// Variant of `render_frame` for the dynamic dispatch types (`SystemEnum`
 /// + `StateEnum`). Used by the WebAssembly bindings.
-///
-/// Identical to `render_frame` other than the trait it dispatches through:
-/// `DynSystem` for `tile_pixels` / `tile_blocker_mask` / mismatch lookup,
-/// and `Canvas` / `StateStatus` (already on `StateEnum`) for state data.
 pub fn render_frame_dyn(
     sys: &crate::system::SystemEnum,
     state: &crate::state::StateEnum,
@@ -412,44 +931,22 @@ pub fn render_frame_dyn(
     show_mismatches: bool,
     frame: &mut [u8],
 ) -> RenderStats {
-    use crate::canvas::Canvas;
     use crate::state::StateStatus;
     use crate::system::{DynSystem, TileBondInfo};
 
-    let (canvas_width, canvas_height) = state.draw_size();
-    let frame_width = (canvas_width * scale as u32) as usize;
-    let frame_height = (canvas_height * scale as u32) as usize;
+    let scale_u = scale as u32;
+    let (frame_w, frame_h) = state.frame_size_px(scale_u);
+    let frame_width = frame_w as usize;
+    let frame_height = frame_h as usize;
     let needed = frame_width * frame_height * 4;
-
     let pixel_frame = &mut frame[..needed];
 
     let tiles = state.raw_array();
     let max_tile = tiles.iter().copied().max().unwrap_or(0) as usize;
-    let sprites: Vec<_> = (0..=max_tile)
-        .map(|t| sys.tile_pixels(t as Tile, scale))
-        .collect();
+    let sprites = build_sprites_for_canvas(state, max_tile, scale, |t, sz| sys.tile_pixels(t, sz));
     let blocker_masks: Vec<u8> = (0..=max_tile)
         .map(|t| sys.tile_blocker_mask(t as Tile))
         .collect();
-
-    for ((y, x), &tileid) in tiles.indexed_iter() {
-        if let Some(sprite) = sprites.get(tileid as usize) {
-            blit_sprite(pixel_frame, sprite, x, y, frame_width);
-        }
-    }
-
-    if scale >= 12 {
-        render_outlines(pixel_frame, tiles, scale, frame_width);
-    }
-
-    render_blockers(
-        pixel_frame,
-        tiles,
-        &blocker_masks,
-        scale,
-        frame_width,
-        frame_height,
-    );
 
     let (mismatch_count, mismatch_locs) = if show_mismatches {
         let locs = sys.calc_mismatch_locations(state);
@@ -462,13 +959,21 @@ pub fn render_frame_dyn(
         (sys.calc_mismatches(state) as u32, None)
     };
 
-    if let Some(ref locs) = mismatch_locs {
-        render_mismatches(pixel_frame, &locs.view(), scale, frame_width);
-    }
+    render_into_with_canvas(
+        state,
+        tiles,
+        &sprites,
+        &blocker_masks,
+        mismatch_locs.as_ref().map(|a| a.view()).as_ref(),
+        scale,
+        pixel_frame,
+        frame_w,
+        frame_h,
+    );
 
     RenderStats {
-        frame_width: frame_width as u32,
-        frame_height: frame_height as u32,
+        frame_width: frame_w,
+        frame_height: frame_h,
         data_len: needed,
         mismatch_count,
         n_tiles: state.n_tiles(),
@@ -741,5 +1246,63 @@ mod tests {
         render_mismatches(&mut frame, &locs.view(), scale, frame_w);
 
         assert!(frame.iter().all(|&b| b == 0));
+    }
+
+    // ── square_to_diamond ─────────────────────────────────────────────────
+
+    #[test]
+    fn square_to_diamond_alpha_keys_corners() {
+        // 12x12 sprite, all opaque green. Diamond should leave the four
+        // corners transparent.
+        let n = 12;
+        let green = [0u8, 200, 0, 255];
+        let pixels = vec![green[0], green[1], green[2], green[3]]
+            .repeat(n * n)
+            .into_boxed_slice();
+        let square = SpriteSquare { size: n, pixels };
+        let diamond = square_to_diamond(&square);
+        assert_eq!(diamond.size, n);
+        // Top-left corner (0, 0) is outside the inscribed diamond.
+        let alpha_at = |x: usize, y: usize| diamond.pixels[(y * n + x) * 4 + 3];
+        assert_eq!(alpha_at(0, 0), 0, "NW corner should be transparent");
+        assert_eq!(alpha_at(n - 1, 0), 0, "NE corner should be transparent");
+        assert_eq!(alpha_at(0, n - 1), 0, "SW corner should be transparent");
+        assert_eq!(alpha_at(n - 1, n - 1), 0, "SE corner should be transparent");
+        // Center should be opaque.
+        assert_eq!(alpha_at(n / 2, n / 2), 255, "center should be opaque");
+    }
+
+    #[test]
+    fn square_to_diamond_quadrant_colors() {
+        // Square sprite with distinct colors on each NSEW edge.
+        let n = 16;
+        let north = [10, 0, 0, 255];
+        let east = [0, 20, 0, 255];
+        let south = [0, 0, 30, 255];
+        let west = [40, 40, 40, 255];
+        let style = TileStyle {
+            tri_colors: [north, east, south, west],
+        };
+        let square = style.as_sprite(n);
+        let diamond = square_to_diamond(&square);
+        let pixel = |x: usize, y: usize| -> [u8; 4] {
+            let i = (y * n + x) * 4;
+            [
+                diamond.pixels[i],
+                diamond.pixels[i + 1],
+                diamond.pixels[i + 2],
+                diamond.pixels[i + 3],
+            ]
+        };
+        // NW quadrant (small dx, small dy from center, both negative) maps
+        // to storage-N color.
+        let half = n / 2;
+        assert_eq!(pixel(half - 2, half - 2), north);
+        // NE quadrant → E color.
+        assert_eq!(pixel(half + 2, half - 2), east);
+        // SE quadrant → S color.
+        assert_eq!(pixel(half + 2, half + 2), south);
+        // SW quadrant → W color.
+        assert_eq!(pixel(half - 2, half + 2), west);
     }
 }

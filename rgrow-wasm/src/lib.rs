@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use rgrow::base::Tile;
-use rgrow::canvas::Canvas;
+use rgrow::canvas::{Canvas, PointSafe2};
 use rgrow::models::kblock::{
     GlueIdentifier, KBlock, KBlockParams, KBlockTile, StrenOrSeq, TileIdentifier,
 };
@@ -274,10 +274,8 @@ impl Sim {
         scale: usize,
         show_mismatches: bool,
     ) -> js_sys::Uint8ClampedArray {
-        let (w, h) = self.state.draw_size();
-        let frame_w = (w * scale as u32) as usize;
-        let frame_h = (h * scale as u32) as usize;
-        let mut frame = vec![0u8; frame_w * frame_h * 4];
+        let (frame_w, frame_h) = self.state.frame_size_px(scale as u32);
+        let mut frame = vec![0u8; (frame_w as usize) * (frame_h as usize) * 4];
         let _stats = render_frame_dyn(&self.sys, &self.state, scale, show_mismatches, &mut frame);
         js_sys::Uint8ClampedArray::from(&frame[..])
     }
@@ -286,21 +284,51 @@ impl Sim {
     /// `<canvas>` and the JS-side `Uint8ClampedArray`.
     #[wasm_bindgen(js_name = frameSize)]
     pub fn frame_size(&self, scale: usize) -> Result<JsValue, JsError> {
-        let (w, h) = self.state.draw_size();
+        let (w, h) = self.state.frame_size_px(scale as u32);
         let s = FrameSize {
-            width: w * scale as u32,
-            height: h * scale as u32,
+            width: w,
+            height: h,
         };
         serde_wasm_bindgen::to_value(&s).map_err(js_err)
     }
 
-    /// Tile-grid (canvas) size in cells, before scaling.
+    /// Pre-scale frame extent in subcells. For square canvases this is
+    /// `(ncols, nrows)`. For tube canvases this is the physical extent of
+    /// the rendered frame (sheared/staggered) in subcell units; multiply by
+    /// the canvas's per-subcell pixel size to get the pixel frame.
     #[wasm_bindgen(js_name = canvasSize)]
     pub fn canvas_size(&self) -> Result<JsValue, JsError> {
-        let (w, h) = self.state.draw_size();
+        let (w, h) = self.state.frame_size_subcells();
         let s = CanvasSize {
             width: w,
             height: h,
+        };
+        serde_wasm_bindgen::to_value(&s).map_err(js_err)
+    }
+
+    /// Subcells per scale-unit for the loaded canvas. `1` for square /
+    /// diagonal-tube canvases, `2` for the zigzag-tube (diamond) canvas
+    /// where each tile occupies a 2×2 subcell block. JS uses this to drive
+    /// cell-size computations that need the pixel size of a single tile,
+    /// not a single subcell.
+    #[wasm_bindgen(js_name = subcellsPerTile)]
+    pub fn subcells_per_tile(&self) -> u32 {
+        use rgrow::canvas::TileShape;
+        match self.state.tile_shape() {
+            TileShape::Square => 1,
+            TileShape::Diamond => 2,
+        }
+    }
+
+    /// Storage-grid shape `(rows, cols)` of the underlying tile array.
+    /// Useful for callers that want to enumerate raw storage independent
+    /// of how the canvas displays it (e.g. the tube canvases).
+    #[wasm_bindgen(js_name = tileStorageShape)]
+    pub fn tile_storage_shape(&self) -> Result<JsValue, JsError> {
+        let arr = self.state.raw_array();
+        let s = CanvasSize {
+            width: arr.ncols() as u32,
+            height: arr.nrows() as u32,
         };
         serde_wasm_bindgen::to_value(&s).map_err(js_err)
     }
@@ -418,7 +446,7 @@ impl Sim {
         let mut flat = Vec::with_capacity(nrows * ncols);
         for y in 0..nrows {
             for x in 0..ncols {
-                flat.push(arr[[y, x]] as u32);
+                flat.push(arr[[y, x]]);
             }
         }
         js_sys::Uint32Array::from(&flat[..])
@@ -455,29 +483,72 @@ impl Sim {
         }
     }
 
-    /// Information about the cell at grid `(x, y)`: which tile is there,
-    /// its name (if any), and its color. Returns `null` for out-of-bounds
-    /// coordinates so the JS side can no-op gracefully when the mouse
-    /// drifts outside the canvas during a hover update.
+    /// Information about the cell at pixel position `(px, py)` rendered at
+    /// `scale`: which tile is there, its name (if any), and its color.
+    /// Returns `null` if the pixel falls outside any tile (e.g. the empty
+    /// triangles of a sheared tube canvas, or beyond the frame). The
+    /// returned `x` / `y` are storage-grid coordinates.
+    #[wasm_bindgen(js_name = cellInfoAtPixel)]
+    pub fn cell_info_at_pixel(&self, px: u32, py: u32, scale: u32) -> Result<JsValue, JsError> {
+        let Some(p) = self.state.pixel_to_storage(px, py, scale) else {
+            return Ok(JsValue::NULL);
+        };
+        let (row, col) = p.0;
+        Ok(self.cell_info_inner(col as u32, row as u32))
+    }
+
+    /// Information about the cell at storage grid `(x=col, y=row)`. Storage
+    /// coordinates index `raw_array` directly. For tube canvases, prefer
+    /// `cellInfoAtPixel` to avoid having to do storage-coord conversion in
+    /// JS. Returns `null` for out-of-bounds.
     #[wasm_bindgen(js_name = cellInfo)]
     pub fn cell_info(&self, x: u32, y: u32) -> Result<JsValue, JsError> {
-        let (w, h) = self.state.draw_size();
-        if x >= w || y >= h {
+        let arr = self.state.raw_array();
+        if (x as usize) >= arr.ncols() || (y as usize) >= arr.nrows() {
             return Ok(JsValue::NULL);
         }
-        let tile = self.state.raw_array()[[y as usize, x as usize]] as u32;
+        Ok(self.cell_info_inner(x, y))
+    }
+
+    fn cell_info_inner(&self, col: u32, row: u32) -> JsValue {
+        let arr = self.state.raw_array();
+        let tile = arr[[row as usize, col as usize]];
         let names = self.sys.tile_names();
         let colors = self.sys.tile_colors();
         let name = names.get(tile as usize).cloned().unwrap_or_default();
         let color = colors.get(tile as usize).copied().unwrap_or([0, 0, 0, 0]);
         let info = CellInfo {
-            x,
-            y,
+            x: col,
+            y: row,
             tile,
             name,
             color,
         };
-        serde_wasm_bindgen::to_value(&info).map_err(js_err)
+        serde_wasm_bindgen::to_value(&info).unwrap_or(JsValue::NULL)
+    }
+
+    /// Per-cell label-anchor info: for every non-empty cell, returns the
+    /// pixel center of that cell at `scale`, plus its tile id. Used by JS
+    /// to overlay tile-name labels on the canvas without re-implementing
+    /// the canvas's storage→pixel transform. Returned as a flat
+    /// `Float32Array` of triples `(cx_px, cy_px, tile_id)`.
+    #[wasm_bindgen(js_name = labelAnchors)]
+    pub fn label_anchors(&self, scale: u32) -> js_sys::Float32Array {
+        let arr = self.state.raw_array();
+        let tile_size = self.state.tile_size_px(scale) as f32;
+        let half = tile_size * 0.5;
+        let mut out: Vec<f32> = Vec::with_capacity(arr.len() * 3);
+        for ((row, col), &tileid) in arr.indexed_iter() {
+            if tileid == 0 {
+                continue;
+            }
+            let p = PointSafe2((row, col));
+            let (ox, oy) = self.state.tile_origin_px(p, scale);
+            out.push(ox as f32 + half);
+            out.push(oy as f32 + half);
+            out.push(tileid as f32);
+        }
+        js_sys::Float32Array::from(&out[..])
     }
 
     /// Full tileset inventory: one `TileInfo` per non-empty tile id (id 0
@@ -865,18 +936,43 @@ impl Sim {
         js_sys::Uint8ClampedArray::from(&sprite.pixels[..])
     }
 
-    /// Place a specific tile id at grid `(x, y)`. Out-of-bounds returns
-    /// an error.
+    /// Place a specific tile id at storage grid `(x=col, y=row)`.
+    /// Out-of-bounds returns an error. For tube canvases, prefer
+    /// `setPointAtPixel` to avoid having to do storage-coord conversion in
+    /// JS.
     #[wasm_bindgen(js_name = setPoint)]
     pub fn set_point(&mut self, x: u32, y: u32, tile: u32) -> Result<(), JsError> {
-        let (w, h) = self.state.draw_size();
-        if x >= w || y >= h {
+        let arr_shape = {
+            let arr = self.state.raw_array();
+            (arr.nrows(), arr.ncols())
+        };
+        if (x as usize) >= arr_shape.1 || (y as usize) >= arr_shape.0 {
             return Err(JsError::new("set_point: coordinates out of bounds"));
         }
-        // The Canvas trait exposes raw_array_mut; we update the cell
-        // directly. (Rate / RateStore is updated lazily on next event.)
         let mut arr = self.state.raw_array_mut();
         arr[[y as usize, x as usize]] = tile as Tile;
+        Ok(())
+    }
+
+    /// Place a specific tile id at the storage cell whose rendered area
+    /// contains pixel `(px, py)` at the given `scale`. Returns an error
+    /// when the pixel falls outside any tile (e.g. an empty triangle of
+    /// a sheared tube canvas).
+    #[wasm_bindgen(js_name = setPointAtPixel)]
+    pub fn set_point_at_pixel(
+        &mut self,
+        px: u32,
+        py: u32,
+        scale: u32,
+        tile: u32,
+    ) -> Result<(), JsError> {
+        let p = self
+            .state
+            .pixel_to_storage(px, py, scale)
+            .ok_or_else(|| JsError::new("set_point_at_pixel: pixel is outside any tile"))?;
+        let (row, col) = p.0;
+        let mut arr = self.state.raw_array_mut();
+        arr[[row, col]] = tile as Tile;
         Ok(())
     }
 

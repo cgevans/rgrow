@@ -1,5 +1,3 @@
-use crate::painter::SpriteSquare;
-
 use super::base::{GrowError, GrowResult, NumTiles, Point, Tile};
 use enum_dispatch::enum_dispatch;
 use ndarray::prelude::*;
@@ -23,6 +21,21 @@ pub struct PointSafe2(pub Point);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
 pub struct PointSafeHere(pub Point);
+
+/// Shape that storage cells render as.
+///
+/// `Square`: axis-aligned square. NSEW colors map to the top, right, bottom,
+/// left edges. Adjacent cells abut edge-to-edge and tile the plane without gaps.
+///
+/// `Diamond`: 45°-rotated square. NSEW colors map to the diamond's NW, NE, SE,
+/// SW edges (storage-N is the upper-left edge, storage-E the upper-right, etc.).
+/// Used by `CanvasTube` (zigzag) where storage neighbors form a tilted-square
+/// lattice rather than an axis-aligned one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TileShape {
+    Square,
+    Diamond,
+}
 
 #[enum_dispatch]
 pub trait Canvas: std::fmt::Debug + Sync + Send {
@@ -292,41 +305,84 @@ pub trait Canvas: std::fmt::Debug + Sync + Send {
         self.uvm_p(self.u_move_point_w(p))
     }
 
-    fn draw(&self, frame: &mut [u8], colors: &[[u8; 4]]) {
-        for (p, v) in Iterator::zip(frame.chunks_exact_mut(4), self.raw_array().iter()) {
-            let color = colors[*v as usize];
-            p.copy_from_slice(&color);
-        }
-    }
-
-    /// Draw some sprite to some location in the canvas
-    fn draw_sprite(
-        &self,
-        frame: &mut [u8],
-        // Tile style
-        tile_style: SpriteSquare,
-        // Canvas size
-        // Where in the canvas the tile is
-        pos: PointSafeHere,
-    ) {
-        let (y, x) = pos.0;
-        let pixels = tile_style.pixels;
-        let tile_size = tile_style.size;
-
-        let tile_width_bytes = tile_size * 4;
-
-        let tile_nbytes = tile_size.pow(2) * 4;
-        let row_nbytes = self.ncols() * tile_nbytes;
-
-        let idx = row_nbytes * y + tile_width_bytes * x;
-        for (e, pixel_row) in pixels.chunks(tile_width_bytes).enumerate() {
-            let from = idx + (e * tile_width_bytes * self.ncols());
-            frame[from..from + tile_width_bytes].copy_from_slice(pixel_row);
-        }
-    }
-
-    fn draw_size(&self) -> (u32, u32) {
+    /// Frame size in pre-scale "subcell" units.
+    ///
+    /// `frame_size_px(scale) = frame_size_subcells() * subcell_size_px(scale)`.
+    /// For square canvases, one subcell equals one storage cell. For diamond
+    /// canvases (zigzag tube), one subcell equals half a tile so that even/odd
+    /// row stagger is representable as integer offsets.
+    fn frame_size_subcells(&self) -> (u32, u32) {
         (self.ncols() as u32, self.nrows() as u32)
+    }
+
+    /// Pixel size of one subcell at the given painter scale.
+    ///
+    /// Square canvases use the full scale; diamond canvases use half because
+    /// each tile occupies a 2×2 block of subcells.
+    fn subcell_size_px(&self, scale: u32) -> u32 {
+        match self.tile_shape() {
+            TileShape::Square => scale,
+            // Round up so even an odd `scale` still yields a tile that's
+            // `subcell_size_px(scale) * 2 == scale + (scale & 1)` pixels —
+            // close enough that the diamond doesn't lose a pixel of width.
+            TileShape::Diamond => scale.div_ceil(2),
+        }
+    }
+
+    /// Frame size in pixels at the given painter scale.
+    fn frame_size_px(&self, scale: u32) -> (u32, u32) {
+        let (w, h) = self.frame_size_subcells();
+        let s = self.subcell_size_px(scale);
+        (w * s, h * s)
+    }
+
+    /// How tile sprites should be rendered.
+    fn tile_shape(&self) -> TileShape {
+        TileShape::Square
+    }
+
+    /// Pixel side length of a tile sprite (its bounding box).
+    ///
+    /// For diamond canvases this is the diamond's bounding box (the diamond
+    /// itself is inscribed in a square of this size with transparent corners).
+    fn tile_size_px(&self, scale: u32) -> u32 {
+        match self.tile_shape() {
+            TileShape::Square => scale,
+            TileShape::Diamond => self.subcell_size_px(scale) * 2,
+        }
+    }
+
+    /// Top-left pixel of the tile-sprite bounding box for storage cell `p`.
+    ///
+    /// Default places `(row, col)` at `(col*scale, row*scale)`. Tube canvases
+    /// override to shear (diagonal) or stagger (zigzag).
+    fn tile_origin_px(&self, p: PointSafe2, scale: u32) -> (u32, u32) {
+        let (row, col) = p.0;
+        let s = self.subcell_size_px(scale);
+        (col as u32 * s, row as u32 * s)
+    }
+
+    /// Inverse of `tile_origin_px`: pixel `(px, py)` → storage cell, or `None`
+    /// if the pixel falls outside any tile (e.g. the empty triangle corners
+    /// of a sheared tube canvas, or beyond the frame).
+    fn pixel_to_storage(&self, px: u32, py: u32, scale: u32) -> Option<PointSafe2> {
+        let s = self.subcell_size_px(scale);
+        if s == 0 {
+            return None;
+        }
+        let col = (px / s) as usize;
+        let row = (py / s) as usize;
+        if row >= self.nrows() || col >= self.ncols() {
+            return None;
+        }
+        Some(PointSafe2((row, col)))
+    }
+
+    /// Storage extent in unit cells. Retained for callers that pre-compute
+    /// shared-memory or buffer sizes from `state.draw_size() * scale` — but
+    /// new code should use `frame_size_px(scale)` directly.
+    fn draw_size(&self) -> (u32, u32) {
+        self.frame_size_subcells()
     }
 
     fn center(&self) -> PointSafe2 {
