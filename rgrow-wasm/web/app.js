@@ -40,6 +40,12 @@ const importfileOffsetI = $("importfile-offset-i");
 const importfileOffsetJ = $("importfile-offset-j");
 const importfileStatus = $("importfile-status");
 const tileInfoEl = $("tile-info");
+const tilesetPanel = $("tileset-panel");
+const tilesetTable = $("tileset-table");
+const tilesetTableBody = tilesetTable.querySelector("tbody");
+const tilesetCountEl = $("tileset-count");
+
+const TILESET_SPRITE_PX = 22;
 
 let wasm = null;     // wasm module exports (after init)
 let sim = null;      // current Sim instance
@@ -97,6 +103,7 @@ async function loadTilesetText(text, kind) {
     statsEl.textContent = `Error loading tileset: ${e.message || e}`;
     sim = null;
     setControlsEnabled(false);
+    tilesetPanel.hidden = true;
     return;
   }
   lastTilesetText = text;
@@ -107,7 +114,9 @@ async function loadTilesetText(text, kind) {
 
   resizeCanvasFor(sim);
   rebuildParameterControls();
+  rebuildTileSetPanel();
   pinnedCell = null;
+  pinnedTilesetId = null;
   renderTileInfo(null);
   if (k === "xgrow") {
     showImportfilePromptFor(text);
@@ -322,6 +331,146 @@ function rebuildParameterControls() {
   }
 }
 
+// ── Tileset panel ─────────────────────────────────────────────────────
+//
+// One row per non-empty tile id, with a sprite (rendered via the painter
+// over the wasm boundary so duples / multi-color tiles look right), id,
+// name, optional concentration, and per-side glue names. Hover and click
+// reuse the `#tile-info` bar — clicking a row pins it the same way
+// clicking a canvas cell does. `pinnedCell` and `pinnedTilesetId` are
+// mutually exclusive.
+
+let pinnedTilesetId = null;
+let currentTileSetData = null;
+
+function rebuildTileSetPanel() {
+  tilesetTableBody.replaceChildren();
+  currentTileSetData = null;
+  if (!sim) {
+    tilesetPanel.hidden = true;
+    return;
+  }
+  let tiles;
+  try {
+    tiles = sim.tileSet();
+  } catch (e) {
+    tilesetPanel.hidden = true;
+    console.warn("tileSet() failed:", e);
+    return;
+  }
+  if (!Array.isArray(tiles) || tiles.length === 0) {
+    tilesetPanel.hidden = true;
+    return;
+  }
+  currentTileSetData = tiles;
+  tilesetPanel.hidden = false;
+  tilesetCountEl.textContent = `${tiles.length} tile${tiles.length === 1 ? "" : "s"}`;
+
+  const anyConc = tiles.some((t) => t.concentration != null);
+  const anyGlue = tiles.some((t) =>
+    Array.isArray(t.edge_glues) && t.edge_glues.some((g) => g != null && g !== "")
+  );
+  tilesetTable.classList.toggle("no-conc", !anyConc);
+  tilesetTable.classList.toggle("no-glues", !anyGlue);
+
+  for (const t of tiles) {
+    const tr = document.createElement("tr");
+    tr.dataset.tileId = String(t.id);
+
+    const tdSprite = document.createElement("td");
+    const sc = document.createElement("canvas");
+    sc.width = TILESET_SPRITE_PX;
+    sc.height = TILESET_SPRITE_PX;
+    try {
+      const bytes = sim.tilePixels(t.id, TILESET_SPRITE_PX);
+      sc.getContext("2d").putImageData(
+        new ImageData(bytes, TILESET_SPRITE_PX, TILESET_SPRITE_PX),
+        0,
+        0,
+      );
+    } catch {
+      sc.style.background = rgbaCss(t.color);
+    }
+    tdSprite.append(sc);
+
+    const tdId = document.createElement("td");
+    tdId.className = "col-id";
+    tdId.textContent = `#${t.id}`;
+
+    const tdName = document.createElement("td");
+    tdName.className = "col-name";
+    tdName.textContent = t.name && t.name.length ? t.name : "(unnamed)";
+
+    const tdConc = document.createElement("td");
+    tdConc.className = "col-conc";
+    tdConc.textContent = t.concentration != null ? fmt(t.concentration, 3) : "";
+
+    const glueCells = (t.edge_glues || [null, null, null, null]).map((g) => {
+      const td = document.createElement("td");
+      td.className = "col-glue" + (g ? "" : " empty");
+      td.textContent = g || "—";
+      return td;
+    });
+
+    tr.append(tdSprite, tdId, tdName, tdConc, ...glueCells);
+
+    tr.addEventListener("mouseenter", () => {
+      if (pinnedCell || pinnedTilesetId != null) return;
+      renderTileInfoForTile(t, { pinned: false });
+    });
+    tr.addEventListener("mouseleave", () => {
+      if (pinnedCell || pinnedTilesetId != null) return;
+      renderTileInfo(null);
+    });
+    tr.addEventListener("click", () => {
+      if (pinnedTilesetId === t.id) {
+        pinnedTilesetId = null;
+        tr.classList.remove("pinned");
+        renderTileInfoForTile(t, { pinned: false });
+      } else {
+        // A canvas pin and a tileset pin are mutually exclusive — clear
+        // any canvas pin so the visual state stays coherent.
+        pinnedCell = null;
+        clearAllPinnedRows();
+        pinnedTilesetId = t.id;
+        tr.classList.add("pinned");
+        renderTileInfoForTile(t, { pinned: true });
+      }
+    });
+
+    tilesetTableBody.append(tr);
+  }
+}
+
+function clearAllPinnedRows() {
+  for (const tr of tilesetTableBody.querySelectorAll("tr.pinned")) {
+    tr.classList.remove("pinned");
+  }
+}
+
+function renderTileInfoForTile(tile, opts = {}) {
+  const pinned = !!opts.pinned;
+  tileInfoEl.classList.remove("empty");
+  tileInfoEl.classList.toggle("pinned", pinned);
+
+  const swatch = document.createElement("span");
+  swatch.className = "swatch";
+  swatch.style.background = rgbaCss(tile.color);
+
+  const text = document.createElement("span");
+  const name = tile.name && tile.name.length ? tile.name : "(unnamed)";
+  let s = `tile #${tile.id} ${name}`;
+  if (tile.concentration != null) s += `   c=${fmt(tile.concentration, 3)}`;
+  text.textContent = s;
+
+  tileInfoEl.replaceChildren(swatch, text);
+
+  const hint = document.createElement("span");
+  hint.className = "pin-hint";
+  hint.textContent = pinned ? "click to unpin" : "click to pin";
+  tileInfoEl.append(hint);
+}
+
 // ── Wiring ────────────────────────────────────────────────────────────
 
 pauseBtn.addEventListener("click", () => {
@@ -487,6 +636,14 @@ canvas.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("mouseleave", () => {
   if (pinnedCell) return;
+  // If a tileset row is pinned, restore that view rather than clearing.
+  if (pinnedTilesetId != null) {
+    const tile = currentTileSetData?.find((t) => t.id === pinnedTilesetId);
+    if (tile) {
+      renderTileInfoForTile(tile, { pinned: true });
+      return;
+    }
+  }
   renderTileInfo(null);
 });
 
@@ -497,6 +654,9 @@ canvas.addEventListener("click", (e) => {
     pinnedCell = null;
     renderTileInfo(cell, { pinned: false });
   } else {
+    // Clear any tileset-row pin so only one pinned thing is highlighted.
+    pinnedTilesetId = null;
+    clearAllPinnedRows();
     pinnedCell = cell;
     renderTileInfo(cell, { pinned: true });
   }

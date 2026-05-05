@@ -686,6 +686,19 @@ impl TileBondInfo for SDC2DSquare {
     fn bond_names(&self) -> &[String] {
         &self.glue_names
     }
+    fn tile_edge_glues(&self, tile_number: Tile) -> [Option<usize>; 4] {
+        let row = tile_number as usize;
+        if row >= self.strand_glues.nrows() {
+            return [None; 4];
+        }
+        let map = |g: Glue| if g == 0 { None } else { Some(g) };
+        [
+            map(self.strand_glues[(row, NORTH_GLUE_INDEX)]),
+            map(self.strand_glues[(row, EAST_GLUE_INDEX)]),
+            map(self.strand_glues[(row, SOUTH_GLUE_INDEX)]),
+            map(self.strand_glues[(row, WEST_GLUE_INDEX)]),
+        ]
+    }
 }
 
 #[cfg(feature = "python")]

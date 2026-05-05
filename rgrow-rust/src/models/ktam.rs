@@ -1076,6 +1076,16 @@ impl TileBondInfo for KTAM {
     fn bond_names(&self) -> &[String] {
         &self.glue_names
     }
+
+    fn tile_edge_glues(&self, tile_number: Tile) -> [Option<usize>; 4] {
+        let row = tile_number as usize;
+        if row >= self.tile_edges.nrows() {
+            return [None; 4];
+        }
+        let r = self.tile_edges.row(row);
+        let map = |g: usize| if g == 0 { None } else { Some(g) };
+        [map(r[0]), map(r[1]), map(r[2]), map(r[3])]
+    }
 }
 
 impl SystemInfo for KTAM {

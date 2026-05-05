@@ -17,6 +17,29 @@
           <canvas id="sim"></canvas>
           <div id="stats">Loading…</div>
           <div id="tile-info" class="tile-info empty">Hover the canvas to inspect a tile.</div>
+          <div id="tileset-panel" class="tileset-panel" hidden>
+            <div class="tileset-header">
+              <h3>Tileset</h3>
+              <span id="tileset-count" class="muted"></span>
+            </div>
+            <div class="tileset-table-wrap">
+              <table id="tileset-table">
+                <thead>
+                  <tr>
+                    <th>Tile</th>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th class="col-conc">Conc.</th>
+                    <th class="col-glue">N</th>
+                    <th class="col-glue">E</th>
+                    <th class="col-glue">S</th>
+                    <th class="col-glue">W</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <aside id="controls">

@@ -546,6 +546,14 @@ pub trait TileBondInfo {
     fn tile_blocker_mask(&self, _tile_number: Tile) -> u8 {
         0
     }
+
+    /// Per-side glue id for `tile_number`, in `[N, E, S, W]` order.
+    /// `None` means "no glue here" or "this model has no notion of a glue
+    /// on this side." The default returns `[None; 4]` so models without
+    /// edge-glue data don't have to override.
+    fn tile_edge_glues(&self, _tile_number: Tile) -> [Option<usize>; 4] {
+        [None; 4]
+    }
 }
 
 pub trait SystemInfo {

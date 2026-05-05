@@ -88,6 +88,10 @@ canvas {
   gap: 8px;
 }
 
+.control-block[hidden] {
+  display: none;
+}
+
 .control-block h2 {
   margin: 0 0 4px 0;
   font-size: 13px;
@@ -200,6 +204,93 @@ footer code { color: var(--accent); }
   color: var(--muted);
   font-size: 11px;
 }
+
+.tileset-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tileset-panel[hidden] { display: none; }
+
+.tileset-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.tileset-header h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tileset-table-wrap {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+#tileset-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+#tileset-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  z-index: 1;
+}
+
+#tileset-table tbody td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #2a2a2f;
+  vertical-align: middle;
+}
+
+#tileset-table tbody tr:last-child td { border-bottom: none; }
+
+#tileset-table tbody tr:hover { background: #2a2a30; }
+
+#tileset-table tbody tr.pinned {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+#tileset-table td canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+#tileset-table td.col-id { color: var(--muted); }
+#tileset-table td.col-name { color: var(--fg); }
+#tileset-table td.col-glue { color: var(--accent); }
+#tileset-table td.col-glue.empty { color: var(--muted); }
+
+#tileset-table.no-conc th.col-conc,
+#tileset-table.no-conc td.col-conc { display: none; }
+#tileset-table.no-glues th.col-glue,
+#tileset-table.no-glues td.col-glue { display: none; }
 
 canvas { cursor: crosshair; }
 

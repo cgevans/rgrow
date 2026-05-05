@@ -61,6 +61,22 @@ pub struct CellInfo {
     pub color: [u8; 4],
 }
 
+/// Per-tile info for the tileset panel below the canvas.
+///
+/// `concentration` and `stoic` are `None` for models that do not expose
+/// per-tile concentration data (currently anything other than KTAM).
+/// `edge_glues` is `[N, E, S, W]`; an entry is `None` when the tile has
+/// no glue on that side or the model has no notion of one.
+#[derive(Serialize)]
+pub struct TileInfo {
+    pub id: u32,
+    pub name: String,
+    pub color: [u8; 4],
+    pub concentration: Option<f64>,
+    pub stoic: Option<f64>,
+    pub edge_glues: [Option<String>; 4],
+}
+
 #[wasm_bindgen]
 pub struct Sim {
     sys: SystemEnum,
@@ -359,6 +375,61 @@ impl Sim {
             color,
         };
         serde_wasm_bindgen::to_value(&info).map_err(js_err)
+    }
+
+    /// Full tileset inventory: one `TileInfo` per non-empty tile id (id 0
+    /// is the empty tile and is omitted). Concentration and stoichiometry
+    /// are populated only for models that expose them; glue names are
+    /// populated for models that implement `tile_edge_glues` (KTAM,
+    /// SDC2DSquare).
+    #[wasm_bindgen(js_name = tileSet)]
+    pub fn tile_set(&self) -> Result<JsValue, JsError> {
+        let names = self.sys.tile_names();
+        let colors = self.sys.tile_colors();
+        let n = names.len().min(colors.len());
+        // Concentrations are only available on models that implement
+        // `SystemInfo`. `bond_names` is `todo!()` on ATAM, so we only call
+        // it when we know it's safe (KTAM, SDC2DSquare).
+        let (concs, stoics, has_bond_names) = match &self.sys {
+            SystemEnum::KTAM(k) => {
+                use rgrow::system::SystemInfo;
+                (Some(k.tile_concs()), None, true)
+            }
+            SystemEnum::SDC2DSquare(_) => (None, None, true),
+            _ => (None, None, false),
+        };
+        let bond_names: &[String] = if has_bond_names {
+            self.sys.bond_names()
+        } else {
+            &[]
+        };
+        let mut out: Vec<TileInfo> = Vec::with_capacity(n.saturating_sub(1));
+        for id in 1..n {
+            let edges = self.sys.tile_edge_glues(id as Tile);
+            let edge_glues = edges.map(|g| {
+                g.and_then(|gid| bond_names.get(gid).cloned())
+                    .filter(|s| !s.is_empty())
+            });
+            out.push(TileInfo {
+                id: id as u32,
+                name: names.get(id).cloned().unwrap_or_default(),
+                color: colors.get(id).copied().unwrap_or([0, 0, 0, 0]),
+                concentration: concs.as_ref().and_then(|v| v.get(id).copied()),
+                stoic: stoics.as_ref().and_then(|v: &Vec<f64>| v.get(id).copied()),
+                edge_glues,
+            });
+        }
+        serde_wasm_bindgen::to_value(&out).map_err(js_err)
+    }
+
+    /// Render a `size`×`size` RGBA sprite for tile id `id` (using the
+    /// model's `tile_pixels` so compound tiles render with their proper
+    /// per-side colors). Returned bytes are suitable for
+    /// `new ImageData(bytes, size, size)` in JS.
+    #[wasm_bindgen(js_name = tilePixels)]
+    pub fn tile_pixels(&self, id: u32, size: u32) -> js_sys::Uint8ClampedArray {
+        let sprite = self.sys.tile_pixels(id as Tile, size as usize);
+        js_sys::Uint8ClampedArray::from(&sprite.pixels[..])
     }
 
     /// Place a specific tile id at grid `(x, y)`. Out-of-bounds returns
