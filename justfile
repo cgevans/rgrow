@@ -27,6 +27,19 @@ bench-python: build-python
 bench-python-json: build-python
     source .venv/bin/activate && pytest rgrow-python/tests/ --benchmark-only --benchmark-json benchmark-results.json -v
 
+# Save a named benchmark snapshot under .benchmarks/ (e.g. `just bench-python-save baseline`)
+bench-python-save name: build-python
+    source .venv/bin/activate && pytest rgrow-python/tests/ --benchmark-only --benchmark-save={{name}} -v
+
+# Compare current benchmarks against a saved snapshot (e.g. `just bench-python-compare baseline`)
+bench-python-compare name: build-python
+    source .venv/bin/activate && pytest rgrow-python/tests/ --benchmark-only \
+        --benchmark-compare={{name}} --benchmark-compare-fail=mean:5% -v
+
+# List saved benchmark snapshots
+bench-python-list:
+    source .venv/bin/activate && pytest-benchmark list
+
 # Run Rust clippy
 clippy:
     cargo clippy -p rgrow -- -D warnings
