@@ -66,7 +66,10 @@ pub struct CellInfo {
 /// `concentration` and `stoic` are `None` for models that do not expose
 /// per-tile concentration data (currently anything other than KTAM).
 /// `edge_glues` is `[N, E, S, W]`; an entry is `None` when the tile has
-/// no glue on that side or the model has no notion of one.
+/// no glue on that side or the model has no notion of one. `edge_glue_ids`
+/// carries the same information as numeric ids, which the editing UI
+/// uses to drive per-side glue dropdowns without having to round-trip
+/// names back through `bond_names`.
 #[derive(Serialize)]
 pub struct TileInfo {
     pub id: u32,
@@ -75,6 +78,49 @@ pub struct TileInfo {
     pub concentration: Option<f64>,
     pub stoic: Option<f64>,
     pub edge_glues: [Option<String>; 4],
+    pub edge_glue_ids: [Option<u32>; 4],
+}
+
+/// Per-glue info for the per-side glue dropdown in the tileset table.
+#[derive(Serialize)]
+pub struct GlueInfo {
+    pub id: u32,
+    pub name: String,
+}
+
+/// One non-zero entry in the model's pair interaction matrix. `dg` is the
+/// model's primary number — KTAM: dimensionless strength; SDC2D / KBlock:
+/// ΔG in kcal/mol. `ds` is only populated for SDC2D (ΔS in kcal/(mol·K)).
+/// `matching` flags KTAM's special case where `(g, g)` reads from
+/// `glue_strengths[g]` instead of `glue_links[(g, g)]`.
+#[derive(Serialize)]
+pub struct GlueInteraction {
+    pub a: u32,
+    pub a_name: String,
+    pub b: u32,
+    pub b_name: String,
+    pub matching: bool,
+    pub dg: f64,
+    pub ds: Option<f64>,
+}
+
+/// Describes the per-pair editing schema for the loaded model — what the
+/// numbers mean, how to label them, and whether the second column exists.
+#[derive(Serialize, Default)]
+pub struct InteractionSchema {
+    pub label_dg: String,
+    pub has_ds: bool,
+    pub label_ds: Option<String>,
+}
+
+/// Capability flags for the editing UI. JS reads this once after a sim
+/// loads and decides which cells become editable. Avoids matching on
+/// `modelName()` strings in the JS layer.
+#[derive(Serialize, Default)]
+pub struct EditableFeatures {
+    pub tile_concentration: bool,
+    pub tile_edge_glue: bool,
+    pub glue_interaction: bool,
 }
 
 #[wasm_bindgen]
@@ -410,6 +456,7 @@ impl Sim {
                 g.and_then(|gid| bond_names.get(gid).cloned())
                     .filter(|s| !s.is_empty())
             });
+            let edge_glue_ids = edges.map(|g| g.map(|gid| gid as u32));
             out.push(TileInfo {
                 id: id as u32,
                 name: names.get(id).cloned().unwrap_or_default(),
@@ -417,9 +464,324 @@ impl Sim {
                 concentration: concs.as_ref().and_then(|v| v.get(id).copied()),
                 stoic: stoics.as_ref().and_then(|v: &Vec<f64>| v.get(id).copied()),
                 edge_glues,
+                edge_glue_ids,
             });
         }
         serde_wasm_bindgen::to_value(&out).map_err(js_err)
+    }
+
+    /// All glues defined by the loaded tileset (id 0 is omitted). Used to
+    /// populate per-side glue dropdowns in the tileset table.
+    #[wasm_bindgen(js_name = glueList)]
+    pub fn glue_list(&self) -> Result<JsValue, JsError> {
+        // ATAM's `bond_names` is `todo!()`, so guard.
+        let names: &[String] = match &self.sys {
+            SystemEnum::ATAM(_) => &[],
+            _ => self.sys.bond_names(),
+        };
+        let mut out: Vec<GlueInfo> = Vec::with_capacity(names.len().saturating_sub(1));
+        for (id, name) in names.iter().enumerate().skip(1) {
+            if name.is_empty() {
+                // Skip placeholder slots — these are usually internal padding.
+                continue;
+            }
+            out.push(GlueInfo {
+                id: id as u32,
+                name: name.clone(),
+            });
+        }
+        serde_wasm_bindgen::to_value(&out).map_err(js_err)
+    }
+
+    /// Per-pair interaction labels and arity for the loaded model. JS uses
+    /// this to lay out the glue-interactions panel.
+    #[wasm_bindgen(js_name = interactionSchema)]
+    pub fn interaction_schema(&self) -> Result<JsValue, JsError> {
+        let s = match &self.sys {
+            SystemEnum::KTAM(_) => InteractionSchema {
+                label_dg: "Strength".to_string(),
+                has_ds: false,
+                label_ds: None,
+            },
+            SystemEnum::SDC2DSquare(_) => InteractionSchema {
+                label_dg: "ΔG (kcal/mol)".to_string(),
+                has_ds: true,
+                label_ds: Some("ΔS (kcal/(mol·K))".to_string()),
+            },
+            SystemEnum::KBlock(_) => InteractionSchema {
+                label_dg: "ΔG (kcal/mol)".to_string(),
+                has_ds: false,
+                label_ds: None,
+            },
+            _ => InteractionSchema::default(),
+        };
+        serde_wasm_bindgen::to_value(&s).map_err(js_err)
+    }
+
+    /// Non-zero glue-glue interactions. For KTAM, includes self-pairs
+    /// `(g, g)` whose value lives in `glue_strengths` (flagged with
+    /// `matching: true`). Pairs with `a < b` come from the link matrix.
+    #[wasm_bindgen(js_name = glueInteractions)]
+    pub fn glue_interactions(&self) -> Result<JsValue, JsError> {
+        let mut out: Vec<GlueInteraction> = Vec::new();
+        let names: &[String] = match &self.sys {
+            SystemEnum::ATAM(_) => &[],
+            _ => self.sys.bond_names(),
+        };
+        let name_at = |id: usize| -> String { names.get(id).cloned().unwrap_or_default() };
+        match &self.sys {
+            SystemEnum::KTAM(k) => {
+                let n = k.glue_strengths.len();
+                for g in 1..n {
+                    let v = k.glue_strengths[g];
+                    if v != 0.0 {
+                        out.push(GlueInteraction {
+                            a: g as u32,
+                            a_name: name_at(g),
+                            b: g as u32,
+                            b_name: name_at(g),
+                            matching: true,
+                            dg: v,
+                            ds: None,
+                        });
+                    }
+                }
+                let m = k.glue_links.nrows().min(k.glue_links.ncols());
+                for a in 1..m {
+                    for b in (a + 1)..m {
+                        let v = k.glue_links[(a, b)];
+                        if v != 0.0 {
+                            out.push(GlueInteraction {
+                                a: a as u32,
+                                a_name: name_at(a),
+                                b: b as u32,
+                                b_name: name_at(b),
+                                matching: false,
+                                dg: v,
+                                ds: None,
+                            });
+                        }
+                    }
+                }
+            }
+            SystemEnum::SDC2DSquare(s) => {
+                let m = s
+                    .delta_g_matrix
+                    .nrows()
+                    .min(s.delta_g_matrix.ncols())
+                    .min(s.entropy_matrix.nrows())
+                    .min(s.entropy_matrix.ncols());
+                for a in 1..m {
+                    for b in a..m {
+                        let dg: f64 = s.delta_g_matrix[(a, b)].into();
+                        let ds: f64 = s.entropy_matrix[(a, b)].into();
+                        if dg != 0.0 || ds != 0.0 {
+                            out.push(GlueInteraction {
+                                a: a as u32,
+                                a_name: name_at(a),
+                                b: b as u32,
+                                b_name: name_at(b),
+                                matching: a == b,
+                                dg,
+                                ds: Some(ds),
+                            });
+                        }
+                    }
+                }
+            }
+            SystemEnum::KBlock(k) => {
+                let links = k.glue_links();
+                let m = links.nrows().min(links.ncols());
+                for a in 1..m {
+                    for b in a..m {
+                        let dg: f64 = links[(a, b)].into();
+                        if dg != 0.0 {
+                            out.push(GlueInteraction {
+                                a: a as u32,
+                                a_name: name_at(a),
+                                b: b as u32,
+                                b_name: name_at(b),
+                                matching: a == b,
+                                dg,
+                                ds: None,
+                            });
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        serde_wasm_bindgen::to_value(&out).map_err(js_err)
+    }
+
+    /// Editing capabilities of the loaded model.
+    #[wasm_bindgen(js_name = editableFeatures)]
+    pub fn editable_features(&self) -> Result<JsValue, JsError> {
+        let f = match &self.sys {
+            SystemEnum::KTAM(_) => EditableFeatures {
+                tile_concentration: true,
+                tile_edge_glue: true,
+                glue_interaction: true,
+            },
+            SystemEnum::SDC2DSquare(_) => EditableFeatures {
+                tile_concentration: true,
+                tile_edge_glue: false,
+                glue_interaction: true,
+            },
+            SystemEnum::KBlock(_) => EditableFeatures {
+                tile_concentration: false,
+                tile_edge_glue: false,
+                glue_interaction: true,
+            },
+            _ => EditableFeatures::default(),
+        };
+        serde_wasm_bindgen::to_value(&f).map_err(js_err)
+    }
+
+    /// Set tile `id`'s concentration. KTAM and SDC2DSquare only.
+    #[wasm_bindgen(js_name = setTileConcentration)]
+    pub fn set_tile_concentration(&mut self, id: u32, value: f64) -> Result<(), JsError> {
+        if !value.is_finite() || value < 0.0 {
+            return Err(JsError::new(
+                "setTileConcentration: value must be a non-negative finite number",
+            ));
+        }
+        let idx = id as usize;
+        match &mut self.sys {
+            SystemEnum::KTAM(k) => {
+                if idx == 0 || idx >= k.tile_concs.len() {
+                    return Err(JsError::new("setTileConcentration: tile id out of range"));
+                }
+                k.tile_concs[idx] = value;
+                k.update_system();
+            }
+            SystemEnum::SDC2DSquare(s) => {
+                if idx == 0 || idx >= s.strand_concentration.len() {
+                    return Err(JsError::new("setTileConcentration: strand id out of range"));
+                }
+                s.strand_concentration[idx] = rgrow::units::Molar::from(value);
+                s.update_system();
+            }
+            _ => {
+                return Err(JsError::new(
+                    "setTileConcentration: not supported for this model",
+                ));
+            }
+        }
+        self.sys
+            .update_state(&mut self.state, &rgrow::system::NeededUpdate::NonZero);
+        Ok(())
+    }
+
+    /// Set tile `id`'s glue on `side` (0=N, 1=E, 2=S, 3=W). `glue_id` of
+    /// `None` (or `undefined` from JS) clears the glue. KTAM only.
+    #[wasm_bindgen(js_name = setTileEdgeGlue)]
+    pub fn set_tile_edge_glue(
+        &mut self,
+        id: u32,
+        side: u32,
+        glue_id: Option<u32>,
+    ) -> Result<(), JsError> {
+        if side >= 4 {
+            return Err(JsError::new("setTileEdgeGlue: side must be 0..=3"));
+        }
+        let g = glue_id.unwrap_or(0) as usize;
+        let idx = id as usize;
+        match &mut self.sys {
+            SystemEnum::KTAM(k) => {
+                if idx == 0 || idx >= k.tile_edges.nrows() {
+                    return Err(JsError::new("setTileEdgeGlue: tile id out of range"));
+                }
+                if g >= k.glue_strengths.len() {
+                    return Err(JsError::new("setTileEdgeGlue: glue id out of range"));
+                }
+                k.tile_edges[(idx, side as usize)] = g;
+                k.update_system();
+            }
+            _ => {
+                return Err(JsError::new(
+                    "setTileEdgeGlue: not supported for this model",
+                ));
+            }
+        }
+        self.sys
+            .update_state(&mut self.state, &rgrow::system::NeededUpdate::NonZero);
+        Ok(())
+    }
+
+    /// Set the interaction value(s) for the glue pair `(a, b)`. The matrix
+    /// is symmetric, so `(b, a)` is mirrored automatically. KTAM ignores
+    /// `ds`; SDC2D requires it; KBlock ignores it.
+    #[wasm_bindgen(js_name = setGlueInteraction)]
+    pub fn set_glue_interaction(
+        &mut self,
+        a: u32,
+        b: u32,
+        dg: f64,
+        ds: Option<f64>,
+    ) -> Result<(), JsError> {
+        if !dg.is_finite() {
+            return Err(JsError::new("setGlueInteraction: dg must be finite"));
+        }
+        if let Some(d) = ds {
+            if !d.is_finite() {
+                return Err(JsError::new("setGlueInteraction: ds must be finite"));
+            }
+        }
+        let ai = a as usize;
+        let bi = b as usize;
+        if ai == 0 || bi == 0 {
+            return Err(JsError::new(
+                "setGlueInteraction: glue id 0 is the null glue",
+            ));
+        }
+        match &mut self.sys {
+            SystemEnum::KTAM(k) => {
+                let n = k.glue_strengths.len();
+                if ai >= n || bi >= n {
+                    return Err(JsError::new("setGlueInteraction: glue id out of range"));
+                }
+                if ai == bi {
+                    k.glue_strengths[ai] = dg;
+                } else {
+                    k.glue_links[(ai, bi)] = dg;
+                    k.glue_links[(bi, ai)] = dg;
+                }
+                k.update_system();
+            }
+            SystemEnum::SDC2DSquare(s) => {
+                let nrows = s.delta_g_matrix.nrows();
+                let ncols = s.delta_g_matrix.ncols();
+                if ai >= nrows || bi >= ncols || ai >= s.entropy_matrix.nrows() {
+                    return Err(JsError::new("setGlueInteraction: glue id out of range"));
+                }
+                let dg_val = rgrow::units::KcalPerMol::from(dg);
+                s.delta_g_matrix[(ai, bi)] = dg_val;
+                s.delta_g_matrix[(bi, ai)] = dg_val;
+                if let Some(d) = ds {
+                    let ds_val = rgrow::units::KcalPerMolKelvin::from(d);
+                    s.entropy_matrix[(ai, bi)] = ds_val;
+                    s.entropy_matrix[(bi, ai)] = ds_val;
+                }
+                s.update_system();
+            }
+            SystemEnum::KBlock(k) => {
+                let links = k.glue_links();
+                if ai >= links.nrows() || bi >= links.ncols() {
+                    return Err(JsError::new("setGlueInteraction: glue id out of range"));
+                }
+                k.set_glue_link(ai, bi, rgrow::units::KcalPerMol::from(dg));
+                k.update();
+            }
+            _ => {
+                return Err(JsError::new(
+                    "setGlueInteraction: not supported for this model",
+                ));
+            }
+        }
+        self.sys
+            .update_state(&mut self.state, &rgrow::system::NeededUpdate::NonZero);
+        Ok(())
     }
 
     /// Render a `size`×`size` RGBA sprite for tile id `id` (using the

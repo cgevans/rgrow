@@ -221,6 +221,21 @@ impl KBlock {
         self.fill_free_blocker_concentrations();
     }
 
+    /// Read-only view of the per-pair binding ΔG matrix.
+    pub fn glue_links(&self) -> &Array2<KcalPerMol> {
+        &self.glue_links
+    }
+
+    /// Set the binding ΔG for the (a, b) glue pair, mirrored to (b, a)
+    /// to keep the matrix symmetric. Caller must invoke `update()` (or
+    /// `fill_energy_pairs()`) afterwards to refresh the cached energies.
+    pub fn set_glue_link(&mut self, a: usize, b: usize, value: KcalPerMol) {
+        self.glue_links[(a, b)] = value;
+        if a != b {
+            self.glue_links[(b, a)] = value;
+        }
+    }
+
     /// Get the unblocked friends to one side of some given tile
     pub fn get_unblocked_friends_to_side(
         &self,

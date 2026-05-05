@@ -1090,6 +1090,20 @@ impl ProcessedTileSet {
         hdoubles.iter_mut().for_each(|(_, j)| *j += tile_i);
         vdoubles.iter_mut().for_each(|(_, j)| *j += tile_i);
 
+        // Reverse-map the glue BiMap into a Vec<String> indexed by glue id.
+        // Slot 0 is the null glue and is left empty so downstream code that
+        // skips empty names doesn't surface it.
+        let glue_names: Vec<String> = {
+            let max_id = glue_map.right_values().copied().max().unwrap_or(0);
+            let mut names = vec![String::new(); max_id + 1];
+            for (name, &id) in glue_map.iter() {
+                if id != 0 {
+                    names[id] = name.clone();
+                }
+            }
+            names
+        };
+
         let mut s = Self {
             tile_edges: Array2::from_shape_vec(
                 ((tile_i + double_tile_i_offset) as usize, 4),
@@ -1099,7 +1113,7 @@ impl ProcessedTileSet {
             tile_stoics: Array1::from_vec(tile_stoics),
             tile_names,
             tile_colors,
-            glue_names: Vec::new(), // FIXME
+            glue_names,
             glue_strengths,
             has_duples,
             glue_map,

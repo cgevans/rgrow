@@ -44,8 +44,18 @@ const tilesetPanel = $("tileset-panel");
 const tilesetTable = $("tileset-table");
 const tilesetTableBody = tilesetTable.querySelector("tbody");
 const tilesetCountEl = $("tileset-count");
+const gluePanel = $("glue-panel");
+const glueTable = $("glue-table");
+const glueTableBody = glueTable.querySelector("tbody");
+const glueCountEl = $("glue-count");
 
 const TILESET_SPRITE_PX = 22;
+let editFeatures = {
+  tile_concentration: false,
+  tile_edge_glue: false,
+  glue_interaction: false,
+};
+let currentGlueList = null;
 
 let wasm = null;     // wasm module exports (after init)
 let sim = null;      // current Sim instance
@@ -104,6 +114,7 @@ async function loadTilesetText(text, kind) {
     sim = null;
     setControlsEnabled(false);
     tilesetPanel.hidden = true;
+    gluePanel.hidden = true;
     return;
   }
   lastTilesetText = text;
@@ -113,8 +124,11 @@ async function loadTilesetText(text, kind) {
   pauseBtn.textContent = "Resume";
 
   resizeCanvasFor(sim);
-  rebuildParameterControls();
+  refreshEditableFeatures();
+  refreshGlueList();
   rebuildTileSetPanel();
+  rebuildGlueInteractionsPanel();
+  rebuildParameterControls();
   pinnedCell = null;
   pinnedTilesetId = null;
   renderTileInfo(null);
@@ -403,14 +417,39 @@ function rebuildTileSetPanel() {
 
     const tdConc = document.createElement("td");
     tdConc.className = "col-conc";
-    tdConc.textContent = t.concentration != null ? fmt(t.concentration, 3) : "";
+    if (editFeatures.tile_concentration && t.concentration != null) {
+      const input = makeNumberInput(t.concentration, 3, (v, revert) => {
+        applyEdit(
+          () => sim.setTileConcentration(t.id, v),
+          revert,
+          `Failed to set tile #${t.id} concentration`,
+        );
+      });
+      tdConc.append(input);
+    } else {
+      tdConc.textContent = t.concentration != null ? fmt(t.concentration, 3) : "";
+    }
 
-    const glueCells = (t.edge_glues || [null, null, null, null]).map((g) => {
-      const td = document.createElement("td");
-      td.className = "col-glue" + (g ? "" : " empty");
-      td.textContent = g || "—";
-      return td;
-    });
+    const glueCells = (t.edge_glue_ids || [null, null, null, null]).map(
+      (gid, sideIdx) => {
+        const td = document.createElement("td");
+        td.className = "col-glue" + (gid != null ? "" : " empty");
+        if (editFeatures.tile_edge_glue) {
+          const sel = makeGlueSelect(gid, (newId, revert) => {
+            applyEdit(
+              () => sim.setTileEdgeGlue(t.id, sideIdx, newId),
+              revert,
+              `Failed to set tile #${t.id} side ${"NESW"[sideIdx]} glue`,
+            );
+          });
+          td.append(sel);
+        } else {
+          const name = t.edge_glues?.[sideIdx];
+          td.textContent = name && name.length ? name : gid != null ? `#${gid}` : "—";
+        }
+        return td;
+      },
+    );
 
     tr.append(tdSprite, tdId, tdName, tdConc, ...glueCells);
 
@@ -422,7 +461,10 @@ function rebuildTileSetPanel() {
       if (pinnedCell || pinnedTilesetId != null) return;
       renderTileInfo(null);
     });
-    tr.addEventListener("click", () => {
+    tr.addEventListener("click", (e) => {
+      // Don't toggle the row pin when the user is interacting with an
+      // editable form control inside the row.
+      if (e.target.closest("input, select, button, textarea, label")) return;
       if (pinnedTilesetId === t.id) {
         pinnedTilesetId = null;
         tr.classList.remove("pinned");
@@ -445,6 +487,235 @@ function rebuildTileSetPanel() {
 function clearAllPinnedRows() {
   for (const tr of tilesetTableBody.querySelectorAll("tr.pinned")) {
     tr.classList.remove("pinned");
+  }
+}
+
+// ── Editing helpers ───────────────────────────────────────────────────
+
+function refreshEditableFeatures() {
+  if (!sim) {
+    editFeatures = {
+      tile_concentration: false,
+      tile_edge_glue: false,
+      glue_interaction: false,
+    };
+    return;
+  }
+  try {
+    const f = sim.editableFeatures();
+    editFeatures = {
+      tile_concentration: !!f.tile_concentration,
+      tile_edge_glue: !!f.tile_edge_glue,
+      glue_interaction: !!f.glue_interaction,
+    };
+  } catch (e) {
+    console.warn("editableFeatures() failed:", e);
+    editFeatures = {
+      tile_concentration: false,
+      tile_edge_glue: false,
+      glue_interaction: false,
+    };
+  }
+}
+
+// Common change handler: read the input, parse, run the wasm setter, and
+// revert on error. The caller passes the setter as a thunk so we don't
+// need a dedicated wrapper per field.
+function applyEdit(setterThunk, revert, errorPrefix) {
+  if (!sim) return;
+  try {
+    setterThunk();
+  } catch (e) {
+    statsEl.textContent = `${errorPrefix}: ${e.message || e}`;
+    revert?.();
+  }
+}
+
+function makeNumberInput(initialValue, digits, onCommit, opts = {}) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "any";
+  if (!opts.allowNegative) input.min = "0";
+  input.value = formatForInput(initialValue, digits);
+  let lastCommitted = input.value;
+  // The browser fires `change` on Enter or blur — exactly what we want
+  // (no per-keystroke applies).
+  input.addEventListener("change", () => {
+    const v = Number(input.value);
+    if (!Number.isFinite(v) || (!opts.allowNegative && v < 0)) {
+      input.value = lastCommitted;
+      return;
+    }
+    onCommit(v, () => {
+      input.value = lastCommitted;
+    });
+    lastCommitted = input.value;
+  });
+  // Avoid the row click handler hijacking focus interactions.
+  input.addEventListener("click", (e) => e.stopPropagation());
+  return input;
+}
+
+function formatForInput(n, digits) {
+  if (n == null || !Number.isFinite(n)) return "";
+  // Use a plain-number representation by default; fall back to exponential
+  // for tiny values where toFixed loses information.
+  if (Math.abs(n) < 1e-3 && n !== 0) return n.toExponential(digits);
+  return Number(n.toFixed(digits)).toString();
+}
+
+function makeGlueSelect(currentId, onCommit) {
+  const sel = document.createElement("select");
+  const noneOpt = document.createElement("option");
+  noneOpt.value = "";
+  noneOpt.textContent = "—";
+  sel.append(noneOpt);
+  if (Array.isArray(currentGlueList)) {
+    for (const g of currentGlueList) {
+      const opt = document.createElement("option");
+      opt.value = String(g.id);
+      opt.textContent = `${g.name}`;
+      sel.append(opt);
+    }
+  }
+  sel.value = currentId == null ? "" : String(currentId);
+  let lastCommitted = sel.value;
+  sel.addEventListener("change", () => {
+    const v = sel.value === "" ? null : Number(sel.value);
+    onCommit(v, () => {
+      sel.value = lastCommitted;
+    });
+    lastCommitted = sel.value;
+  });
+  sel.addEventListener("click", (e) => e.stopPropagation());
+  return sel;
+}
+
+// ── Glue list (for per-side dropdowns) and interactions panel ─────────
+
+// Refresh the cached glue list used to populate per-side glue dropdowns
+// in the tileset table. Independent of whether the interactions panel
+// shows anything (the dropdowns may be useful when no pair interactions
+// are non-zero yet).
+function refreshGlueList() {
+  currentGlueList = null;
+  if (!sim) return;
+  try {
+    const glues = sim.glueList();
+    currentGlueList = Array.isArray(glues) ? glues : null;
+  } catch (e) {
+    console.warn("glueList() failed:", e);
+  }
+}
+
+function rebuildGlueInteractionsPanel() {
+  glueTableBody.replaceChildren();
+  if (!sim) {
+    gluePanel.hidden = true;
+    return;
+  }
+  let schema;
+  try {
+    schema = sim.interactionSchema() || {};
+  } catch (e) {
+    gluePanel.hidden = true;
+    console.warn("interactionSchema() failed:", e);
+    return;
+  }
+  let interactions;
+  try {
+    interactions = sim.glueInteractions();
+  } catch (e) {
+    gluePanel.hidden = true;
+    console.warn("glueInteractions() failed:", e);
+    return;
+  }
+  if (!Array.isArray(interactions) || interactions.length === 0) {
+    gluePanel.hidden = true;
+    return;
+  }
+  gluePanel.hidden = false;
+  glueCountEl.textContent =
+    `${interactions.length} pair${interactions.length === 1 ? "" : "s"}`;
+
+  const thDg = $("glue-th-dg");
+  const thDs = $("glue-th-ds");
+  thDg.textContent = schema.label_dg || "Strength";
+  if (schema.has_ds) {
+    thDs.textContent = schema.label_ds || "ΔS";
+    glueTable.classList.remove("no-ds");
+  } else {
+    glueTable.classList.add("no-ds");
+  }
+
+  for (const iax of interactions) {
+    const tr = document.createElement("tr");
+
+    const tdPair = document.createElement("td");
+    tdPair.className = "col-pair";
+    const aName = iax.a_name && iax.a_name.length ? iax.a_name : `#${iax.a}`;
+    const bName = iax.b_name && iax.b_name.length ? iax.b_name : `#${iax.b}`;
+    if (iax.matching) {
+      tdPair.append(document.createTextNode(aName));
+      const tag = document.createElement("span");
+      tag.className = "self-tag";
+      tag.textContent = "(self)";
+      tdPair.append(tag);
+    } else {
+      tdPair.append(document.createTextNode(`${aName} — ${bName}`));
+    }
+    const idHint = document.createElement("span");
+    idHint.className = "glue-id";
+    idHint.textContent = iax.matching
+      ? `(#${iax.a})`
+      : `(#${iax.a}–#${iax.b})`;
+    tdPair.append(idHint);
+
+    const tdDg = document.createElement("td");
+    if (editFeatures.glue_interaction) {
+      const input = makeNumberInput(
+        iax.dg,
+        4,
+        (v, revert) => {
+          applyEdit(
+            () => sim.setGlueInteraction(iax.a, iax.b, v, schema.has_ds ? iax.ds : undefined),
+            revert,
+            `Failed to set ${schema.label_dg} for pair (#${iax.a}, #${iax.b})`,
+          );
+          iax.dg = v;
+        },
+        { allowNegative: true },
+      );
+      tdDg.append(input);
+    } else {
+      tdDg.textContent = fmt(iax.dg, 4);
+    }
+
+    const tdDs = document.createElement("td");
+    tdDs.className = "col-ds";
+    if (schema.has_ds) {
+      if (editFeatures.glue_interaction) {
+        const input = makeNumberInput(
+          iax.ds ?? 0,
+          6,
+          (v, revert) => {
+            applyEdit(
+              () => sim.setGlueInteraction(iax.a, iax.b, iax.dg, v),
+              revert,
+              `Failed to set ${schema.label_ds || "ΔS"} for pair (#${iax.a}, #${iax.b})`,
+            );
+            iax.ds = v;
+          },
+          { allowNegative: true },
+        );
+        tdDs.append(input);
+      } else {
+        tdDs.textContent = iax.ds != null ? fmt(iax.ds, 6) : "";
+      }
+    }
+
+    tr.append(tdPair, tdDg, tdDs);
+    glueTableBody.append(tr);
   }
 }
 
