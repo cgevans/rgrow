@@ -475,6 +475,10 @@ impl<C: Canvas, T: StateTracker> RateStore for QuadTreeState<C, T> {
         self.rates.choose_point()
     }
 
+    fn choose_point_with_rand(&self, rand: f64) -> (Point, PerSecond) {
+        self.rates.choose_point_with_rand(rand)
+    }
+
     fn rate_at_point(&self, point: PointSafeHere) -> PerSecond {
         self.rates.rate_at_point(point)
     }
