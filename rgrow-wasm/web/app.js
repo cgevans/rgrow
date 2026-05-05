@@ -435,14 +435,14 @@ function rebuildTileSetPanel() {
         const td = document.createElement("td");
         td.className = "col-glue" + (gid != null ? "" : " empty");
         if (editFeatures.tile_edge_glue) {
-          const sel = makeGlueSelect(gid, (newId, revert) => {
+          const inp = makeGlueInput(gid, (newId, revert) => {
             applyEdit(
               () => sim.setTileEdgeGlue(t.id, sideIdx, newId),
               revert,
               `Failed to set tile #${t.id} side ${"NESW"[sideIdx]} glue`,
             );
           });
-          td.append(sel);
+          td.append(inp);
         } else {
           const name = t.edge_glues?.[sideIdx];
           td.textContent = name && name.length ? name : gid != null ? `#${gid}` : "—";
@@ -564,47 +564,247 @@ function formatForInput(n, digits) {
   return Number(n.toFixed(digits)).toString();
 }
 
-function makeGlueSelect(currentId, onCommit) {
-  const sel = document.createElement("select");
-  const noneOpt = document.createElement("option");
-  noneOpt.value = "";
-  noneOpt.textContent = "—";
-  sel.append(noneOpt);
+// Display label for a glue id — its name if it has one, else `#<id>`.
+// Used as the <input> value so the user-visible string is also what the
+// browser autocomplete matches against.
+function glueDisplayLabel(id) {
+  if (id == null) return "";
   if (Array.isArray(currentGlueList)) {
-    for (const g of currentGlueList) {
-      const opt = document.createElement("option");
-      opt.value = String(g.id);
-      opt.textContent = `${g.name}`;
-      sel.append(opt);
+    const g = currentGlueList.find((x) => x.id === id);
+    if (g && g.name && g.name.length) return g.name;
+  }
+  return `#${id}`;
+}
+
+// Resolve a typed string to a glue id (or null for empty). Accepts the
+// glue's name, or an explicit `#<id>` form. Returns `undefined` on no
+// match so the caller can distinguish "no glue" from "invalid".
+function resolveGlueInput(raw) {
+  const s = raw.trim();
+  if (s === "") return null;
+  if (Array.isArray(currentGlueList)) {
+    const byName = currentGlueList.find((g) => g.name === s);
+    if (byName) return byName.id;
+  }
+  const m = s.match(/^#(\d+)$/);
+  if (m) {
+    const id = Number(m[1]);
+    if (Array.isArray(currentGlueList) && currentGlueList.some((g) => g.id === id)) {
+      return id;
     }
   }
-  sel.value = currentId == null ? "" : String(currentId);
-  let lastCommitted = sel.value;
-  sel.addEventListener("change", () => {
-    const v = sel.value === "" ? null : Number(sel.value);
-    onCommit(v, () => {
-      sel.value = lastCommitted;
+  return undefined;
+}
+
+// One shared dropdown floats over the page (position: fixed) so it
+// isn't clipped by the table's scroll container. Only one combobox can
+// be open at a time, which is fine — we anchor it to whichever input
+// has focus.
+let glueDropdown = null;
+let glueDropdownInput = null;
+let glueDropdownActiveIndex = -1;
+
+function ensureGlueDropdown() {
+  if (glueDropdown) return glueDropdown;
+  const ul = document.createElement("ul");
+  ul.className = "glue-combo-list";
+  ul.hidden = true;
+  document.body.append(ul);
+  glueDropdown = ul;
+  return ul;
+}
+
+function positionGlueDropdown(input) {
+  const ul = ensureGlueDropdown();
+  const rect = input.getBoundingClientRect();
+  ul.style.left = `${rect.left}px`;
+  ul.style.top = `${rect.bottom + 2}px`;
+  ul.style.minWidth = `${rect.width}px`;
+}
+
+function hideGlueDropdown() {
+  if (glueDropdown) glueDropdown.hidden = true;
+  glueDropdownInput = null;
+  glueDropdownActiveIndex = -1;
+}
+
+function isGlueDropdownOpenFor(input) {
+  return (
+    glueDropdown &&
+    !glueDropdown.hidden &&
+    glueDropdownInput === input
+  );
+}
+
+function updateGlueDropdownActive() {
+  if (!glueDropdown) return;
+  const items = glueDropdown.children;
+  for (let i = 0; i < items.length; i++) {
+    items[i].classList.toggle("active", i === glueDropdownActiveIndex);
+  }
+  const active = items[glueDropdownActiveIndex];
+  if (active) active.scrollIntoView({ block: "nearest" });
+}
+
+function showGlueDropdown(input, filter, onPick) {
+  const ul = ensureGlueDropdown();
+  glueDropdownInput = input;
+
+  const opts = [{ id: null, label: "—" }];
+  if (Array.isArray(currentGlueList)) {
+    for (const g of currentGlueList) {
+      opts.push({
+        id: g.id,
+        label: g.name && g.name.length ? g.name : `#${g.id}`,
+      });
+    }
+  }
+  const f = filter.trim().toLowerCase();
+  const matches = f === ""
+    ? opts
+    : opts.filter((o) => o.label.toLowerCase().includes(f));
+
+  ul.replaceChildren();
+  if (matches.length === 0) {
+    hideGlueDropdown();
+    return;
+  }
+  for (const opt of matches) {
+    const li = document.createElement("li");
+    li.textContent = opt.label;
+    li.dataset.glueId = opt.id == null ? "" : String(opt.id);
+    // mousedown so we beat the input's `blur` handler — preventDefault
+    // keeps focus on the input.
+    li.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      onPick(opt.id);
+      hideGlueDropdown();
     });
-    lastCommitted = sel.value;
+    ul.append(li);
+  }
+  glueDropdownActiveIndex = 0;
+  updateGlueDropdownActive();
+  positionGlueDropdown(input);
+  ul.hidden = false;
+}
+
+// Reposition / close on viewport changes. Use capture so nested
+// scrollers (the tileset table wrap) trigger us too.
+window.addEventListener("scroll", hideGlueDropdown, true);
+window.addEventListener("resize", hideGlueDropdown);
+
+function makeGlueInput(currentId, onCommit) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.placeholder = "—";
+  input.value = glueDisplayLabel(currentId);
+  let lastCommitted = input.value;
+
+  const commitText = () => {
+    const resolved = resolveGlueInput(input.value);
+    if (resolved === undefined) {
+      input.value = lastCommitted;
+      return;
+    }
+    const newLabel = glueDisplayLabel(resolved);
+    if (newLabel === lastCommitted) {
+      // Already at this value (e.g. typed the same name again). Just
+      // normalize the display and skip the wasm round-trip.
+      input.value = newLabel;
+      return;
+    }
+    let reverted = false;
+    onCommit(resolved, () => {
+      input.value = lastCommitted;
+      reverted = true;
+    });
+    if (!reverted) {
+      input.value = newLabel;
+      lastCommitted = newLabel;
+    }
+  };
+
+  const pickById = (id) => {
+    input.value = id == null ? "" : glueDisplayLabel(id);
+    commitText();
+  };
+
+  input.addEventListener("focus", () =>
+    showGlueDropdown(input, "", pickById),
+  );
+  input.addEventListener("click", (e) => {
+    e.stopPropagation();
+    showGlueDropdown(input, input.value, pickById);
   });
-  sel.addEventListener("click", (e) => e.stopPropagation());
-  return sel;
+  input.addEventListener("input", () =>
+    showGlueDropdown(input, input.value, pickById),
+  );
+  input.addEventListener("blur", () => {
+    // The list's `mousedown` runs before blur and calls preventDefault,
+    // so a click on a list item won't reach this path. A blur from
+    // tabbing / clicking outside should commit whatever's in the box.
+    setTimeout(() => {
+      if (glueDropdownInput === input) hideGlueDropdown();
+    }, 0);
+    commitText();
+  });
+  input.addEventListener("keydown", (e) => {
+    const ul = glueDropdown;
+    const open = isGlueDropdownOpenFor(input);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!open) {
+        showGlueDropdown(input, input.value, pickById);
+      } else if (ul.children.length > 0) {
+        glueDropdownActiveIndex = Math.min(
+          glueDropdownActiveIndex + 1,
+          ul.children.length - 1,
+        );
+        updateGlueDropdownActive();
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (open) {
+        glueDropdownActiveIndex = Math.max(glueDropdownActiveIndex - 1, 0);
+        updateGlueDropdownActive();
+      }
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (open && glueDropdownActiveIndex >= 0) {
+        const li = ul.children[glueDropdownActiveIndex];
+        const idStr = li.dataset.glueId;
+        pickById(idStr === "" ? null : Number(idStr));
+      } else {
+        commitText();
+      }
+      hideGlueDropdown();
+    } else if (e.key === "Escape") {
+      input.value = lastCommitted;
+      hideGlueDropdown();
+      input.blur();
+    }
+  });
+
+  return input;
 }
 
 // ── Glue list (for per-side dropdowns) and interactions panel ─────────
 
-// Refresh the cached glue list used to populate per-side glue dropdowns
-// in the tileset table. Independent of whether the interactions panel
-// shows anything (the dropdowns may be useful when no pair interactions
-// are non-zero yet).
+// Refresh the cached glue list used by the per-side glue combobox
+// inputs in the tileset table. The combobox renders directly from
+// `currentGlueList` each time it opens, so there's nothing more to
+// rebuild here.
 function refreshGlueList() {
   currentGlueList = null;
-  if (!sim) return;
-  try {
-    const glues = sim.glueList();
-    currentGlueList = Array.isArray(glues) ? glues : null;
-  } catch (e) {
-    console.warn("glueList() failed:", e);
+  if (sim) {
+    try {
+      const glues = sim.glueList();
+      currentGlueList = Array.isArray(glues) ? glues : null;
+    } catch (e) {
+      console.warn("glueList() failed:", e);
+    }
   }
 }
 

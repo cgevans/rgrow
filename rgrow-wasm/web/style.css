@@ -319,6 +319,42 @@ footer code { color: var(--accent); }
   max-width: 92px;
 }
 
+#tileset-table td.col-glue input[type="text"] {
+  width: 92px;
+  padding: 1px 4px;
+  font: inherit;
+}
+
+.glue-combo-list {
+  position: fixed;
+  margin: 0;
+  padding: 2px 0;
+  list-style: none;
+  background: #0e0e10;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.glue-combo-list[hidden] { display: none; }
+
+.glue-combo-list li {
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.glue-combo-list li.active,
+.glue-combo-list li:hover {
+  background: #2a2a30;
+}
+
 #glue-table {
   width: 100%;
   border-collapse: collapse;

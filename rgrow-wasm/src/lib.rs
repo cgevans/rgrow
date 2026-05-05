@@ -16,6 +16,7 @@ use wasm_bindgen::prelude::*;
 
 use rgrow::base::Tile;
 use rgrow::canvas::Canvas;
+use rgrow::models::sdc1d::{SDCParams, SDCStrand, SingleOrMultiScaffold, SDC};
 use rgrow::models::sdc2d::{SDC2DParams, SDC2DSquare, SDC2DStrand};
 use rgrow::models::sdc_common::{GsOrSeq, RefOrPair};
 use rgrow::painter::render_frame_dyn;
@@ -149,22 +150,25 @@ impl Sim {
     }
 
     /// Construct a simulation from a JSON tileset string.
+    ///
+    /// Tries the `WebExample` schema first (its `model` tag namespaces
+    /// browser-only tileset shapes like `sdc2d-square` and `sdc1d` so they
+    /// don't collide with the generic `TileSet` model field). Falls back to
+    /// `TileSet::from_json` for everything else.
     #[wasm_bindgen(js_name = fromJson)]
     pub fn from_json(json: &str) -> Result<Sim, JsError> {
         console_error_panic_hook::set_once();
-        match TileSet::from_json(json) {
-            Ok(tileset) => {
-                let (sys, state) = tileset.create_system_and_state().map_err(js_err)?;
-                Ok(Sim { sys, state })
-            }
-            Err(tileset_err) => WebExample::from_json(json)
-                .map_err(|example_err| {
-                    JsError::new(&format!(
-                        "JSON is neither a tileset nor a web example. tileset: {tileset_err}; web example: {example_err}"
-                    ))
-                })?
-                .into_sim()
-                .map_err(js_err),
+        match WebExample::from_json(json) {
+            Ok(example) => example.into_sim().map_err(js_err),
+            Err(example_err) => match TileSet::from_json(json) {
+                Ok(tileset) => {
+                    let (sys, state) = tileset.create_system_and_state().map_err(js_err)?;
+                    Ok(Sim { sys, state })
+                }
+                Err(tileset_err) => Err(JsError::new(&format!(
+                    "JSON is neither a web example nor a tileset. web example: {example_err}; tileset: {tileset_err}"
+                ))),
+            },
         }
     }
 
@@ -625,7 +629,7 @@ impl Sim {
             },
             SystemEnum::SDC2DSquare(_) => EditableFeatures {
                 tile_concentration: true,
-                tile_edge_glue: false,
+                tile_edge_glue: true,
                 glue_interaction: true,
             },
             SystemEnum::KBlock(_) => EditableFeatures {
@@ -697,6 +701,20 @@ impl Sim {
                 }
                 k.tile_edges[(idx, side as usize)] = g;
                 k.update_system();
+            }
+            SystemEnum::SDC2DSquare(s) => {
+                // strand_glues columns are NORTH/EAST/SOUTH/WEST (0..=3)
+                // — same as the JS-side `side` convention. The bottom
+                // (scaffold) glue lives in column 4 and isn't editable
+                // from the per-side cells.
+                if idx == 0 || idx >= s.strand_glues.nrows() {
+                    return Err(JsError::new("setTileEdgeGlue: strand id out of range"));
+                }
+                if g >= s.glue_names.len() {
+                    return Err(JsError::new("setTileEdgeGlue: glue id out of range"));
+                }
+                s.strand_glues[(idx, side as usize)] = g;
+                s.update_system();
             }
             _ => {
                 return Err(JsError::new(
@@ -920,6 +938,8 @@ fn parse_xgrow_seed(text: &str) -> Result<Vec<Vec<Tile>>, String> {
 enum WebExample {
     #[serde(rename = "sdc2d-square")]
     Sdc2dSquare(WebSdc2dSquare),
+    #[serde(rename = "sdc1d")]
+    Sdc1d(WebSdc1d),
 }
 
 impl WebExample {
@@ -930,6 +950,7 @@ impl WebExample {
     fn into_sim(self) -> Result<Sim, rgrow::base::GrowError> {
         match self {
             WebExample::Sdc2dSquare(example) => example.into_sim(),
+            WebExample::Sdc1d(example) => example.into_sim(),
         }
     }
 }
@@ -1029,5 +1050,114 @@ impl From<WebCanvasType> for CanvasType {
             WebCanvasType::Square => CanvasType::Square,
             WebCanvasType::SquareCompact => CanvasType::SquareCompact,
         }
+    }
+}
+
+#[derive(Deserialize)]
+struct WebSdc1d {
+    strands: Vec<WebSdc1dStrand>,
+    /// Single 1D scaffold, repeated `n_scaffolds` times along the i-axis.
+    scaffold: Vec<Option<String>>,
+    scaffold_concentration: f64,
+    glue_dg_s: Vec<WebGlueEnergy>,
+    k_f: f64,
+    #[serde(default = "default_k_n")]
+    k_n: f64,
+    #[serde(default = "default_k_c")]
+    k_c: f64,
+    temperature: f64,
+    #[serde(default = "default_n_scaffolds")]
+    n_scaffolds: usize,
+    #[serde(default)]
+    junction_penalty_dg: Option<f64>,
+    #[serde(default)]
+    junction_penalty_ds: Option<f64>,
+    #[serde(default = "default_sdc1d_canvas_type")]
+    canvas_type: WebCanvasType,
+}
+
+#[derive(Deserialize)]
+struct WebSdc1dStrand {
+    name: Option<String>,
+    color: Option<String>,
+    concentration: f64,
+    left_glue: Option<String>,
+    btm_glue: Option<String>,
+    right_glue: Option<String>,
+}
+
+impl From<WebSdc1dStrand> for SDCStrand {
+    fn from(strand: WebSdc1dStrand) -> Self {
+        SDCStrand {
+            name: strand.name,
+            color: strand.color,
+            concentration: strand.concentration,
+            btm_glue: strand.btm_glue,
+            left_glue: strand.left_glue,
+            right_glue: strand.right_glue,
+        }
+    }
+}
+
+fn default_k_n() -> f64 {
+    1e5
+}
+
+fn default_k_c() -> f64 {
+    1e4
+}
+
+fn default_n_scaffolds() -> usize {
+    32
+}
+
+fn default_sdc1d_canvas_type() -> WebCanvasType {
+    WebCanvasType::SquareCompact
+}
+
+impl WebSdc1d {
+    fn into_sim(self) -> Result<Sim, rgrow::base::GrowError> {
+        let scaffold_len = self.scaffold.len();
+        if scaffold_len == 0 {
+            return Err(rgrow::base::GrowError::NotSupported(
+                "sdc1d: scaffold must have at least one position".to_string(),
+            ));
+        }
+        let scaffold = SingleOrMultiScaffold::Single(self.scaffold);
+        let glue_dg_s = self
+            .glue_dg_s
+            .into_iter()
+            .map(|g| (RefOrPair::Ref(g.name), GsOrSeq::GS((g.dg37, g.ds))))
+            .collect::<HashMap<_, _>>();
+        let params = SDCParams {
+            strands: self.strands.into_iter().map(Into::into).collect(),
+            scaffold,
+            scaffold_concentration: self.scaffold_concentration,
+            glue_dg_s,
+            k_f: self.k_f,
+            k_n: self.k_n,
+            k_c: self.k_c,
+            temperature: self.temperature,
+            junction_penalty_dg: self.junction_penalty_dg.map(rgrow::units::KcalPerMol::from),
+            junction_penalty_ds: self
+                .junction_penalty_ds
+                .map(rgrow::units::KcalPerMolKelvin::from),
+            quencher_name: None,
+            quencher_concentration: 0.0,
+            reporter_name: None,
+            fluorophore_concentration: 0.0,
+        };
+        let sys = SDC::from_params(params);
+        let n_tile_types = sys.strand_names.len();
+        let mut state = StateEnum::empty(
+            (self.n_scaffolds, scaffold_len),
+            self.canvas_type.into(),
+            &TrackingConfig::None,
+            n_tile_types,
+        )?;
+        let sys = SystemEnum::SDC(sys);
+        sys.setup_state(&mut state)?;
+        sys.update_state(&mut state, &rgrow::system::NeededUpdate::All);
+        Ok(Sim { sys, state })
     }
 }
