@@ -32,15 +32,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
-/// Convert a `HashSetType<Tile>` into a sorted, deduplicated `Box<[Tile]>`.
-/// Used at `update_system` time to freeze the friends sets into the form
-/// the hot path expects.
-fn set_to_sorted_slice(s: HashSetType<Tile>) -> Box<[Tile]> {
-    let mut v: Vec<Tile> = s.into_iter().collect();
-    v.sort_unstable();
-    v.into_boxed_slice()
-}
-
 thread_local! {
     /// Scratch buffer for the per-call friends-set merge in
     /// `_find_monomer_attachment_possibilities_at_point`. Reusing the buffer
@@ -1280,77 +1271,81 @@ impl KTAM {
         // Build friends sets in temporary HashSets, then freeze each into a
         // sorted Box<[Tile]> for the hot path to sort-merge against. The
         // hashset-construction logic below mirrors the original code.
-        let mut bn: Vec<HashSetType<Tile>> = (0..ntiles).map(|_| HashSetType::default()).collect();
-        let mut be: Vec<HashSetType<Tile>> = (0..ntiles).map(|_| HashSetType::default()).collect();
-        let mut bs: Vec<HashSetType<Tile>> = (0..ntiles).map(|_| HashSetType::default()).collect();
-        let mut bw: Vec<HashSetType<Tile>> = (0..ntiles).map(|_| HashSetType::default()).collect();
-        let mut bne: Vec<HashSetType<Tile>> = (0..ntiles).map(|_| HashSetType::default()).collect();
-        let mut bee: Vec<HashSetType<Tile>> = (0..ntiles).map(|_| HashSetType::default()).collect();
-        let mut bse: Vec<HashSetType<Tile>> = (0..ntiles).map(|_| HashSetType::default()).collect();
-        let mut bss: Vec<HashSetType<Tile>> = (0..ntiles).map(|_| HashSetType::default()).collect();
-        let mut bsw: Vec<HashSetType<Tile>> = (0..ntiles).map(|_| HashSetType::default()).collect();
+        // Build friends as Vec<Tile> directly. The outer loop visits t1
+        // monotonically; for fixed (t1, t2), each conditional inserts t1
+        // into a different direction-vec, so each output is built
+        // already-sorted with no duplicates — no HashSet needed.
+        let mut bn: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut be: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bs: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bw: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bne: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bee: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bse: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bss: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bsw: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
         for t1 in 0..(ntiles) {
             for t2 in 0..(ntiles) {
                 let t1t = t1 as Tile;
                 match self.tile_shape(t1t) {
                     TileShape::Single => {
                         if self.get_energy_ns(t2, t1) != 0. {
-                            bn[t2 as usize].insert(t1);
+                            bn[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t2, t1) != 0. {
-                            bw[t2 as usize].insert(t1);
+                            bw[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(t1, t2) != 0. {
-                            bs[t2 as usize].insert(t1);
+                            bs[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t1, t2) != 0. {
-                            be[t2 as usize].insert(t1);
+                            be[t2 as usize].push(t1);
                         }
                     }
                     TileShape::DupleToRight(td) => {
                         if self.get_energy_ns(t2, td) != 0. {
-                            bne[t2 as usize].insert(t1);
+                            bne[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(td, t2) != 0. {
-                            bse[t2 as usize].insert(t1);
+                            bse[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(td, t2) != 0. {
-                            bee[t2 as usize].insert(t1);
+                            bee[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(t2, t1) != 0. {
-                            bn[t2 as usize].insert(t1);
+                            bn[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t2, t1) != 0. {
-                            bw[t2 as usize].insert(t1);
+                            bw[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(t1, t2) != 0. {
-                            bs[t2 as usize].insert(t1);
+                            bs[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t1, t2) != 0. {
-                            be[t2 as usize].insert(t1);
+                            be[t2 as usize].push(t1);
                         }
                     }
                     TileShape::DupleToBottom(td) => {
                         if self.get_energy_we(t2, td) != 0. {
-                            bsw[t2 as usize].insert(t1);
+                            bsw[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(td, t2) != 0. {
-                            bse[t2 as usize].insert(t1);
+                            bse[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(td, t2) != 0. {
-                            bss[t2 as usize].insert(t1);
+                            bss[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(t2, t1) != 0. {
-                            bn[t2 as usize].insert(t1);
+                            bn[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t2, t1) != 0. {
-                            bw[t2 as usize].insert(t1);
+                            bw[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(t1, t2) != 0. {
-                            bs[t2 as usize].insert(t1);
+                            bs[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t1, t2) != 0. {
-                            be[t2 as usize].insert(t1);
+                            be[t2 as usize].push(t1);
                         }
                     }
                     TileShape::DupleToLeft(_) => (),
@@ -1358,15 +1353,15 @@ impl KTAM {
                 };
             }
         }
-        self.friends_n = bn.into_iter().map(set_to_sorted_slice).collect();
-        self.friends_e = be.into_iter().map(set_to_sorted_slice).collect();
-        self.friends_s = bs.into_iter().map(set_to_sorted_slice).collect();
-        self.friends_w = bw.into_iter().map(set_to_sorted_slice).collect();
-        self.friends_ne = bne.into_iter().map(set_to_sorted_slice).collect();
-        self.friends_ee = bee.into_iter().map(set_to_sorted_slice).collect();
-        self.friends_se = bse.into_iter().map(set_to_sorted_slice).collect();
-        self.friends_ss = bss.into_iter().map(set_to_sorted_slice).collect();
-        self.friends_sw = bsw.into_iter().map(set_to_sorted_slice).collect();
+        self.friends_n = bn.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_e = be.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_s = bs.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_w = bw.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_ne = bne.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_ee = bee.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_se = bse.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_ss = bss.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_sw = bsw.into_iter().map(Vec::into_boxed_slice).collect();
 
         // Compute dimer equilibrium and cache results
         self.free_tile_concs = self.tile_concs.clone();
