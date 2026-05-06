@@ -458,6 +458,11 @@ impl<'py> IntoPyObject<'py> for Size {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Copy)]
 
 pub enum CanvasType {
+    /// Square canvas with a hidden internal border. User-visible coordinates
+    /// run `[0, N)` on each axis; tiles can be placed anywhere in that range.
+    /// Backed by `CanvasSquareCompact`. This is the default and is what
+    /// `CanvasType::SquareCompact` also resolves to (alias retained for
+    /// back-compat).
     #[serde(alias = "square")]
     Square,
     #[serde(alias = "periodic")]
@@ -466,8 +471,19 @@ pub enum CanvasType {
     Tube,
     #[serde(alias = "tube-diagonals")]
     TubeDiagonals,
+    /// Alias for `Square`. Retained so explicit `kind="square-compact"`
+    /// callers keep working; resolves to the same `CanvasSquareCompact`
+    /// backend.
     #[serde(alias = "square-compact")]
     SquareCompact,
+    /// Legacy bordered square canvas. User-visible coordinates run
+    /// `[2, N-2)` on each axis (tile placements outside that range are
+    /// rejected as out-of-bounds). Faster than `Square` by ≤1% in
+    /// measurement noise but exposes the +4 sizing convention. Use only
+    /// for back-compat with code that hardcodes the inset; new code
+    /// should use `Square`.
+    #[serde(alias = "square-bordered", alias = "squarebordered")]
+    SquareBordered,
 }
 
 #[cfg(feature = "python")]
@@ -489,6 +505,7 @@ impl<'py> IntoPyObject<'py> for CanvasType {
             CanvasType::Tube => "tube".into_bound_py_any(py),
             CanvasType::TubeDiagonals => "tube-diagonals".into_bound_py_any(py),
             CanvasType::SquareCompact => "square-compact".into_bound_py_any(py),
+            CanvasType::SquareBordered => "square-bordered".into_bound_py_any(py),
         }
     }
 
@@ -507,7 +524,8 @@ impl TryFrom<&str> for CanvasType {
             "tube" => Ok(CanvasType::Tube),
             "tube-diagonals" => Ok(CanvasType::TubeDiagonals),
             "square-compact" | "squarecompact" => Ok(CanvasType::SquareCompact),
-            _ => Err(StringConvError(format!("Unknown canvas type {value}.  Valid options are \"square\", \"periodic\", \"tube\", \"tube-diagonals\", \"square-compact\"."))),
+            "square-bordered" | "squarebordered" => Ok(CanvasType::SquareBordered),
+            _ => Err(StringConvError(format!("Unknown canvas type {value}.  Valid options are \"square\", \"periodic\", \"tube\", \"tube-diagonals\", \"square-compact\", \"square-bordered\"."))),
         }
     }
 }

@@ -29,7 +29,33 @@ def test_bench_evolve_squarecompact(benchmark):
 
 
 def test_bench_evolve_square(benchmark):
-    """Benchmark evolve SDC N=8 bitcopy with Square canvas."""
+    """Benchmark evolve SDC N=8 bitcopy with Square canvas (compact backend)."""
+    N = 8
+    sys = make_bitcopy(N)
+    temp = temperature_for_target_prob(sys, prob=0.75, precision=0.1)
+    sys.temperature = temp
+
+    def setup():
+        state = State(
+            (1024, N), kind="Square", tracking="None",
+            n_tile_types=len(sys.tile_names),
+        )
+        sys.update_state(state)
+        return (state,), {}
+
+    def run(state):
+        sys.evolve(state, for_events=1000000)
+
+    benchmark.pedantic(run, setup=setup, rounds=5, warmup_rounds=1)
+
+
+def test_bench_evolve_squarebordered(benchmark):
+    """Regression bench for the legacy bordered Square (`kind="square-bordered"`).
+
+    Kept as a regression detector for any change touching `CanvasSquare`
+    after `Square` was repointed to the compact backend; not the recommended
+    canvas for new code.
+    """
     N = 8
     sys = make_bitcopy(N, pad=True)
     temp = temperature_for_target_prob(sys, prob=0.75, precision=0.1)
@@ -37,7 +63,7 @@ def test_bench_evolve_square(benchmark):
 
     def setup():
         state = State(
-            (1024, N + 4), kind="Square", tracking="None",
+            (1024, N + 4), kind="SquareBordered", tracking="None",
             n_tile_types=len(sys.tile_names),
         )
         sys.update_state(state)
@@ -52,10 +78,13 @@ def test_bench_evolve_square(benchmark):
 def test_bench_evolve_sierpinski_square(benchmark):
     """Benchmark evolve KTAM sierpinski with Square canvas (1020x1020, 50K events).
 
+    `Square` is now backed by `CanvasSquareCompact`; the seed sits at the
+    user-coord corner without the legacy 2-tile inset.
+
     Uses `setup_state` to place the seed; `update_state` alone leaves the
     canvas empty and evolve hits ReachedZeroRate immediately.
     """
-    sys = create_sierpinski_tileset(pad_seed=True).create_system()
+    sys = create_sierpinski_tileset(pad_seed=False).create_system()
 
     def setup():
         state = State(
@@ -71,8 +100,28 @@ def test_bench_evolve_sierpinski_square(benchmark):
     benchmark.pedantic(run, setup=setup, rounds=7, warmup_rounds=1)
 
 
+def test_bench_evolve_sierpinski_squarebordered(benchmark):
+    """Regression bench for the legacy bordered Square (sierpinski, 1020x1020)."""
+    sys = create_sierpinski_tileset(pad_seed=True).create_system()
+
+    def setup():
+        state = State(
+            (1020, 1020), kind="SquareBordered", tracking="None",
+            n_tile_types=len(sys.tile_names),
+        )
+        sys.setup_state(state)
+        return (state,), {}
+
+    def run(state):
+        sys.evolve(state, for_events=50000)
+
+    benchmark.pedantic(run, setup=setup, rounds=7, warmup_rounds=1)
+
+
 def test_bench_evolve_sierpinski_squarecompact(benchmark):
-    """Benchmark evolve KTAM sierpinski with SquareCompact canvas (1020x1020, 50K events)."""
+    """Alias regression bench: `kind="SquareCompact"` resolves to the same
+    backend as `Square`, so this should track `_sierpinski_square` to within
+    measurement noise."""
     sys = create_sierpinski_tileset(pad_seed=False).create_system()
 
     def setup():

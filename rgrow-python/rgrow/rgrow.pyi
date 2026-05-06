@@ -1366,7 +1366,13 @@ class FFSRunConfig:
         Type of boundary conditions for the simulation canvas.
         Determines how the edges of the canvas are handled:
         - Periodic: opposite edges are connected (torus topology)
-        - Square: finite canvas with hard boundaries
+        - Square: finite canvas with hard boundaries; user coordinates
+          cover the full ``(N, N)`` storage. Backed by the compact layout.
+        - SquareCompact: alias for Square (kept for back-compat).
+        - SquareBordered: legacy bordered Square; user coordinates run
+          ``[2, N-2)`` on each axis. Slightly faster than Square (≤1% on
+          KTAM Sierpinski) but exposes the +4 sizing convention. Use only
+          for code that hardcodes the inset.
         - Tube: periodic in one dimension, finite in the other
         Default is Periodic.
     tracking : str, optional

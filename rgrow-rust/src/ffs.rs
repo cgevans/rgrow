@@ -1348,47 +1348,50 @@ impl FFSRunResult {
         SystemEnum: From<Sy>,
     {
         let mut res: FFSRunResult = (match (config.canvas_type, &config.tracking) {
-            (CanvasType::Square, TrackingConfig::None) => {
-                FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Square, TrackingConfig::Order) => {
-                FFSRun::<QuadTreeState<CanvasSquare, OrderTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Square, TrackingConfig::LastAttachTime) => {
-                FFSRun::<QuadTreeState<CanvasSquare, LastAttachTimeTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Square, TrackingConfig::PrintEvent) => {
-                FFSRun::<QuadTreeState<CanvasSquare, PrintEventTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-            (CanvasType::Square, TrackingConfig::Movie) => {
-                FFSRun::<QuadTreeState<CanvasSquare, MovieTracker>>::create(sys, config)
-                    .map(|x| x.into())
-            }
-
-            (CanvasType::SquareCompact, TrackingConfig::None) => {
+            // `Square` and the legacy alias `SquareCompact` both resolve to
+            // CanvasSquareCompact (high-side pad + low-side wrap).
+            (CanvasType::Square | CanvasType::SquareCompact, TrackingConfig::None) => {
                 FFSRun::<QuadTreeState<CanvasSquareCompact, NullStateTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
-            (CanvasType::SquareCompact, TrackingConfig::Order) => {
+            (CanvasType::Square | CanvasType::SquareCompact, TrackingConfig::Order) => {
                 FFSRun::<QuadTreeState<CanvasSquareCompact, OrderTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
-            (CanvasType::SquareCompact, TrackingConfig::LastAttachTime) => {
+            (CanvasType::Square | CanvasType::SquareCompact, TrackingConfig::LastAttachTime) => {
                 FFSRun::<QuadTreeState<CanvasSquareCompact, LastAttachTimeTracker>>::create(
                     sys, config,
                 )
                 .map(|x| x.into())
             }
-            (CanvasType::SquareCompact, TrackingConfig::PrintEvent) => {
+            (CanvasType::Square | CanvasType::SquareCompact, TrackingConfig::PrintEvent) => {
                 FFSRun::<QuadTreeState<CanvasSquareCompact, PrintEventTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
-            (CanvasType::SquareCompact, TrackingConfig::Movie) => {
+            (CanvasType::Square | CanvasType::SquareCompact, TrackingConfig::Movie) => {
                 FFSRun::<QuadTreeState<CanvasSquareCompact, MovieTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+
+            // Legacy bordered canvas, exposed under `kind="square-bordered"`.
+            (CanvasType::SquareBordered, TrackingConfig::None) => {
+                FFSRun::<QuadTreeState<CanvasSquare, NullStateTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareBordered, TrackingConfig::Order) => {
+                FFSRun::<QuadTreeState<CanvasSquare, OrderTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareBordered, TrackingConfig::LastAttachTime) => {
+                FFSRun::<QuadTreeState<CanvasSquare, LastAttachTimeTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareBordered, TrackingConfig::PrintEvent) => {
+                FFSRun::<QuadTreeState<CanvasSquare, PrintEventTracker>>::create(sys, config)
+                    .map(|x| x.into())
+            }
+            (CanvasType::SquareBordered, TrackingConfig::Movie) => {
+                FFSRun::<QuadTreeState<CanvasSquare, MovieTracker>>::create(sys, config)
                     .map(|x| x.into())
             }
 
@@ -1455,15 +1458,16 @@ impl FFSRunResult {
                     .map(|x| x.into())
             }
 
-            (CanvasType::Square, TrackingConfig::EnergyChanges { .. }) => {
+            (
+                CanvasType::Square | CanvasType::SquareCompact,
+                TrackingConfig::EnergyChanges { .. },
+            ) => FFSRun::<QuadTreeState<CanvasSquareCompact, EnergyChangesTracker>>::create(
+                sys, config,
+            )
+            .map(|x| x.into()),
+            (CanvasType::SquareBordered, TrackingConfig::EnergyChanges { .. }) => {
                 FFSRun::<QuadTreeState<CanvasSquare, EnergyChangesTracker>>::create(sys, config)
                     .map(|x| x.into())
-            }
-            (CanvasType::SquareCompact, TrackingConfig::EnergyChanges { .. }) => {
-                FFSRun::<QuadTreeState<CanvasSquareCompact, EnergyChangesTracker>>::create(
-                    sys, config,
-                )
-                .map(|x| x.into())
             }
             (CanvasType::Periodic, TrackingConfig::EnergyChanges { .. }) => {
                 FFSRun::<QuadTreeState<CanvasPeriodic, EnergyChangesTracker>>::create(sys, config)

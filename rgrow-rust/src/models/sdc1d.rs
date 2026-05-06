@@ -1861,9 +1861,12 @@ impl AnnealProtocol {
             crate::system::System::update_state(&sdc, &mut state, &needed);
             crate::system::System::evolve(&sdc, &mut state, bounds)?;
             // FIXME: This is flattening the canvas, so it doesnt work nicely
-            // it should be Vec<Vec<_>>, not Vec<_>
-            let canvas = state.raw_array().to_slice().unwrap();
-            canvases.push(canvas.to_vec())
+            // it should be Vec<Vec<_>>, not Vec<_>.
+            // `to_slice()` requires contiguous storage; CanvasSquareCompact's
+            // raw_array is a non-contiguous slice into the padded backing
+            // (skips the trailing pad cols on each row). Iterate instead.
+            let canvas: Vec<_> = state.raw_array().iter().copied().collect();
+            canvases.push(canvas)
         }
 
         Ok((canvases, times, tmps))

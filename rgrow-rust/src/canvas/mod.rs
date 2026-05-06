@@ -612,8 +612,17 @@ impl CanvasCreate for CanvasSquareCompact {
     }
 
     fn from_array(arr: Array2<Tile>) -> GrowResult<Self> {
-        // TODO: maybe we want to pad this
-        Ok(Self(arr))
+        // CanvasSquareCompact's storage carries 2 cells of high-side
+        // padding (low-side moves wrap into them), so the user-visible
+        // `(rows, cols)` array has to land in storage `[0..rows, 0..cols]`
+        // with rows `[rows..rows+2]` and cols `[cols..cols+2]` zeroed.
+        // Without this, `nrows() = self.0.nrows() - 2` would be 2 short
+        // of the user's expected size and the high rows/cols of the
+        // input would be silently treated as pad.
+        let (rows, cols) = (arr.nrows(), arr.ncols());
+        let mut storage = Array2::zeros((rows + 2, cols + 2));
+        storage.slice_mut(s![0..rows, 0..cols]).assign(&arr);
+        Ok(Self(storage))
     }
 }
 

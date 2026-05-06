@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::SeedableRng;
 use rgrow::{
-    canvas::{Canvas, CanvasPeriodic, CanvasSquare},
+    canvas::{Canvas, CanvasPeriodic, CanvasSquare, CanvasSquareCompact},
     models::ktam::KTAM,
     state::{NullStateTracker, QuadTreeState, StateWithCreate},
     system::{EvolveBounds, System},
@@ -38,6 +38,35 @@ fn raw_sim_run(c: &mut Criterion) {
 
     c.bench_function("evolve unistep", |b| {
         b.iter(|| sys.take_single_step(&mut st, Second::new(1000000.)))
+    });
+
+    // Default Square canvas (`CanvasType::Square`, backed by CanvasSquareCompact).
+    // 1024² with seed at the geometric center.
+    let mut ts_sq = TileSet::from_file("../examples/sierpinski.yaml").unwrap();
+    ts_sq.seed = Some(Seed::Single(511, 511, 1.into()));
+    let sys_sq = KTAM::try_from(&ts_sq).unwrap();
+    let mut st_sq = sys_sq
+        .new_state::<QuadTreeState<CanvasSquareCompact, NullStateTracker>>((1024, 1024))
+        .unwrap();
+    sys_sq.setup_state(&mut st_sq).unwrap();
+    c.bench_function("evolve 10000 sys (square 1024)", |b| {
+        b.iter(|| sys_sq.evolve(&mut st_sq, BOUNDS10K))
+    });
+
+    // Legacy bordered Square (`CanvasType::SquareBordered`, backed by
+    // CanvasSquare). Kept as a regression detector now that the default
+    // Square is borderless. Same storage shape (1024²) so the rate-store
+    // dimensions match the borderless bench; usable area is 1020² because
+    // of the 2-tile inset.
+    let mut ts_sb = TileSet::from_file("../examples/sierpinski.yaml").unwrap();
+    ts_sb.seed = Some(Seed::Single(511, 511, 1.into()));
+    let sys_sb = KTAM::try_from(&ts_sb).unwrap();
+    let mut st_sb = sys_sb
+        .new_state::<QuadTreeState<CanvasSquare, NullStateTracker>>((1024, 1024))
+        .unwrap();
+    sys_sb.setup_state(&mut st_sb).unwrap();
+    c.bench_function("evolve 10000 sys (square-bordered 1024)", |b| {
+        b.iter(|| sys_sb.evolve(&mut st_sb, BOUNDS10K))
     });
 }
 //

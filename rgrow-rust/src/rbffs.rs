@@ -472,38 +472,41 @@ impl RBFFSResult {
         SystemEnum: From<Sy>,
     {
         Ok(match (config.canvas_type, &config.tracking) {
-            (CanvasType::Square, TrackingConfig::None) => {
-                run_rbffs::<Sy, QuadTreeState<CanvasSquare, NullStateTracker>>(sys, config)?
-            }
-            (CanvasType::Square, TrackingConfig::Order) => {
-                run_rbffs::<Sy, QuadTreeState<CanvasSquare, OrderTracker>>(sys, config)?
-            }
-            (CanvasType::Square, TrackingConfig::LastAttachTime) => {
-                run_rbffs::<Sy, QuadTreeState<CanvasSquare, LastAttachTimeTracker>>(sys, config)?
-            }
-            (CanvasType::Square, TrackingConfig::PrintEvent) => {
-                run_rbffs::<Sy, QuadTreeState<CanvasSquare, PrintEventTracker>>(sys, config)?
-            }
-            (CanvasType::Square, TrackingConfig::Movie) => {
-                run_rbffs::<Sy, QuadTreeState<CanvasSquare, MovieTracker>>(sys, config)?
-            }
-
-            (CanvasType::SquareCompact, TrackingConfig::None) => {
+            // `Square` and the legacy alias `SquareCompact` both resolve to
+            // CanvasSquareCompact (high-side pad + low-side wrap).
+            (CanvasType::Square | CanvasType::SquareCompact, TrackingConfig::None) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, NullStateTracker>>(sys, config)?
             }
-            (CanvasType::SquareCompact, TrackingConfig::Order) => {
+            (CanvasType::Square | CanvasType::SquareCompact, TrackingConfig::Order) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, OrderTracker>>(sys, config)?
             }
-            (CanvasType::SquareCompact, TrackingConfig::LastAttachTime) => {
+            (CanvasType::Square | CanvasType::SquareCompact, TrackingConfig::LastAttachTime) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, LastAttachTimeTracker>>(
                     sys, config,
                 )?
             }
-            (CanvasType::SquareCompact, TrackingConfig::PrintEvent) => {
+            (CanvasType::Square | CanvasType::SquareCompact, TrackingConfig::PrintEvent) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, PrintEventTracker>>(sys, config)?
             }
-            (CanvasType::SquareCompact, TrackingConfig::Movie) => {
+            (CanvasType::Square | CanvasType::SquareCompact, TrackingConfig::Movie) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, MovieTracker>>(sys, config)?
+            }
+
+            // Legacy bordered canvas, exposed under `kind="square-bordered"`.
+            (CanvasType::SquareBordered, TrackingConfig::None) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasSquare, NullStateTracker>>(sys, config)?
+            }
+            (CanvasType::SquareBordered, TrackingConfig::Order) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasSquare, OrderTracker>>(sys, config)?
+            }
+            (CanvasType::SquareBordered, TrackingConfig::LastAttachTime) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasSquare, LastAttachTimeTracker>>(sys, config)?
+            }
+            (CanvasType::SquareBordered, TrackingConfig::PrintEvent) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasSquare, PrintEventTracker>>(sys, config)?
+            }
+            (CanvasType::SquareBordered, TrackingConfig::Movie) => {
+                run_rbffs::<Sy, QuadTreeState<CanvasSquare, MovieTracker>>(sys, config)?
             }
 
             (CanvasType::Periodic, TrackingConfig::None) => {
@@ -556,13 +559,14 @@ impl RBFFSResult {
                 run_rbffs::<Sy, QuadTreeState<CanvasTubeDiagonals, MovieTracker>>(sys, config)?
             }
 
-            (CanvasType::Square, TrackingConfig::EnergyChanges { .. }) => {
+            (
+                CanvasType::Square | CanvasType::SquareCompact,
+                TrackingConfig::EnergyChanges { .. },
+            ) => run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, EnergyChangesTracker>>(
+                sys, config,
+            )?,
+            (CanvasType::SquareBordered, TrackingConfig::EnergyChanges { .. }) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasSquare, EnergyChangesTracker>>(sys, config)?
-            }
-            (CanvasType::SquareCompact, TrackingConfig::EnergyChanges { .. }) => {
-                run_rbffs::<Sy, QuadTreeState<CanvasSquareCompact, EnergyChangesTracker>>(
-                    sys, config,
-                )?
             }
             (CanvasType::Periodic, TrackingConfig::EnergyChanges { .. }) => {
                 run_rbffs::<Sy, QuadTreeState<CanvasPeriodic, EnergyChangesTracker>>(sys, config)?
