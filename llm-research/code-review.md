@@ -1,37 +1,21 @@
 # rgrow Code Review
 
 Focused review of simulation correctness, API usability, and performance.
-Codebase snapshot: `cc835aa` (2026-03-23).
+Codebase snapshot: `cc835aa` (2026-03-23). Updated after fixes in `19a9492`.
 
 ---
 
 ## 1. Simulation Correctness
 
-### 1.1 CRITICAL: Bitwise OR causes unsafe access in dimer detachment rates
+### 1.1 ~~CRITICAL: Bitwise OR causes unsafe access in dimer detachment rates~~ FIXED
 
 **Files:** `ktam.rs:1931`, `ktam.rs:1955`
 
-The dimer detachment rate functions use bitwise OR (`|`) instead of short-circuit
-logical OR (`||`) in a guard that precedes an unsafe canvas read:
-
-```rust
-// ktam.rs:1931 — dimer_s_detach_rate
-if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 }) | self.is_seed(PointSafe2(p2))
-
-// ktam.rs:1955 — dimer_e_detach_rate
-if (!canvas.inbounds(p2)) | (unsafe { canvas.uv_p(p2) == 0 } | self.is_seed(PointSafe2(p2)))
-```
-
-With `|`, all three operands are evaluated regardless of earlier results. If
-`canvas.inbounds(p2)` is false, the unsafe `canvas.uv_p(p2)` still executes on
-an out-of-bounds point. This is **undefined behavior**.
-
-**Fix:** Replace `|` with `||` so the unsafe read is short-circuited when the
-point is out of bounds.
-
-Note: the parenthesization also differs between the two lines (the second nests
-`is_seed` inside the `uv_p` comparison's parens), which may indicate a second
-subtle logic error.
+Dimer detachment rate functions used bitwise OR (`|`) instead of short-circuit
+logical OR (`||`) in a guard preceding an unsafe canvas read. If
+`canvas.inbounds(p2)` was false, the unsafe `canvas.uv_p(p2)` still executed on
+an out-of-bounds point (UB). Fixed: replaced `|` with `||` and normalized
+parenthesization.
 
 ---
 
@@ -125,17 +109,12 @@ reads border tiles and computes spurious bond energies.
 
 ---
 
-### 1.10 MODERATE: `FAKE_EVENT_RATE` leaks through for seeds and duple fakes
+### 1.10 ~~LOW: `FAKE_EVENT_RATE` leaks through for seeds and duple fakes~~ FIXED
 
-**File:** `ktam.rs:67, 1441–1453`
-
-Seeds and fake duple parts return `1e-20` as their detachment rate instead of
-exactly 0. This is described as an "ODD HACK" to "allow rate-based copying."
-While the probability of selecting such an event is vanishingly small, it means:
-
-- Seeds can theoretically be detached.
-- The rate contributes (negligibly) to total rate, distorting time sampling.
-- In very long simulations or extreme conditions, these events may fire.
+Removed `FAKE_EVENT_RATE` constant. Seeds and fake duple halves now return
+rate 0. The sparse quadtree copy uses a visitor callback to copy duple
+companions during the single traversal, and patches seed tiles explicitly
+afterwards. See branch `remove-fake-event-rate`.
 
 ---
 
@@ -278,12 +257,7 @@ more likely with:
 
 ---
 
-### 3.2 HIGH: `println!` in dimer hot path (repeated from §1.5)
-
-Beyond correctness, the I/O serialization from `println!` in the dimer
-attachment code dominates wall-clock time whenever dimers exist. Each `println!`
-acquires a lock on stdout, flushes, and performs string formatting. In a tight
-simulation loop, this can easily slow things down by 100–1000×.
+### 3.2 ~~HIGH: `println!` in dimer hot path~~ FIXED (see §1.5)
 
 ---
 
@@ -390,8 +364,8 @@ Grepping for `FIXME`, `TODO`, `HACK`, and `todo!()` across the Rust source:
 - **state.rs**: ~3 markers (ratestore abstraction leaks)
 - **parser_xgrow.rs**: 1 panic, 1 precedence bug
 
-The highest-risk cluster is the dimer attachment/detachment code in ktam.rs,
-which has active correctness bugs alongside multiple FIXME markers.
+The dimer attachment/detachment code in ktam.rs had the highest-risk cluster;
+the active correctness bugs there have now been fixed (`19a9492`).
 
 ### 4.3 Test coverage gaps
 
@@ -410,10 +384,10 @@ The test suite has good coverage of basic KTAM and FFS workflows. Notable gaps:
 
 | Priority | Issue | Section |
 |----------|-------|---------|
-| **P0 — Fix now** | Bitwise OR → UB in dimer detach | §1.1 |
-| ~~P0~~ | ~~Friend-set index bug in dimer attach~~ (already fixed) | §1.2 |
-| **P0 — Fix now** | Remove debug `println!` from dimer code | §1.5 / §3.2 |
-| **P1 — Fix soon** | Parser operator precedence | §1.3 |
+| ~~P0~~ | ~~Bitwise OR → UB in dimer detach~~ FIXED | §1.1 |
+| ~~P0~~ | ~~Friend-set index bug in dimer attach~~ FIXED | §1.2 |
+| ~~P0~~ | ~~Remove debug `println!` from dimer code~~ FIXED | §1.5 / §3.2 |
+| ~~P1~~ | ~~Parser operator precedence~~ FIXED | §1.3 |
 | **P1 — Fix soon** | Glue links silently discarded | §1.4 |
 | **P1 — Fix soon** | Python `.unwrap()` → exceptions | §2.1 |
 | **P1 — Fix soon** | QuadTree panic on FP edge case | §3.1 |
@@ -423,4 +397,4 @@ The test suite has good coverage of basic KTAM and FFS workflows. Notable gaps:
 | **P2 — Plan** | Type stub completeness | §2.2, §2.3 |
 | **P3 — Backlog** | Duple `state_energy` / `energy_contribution` | §1.7 |
 | **P3 — Backlog** | Mismatch threshold hardcoding | §1.11 |
-| **P3 — Backlog** | `FAKE_EVENT_RATE` cleanup | §1.10 / §3.8 |
+| **P3 — Backlog** | `FAKE_EVENT_RATE` cleanup (doc + RBFFS `reset` removal) | §1.10 / §3.8 |
