@@ -5,7 +5,7 @@ use rayon::prelude::*;
 
 use crate::base::{GrowError, NumEvents, NumTiles};
 use crate::maybe_par_iter;
-use crate::state::{StateEnum, StateStatus};
+use crate::state::{OwnsMovieTracker, StateEnum, StateStatus};
 
 use super::core::System;
 use super::dispatch::SystemEnum;
@@ -451,7 +451,7 @@ pub(super) fn find_first_critical_state<S: System>(
 where
     SystemEnum: From<S>,
 {
-    let _tracker = if let Some(tracker) = end_state.get_movie_tracker() {
+    let _tracker = if let Some(tracker) = end_state.movie_tracker() {
         tracker
     } else {
         return Err(GrowError::NotSupported(
@@ -509,7 +509,7 @@ pub(super) fn find_last_critical_state<S: System>(
 where
     SystemEnum: From<S>,
 {
-    let _tracker = if let Some(tracker) = end_state.get_movie_tracker() {
+    let _tracker = if let Some(tracker) = end_state.movie_tracker() {
         tracker
     } else {
         return Err(GrowError::NotSupported(

@@ -77,11 +77,11 @@ fn main() {
     // path the Python `evolve_states` users would hit through FFS / committor.
     let mut states: Vec<StateEnum> = (0..k)
         .map(|_| match canvas {
-            "periodic" => StateEnum::PeriodicCanvasNoTracker(
+            "periodic" => StateEnum::PeriodicNull(
                 sys.new_state::<QuadTreeState<CanvasPeriodic, NullStateTracker>>((size, size))
                     .unwrap(),
             ),
-            _ => StateEnum::SquareCanvasNullTracker(
+            _ => StateEnum::SquareNull(
                 sys.new_state::<QuadTreeState<CanvasSquare, NullStateTracker>>((size, size))
                     .unwrap(),
             ),

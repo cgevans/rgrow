@@ -295,7 +295,7 @@ fn test_calc_committor() -> Result<()> {
     }
     sys.setup_state(&mut state)?;
 
-    let se = StateEnum::PeriodicCanvasNoTracker(state);
+    let se = StateEnum::PeriodicNull(state);
 
     let committor = sys.calc_committor(&se, 200, None, None, 100)?;
 
@@ -315,7 +315,7 @@ fn test_calc_committor() -> Result<()> {
     }
     sys.setup_state(&mut state)?;
 
-    let se = StateEnum::PeriodicCanvasNoTracker(state);
+    let se = StateEnum::PeriodicNull(state);
 
     let committor = sys.calc_committor(&se, 200, None, None, 100)?;
 
@@ -335,7 +335,7 @@ fn test_calc_committor() -> Result<()> {
     }
     sys.setup_state(&mut state)?;
 
-    let se = StateEnum::PeriodicCanvasNoTracker(state);
+    let se = StateEnum::PeriodicNull(state);
 
     let committor = sys.calc_committor(&se, 200, None, None, 100)?;
 

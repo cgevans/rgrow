@@ -27,7 +27,7 @@ fn bench_calc_committor(c: &mut Criterion) {
                     || {
                         let sys = setup_ktam_system();
                         let state = create_state_with_tiles(&sys, size);
-                        let se = StateEnum::PeriodicCanvasNoTracker(state);
+                        let se = StateEnum::PeriodicNull(state);
                         (sys, se)
                     },
                     |(mut sys, se)| black_box(sys.calc_committor(&se, 50, None, None, 5).unwrap()),
@@ -46,7 +46,7 @@ fn bench_calc_committor(c: &mut Criterion) {
                     || {
                         let sys = setup_ktam_system();
                         let state = create_state_with_tiles(&sys, 3);
-                        let se = StateEnum::PeriodicCanvasNoTracker(state);
+                        let se = StateEnum::PeriodicNull(state);
                         (sys, se)
                     },
                     |(mut sys, se)| {
@@ -67,7 +67,7 @@ fn bench_calc_committor(c: &mut Criterion) {
                     || {
                         let sys = setup_ktam_system();
                         let state = create_state_with_tiles(&sys, 3);
-                        let se = StateEnum::PeriodicCanvasNoTracker(state);
+                        let se = StateEnum::PeriodicNull(state);
                         (sys, se)
                     },
                     |(mut sys, se)| {

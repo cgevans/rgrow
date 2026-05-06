@@ -32,8 +32,134 @@ pub trait ClonableState: State {
     fn clone_into_state(&self, target: &mut StateEnum);
 }
 
-macro_rules! impl_clonable_state {
-    ($(($canvas:ty, $tracker:ty) => $variant:ident),*) => {
+/// Tracker-side accessor for variants that own a [`MovieTracker`].
+///
+/// Default impls on each [`StateTracker`] return `None`; only [`MovieTracker`]
+/// itself overrides to return `Some(self)`. This collapses what would
+/// otherwise be a per-(canvas, tracker) match into a single trait dispatch.
+pub trait MaybeMovieTracker {
+    fn maybe_movie_tracker(&self) -> Option<&MovieTracker> {
+        None
+    }
+}
+
+/// Tracker-side accessor for variants that own an [`EnergyChangesTracker`].
+pub trait MaybeEnergyChangesTracker {
+    fn maybe_energy_changes_tracker(&self) -> Option<&EnergyChangesTracker> {
+        None
+    }
+    fn maybe_energy_changes_tracker_mut(&mut self) -> Option<&mut EnergyChangesTracker> {
+        None
+    }
+}
+
+/// State-side dispatched accessor for the movie tracker, plus the
+/// `clone-with-movie-tracker-stripped` operation that depends on it.
+#[enum_dispatch]
+pub trait OwnsMovieTracker {
+    fn movie_tracker(&self) -> Option<&MovieTracker>;
+    fn clone_empty_no_movie_tracker(&self) -> Result<StateEnum, GrowError>;
+}
+
+/// State-side dispatched accessor for the energy-changes tracker.
+#[enum_dispatch]
+pub trait OwnsEnergyChangesTracker {
+    fn energy_changes_tracker(&self) -> Option<&EnergyChangesTracker>;
+    fn energy_changes_tracker_mut(&mut self) -> Option<&mut EnergyChangesTracker>;
+}
+
+impl<C, T> OwnsMovieTracker for QuadTreeState<C, T>
+where
+    C: Canvas + CanvasCreate,
+    T: StateTracker + MaybeMovieTracker,
+    QuadTreeState<C, T>: StateWithCreate<C = C>,
+    QuadTreeState<C, NullStateTracker>: ClonableState,
+{
+    fn movie_tracker(&self) -> Option<&MovieTracker> {
+        self.tracker.maybe_movie_tracker()
+    }
+
+    fn clone_empty_no_movie_tracker(&self) -> Result<StateEnum, GrowError> {
+        if self.tracker.maybe_movie_tracker().is_none() {
+            return Err(GrowError::NotSupported(
+                "State does not have a movie tracker".to_string(),
+            ));
+        }
+        let null_state: QuadTreeState<C, NullStateTracker> = self.clone_empty_no_tracker()?;
+        Ok(null_state.clone_as_stateenum())
+    }
+}
+
+impl<C, T> OwnsEnergyChangesTracker for QuadTreeState<C, T>
+where
+    C: Canvas,
+    T: StateTracker + MaybeEnergyChangesTracker,
+{
+    fn energy_changes_tracker(&self) -> Option<&EnergyChangesTracker> {
+        self.tracker.maybe_energy_changes_tracker()
+    }
+
+    fn energy_changes_tracker_mut(&mut self) -> Option<&mut EnergyChangesTracker> {
+        self.tracker.maybe_energy_changes_tracker_mut()
+    }
+}
+
+// Default-None impls for trackers that do not own a movie or energy-changes
+// tracker. The two specialised trackers override below.
+impl MaybeMovieTracker for NullStateTracker {}
+impl MaybeMovieTracker for OrderTracker {}
+impl MaybeMovieTracker for LastAttachTimeTracker {}
+impl MaybeMovieTracker for PrintEventTracker {}
+impl MaybeMovieTracker for EnergyChangesTracker {}
+impl MaybeMovieTracker for MovieTracker {
+    fn maybe_movie_tracker(&self) -> Option<&MovieTracker> {
+        Some(self)
+    }
+}
+
+impl MaybeEnergyChangesTracker for NullStateTracker {}
+impl MaybeEnergyChangesTracker for OrderTracker {}
+impl MaybeEnergyChangesTracker for LastAttachTimeTracker {}
+impl MaybeEnergyChangesTracker for PrintEventTracker {}
+impl MaybeEnergyChangesTracker for MovieTracker {}
+impl MaybeEnergyChangesTracker for EnergyChangesTracker {
+    fn maybe_energy_changes_tracker(&self) -> Option<&EnergyChangesTracker> {
+        Some(self)
+    }
+    fn maybe_energy_changes_tracker_mut(&mut self) -> Option<&mut EnergyChangesTracker> {
+        Some(self)
+    }
+}
+
+/// Generates the [`StateEnum`] enum and the per-(canvas, tracker) [`ClonableState`]
+/// impls from a single Cartesian-product list. Each row is
+/// `(CanvasType, TrackerType, NewVariantName, "LegacyVariantName")`.
+///
+/// `LegacyVariantName` is preserved on the wire via `#[serde(rename = ...)]`
+/// so existing `PyState.write_json` snapshots continue to deserialize.
+macro_rules! state_combinations {
+    ( $( ($canvas:ident, $tracker:ident, $variant:ident, $legacy:literal) ),+ $(,)? ) => {
+        #[enum_dispatch(
+            State,
+            StateStatus,
+            StateWithCreate,
+            Canvas,
+            RateStore,
+            TrackerData,
+            CloneAsStateEnum,
+            TileCounts,
+            ClonableState,
+            OwnsMovieTracker,
+            OwnsEnergyChangesTracker,
+        )]
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        pub enum StateEnum {
+            $(
+                #[serde(rename = $legacy)]
+                $variant(QuadTreeState<$canvas, $tracker>),
+            )+
+        }
+
         $(
             impl ClonableState for QuadTreeState<$canvas, $tracker> {
                 fn clone_as_stateenum(&self) -> StateEnum {
@@ -47,91 +173,46 @@ macro_rules! impl_clonable_state {
                     }
                 }
             }
-        )*
+        )+
     };
 }
 
-impl_clonable_state! {
-    (CanvasSquare, NullStateTracker) => SquareCanvasNullTracker,
-    (CanvasPeriodic, NullStateTracker) => PeriodicCanvasNoTracker,
-    (CanvasTube, NullStateTracker) => TubeNoTracking,
-    (CanvasTubeDiagonals, NullStateTracker) => TubeDiagonalsNoTracking,
-    (CanvasSquareCompact, NullStateTracker) => SquareCompactNoTracking,
+state_combinations! {
+    (CanvasSquare,         NullStateTracker,       SquareNull,                   "SquareCanvasNullTracker"),
+    (CanvasPeriodic,       NullStateTracker,       PeriodicNull,                 "PeriodicCanvasNoTracker"),
+    (CanvasTube,           NullStateTracker,       TubeNull,                     "TubeNoTracking"),
+    (CanvasTubeDiagonals,  NullStateTracker,       TubeDiagonalsNull,            "TubeDiagonalsNoTracking"),
+    (CanvasSquareCompact,  NullStateTracker,       SquareCompactNull,            "SquareCompactNoTracking"),
 
-    (CanvasSquare, OrderTracker) => SquareOrderTracking,
-    (CanvasPeriodic, OrderTracker) => PeriodicOrderTracking,
-    (CanvasTube, OrderTracker) => TubeOrderTracking,
-    (CanvasTubeDiagonals, OrderTracker) => TubeDiagonalsOrderTracking,
-    (CanvasSquareCompact, OrderTracker) => SquareCompactOrderTracking,
+    (CanvasSquare,         OrderTracker,           SquareOrder,                  "SquareOrderTracking"),
+    (CanvasPeriodic,       OrderTracker,           PeriodicOrder,                "PeriodicOrderTracking"),
+    (CanvasTube,           OrderTracker,           TubeOrder,                    "TubeOrderTracking"),
+    (CanvasTubeDiagonals,  OrderTracker,           TubeDiagonalsOrder,           "TubeDiagonalsOrderTracking"),
+    (CanvasSquareCompact,  OrderTracker,           SquareCompactOrder,           "SquareCompactOrderTracking"),
 
-    (CanvasSquare, LastAttachTimeTracker) => SquareLastAttachTimeTracking,
-    (CanvasPeriodic, LastAttachTimeTracker) => PeriodicLastAttachTimeTracking,
-    (CanvasTube, LastAttachTimeTracker) => TubeLastAttachTimeTracking,
-    (CanvasTubeDiagonals, LastAttachTimeTracker) => TubeDiagonalsLastAttachTimeTracking,
-    (CanvasSquareCompact, LastAttachTimeTracker) => SquareCompactLastAttachTimeTracking,
+    (CanvasSquare,         LastAttachTimeTracker,  SquareLastAttachTime,         "SquareLastAttachTimeTracking"),
+    (CanvasPeriodic,       LastAttachTimeTracker,  PeriodicLastAttachTime,       "PeriodicLastAttachTimeTracking"),
+    (CanvasTube,           LastAttachTimeTracker,  TubeLastAttachTime,           "TubeLastAttachTimeTracking"),
+    (CanvasTubeDiagonals,  LastAttachTimeTracker,  TubeDiagonalsLastAttachTime,  "TubeDiagonalsLastAttachTimeTracking"),
+    (CanvasSquareCompact,  LastAttachTimeTracker,  SquareCompactLastAttachTime,  "SquareCompactLastAttachTimeTracking"),
 
-    (CanvasSquare, PrintEventTracker) => SquarePrintEventTracking,
-    (CanvasPeriodic, PrintEventTracker) => PeriodicPrintEventTracking,
-    (CanvasTube, PrintEventTracker) => TubePrintEventTracking,
-    (CanvasTubeDiagonals, PrintEventTracker) => TubeDiagonalsPrintEventTracking,
-    (CanvasSquareCompact, PrintEventTracker) => SquareCompactPrintEventTracking,
+    (CanvasSquare,         PrintEventTracker,      SquarePrintEvent,             "SquarePrintEventTracking"),
+    (CanvasPeriodic,       PrintEventTracker,      PeriodicPrintEvent,           "PeriodicPrintEventTracking"),
+    (CanvasTube,           PrintEventTracker,      TubePrintEvent,               "TubePrintEventTracking"),
+    (CanvasTubeDiagonals,  PrintEventTracker,      TubeDiagonalsPrintEvent,      "TubeDiagonalsPrintEventTracking"),
+    (CanvasSquareCompact,  PrintEventTracker,      SquareCompactPrintEvent,      "SquareCompactPrintEventTracking"),
 
-    (CanvasSquare, MovieTracker) => SquareMovieTracking,
-    (CanvasPeriodic, MovieTracker) => PeriodicMovieTracking,
-    (CanvasTube, MovieTracker) => TubeMovieTracking,
-    (CanvasTubeDiagonals, MovieTracker) => TubeDiagonalsMovieTracking,
-    (CanvasSquareCompact, MovieTracker) => SquareCompactMovieTracking,
+    (CanvasSquare,         MovieTracker,           SquareMovie,                  "SquareMovieTracking"),
+    (CanvasPeriodic,       MovieTracker,           PeriodicMovie,                "PeriodicMovieTracking"),
+    (CanvasTube,           MovieTracker,           TubeMovie,                    "TubeMovieTracking"),
+    (CanvasTubeDiagonals,  MovieTracker,           TubeDiagonalsMovie,           "TubeDiagonalsMovieTracking"),
+    (CanvasSquareCompact,  MovieTracker,           SquareCompactMovie,           "SquareCompactMovieTracking"),
 
-    (CanvasSquare, EnergyChangesTracker) => SquareEnergyChangesTracking,
-    (CanvasPeriodic, EnergyChangesTracker) => PeriodicEnergyChangesTracking,
-    (CanvasTube, EnergyChangesTracker) => TubeEnergyChangesTracking,
-    (CanvasTubeDiagonals, EnergyChangesTracker) => TubeDiagonalsEnergyChangesTracking,
-    (CanvasSquareCompact, EnergyChangesTracker) => SquareCompactEnergyChangesTracking
-}
-
-#[enum_dispatch(
-    State,
-    StateStatus,
-    StateWithCreate,
-    Canvas,
-    RateStore,
-    TrackerData,
-    CloneAsStateEnum,
-    TileCounts,
-    ClonableState
-)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum StateEnum {
-    SquareCanvasNullTracker(QuadTreeState<CanvasSquare, NullStateTracker>),
-    PeriodicCanvasNoTracker(QuadTreeState<CanvasPeriodic, NullStateTracker>),
-    TubeNoTracking(QuadTreeState<CanvasTube, NullStateTracker>),
-    TubeDiagonalsNoTracking(QuadTreeState<CanvasTubeDiagonals, NullStateTracker>),
-    SquareCompactNoTracking(QuadTreeState<CanvasSquareCompact, NullStateTracker>),
-    SquareOrderTracking(QuadTreeState<CanvasSquare, OrderTracker>),
-    PeriodicOrderTracking(QuadTreeState<CanvasPeriodic, OrderTracker>),
-    TubeOrderTracking(QuadTreeState<CanvasTube, OrderTracker>),
-    TubeDiagonalsOrderTracking(QuadTreeState<CanvasTubeDiagonals, OrderTracker>),
-    SquareCompactOrderTracking(QuadTreeState<CanvasSquareCompact, OrderTracker>),
-    SquareLastAttachTimeTracking(QuadTreeState<CanvasSquare, LastAttachTimeTracker>),
-    PeriodicLastAttachTimeTracking(QuadTreeState<CanvasPeriodic, LastAttachTimeTracker>),
-    TubeLastAttachTimeTracking(QuadTreeState<CanvasTube, LastAttachTimeTracker>),
-    TubeDiagonalsLastAttachTimeTracking(QuadTreeState<CanvasTubeDiagonals, LastAttachTimeTracker>),
-    SquareCompactLastAttachTimeTracking(QuadTreeState<CanvasSquareCompact, LastAttachTimeTracker>),
-    SquarePrintEventTracking(QuadTreeState<CanvasSquare, PrintEventTracker>),
-    PeriodicPrintEventTracking(QuadTreeState<CanvasPeriodic, PrintEventTracker>),
-    TubePrintEventTracking(QuadTreeState<CanvasTube, PrintEventTracker>),
-    TubeDiagonalsPrintEventTracking(QuadTreeState<CanvasTubeDiagonals, PrintEventTracker>),
-    SquareCompactPrintEventTracking(QuadTreeState<CanvasSquareCompact, PrintEventTracker>),
-    SquareMovieTracking(QuadTreeState<CanvasSquare, MovieTracker>),
-    PeriodicMovieTracking(QuadTreeState<CanvasPeriodic, MovieTracker>),
-    TubeMovieTracking(QuadTreeState<CanvasTube, MovieTracker>),
-    TubeDiagonalsMovieTracking(QuadTreeState<CanvasTubeDiagonals, MovieTracker>),
-    SquareCompactMovieTracking(QuadTreeState<CanvasSquareCompact, MovieTracker>),
-    SquareEnergyChangesTracking(QuadTreeState<CanvasSquare, EnergyChangesTracker>),
-    PeriodicEnergyChangesTracking(QuadTreeState<CanvasPeriodic, EnergyChangesTracker>),
-    TubeEnergyChangesTracking(QuadTreeState<CanvasTube, EnergyChangesTracker>),
-    TubeDiagonalsEnergyChangesTracking(QuadTreeState<CanvasTubeDiagonals, EnergyChangesTracker>),
-    SquareCompactEnergyChangesTracking(QuadTreeState<CanvasSquareCompact, EnergyChangesTracker>),
+    (CanvasSquare,         EnergyChangesTracker,   SquareEnergyChanges,          "SquareEnergyChangesTracking"),
+    (CanvasPeriodic,       EnergyChangesTracker,   PeriodicEnergyChanges,        "PeriodicEnergyChangesTracking"),
+    (CanvasTube,           EnergyChangesTracker,   TubeEnergyChanges,            "TubeEnergyChangesTracking"),
+    (CanvasTubeDiagonals,  EnergyChangesTracker,   TubeDiagonalsEnergyChanges,   "TubeDiagonalsEnergyChangesTracking"),
+    (CanvasSquareCompact,  EnergyChangesTracker,   SquareCompactEnergyChanges,   "SquareCompactEnergyChangesTracking"),
 }
 
 impl StateEnum {
@@ -200,70 +281,14 @@ impl StateEnum {
         Ok(state)
     }
 
-    pub fn get_movie_tracker(&self) -> Option<&MovieTracker> {
-        match self {
-            StateEnum::SquareMovieTracking(state) => Some(&state.tracker),
-            StateEnum::PeriodicMovieTracking(state) => Some(&state.tracker),
-            StateEnum::TubeMovieTracking(state) => Some(&state.tracker),
-            StateEnum::TubeDiagonalsMovieTracking(state) => Some(&state.tracker),
-            StateEnum::SquareCompactMovieTracking(state) => Some(&state.tracker),
-            _ => None,
-        }
-    }
-
-    pub fn get_energy_changes_tracker(&self) -> Option<&EnergyChangesTracker> {
-        match self {
-            StateEnum::SquareEnergyChangesTracking(state) => Some(&state.tracker),
-            StateEnum::PeriodicEnergyChangesTracking(state) => Some(&state.tracker),
-            StateEnum::TubeEnergyChangesTracking(state) => Some(&state.tracker),
-            StateEnum::TubeDiagonalsEnergyChangesTracking(state) => Some(&state.tracker),
-            StateEnum::SquareCompactEnergyChangesTracking(state) => Some(&state.tracker),
-            _ => None,
-        }
-    }
-
-    pub fn get_energy_changes_tracker_mut(&mut self) -> Option<&mut EnergyChangesTracker> {
-        match self {
-            StateEnum::SquareEnergyChangesTracking(state) => Some(&mut state.tracker),
-            StateEnum::PeriodicEnergyChangesTracking(state) => Some(&mut state.tracker),
-            StateEnum::TubeEnergyChangesTracking(state) => Some(&mut state.tracker),
-            StateEnum::TubeDiagonalsEnergyChangesTracking(state) => Some(&mut state.tracker),
-            StateEnum::SquareCompactEnergyChangesTracking(state) => Some(&mut state.tracker),
-            _ => None,
-        }
-    }
-
     pub fn set_energy_bin_width(&mut self, width: f64) {
-        if let Some(tracker) = self.get_energy_changes_tracker_mut() {
+        if let Some(tracker) = self.energy_changes_tracker_mut() {
             tracker.bin_width = width;
         }
     }
 
-    pub fn clone_empty_no_tracker(&self) -> Result<StateEnum, GrowError> {
-        match self {
-            StateEnum::SquareMovieTracking(state) => Ok(StateEnum::SquareCanvasNullTracker(
-                state.clone_empty_no_tracker()?,
-            )),
-            StateEnum::PeriodicMovieTracking(state) => Ok(StateEnum::PeriodicCanvasNoTracker(
-                state.clone_empty_no_tracker()?,
-            )),
-            StateEnum::TubeMovieTracking(state) => {
-                Ok(StateEnum::TubeNoTracking(state.clone_empty_no_tracker()?))
-            }
-            StateEnum::TubeDiagonalsMovieTracking(state) => Ok(StateEnum::TubeDiagonalsNoTracking(
-                state.clone_empty_no_tracker()?,
-            )),
-            StateEnum::SquareCompactMovieTracking(state) => Ok(StateEnum::SquareCompactNoTracking(
-                state.clone_empty_no_tracker()?,
-            )),
-            _ => Err(GrowError::NotSupported(
-                "State does not have a movie tracker".to_string(),
-            )),
-        }
-    }
-
     pub fn replay(&self, up_to_event: Option<u64>) -> Result<StateEnum, GrowError> {
-        let movie_tracker = match self.get_movie_tracker() {
+        let movie_tracker = match self.movie_tracker() {
             Some(tracker) => tracker,
             None => {
                 return Err(GrowError::NotSupported(
@@ -271,7 +296,7 @@ impl StateEnum {
                 ))
             }
         };
-        let mut base_state = self.clone_empty_no_tracker()?;
+        let mut base_state = self.clone_empty_no_movie_tracker()?;
 
         base_state.replay_inplace(
             &movie_tracker.coord,
@@ -327,7 +352,7 @@ impl StateEnum {
     ///
     /// This removes transient attach/detach pairs that don't contribute to the final state.
     pub fn filtered_movie_indices(&self) -> Result<Vec<usize>, GrowError> {
-        let tracker = if let Some(tracker) = self.get_movie_tracker() {
+        let tracker = if let Some(tracker) = self.movie_tracker() {
             tracker
         } else {
             return Err(GrowError::NotSupported(
@@ -1550,3 +1575,135 @@ impl StateTracker for EnergyChangesTracker {
 
 //     Ok((rows, cols, new_tiles, event_ids, energies))
 // }
+
+#[cfg(test)]
+mod state_enum_tests {
+    use super::*;
+    use crate::tileset::TrackingConfig;
+
+    /// Asserts that the JSON tag emitted for each variant matches the
+    /// pre-refactor name. Snapshots saved by `PyState.write_json` before
+    /// this PR should still deserialize.
+    fn assert_json_tag_contains(state: &StateEnum, legacy_name: &str) {
+        let s = serde_json::to_string(state).expect("serialize");
+        let needle = format!("\"{legacy_name}\"");
+        assert!(
+            s.contains(&needle),
+            "expected JSON to contain {needle}, got: {}",
+            &s[..s.len().min(200)],
+        );
+    }
+
+    fn make(canvas: CanvasType, tracking: TrackingConfig) -> StateEnum {
+        // (16, 64) satisfies every canvas's constraints: even width, and
+        // ncols > 4 + width for TubeDiagonals.
+        StateEnum::empty((16, 64), canvas, &tracking, 1).expect("empty")
+    }
+
+    #[test]
+    fn json_tags_preserve_legacy_variant_names() {
+        let cases: &[(CanvasType, TrackingConfig, &str)] = &[
+            (
+                CanvasType::Square,
+                TrackingConfig::None,
+                "SquareCanvasNullTracker",
+            ),
+            (
+                CanvasType::Periodic,
+                TrackingConfig::None,
+                "PeriodicCanvasNoTracker",
+            ),
+            (CanvasType::Tube, TrackingConfig::None, "TubeNoTracking"),
+            (
+                CanvasType::TubeDiagonals,
+                TrackingConfig::None,
+                "TubeDiagonalsNoTracking",
+            ),
+            (
+                CanvasType::SquareCompact,
+                TrackingConfig::None,
+                "SquareCompactNoTracking",
+            ),
+            (
+                CanvasType::Square,
+                TrackingConfig::Order,
+                "SquareOrderTracking",
+            ),
+            (
+                CanvasType::Square,
+                TrackingConfig::LastAttachTime,
+                "SquareLastAttachTimeTracking",
+            ),
+            (
+                CanvasType::Square,
+                TrackingConfig::PrintEvent,
+                "SquarePrintEventTracking",
+            ),
+            (
+                CanvasType::Square,
+                TrackingConfig::Movie,
+                "SquareMovieTracking",
+            ),
+            (
+                CanvasType::Square,
+                TrackingConfig::EnergyChanges { bin_width: 1.0 },
+                "SquareEnergyChangesTracking",
+            ),
+        ];
+        for (canvas, tracking, legacy) in cases {
+            let state = make(*canvas, tracking.clone());
+            assert_json_tag_contains(&state, legacy);
+        }
+    }
+
+    #[test]
+    fn json_roundtrip_preserves_variant() {
+        let state = make(CanvasType::Square, TrackingConfig::Movie);
+        let s = serde_json::to_string(&state).unwrap();
+        let back: StateEnum = serde_json::from_str(&s).expect("roundtrip");
+        // Sanity: the deserialized state still claims movie-tracker ownership.
+        assert!(back.movie_tracker().is_some());
+    }
+
+    #[test]
+    fn movie_tracker_dispatch_distinguishes_owners() {
+        assert!(make(CanvasType::Square, TrackingConfig::Movie)
+            .movie_tracker()
+            .is_some());
+        assert!(make(CanvasType::Square, TrackingConfig::None)
+            .movie_tracker()
+            .is_none());
+        assert!(make(CanvasType::Square, TrackingConfig::Order)
+            .movie_tracker()
+            .is_none());
+    }
+
+    #[test]
+    fn energy_changes_tracker_dispatch_distinguishes_owners() {
+        assert!(make(
+            CanvasType::Square,
+            TrackingConfig::EnergyChanges { bin_width: 0.5 }
+        )
+        .energy_changes_tracker()
+        .is_some());
+        assert!(make(CanvasType::Tube, TrackingConfig::Movie)
+            .energy_changes_tracker()
+            .is_none());
+    }
+
+    #[test]
+    fn clone_empty_no_movie_tracker_errors_for_non_movie() {
+        let state = make(CanvasType::Square, TrackingConfig::Order);
+        assert!(state.clone_empty_no_movie_tracker().is_err());
+    }
+
+    #[test]
+    fn clone_empty_no_movie_tracker_returns_null_variant_for_movie() {
+        let state = make(CanvasType::Tube, TrackingConfig::Movie);
+        let cleaned = state
+            .clone_empty_no_movie_tracker()
+            .expect("movie variant should clone-strip");
+        assert_json_tag_contains(&cleaned, "TubeNoTracking");
+        assert!(cleaned.movie_tracker().is_none());
+    }
+}

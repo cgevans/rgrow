@@ -14,7 +14,7 @@ use crate::models::sdc1d::SDC;
 use crate::models::sdc1d_bindreplace::SDC1DBindReplace;
 use crate::models::sdc2d::SDC2DSquare;
 use crate::ratestore::RateStore;
-use crate::state::{StateEnum, StateStatus, TileCounts, TrackerData};
+use crate::state::{OwnsEnergyChangesTracker, StateEnum, StateStatus, TileCounts, TrackerData};
 use crate::system::{CriticalStateConfig, CriticalStateResult};
 use crate::system::{
     DimerInfo, DynSystem, EvolveBounds, EvolveOutcome, NeededUpdate, System, TileBondInfo,
@@ -163,7 +163,7 @@ impl PyState {
     ///     A dict with keys ``"energy_change"`` (list of float) and ``"count"`` (list of int),
     ///     sorted by energy_change.  Returns ``None`` if the state does not use EnergyChanges tracking.
     pub fn energy_histogram(&self) -> Option<std::collections::HashMap<String, Py<PyAny>>> {
-        let tracker = self.0.get_energy_changes_tracker()?;
+        let tracker = self.0.energy_changes_tracker()?;
 
         let mut entries: Vec<(i64, u64)> = tracker.counts.iter().map(|(&k, &v)| (k, v)).collect();
         entries.sort_by_key(|(k, _)| *k);
