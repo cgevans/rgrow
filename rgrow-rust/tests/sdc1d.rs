@@ -7,7 +7,7 @@ use rgrow::models::sdc1d::{GsOrSeq, RefOrPair, SDCParams, SDCStrand, SingleOrMul
 use rgrow::ratestore::RateStore;
 use rgrow::state::{StateEnum, StateStatus};
 use rgrow::system::{EvolveBounds, NeededUpdate, System, TileBondInfo};
-use rgrow::tileset::CanvasType::{Square, SquareCompact};
+use rgrow::tileset::CanvasType::{Square, SquareBordered, SquareCompact};
 use rgrow::tileset::TrackingConfig;
 use std::collections::HashMap;
 
@@ -244,15 +244,22 @@ fn sdc_single_scaffold_compact() {
     assert_ne!(state_1.total_events(), 0);
 }
 
-/// CanvasSquare with fewer than 5 rows/cols should return an error,
-/// since its inbounds check requires a 2-tile border on all sides.
+/// `CanvasType::SquareBordered` requires at least 5 rows/cols since its
+/// inbounds check assumes a 2-tile border on all sides. The default
+/// `Square` (now backed by `CanvasSquareCompact`) accepts any non-zero
+/// dimension, so this test only exercises the legacy bordered variant.
 #[test]
 fn sdc_canvas_square_rejects_small_dimensions() {
     let sdc_sys = make_system();
     let n_tiles = sdc_sys.tile_names().len();
 
-    assert!(StateEnum::empty((1, 9), Square, &TrackingConfig::default(), n_tiles).is_err());
-    assert!(StateEnum::empty((4, 9), Square, &TrackingConfig::default(), n_tiles).is_err());
-    assert!(StateEnum::empty((9, 4), Square, &TrackingConfig::default(), n_tiles).is_err());
-    assert!(StateEnum::empty((5, 9), Square, &TrackingConfig::default(), n_tiles).is_ok());
+    assert!(StateEnum::empty((1, 9), SquareBordered, &TrackingConfig::default(), n_tiles).is_err());
+    assert!(StateEnum::empty((4, 9), SquareBordered, &TrackingConfig::default(), n_tiles).is_err());
+    assert!(StateEnum::empty((9, 4), SquareBordered, &TrackingConfig::default(), n_tiles).is_err());
+    assert!(StateEnum::empty((5, 9), SquareBordered, &TrackingConfig::default(), n_tiles).is_ok());
+
+    // Default `Square` is borderless and accepts small dimensions
+    // (the only failure mode is a zero-sized axis).
+    assert!(StateEnum::empty((1, 9), Square, &TrackingConfig::default(), n_tiles).is_ok());
+    assert!(StateEnum::empty((0, 9), Square, &TrackingConfig::default(), n_tiles).is_err());
 }

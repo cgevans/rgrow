@@ -176,11 +176,20 @@ impl StateEnum {
         }
 
         let mut state: StateEnum = match kind {
-            CanvasType::Square => match_tracking!(CanvasSquare),
+            // `Square` is now backed by `CanvasSquareCompact` — the visible
+            // border is gone; the high-side pad + low-side wrap layout
+            // gives users `[0, N) × [0, N)` coordinates and matches the
+            // bordered version's perf to within ~1% on KTAM Sierpinski.
+            // `SquareCompact` resolves the same way (alias).
+            CanvasType::Square | CanvasType::SquareCompact => match_tracking!(CanvasSquareCompact),
             CanvasType::Periodic => match_tracking!(CanvasPeriodic),
             CanvasType::Tube => match_tracking!(CanvasTube),
             CanvasType::TubeDiagonals => match_tracking!(CanvasTubeDiagonals),
-            CanvasType::SquareCompact => match_tracking!(CanvasSquareCompact),
+            // Legacy bordered-square layout. Tile coordinates are inset by
+            // 2 on each axis: callers pass `(N+4, N+4)` storage and place
+            // tiles in `[2, N+2)`. Slightly faster than `Square` (≤1% on
+            // KTAM Sierpinski) but keeps the +4 sizing footgun.
+            CanvasType::SquareBordered => match_tracking!(CanvasSquare),
         };
 
         // Apply per-variant config

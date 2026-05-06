@@ -1,5 +1,11 @@
 # Unreleased
 
+### Changed
+- `kind="Square"` (and YAML `canvas_type: Square`) is now backed by `CanvasSquareCompact`. User coordinates run `[0, N)` on each axis with no visible 2-tile border; `nrows_usable() == nrows()`. Performance is within ~1% of the previous bordered layout on KTAM Sierpinski (paired benchmarks).
+- The legacy bordered layout is still available as `kind="SquareBordered"` (`square-bordered` / `squarebordered`). Use only for back-compat with code that hardcodes the 2-tile inset; new code should use the default `Square`.
+- `kind="SquareCompact"` is retained as an alias for the new default; existing code using it keeps working.
+- `CanvasSquareCompact::from_array` now properly pads the input array (was a `TODO`); reachable only via `QuadTreeState::from_array`, but tightens an otherwise-dormant footgun.
+
 # 0.23.0
 
 ### Added
