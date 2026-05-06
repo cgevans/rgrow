@@ -74,6 +74,12 @@ pub enum ParserError {
         num: usize,
         shape: TileShape,
     },
+    #[error("Reference to unknown glue {name:?}.")]
+    UnknownGlue { name: String },
+    #[error("Reference to unknown tile {name:?}.")]
+    UnknownTile { name: String },
+    #[error("Tile id {id} does not fit in the tile id type.")]
+    TileIdOutOfRange { id: usize },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1005,10 +1011,13 @@ impl ProcessedTileSet {
                 .edges
                 .iter()
                 .map(|te| match te {
-                    GlueIdent::Name(n) => *glue_map.get_by_left(n).unwrap(),
-                    GlueIdent::Num(i) => *i,
+                    GlueIdent::Name(n) => glue_map
+                        .get_by_left(n)
+                        .copied()
+                        .ok_or_else(|| ParserError::UnknownGlue { name: n.clone() }),
+                    GlueIdent::Num(i) => Ok(*i),
                 })
-                .collect();
+                .collect::<Result<Vec<_>, _>>()?;
 
             match &tile.shape.as_ref().unwrap_or(&TileShape::Single) {
                 TileShape::Single => {
@@ -1126,42 +1135,38 @@ impl ProcessedTileSet {
         s.glue_links = tileset
             .glues
             .iter()
-            .map(|(g1, g2, st)| (s.gpmap(g1), s.gpmap(g2), *st))
-            .collect::<Vec<_>>();
+            .map(|(g1, g2, st)| Ok((s.gpmap(g1)?, s.gpmap(g2)?, *st)))
+            .collect::<Result<Vec<_>, ParserError>>()?;
 
         s.seed = match &tileset.seed {
             None => Vec::new(),
-            Some(Seed::Single(x, y, t)) => vec![(*x, *y, s.tpmap(t))],
+            Some(Seed::Single(x, y, t)) => vec![(*x, *y, s.tpmap(t)?)],
             Some(Seed::Multi(v)) => v
                 .iter()
                 .map(|(x, y, t)| {
-                    (
+                    Ok((
                         *x as base::CanvasLength,
                         *y as base::CanvasLength,
-                        s.tpmap(t),
-                    )
+                        s.tpmap(t)?,
+                    ))
                 })
-                .collect(),
+                .collect::<Result<Vec<_>, ParserError>>()?,
         };
 
-        let hdoubles = {
-            match &tileset.hdoubletiles {
-                Some(x) => x
-                    .iter()
-                    .map(|(a, b)| (s.tpmap(a), s.tpmap(b)))
-                    .collect::<Vec<_>>(),
-                None => Vec::new(),
-            }
+        let hdoubles = match &tileset.hdoubletiles {
+            Some(x) => x
+                .iter()
+                .map(|(a, b)| Ok((s.tpmap(a)?, s.tpmap(b)?)))
+                .collect::<Result<Vec<_>, ParserError>>()?,
+            None => Vec::new(),
         };
 
-        let vdoubles = {
-            match &tileset.vdoubletiles {
-                Some(x) => x
-                    .iter()
-                    .map(|(a, b)| (s.tpmap(a), s.tpmap(b)))
-                    .collect::<Vec<_>>(),
-                None => Vec::new(),
-            }
+        let vdoubles = match &tileset.vdoubletiles {
+            Some(x) => x
+                .iter()
+                .map(|(a, b)| Ok((s.tpmap(a)?, s.tpmap(b)?)))
+                .collect::<Result<Vec<_>, ParserError>>()?,
+            None => Vec::new(),
         };
         s.hdoubletiles.extend(hdoubles);
         s.vdoubletiles.extend(vdoubles);
@@ -1169,20 +1174,142 @@ impl ProcessedTileSet {
         Ok(s)
     }
 
-    pub fn tpmap(&self, tp: &TileIdent) -> base::Tile {
+    pub fn tpmap(&self, tp: &TileIdent) -> Result<base::Tile, ParserError> {
         match tp {
-            TileIdent::Name(x) => {
-                // FIXME: fail gracefully
-                self.tile_names.iter().position(|y| *y == *x).unwrap() as base::Tile
-            }
-            TileIdent::Num(x) => (*x).try_into().unwrap(),
+            TileIdent::Name(x) => self
+                .tile_names
+                .iter()
+                .position(|y| *y == *x)
+                .map(|p| p as base::Tile)
+                .ok_or_else(|| ParserError::UnknownTile { name: x.clone() }),
+            TileIdent::Num(x) => (*x)
+                .try_into()
+                .map_err(|_| ParserError::TileIdOutOfRange { id: *x }),
         }
     }
 
-    pub fn gpmap(&self, gp: &GlueIdent) -> base::Glue {
+    pub fn gpmap(&self, gp: &GlueIdent) -> Result<base::Glue, ParserError> {
         match gp {
-            GlueIdent::Name(x) => *self.glue_map.get_by_left(x).unwrap() as base::Glue,
-            GlueIdent::Num(x) => *x,
+            GlueIdent::Name(x) => self
+                .glue_map
+                .get_by_left(x)
+                .copied()
+                .ok_or_else(|| ParserError::UnknownGlue { name: x.clone() }),
+            GlueIdent::Num(x) => Ok(*x),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tile(name: &str, edges: Vec<GlueIdent>) -> Tile {
+        Tile {
+            name: Some(name.to_string()),
+            edges,
+            stoic: None,
+            color: None,
+            shape: None,
+        }
+    }
+
+    fn ts_with_named_glues() -> TileSet {
+        TileSet {
+            tiles: vec![tile(
+                "a",
+                vec![
+                    GlueIdent::Name("g1".into()),
+                    GlueIdent::Num(0),
+                    GlueIdent::Num(0),
+                    GlueIdent::Num(0),
+                ],
+            )],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn unknown_tile_name_in_seed_returns_typed_error() {
+        let mut ts = ts_with_named_glues();
+        ts.seed = Some(Seed::Single(0, 0, TileIdent::Name("nonexistent".into())));
+        let err = ProcessedTileSet::from_tileset(&ts)
+            .err()
+            .expect("should reject unknown tile");
+        assert!(
+            matches!(err, ParserError::UnknownTile { ref name } if name == "nonexistent"),
+            "expected UnknownTile, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn unknown_tile_name_in_hdoubletiles_returns_typed_error() {
+        let mut ts = ts_with_named_glues();
+        ts.hdoubletiles = Some(vec![(
+            TileIdent::Name("a".into()),
+            TileIdent::Name("ghost".into()),
+        )]);
+        let err = ProcessedTileSet::from_tileset(&ts)
+            .err()
+            .expect("should reject unknown tile");
+        assert!(
+            matches!(err, ParserError::UnknownTile { ref name } if name == "ghost"),
+            "expected UnknownTile, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn unknown_glue_name_in_glue_links_returns_typed_error() {
+        let mut ts = ts_with_named_glues();
+        ts.glues = vec![(
+            GlueIdent::Name("g1".into()),
+            GlueIdent::Name("never_defined".into()),
+            0.5,
+        )];
+        let err = ProcessedTileSet::from_tileset(&ts)
+            .err()
+            .expect("should reject unknown glue");
+        assert!(
+            matches!(err, ParserError::UnknownGlue { ref name } if name == "never_defined"),
+            "expected UnknownGlue, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn out_of_range_tile_id_in_seed_returns_typed_error() {
+        let mut ts = ts_with_named_glues();
+        let huge = (base::Tile::MAX as usize) + 1;
+        ts.seed = Some(Seed::Single(0, 0, TileIdent::Num(huge)));
+        let err = ProcessedTileSet::from_tileset(&ts)
+            .err()
+            .expect("should reject out-of-range id");
+        assert!(
+            matches!(err, ParserError::TileIdOutOfRange { id } if id == huge),
+            "expected TileIdOutOfRange, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn gpmap_returns_unknown_glue_for_missing_name() {
+        let ts = ts_with_named_glues();
+        let pts = ProcessedTileSet::from_tileset(&ts).expect("base tileset should parse");
+        let err = pts
+            .gpmap(&GlueIdent::Name("not_a_glue".into()))
+            .expect_err("unknown glue should error");
+        assert!(matches!(err, ParserError::UnknownGlue { ref name } if name == "not_a_glue"));
+    }
+
+    #[test]
+    fn happy_path_still_parses() {
+        let mut ts = ts_with_named_glues();
+        ts.seed = Some(Seed::Single(1, 1, TileIdent::Name("a".into())));
+        ts.glues = vec![(
+            GlueIdent::Name("g1".into()),
+            GlueIdent::Name("g1".into()),
+            0.25,
+        )];
+        let pts = ProcessedTileSet::from_tileset(&ts).expect("should parse");
+        assert_eq!(pts.seed.len(), 1);
+        assert_eq!(pts.glue_links.len(), 1);
     }
 }
