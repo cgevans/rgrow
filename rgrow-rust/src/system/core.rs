@@ -2,8 +2,10 @@ use ndarray::prelude::*;
 use num_traits::Zero;
 use rand::rng;
 use rand::Rng;
+use rand::SeedableRng;
 
 use std::any::Any;
+use std::cell::RefCell;
 use std::fmt::Debug;
 
 #[cfg(feature = "parallel")]
@@ -14,6 +16,14 @@ use crate::canvas::{PointSafe2, PointSafeHere};
 use crate::maybe_par_iter_mut;
 use crate::state::{State, StateWithCreate};
 use crate::units::{PerSecond, Rate, Second};
+
+thread_local! {
+    /// Scratch for [`System::update_points`]: holds (point, rate) pairs
+    /// while we ask the rate store to apply them. Reused across calls so
+    /// the per-event 5-or-13-element fan-out doesn't re-allocate.
+    static UPDATE_POINTS_SCRATCH: RefCell<Vec<(PointSafeHere, PerSecond)>> =
+        const { RefCell::new(Vec::new()) };
+}
 
 use super::dispatch::TileBondInfo;
 #[cfg(not(target_arch = "wasm32"))]
@@ -36,13 +46,28 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 
     fn take_single_step<St: State>(&self, state: &mut St, max_time_step: Second) -> StepOutcome {
+        let mut rng = rand::rngs::SmallRng::from_rng(&mut rng());
+        self.take_single_step_with_rng(state, max_time_step, &mut rng)
+    }
+
+    /// Like [`take_single_step`] but uses a caller-supplied RNG instead of
+    /// per-call thread-local-RNG access. The hot
+    /// `evolve` loop reuses one `SmallRng` across all events; this saves
+    /// the per-event `ThreadRng` TLS lookup and the `rand_chacha` refill
+    /// machinery (we use `Xoshiro256+` via `SmallRng`).
+    fn take_single_step_with_rng<St: State, R: Rng + ?Sized>(
+        &self,
+        state: &mut St,
+        max_time_step: Second,
+        rng: &mut R,
+    ) -> StepOutcome {
         let total_rate = state.total_rate();
-        let time_step = -f64::ln(rng().random()) / total_rate;
+        let time_step = -f64::ln(rng.random()) / total_rate;
         if time_step > max_time_step {
             state.add_time(max_time_step);
             return StepOutcome::NoEventIn(max_time_step);
         }
-        let (point, remainder) = state.choose_point(); // todo: resultify
+        let (point, remainder) = state.choose_point_with_rand(rng.random::<f64>());
         let (event, chosen_event_rate) = self.choose_event_at_point(
             state,
             PointSafe2(point),
@@ -94,6 +119,12 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
         // that uses `performance.now()` on wasm32-unknown-unknown.
         let start_time = bounds.for_wall_time.map(|_| web_time::Instant::now());
 
+        // Build one tightly-typed `SmallRng` (Xoshiro256++) seeded from the
+        // thread-local RNG, then thread it through every event. Avoids the
+        // per-event `rand::rng()` TLS access and the heavier `rand_chacha`
+        // generator state used by `ThreadRng`.
+        let mut step_rng = rand::rngs::SmallRng::from_rng(&mut rng());
+
         loop {
             if bounds.size_min.is_some_and(|ms| state.n_tiles() <= ms) {
                 return Ok(EvolveOutcome::ReachedSizeMin);
@@ -111,7 +142,7 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
             } else if state.total_rate().is_zero() {
                 return Ok(EvolveOutcome::ReachedZeroRate);
             }
-            let out = self.take_single_step(state, rtime);
+            let out = self.take_single_step_with_rng(state, rtime, &mut step_rng);
             match out {
                 StepOutcome::HadEventAt(t) => {
                     events += 1;
@@ -296,12 +327,16 @@ pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
     }
 
     fn update_points<St: State>(&self, state: &mut St, points: &[PointSafeHere]) {
-        let p = points
-            .iter()
-            .map(|p| (*p, self.event_rate_at_point(state, *p)))
-            .collect::<Vec<_>>();
-
-        state.update_multiple(&p);
+        UPDATE_POINTS_SCRATCH.with(|cell| {
+            let mut buf = cell.borrow_mut();
+            buf.clear();
+            buf.reserve(points.len());
+            for &p in points {
+                let rate = self.event_rate_at_point(state, p);
+                buf.push((p, rate));
+            }
+            state.update_multiple(&buf);
+        });
     }
 
     fn update_state<St: State>(&self, state: &mut St, needed: &NeededUpdate) {

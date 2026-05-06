@@ -28,8 +28,17 @@ use num_traits::Zero;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray2};
 use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+
+thread_local! {
+    /// Scratch buffer for the per-call friends-set merge in
+    /// `_find_monomer_attachment_possibilities_at_point`. Reusing the buffer
+    /// across calls avoids the per-event `FnvHashSet` allocation that
+    /// dominated the old hot path.
+    static FRIENDS_SCRATCH: RefCell<Vec<Tile>> = const { RefCell::new(Vec::new()) };
+}
 
 use crate::base::{Glue, Tile};
 
@@ -136,28 +145,30 @@ pub struct KTAM {
     energy_ns: Array2<Energy>,
     energy_we: Array2<Energy>,
 
-    /// Each "friends" hashset gives the potential tile attachments
-    /// at point P if tile T is in that direction.  Eg, friends_e[T]
-    /// is a set of tiles that might attach at point P if T is east of
-    /// point P.  The ones other than NESW are only for duples.
+    /// Each "friends" entry gives the potential tile attachments at point P
+    /// if tile T is in that direction. `friends_e[T]` is the (sorted,
+    /// deduplicated) list of tiles that might attach at point P if T is east
+    /// of point P. The ones other than NESW are only for duples. Stored as
+    /// `Box<[Tile]>` so the inner loop can sort-merge into a thread-local
+    /// scratch buffer rather than allocating an `FnvHashSet` per call.
     #[serde(skip)]
-    friends_n: Vec<HashSetType<Tile>>,
+    friends_n: Vec<Box<[Tile]>>,
     #[serde(skip)]
-    friends_e: Vec<HashSetType<Tile>>,
+    friends_e: Vec<Box<[Tile]>>,
     #[serde(skip)]
-    friends_s: Vec<HashSetType<Tile>>,
+    friends_s: Vec<Box<[Tile]>>,
     #[serde(skip)]
-    friends_w: Vec<HashSetType<Tile>>,
+    friends_w: Vec<Box<[Tile]>>,
     #[serde(skip)]
-    friends_ne: Vec<HashSetType<Tile>>,
+    friends_ne: Vec<Box<[Tile]>>,
     #[serde(skip)]
-    friends_ee: Vec<HashSetType<Tile>>,
+    friends_ee: Vec<Box<[Tile]>>,
     #[serde(skip)]
-    friends_se: Vec<HashSetType<Tile>>,
+    friends_se: Vec<Box<[Tile]>>,
     #[serde(skip)]
-    friends_ss: Vec<HashSetType<Tile>>,
+    friends_ss: Vec<Box<[Tile]>>,
     #[serde(skip)]
-    friends_sw: Vec<HashSetType<Tile>>,
+    friends_sw: Vec<Box<[Tile]>>,
 
     has_duples: bool,
     duple_info: Array1<TileShape>,
@@ -1257,88 +1268,84 @@ impl KTAM {
             self.has_duples = false;
         }
 
-        self.friends_n.drain(..);
-        self.friends_e.drain(..);
-        self.friends_s.drain(..);
-        self.friends_w.drain(..);
-        self.friends_ne.drain(..);
-        self.friends_ee.drain(..);
-        self.friends_se.drain(..);
-        self.friends_ss.drain(..);
-        self.friends_sw.drain(..);
-        for _ in 0..ntiles {
-            self.friends_n.push(HashSetType::default());
-            self.friends_e.push(HashSetType::default());
-            self.friends_s.push(HashSetType::default());
-            self.friends_w.push(HashSetType::default());
-            self.friends_ne.push(HashSetType::default());
-            self.friends_ee.push(HashSetType::default());
-            self.friends_se.push(HashSetType::default());
-            self.friends_ss.push(HashSetType::default());
-            self.friends_sw.push(HashSetType::default());
-        }
+        // Build friends sets in temporary HashSets, then freeze each into a
+        // sorted Box<[Tile]> for the hot path to sort-merge against. The
+        // hashset-construction logic below mirrors the original code.
+        // Build friends as Vec<Tile> directly. The outer loop visits t1
+        // monotonically; for fixed (t1, t2), each conditional inserts t1
+        // into a different direction-vec, so each output is built
+        // already-sorted with no duplicates — no HashSet needed.
+        let mut bn: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut be: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bs: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bw: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bne: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bee: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bse: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bss: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
+        let mut bsw: Vec<Vec<Tile>> = (0..ntiles).map(|_| Vec::new()).collect();
         for t1 in 0..(ntiles) {
             for t2 in 0..(ntiles) {
                 let t1t = t1 as Tile;
                 match self.tile_shape(t1t) {
                     TileShape::Single => {
                         if self.get_energy_ns(t2, t1) != 0. {
-                            self.friends_n[t2 as usize].insert(t1);
+                            bn[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t2, t1) != 0. {
-                            self.friends_w[t2 as usize].insert(t1);
+                            bw[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(t1, t2) != 0. {
-                            self.friends_s[t2 as usize].insert(t1);
+                            bs[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t1, t2) != 0. {
-                            self.friends_e[t2 as usize].insert(t1);
+                            be[t2 as usize].push(t1);
                         }
                     }
                     TileShape::DupleToRight(td) => {
                         if self.get_energy_ns(t2, td) != 0. {
-                            self.friends_ne[t2 as usize].insert(t1);
+                            bne[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(td, t2) != 0. {
-                            self.friends_se[t2 as usize].insert(t1);
+                            bse[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(td, t2) != 0. {
-                            self.friends_ee[t2 as usize].insert(t1);
+                            bee[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(t2, t1) != 0. {
-                            self.friends_n[t2 as usize].insert(t1);
+                            bn[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t2, t1) != 0. {
-                            self.friends_w[t2 as usize].insert(t1);
+                            bw[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(t1, t2) != 0. {
-                            self.friends_s[t2 as usize].insert(t1);
+                            bs[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t1, t2) != 0. {
-                            self.friends_e[t2 as usize].insert(t1);
+                            be[t2 as usize].push(t1);
                         }
                     }
                     TileShape::DupleToBottom(td) => {
                         if self.get_energy_we(t2, td) != 0. {
-                            self.friends_sw[t2 as usize].insert(t1);
+                            bsw[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(td, t2) != 0. {
-                            self.friends_se[t2 as usize].insert(t1);
+                            bse[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(td, t2) != 0. {
-                            self.friends_ss[t2 as usize].insert(t1);
+                            bss[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(t2, t1) != 0. {
-                            self.friends_n[t2 as usize].insert(t1);
+                            bn[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t2, t1) != 0. {
-                            self.friends_w[t2 as usize].insert(t1);
+                            bw[t2 as usize].push(t1);
                         }
                         if self.get_energy_ns(t1, t2) != 0. {
-                            self.friends_s[t2 as usize].insert(t1);
+                            bs[t2 as usize].push(t1);
                         }
                         if self.get_energy_we(t1, t2) != 0. {
-                            self.friends_e[t2 as usize].insert(t1);
+                            be[t2 as usize].push(t1);
                         }
                     }
                     TileShape::DupleToLeft(_) => (),
@@ -1346,6 +1353,15 @@ impl KTAM {
                 };
             }
         }
+        self.friends_n = bn.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_e = be.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_s = bs.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_w = bw.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_ne = bne.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_ee = bee.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_se = bse.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_ss = bss.into_iter().map(Vec::into_boxed_slice).collect();
+        self.friends_sw = bsw.into_iter().map(Vec::into_boxed_slice).collect();
 
         // Compute dimer equilibrium and cache results
         self.free_tile_concs = self.tile_concs.clone();
@@ -1719,71 +1735,90 @@ impl KTAM {
             }
         }
 
-        let mut friends = HashSetType::<Tile>::default();
+        // Merge the per-direction friends slices into a thread-local scratch
+        // Vec, then iterate. Compared with allocating a fresh FnvHashSet per
+        // call, this avoids the dominant allocation hotspot that May 2026
+        // profiling identified (~26% of CPU on KTAM Sierpinski).
+        let result: Result<(Tile, Rate64), ()> = FRIENDS_SCRATCH.with(|cell| {
+            let mut buf = cell.borrow_mut();
+            buf.clear();
+            if tn.nonzero() {
+                buf.extend_from_slice(&self.friends_n[tn as usize]);
+            }
+            if te.nonzero() {
+                buf.extend_from_slice(&self.friends_e[te as usize]);
+            }
+            if ts.nonzero() {
+                buf.extend_from_slice(&self.friends_s[ts as usize]);
+            }
+            if tw.nonzero() {
+                buf.extend_from_slice(&self.friends_w[tw as usize]);
+            }
+            if self.has_duples {
+                if tss.nonzero() {
+                    buf.extend_from_slice(&self.friends_ss[tss as usize]);
+                }
+                if tne.nonzero() {
+                    buf.extend_from_slice(&self.friends_ne[tne as usize]);
+                }
+                if tee.nonzero() {
+                    buf.extend_from_slice(&self.friends_ee[tee as usize]);
+                }
+                if tse.nonzero() {
+                    buf.extend_from_slice(&self.friends_se[tse as usize]);
+                }
+                // FIXME: is this missing SW?
+            }
+            // Per-direction slices are individually sorted and deduplicated,
+            // but the union across slices may have duplicates we want to
+            // collapse. For sparse uniquely-addressed systems the union is
+            // typically ≤4 elements; for dense systems it's still small
+            // (bounded by alphabet size). sort_unstable + dedup is fine at
+            // both scales.
+            buf.sort_unstable();
+            buf.dedup();
 
-        if tn.nonzero() {
-            friends.extend(&self.friends_n[tn as usize]);
-        }
-        if te.nonzero() {
-            friends.extend(&self.friends_e[te as usize]);
-        }
-        if ts.nonzero() {
-            friends.extend(&self.friends_s[ts as usize]);
-        }
-        if tw.nonzero() {
-            friends.extend(&self.friends_w[tw as usize]);
-        }
+            for &t in buf.iter() {
+                // FIXME: this is likely rather slow, but it's better than
+                // giving very confusing rates (many possible double-tile
+                // attachements at a point that aren't actually possible,
+                // because they are blocked).
+                match self.tile_shape(t) {
+                    TileShape::Single => (),
+                    TileShape::DupleToRight(_) => {
+                        if state.tile_to_e(p) != 0 {
+                            continue;
+                        }
+                    }
+                    TileShape::DupleToBottom(_) => {
+                        if state.tile_to_s(p) != 0 {
+                            continue;
+                        }
+                    }
+                    TileShape::DupleToLeft(_) => {
+                        if state.tile_to_w(p) != 0 {
+                            continue;
+                        }
+                    }
+                    TileShape::DupleToTop(_) => {
+                        if state.tile_to_n(p) != 0 {
+                            continue;
+                        }
+                    }
+                }
+                let rate = self.kf * self.effective_monomer_conc(t as usize);
+                acc -= rate;
+                if !just_calc & (acc <= 0.) {
+                    return Ok((t, rate));
+                }
+            }
+            Err(())
+        });
 
-        if self.has_duples {
-            if tss.nonzero() {
-                friends.extend(&self.friends_ss[tss as usize])
-            }
-            if tne.nonzero() {
-                friends.extend(&self.friends_ne[tne as usize])
-            }
-            if tee.nonzero() {
-                friends.extend(&self.friends_ee[tee as usize])
-            }
-            if tse.nonzero() {
-                friends.extend(&self.friends_se[tse as usize])
-            }
-            // FIXME: is this missing SW?
+        match result {
+            Ok((t, rate)) => (true, acc, Event::MonomerAttachment(p, t), rate),
+            Err(()) => (false, acc, Event::None, f64::NAN),
         }
-
-        for t in friends.drain() {
-            // FIXME: this is likely rather slow, but it's better than giving very confusing rates (many
-            // possible double-tile attachements at a point that aren't actually possible, because they are
-            // blocked).
-            match self.tile_shape(t) {
-                TileShape::Single => (),
-                TileShape::DupleToRight(_) => {
-                    if state.tile_to_e(p) != 0 {
-                        continue;
-                    }
-                }
-                TileShape::DupleToBottom(_) => {
-                    if state.tile_to_s(p) != 0 {
-                        continue;
-                    }
-                }
-                TileShape::DupleToLeft(_) => {
-                    if state.tile_to_w(p) != 0 {
-                        continue;
-                    }
-                }
-                TileShape::DupleToTop(_) => {
-                    if state.tile_to_n(p) != 0 {
-                        continue;
-                    }
-                }
-            }
-            let rate = self.kf * self.effective_monomer_conc(t as usize);
-            acc -= rate;
-            if !just_calc & (acc <= (0.)) {
-                return (true, acc, Event::MonomerAttachment(p, t), rate);
-            }
-        }
-        (false, acc, Event::None, f64::NAN)
     }
 
     pub fn bond_energy_of_tile_type_at_point<S: State>(

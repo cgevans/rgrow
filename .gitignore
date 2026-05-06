@@ -40,3 +40,5 @@ docs/examples/*.md
 docs/examples/*_files/
 .DS_Store
 py-rgrow/rgrow/rgrow.abi3.so
+.benchmarks/
+benchmark-results.json

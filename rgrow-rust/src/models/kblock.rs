@@ -1,4 +1,13 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+
+thread_local! {
+    /// Per-thread scratch for `KBlock::collect_possible_tiles_at` /
+    /// `possible_tiles_at_point`. Reused across calls to avoid the
+    /// per-event `FnvHashSet` allocation that the original code paid.
+    static KBLOCK_FRIENDS_SCRATCH: RefCell<Vec<TileState>> =
+        const { RefCell::new(Vec::new()) };
+}
 
 use ndarray::{Array1, Array2};
 use num_traits::Zero;
@@ -170,20 +179,26 @@ pub struct KBlock {
     /// Binding strength between two glues
     pub(crate) glue_links: Array2<KcalPerMol>,
 
-    /// What can attach to the north of some *glue*
+    /// What can attach to the north of some *glue*.
     ///
-    /// For example, if some tile has the glue 6 to the north side, north_friends[6] will
-    /// return a hashset with every tile containing a 5 (1<->2, 3<->4, 5<->6)
+    /// For example, if some tile has the glue 6 to the north side,
+    /// `north_friends[6]` is a sorted, deduplicated list of every tile
+    /// containing a 5 (1<->2, 3<->4, 5<->6).
     ///
-    /// To get possible attachemnts to some side of a tile (which is the usual expected use), call
-    /// `get_friends_one_side` or `get_friends`
-    north_friends: Vec<HashSetType<TileState>>,
+    /// To get possible attachments to some side of a tile (which is the
+    /// usual expected use), call `get_unblocked_friends_to_side` or
+    /// `get_friends`.
+    ///
+    /// Stored as `Box<[TileState]>` so the hot path
+    /// (`possible_tiles_at_point`) can sort-merge into a thread-local
+    /// scratch instead of allocating a fresh `FnvHashSet` per call.
+    north_friends: Vec<Box<[TileState]>>,
     /// Identical to north_friends
-    south_friends: Vec<HashSetType<TileState>>,
+    south_friends: Vec<Box<[TileState]>>,
     /// Identical to north_friends
-    east_friends: Vec<HashSetType<TileState>>,
+    east_friends: Vec<Box<[TileState]>>,
     /// Identical to north_friends
-    west_friends: Vec<HashSetType<TileState>>,
+    west_friends: Vec<Box<[TileState]>>,
 
     /// Energy of tile and blocker, blocker i contains [N, E, S, W]
     energy_blocker: Array2<KcalPerMol>,
@@ -256,12 +271,14 @@ impl KBlock {
         }
     }
 
-    /// Get the unblocked friends to one side of some given tile
+    /// Get the unblocked friends to one side of some given tile.
+    /// Returns a sorted, deduplicated slice (or `None` if the side is
+    /// blocked).
     pub fn get_unblocked_friends_to_side(
         &self,
         side: Sides,
         tile: TileState,
-    ) -> Option<&HashSetType<TileState>> {
+    ) -> Option<&[TileState]> {
         // The tile is blocked, so we dont have any friends
         if tile.is_blocked(side) {
             return None;
@@ -279,13 +296,15 @@ impl KBlock {
         })
     }
 
-    /// Get the friends to some side
+    /// Get the friends to some side. Result is materialised as a HashSet for
+    /// callers that want set-membership semantics; this is not on the hot
+    /// path.
     pub fn get_friends(&self, side: Sides, tile: TileState) -> HashSetType<TileState> {
         let mut tile_friends = HashSetType::default();
         for s in ALL_SIDES {
             if side & s != 0 {
                 if let Some(ext) = self.get_unblocked_friends_to_side(s, tile) {
-                    tile_friends.extend(ext);
+                    tile_friends.extend(ext.iter().copied());
                 }
             }
         }
@@ -362,10 +381,18 @@ impl KBlock {
                     .insert(base_id);
             }
         }
-        self.north_friends = nf;
-        self.east_friends = ef;
-        self.south_friends = sf;
-        self.west_friends = wf;
+        // Freeze each per-glue hashset into a sorted, deduplicated boxed
+        // slice. The hot path (`possible_tiles_at_point`) merges these into
+        // a thread-local scratch and avoids per-call hash allocations.
+        let to_sorted = |s: HashSetType<TileState>| -> Box<[TileState]> {
+            let mut v: Vec<TileState> = s.into_iter().collect();
+            v.sort_unstable();
+            v.into_boxed_slice()
+        };
+        self.north_friends = nf.into_iter().map(to_sorted).collect();
+        self.east_friends = ef.into_iter().map(to_sorted).collect();
+        self.south_friends = sf.into_iter().map(to_sorted).collect();
+        self.west_friends = wf.into_iter().map(to_sorted).collect();
     }
 
     fn energy_blocker_mut(&mut self, tile: TileType, side: usize) -> &mut KcalPerMol {
@@ -716,18 +743,24 @@ impl KBlock {
             .collect()
     }
 
-    /// Get all possible tiles that may attach at some given point
-    fn possible_tiles_at_point<S: State>(
+    /// Fill `buf` with the sorted, deduplicated list of TileStates that
+    /// could attach at `point`. Returns `false` (with an empty buffer) if
+    /// the point is unattachable (already occupied, or all-blocked under
+    /// `no_partially_blocked_attachments`).
+    ///
+    /// This is the hot-path equivalent of `possible_tiles_at_point` —
+    /// callers that already hold the `KBLOCK_FRIENDS_SCRATCH` borrow use
+    /// this directly instead of allocating a fresh hash set per event.
+    fn collect_possible_tiles_at<S: State>(
         &self,
         state: &S,
         point: PointSafe2,
-    ) -> HashSetType<TileState> {
+        buf: &mut Vec<TileState>,
+    ) -> bool {
+        buf.clear();
         let tile: TileState = state.tile_at_point(point).into();
-        let mut friends: HashSetType<TileState> = HashSet::default();
-
-        // tile aready attached here
         if !tile.is_null() {
-            return friends;
+            return false;
         }
 
         for side in ALL_SIDES {
@@ -735,25 +768,34 @@ impl KBlock {
             if neighbour.is_null() {
                 continue;
             }
-
             if self.no_partially_blocked_attachments && neighbour.is_blocked(inverse(side)) {
-                return HashSet::default();
+                buf.clear();
+                return false;
             }
-
             if let Some(possible_attachments) =
                 self.get_unblocked_friends_to_side(inverse(side), neighbour)
             {
-                let attachments: HashSetType<TileState> = HashSet::from_iter(
-                    possible_attachments
-                        .iter()
-                        .flat_map(|&tile| Self::blocker_combinations(side, tile)),
-                );
-                friends.extend(attachments);
+                for &friend in possible_attachments {
+                    // Push every blocker variant of `friend` whose `side`
+                    // is unblocked (so it can bond to `neighbour`).
+                    for blocker in 0..16u32 {
+                        if blocker & side == 0 {
+                            buf.push(friend.attach_blockers(blocker));
+                        }
+                    }
+                }
             }
         }
 
+        // Sort+dedup turns the multi-source push above into a unique set.
+        // For sparse uniquely-addressed systems each side contributes a
+        // handful of entries; in dense matrices the union is bounded by
+        // alphabet × 16.
+        buf.sort_unstable();
+        buf.dedup();
+
         if self.no_partially_blocked_attachments {
-            friends.retain(|tile| {
+            buf.retain(|tile| {
                 let mut blocked = false;
                 for side in ALL_SIDES {
                     if tile.is_blocked(side) && !Self::tile_to_side(state, side, point).is_null() {
@@ -765,15 +807,33 @@ impl KBlock {
             });
         }
 
-        friends
+        true
+    }
+
+    /// Get all possible tiles that may attach at some given point. Slow
+    /// path that materialises a HashSet for callers that need set
+    /// semantics; the inner loop uses `collect_possible_tiles_at` instead.
+    #[allow(dead_code)]
+    fn possible_tiles_at_point<S: State>(
+        &self,
+        state: &S,
+        point: PointSafe2,
+    ) -> HashSetType<TileState> {
+        let mut buf: Vec<TileState> = Vec::new();
+        self.collect_possible_tiles_at(state, point, &mut buf);
+        buf.into_iter().collect()
     }
 
     fn total_attachment_rate_at_point<S: State>(&self, point: PointSafe2, state: &S) -> PerSecond {
-        self.possible_tiles_at_point(state, point)
-            .iter()
-            .fold(PerSecond::zero(), |acc, &tile| {
+        KBLOCK_FRIENDS_SCRATCH.with(|cell| {
+            let mut buf = cell.borrow_mut();
+            if !self.collect_possible_tiles_at(state, point, &mut buf) {
+                return PerSecond::zero();
+            }
+            buf.iter().fold(PerSecond::zero(), |acc, &tile| {
                 acc + self.kf * self.tile_concentration(tile)
             })
+        })
     }
 
     /// Probability of any tile attaching at some point
@@ -789,17 +849,34 @@ impl KBlock {
             return (false, *acc, Event::None);
         }
 
-        let friends: HashSetType<TileState> = self.possible_tiles_at_point(state, point);
-        // attachment_side is not used, but is relevant in computation, as it accounts for
-        // duplicates (some tiles could bind to the north or east, so it should be taken into
-        // account twice)
-        for tile in friends {
-            *acc -= self.kf * self.tile_concentration(tile);
-            if *acc <= PerSecond::zero() {
-                return (true, *acc, Event::MonomerAttachment(point, tile.into()));
+        let result: Result<(TileState, PerSecond), PerSecond> =
+            KBLOCK_FRIENDS_SCRATCH.with(|cell| {
+                let mut buf = cell.borrow_mut();
+                if !self.collect_possible_tiles_at(state, point, &mut buf) {
+                    return Err(*acc);
+                }
+                // attachment_side is not used, but is relevant in computation,
+                // as it accounts for duplicates (some tiles could bind to the
+                // north or east, so it should be taken into account twice).
+                let mut a = *acc;
+                for &tile in buf.iter() {
+                    a -= self.kf * self.tile_concentration(tile);
+                    if a <= PerSecond::zero() {
+                        return Ok((tile, a));
+                    }
+                }
+                Err(a)
+            });
+        match result {
+            Ok((tile, new_acc)) => {
+                *acc = new_acc;
+                (true, *acc, Event::MonomerAttachment(point, tile.into()))
+            }
+            Err(new_acc) => {
+                *acc = new_acc;
+                (false, *acc, Event::None)
             }
         }
-        (false, *acc, Event::None)
     }
 
     /// Percentage of total concentration of some tile that has a blocker on a given side
@@ -1418,29 +1495,31 @@ mod test_kblock {
         //println!("E: {:?}", kdcov.east_friends);
         //println!("W: {:?}", kdcov.west_friends);
 
-        let mut expected_nf = HashSetType::default();
+        // Friends are now stored as sorted boxed slices; build expected
+        // values as slices, plus a HashSet form for `get_friends`.
+        let expected_nf_slice: Box<[TileState]> = Box::new([TileState(2 << 4)]);
+        let mut expected_nf_set = HashSetType::default();
+        expected_nf_set.insert(TileState(2 << 4));
 
-        expected_nf.insert(TileState(2 << 4));
         // This is a little strange to use, as you need to know the glue on the north side of the
         // tile.
-        assert_eq!(kdcov.north_friends[1], expected_nf);
+        assert_eq!(kdcov.north_friends[1], expected_nf_slice);
         // These helper methods make it so that you can find every tile that can bond to the north
         // of some tile id
         assert_eq!(
             kdcov.get_unblocked_friends_to_side(NORTH, TileState(1 << 4)),
-            Some(&expected_nf)
+            Some(expected_nf_slice.as_ref())
         );
-        assert_eq!(kdcov.get_friends(NORTH, TileState(1 << 4)), expected_nf);
+        assert_eq!(kdcov.get_friends(NORTH, TileState(1 << 4)), expected_nf_set);
         // You can also get frineds to multiple sides at once
         assert_eq!(
             kdcov.get_friends(NORTH | EAST, TileState(1 << 4)),
-            expected_nf
+            expected_nf_set
         );
 
-        let mut expected_wf = HashSetType::default();
-        expected_wf.insert(TileState(2));
-        assert_eq!(kdcov.west_friends[4], expected_nf);
-        assert_eq!(kdcov.get_friends(WEST, TileState(3 << 4)), expected_nf);
+        let _expected_wf: Box<[TileState]> = Box::new([TileState(2)]);
+        assert_eq!(kdcov.west_friends[4], expected_nf_slice);
+        assert_eq!(kdcov.get_friends(WEST, TileState(3 << 4)), expected_nf_set);
     }
 
     #[test]

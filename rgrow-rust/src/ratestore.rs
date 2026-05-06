@@ -23,6 +23,13 @@ use crate::units::{PerSecond, Rate};
 #[enum_dispatch]
 pub trait RateStore {
     fn choose_point(&self) -> (Point, PerSecond);
+    /// Like [`choose_point`] but consumes a uniform-`[0, 1)` `rand` value
+    /// from a caller-supplied RNG. Lets callers (e.g. an `evolve` loop)
+    /// thread an explicit, tightly-typed RNG and skip the per-call
+    /// thread-local-RNG overhead. Concrete implementations should
+    /// override this; the trait fallback re-routes through
+    /// `choose_point` and ignores `rand`.
+    fn choose_point_with_rand(&self, rand: f64) -> (Point, PerSecond);
     fn rate_at_point(&self, point: PointSafeHere) -> PerSecond;
     fn update_point(&mut self, point: PointSafeHere, new_rate: PerSecond);
     fn update_multiple(&mut self, to_update: &[(PointSafeHere, PerSecond)]);
@@ -62,7 +69,11 @@ impl RateStore for QuadTreeSquareArray<PerSecond> {
     }
 
     fn choose_point(&self) -> (Point, PerSecond) {
-        let mut threshold = self.1 * rng().random::<f64>();
+        self.choose_point_with_rand(rng().random::<f64>())
+    }
+
+    fn choose_point_with_rand(&self, rand: f64) -> (Point, PerSecond) {
+        let mut threshold = self.1 * rand;
 
         let mut x: usize = 0;
         let mut y: usize = 0;
