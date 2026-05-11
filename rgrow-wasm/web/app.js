@@ -554,7 +554,26 @@ function rebuildTileSetPanel() {
           `Failed to set tile #${t.id} concentration`,
         );
       });
-      tdConc.append(input);
+      tdConc.append(wirePropagateButton(input, {
+        digits: 3,
+        kind: "tiles",
+        label: "Conc.",
+        errorPrefix: "Failed to bulk-set tile concentration",
+        listMatches: (sourceValue) => {
+          const key = formatForInput(sourceValue, 3);
+          let tiles;
+          try { tiles = sim.tileSet(); } catch { return []; }
+          if (!Array.isArray(tiles)) return [];
+          return tiles.filter(
+            (x) => x.concentration != null && formatForInput(x.concentration, 3) === key,
+          );
+        },
+        applySetter: (m, v) => sim.setTileConcentration(m.id, v),
+        afterApply: () => {
+          rebuildTileSetPanel();
+          refreshDerivedConcentrationDisplays();
+        },
+      }));
     } else {
       tdConc.textContent = t.concentration != null ? fmt(t.concentration, 3) : "";
     }
@@ -697,6 +716,211 @@ function formatForInput(n, digits) {
   // for tiny values where toFixed loses information.
   if (Math.abs(n) < 1e-3 && n !== 0) return n.toExponential(digits);
   return Number(n.toFixed(digits)).toString();
+}
+
+// ── Bulk-edit ("propagate") popover ───────────────────────────────────
+//
+// One shared popover floats over the page (position: fixed). Opens from
+// a small "propagate" button next to each editable numeric input;
+// pushes the row's value out to every other row whose current value
+// rounds to the same display string. Matching on the displayed-precision
+// string (rather than raw float equality) matches what the user sees
+// and avoids 0.1+0.2-style surprises.
+
+let propagatePopover = null;
+let propagatePopoverAnchor = null;
+// Detacher for the per-open click/keydown handlers — invoked from
+// every dismissal path so stale closures from a previous open don't
+// stack on top of new ones.
+let propagatePopoverCleanup = null;
+
+function ensurePropagatePopover() {
+  if (propagatePopover) return propagatePopover;
+  const div = document.createElement("div");
+  div.id = "propagate-popover";
+  div.hidden = true;
+  const summary = document.createElement("div");
+  summary.className = "propagate-summary";
+  const label = document.createElement("label");
+  const labelText = document.createElement("span");
+  labelText.textContent = "New value:";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "any";
+  label.append(labelText, input);
+  const buttons = document.createElement("div");
+  buttons.className = "propagate-buttons";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "cancel";
+  cancelBtn.textContent = "Cancel";
+  const applyBtn = document.createElement("button");
+  applyBtn.type = "button";
+  applyBtn.className = "apply";
+  applyBtn.textContent = "Apply";
+  buttons.append(cancelBtn, applyBtn);
+  div.append(summary, label, buttons);
+  // Stop clicks inside from being treated as "outside" by the
+  // document-level dismissal listener.
+  div.addEventListener("mousedown", (e) => e.stopPropagation());
+  document.body.append(div);
+  propagatePopover = div;
+  return div;
+}
+
+function positionPropagatePopover(anchor) {
+  const pop = ensurePropagatePopover();
+  const rect = anchor.getBoundingClientRect();
+  const popW = pop.offsetWidth || 260;
+  let left = rect.right - popW;
+  if (left < 8) left = 8;
+  let top = rect.bottom + 4;
+  const popH = pop.offsetHeight || 140;
+  if (top + popH > window.innerHeight - 8) {
+    top = rect.top - 4 - popH;
+    if (top < 8) top = 8;
+  }
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+}
+
+function hidePropagatePopover() {
+  if (propagatePopoverCleanup) {
+    propagatePopoverCleanup();
+    propagatePopoverCleanup = null;
+  }
+  if (propagatePopover) propagatePopover.hidden = true;
+  propagatePopoverAnchor = null;
+}
+
+// Close on scroll/resize/outside-click/Escape — same lifecycle as the
+// glue combo dropdown above.
+window.addEventListener("scroll", hidePropagatePopover, true);
+window.addEventListener("resize", hidePropagatePopover);
+window.addEventListener("mousedown", (e) => {
+  if (!propagatePopover || propagatePopover.hidden) return;
+  if (propagatePopover.contains(e.target)) return;
+  if (propagatePopoverAnchor && propagatePopoverAnchor.contains(e.target)) return;
+  hidePropagatePopover();
+});
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && propagatePopover && !propagatePopover.hidden) {
+    hidePropagatePopover();
+  }
+});
+
+function openPropagatePopover(anchor, opts) {
+  // Detach handlers from any previous open before attaching new ones —
+  // outside-click / Escape dismissal doesn't go through the
+  // Apply/Cancel path, so cleanup must run here too.
+  if (propagatePopoverCleanup) {
+    propagatePopoverCleanup();
+    propagatePopoverCleanup = null;
+  }
+  const pop = ensurePropagatePopover();
+  propagatePopoverAnchor = anchor;
+  const summary = pop.querySelector(".propagate-summary");
+  const input = pop.querySelector("input[type='number']");
+  const cancelBtn = pop.querySelector("button.cancel");
+  const applyBtn = pop.querySelector("button.apply");
+
+  const sourceKey = formatForInput(opts.sourceValue, opts.digits);
+  const matches = opts.listMatches(opts.sourceValue) || [];
+  // matches includes the source row itself; "other rows" excludes it.
+  const otherRows = Math.max(0, matches.length - 1);
+
+  summary.replaceChildren();
+  const head = document.createElement("div");
+  const headLeft = document.createTextNode(`Set all ${opts.kind} where `);
+  const headBold = document.createElement("b");
+  headBold.textContent = `${opts.label} = ${sourceKey}`;
+  head.append(headLeft, headBold);
+  const sub = document.createElement("div");
+  sub.className = "muted";
+  sub.textContent = otherRows === 0
+    ? "(no other rows match this value)"
+    : `(${otherRows} other row${otherRows === 1 ? "" : "s"}; ${matches.length} total)`;
+  summary.append(head, sub);
+
+  input.value = formatForInput(opts.sourceValue, opts.digits);
+  input.min = opts.allowNegative ? "" : "0";
+
+  // Detach prior handlers (re-opening from a different anchor reuses
+  // the same DOM nodes).
+  const cleanup = () => {
+    cancelBtn.removeEventListener("click", onCancel);
+    applyBtn.removeEventListener("click", onApply);
+    input.removeEventListener("keydown", onKey);
+  };
+  const onCancel = () => {
+    cleanup();
+    hidePropagatePopover();
+  };
+  const onApply = () => {
+    const v = Number(input.value);
+    if (!Number.isFinite(v) || (!opts.allowNegative && v < 0)) return;
+    let aborted = false;
+    for (const m of matches) {
+      if (aborted) break;
+      applyEdit(
+        () => opts.applySetter(m, v),
+        () => { aborted = true; },
+        opts.errorPrefix,
+      );
+    }
+    if (opts.afterApply) opts.afterApply();
+    cleanup();
+    hidePropagatePopover();
+  };
+  const onKey = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onApply();
+    }
+  };
+  cancelBtn.addEventListener("click", onCancel);
+  applyBtn.addEventListener("click", onApply);
+  input.addEventListener("keydown", onKey);
+  propagatePopoverCleanup = cleanup;
+
+  applyBtn.disabled = otherRows === 0;
+
+  pop.hidden = false;
+  positionPropagatePopover(anchor);
+  input.focus();
+  input.select();
+}
+
+// Wrap a numeric `<input>` with a small "↪" button that opens the
+// bulk-edit popover. Returns a flex span containing both. The input is
+// still the focused-by-default element; the row's edit handler is
+// untouched, so single-row editing behaves exactly as before.
+function wirePropagateButton(input, opts) {
+  const wrap = document.createElement("span");
+  wrap.className = "cell-with-propagate";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "propagate-btn";
+  btn.title = `Set all matching ${opts.kind} to a new value`;
+  btn.textContent = "↪";
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const v = Number(input.value);
+    if (!Number.isFinite(v)) return;
+    openPropagatePopover(btn, {
+      sourceValue: v,
+      digits: opts.digits,
+      kind: opts.kind,
+      label: opts.label,
+      allowNegative: !!opts.allowNegative,
+      listMatches: opts.listMatches,
+      applySetter: opts.applySetter,
+      errorPrefix: opts.errorPrefix,
+      afterApply: opts.afterApply,
+    });
+  });
+  wrap.append(input, btn);
+  return wrap;
 }
 
 // Display label for a glue id — its name if it has one, else `#<id>`.
@@ -1027,7 +1251,26 @@ function rebuildGlueInteractionsPanel() {
         },
         { allowNegative: true },
       );
-      tdDg.append(input);
+      tdDg.append(wirePropagateButton(input, {
+        digits: 4,
+        kind: "glue pairs",
+        label: schema.label_dg || "Strength",
+        allowNegative: true,
+        errorPrefix: `Failed to bulk-set ${schema.label_dg || "strength"}`,
+        listMatches: (sourceValue) => {
+          const key = formatForInput(sourceValue, 4);
+          let list;
+          try { list = sim.glueInteractions(); } catch { return []; }
+          if (!Array.isArray(list)) return [];
+          return list.filter((x) => formatForInput(x.dg, 4) === key);
+        },
+        applySetter: (m, v) =>
+          sim.setGlueInteraction(m.a, m.b, v, schema.has_ds ? m.ds : undefined),
+        afterApply: () => {
+          rebuildGlueInteractionsPanel();
+          refreshDerivedConcentrationDisplays();
+        },
+      }));
     } else {
       tdDg.textContent = fmt(iax.dg, 4);
     }
@@ -1049,7 +1292,27 @@ function rebuildGlueInteractionsPanel() {
           },
           { allowNegative: true },
         );
-        tdDs.append(input);
+        tdDs.append(wirePropagateButton(input, {
+          digits: 6,
+          kind: "glue pairs",
+          label: schema.label_ds || "ΔS",
+          allowNegative: true,
+          errorPrefix: `Failed to bulk-set ${schema.label_ds || "ΔS"}`,
+          listMatches: (sourceValue) => {
+            const key = formatForInput(sourceValue, 6);
+            let list;
+            try { list = sim.glueInteractions(); } catch { return []; }
+            if (!Array.isArray(list)) return [];
+            return list.filter(
+              (x) => x.ds != null && formatForInput(x.ds, 6) === key,
+            );
+          },
+          applySetter: (m, v) => sim.setGlueInteraction(m.a, m.b, m.dg, v),
+          afterApply: () => {
+            rebuildGlueInteractionsPanel();
+            refreshDerivedConcentrationDisplays();
+          },
+        }));
       } else {
         tdDs.textContent = iax.ds != null ? fmt(iax.ds, 6) : "";
       }
@@ -1115,7 +1378,26 @@ function rebuildBlockerPanel() {
         `Failed to set blocker concentration for glue #${b.glue_id}`,
       );
     });
-    tdConc.append(input);
+    tdConc.append(wirePropagateButton(input, {
+      digits: 3,
+      kind: "blockers",
+      label: "Conc.",
+      errorPrefix: "Failed to bulk-set blocker concentration",
+      listMatches: (sourceValue) => {
+        const key = formatForInput(sourceValue, 3);
+        let list;
+        try { list = sim.blockerList(); } catch { return []; }
+        if (!Array.isArray(list)) return [];
+        return list.filter(
+          (x) => x.concentration != null && formatForInput(x.concentration, 3) === key,
+        );
+      },
+      applySetter: (m, v) => sim.setBlockerConcentration(m.glue_id, v),
+      afterApply: () => {
+        rebuildBlockerPanel();
+        refreshDerivedConcentrationDisplays();
+      },
+    }));
 
     const tdFree = document.createElement("td");
     tdFree.className = "col-free-conc";

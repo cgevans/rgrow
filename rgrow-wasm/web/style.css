@@ -447,6 +447,66 @@ canvas { cursor: crosshair; }
   font-family: ui-monospace, "SF Mono", Consolas, monospace;
 }
 
+.cell-with-propagate {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.propagate-btn {
+  padding: 0;
+  width: 22px;
+  height: 24px;
+  line-height: 1;
+  font-size: 13px;
+  color: var(--accent);
+  background: #2c2c32;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.propagate-btn:hover {
+  background: #393940;
+}
+
+#propagate-popover {
+  position: fixed;
+  width: 260px;
+  padding: 10px 12px;
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  z-index: 1001;
+  font-size: 12px;
+}
+
+#propagate-popover[hidden] { display: none; }
+
+#propagate-popover .propagate-summary > div + div { margin-top: 2px; }
+
+#propagate-popover .propagate-summary .muted {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+#propagate-popover label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 8px 0 10px;
+}
+
+#propagate-popover input[type="number"] { width: 100%; }
+
+#propagate-popover .propagate-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 @media (max-width: 900px) {
   main { grid-template-columns: 1fr; }
 }
