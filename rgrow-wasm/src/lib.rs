@@ -1034,7 +1034,18 @@ impl Sim {
     /// `new ImageData(bytes, size, size)` in JS.
     #[wasm_bindgen(js_name = tilePixels)]
     pub fn tile_pixels(&self, id: u32, size: u32) -> js_sys::Uint8ClampedArray {
-        let sprite = self.sys.tile_pixels(id as Tile, size as usize);
+        // KBlock's color lookup expects an encoded TileState (base
+        // index in the high bits, blocker mask in the low 4 bits) —
+        // that's the form the canvas stores. The tileset panel iterates
+        // base indices, so shift here to address the right color slot;
+        // a low-bit mask of 0 also means "no blockers attached," which
+        // is what we want for the panel's reference sprite. Other
+        // models index colors by base id directly and need no shift.
+        let lookup_id = match &self.sys {
+            SystemEnum::KBlock(_) => id << 4,
+            _ => id,
+        };
+        let sprite = self.sys.tile_pixels(lookup_id as Tile, size as usize);
         js_sys::Uint8ClampedArray::from(&sprite.pixels[..])
     }
 
