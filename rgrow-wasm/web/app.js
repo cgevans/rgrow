@@ -25,6 +25,7 @@ const stepBudgetMsInput = $("step-budget-ms");
 const timescaleInput = $("timescale");
 const maxEventsPerSecInput = $("max-events-per-sec");
 const showMismatchesInput = $("show-mismatches");
+const showTileNamesInput = $("show-tile-names");
 const exampleSelect = $("example-select");
 const fileInput = $("file-input");
 const pasteInput = $("paste-input");
@@ -353,6 +354,7 @@ function getTileLabel(id) {
 // dark and light tile colors without needing a per-tile contrast check.
 function drawTileLabels(scale) {
   if (!sim || scale < TILE_LABEL_MIN_SCALE) return;
+  if (!showTileNamesInput.checked) return;
   // `labelAnchors(scale)` returns a flat Float32Array of triples
   // (cx_px, cy_px, tile_id) covering every non-empty cell at its
   // canvas-aware pixel position. Tube canvases shear/stagger inside this
