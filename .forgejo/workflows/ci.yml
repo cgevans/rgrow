@@ -16,10 +16,11 @@ name: CI
 #   - `macos-arm64`    : Apple Silicon macOS host runner for Python wheel builds.
 #
 # Secrets used (set in Codeberg → repo → Settings → Actions → Secrets):
-#   - CODECOV_TOKEN    : optional; coverage upload is best-effort.
 #   - PYPI_TOKEN       : required for `python_release` job on tags.
 #   - CRATES_IO_TOKEN  : required for `rust_release` job on tags.
-#   - forge.token      : auto-provided by Forgejo (used for the Forgejo release).
+#   - forge.token      : auto-provided by Forgejo (used for the Forgejo release
+#                        and for publishing coverage to Codeberg Pages via the
+#                        docs workflow).
 #
 # Caching: the Forgejo runner's built-in cache server (used by
 # `actions/cache` / Swatinem/rust-cache / setup-uv enable-cache) typically
@@ -82,28 +83,15 @@ jobs:
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          components: clippy,llvm-tools
-      - name: Install just and cargo-llvm-cov
+          components: clippy
+      - name: Install just
         uses: https://github.com/taiki-e/install-action@v2
         with:
-          tool: just,cargo-llvm-cov
+          tool: just
       - name: Run clippy
         run: just clippy
-      - name: Run tests with coverage
-        run: |
-          source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
-          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
-          export CARGO_INCREMENTAL=1
-          cargo llvm-cov clean --workspace
-          cargo test -p rgrow
-          cargo llvm-cov --no-run --lcov --output-path coverage.lcov -p rgrow -p rgrow-python
-      - name: Upload coverage to Codecov
-        continue-on-error: true
-        uses: https://github.com/codecov/codecov-action@v5
-        with:
-          files: coverage.lcov
-          name: rust-linux
-          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Run tests
+        run: cargo test -p rgrow
 
   python_checks:
     name: Python checks
@@ -125,7 +113,6 @@ jobs:
       - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          components: clippy,llvm-tools
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -133,10 +120,6 @@ jobs:
         # Cache lives on the host volume mounted at $UV_CACHE_DIR; we don't
         # use setup-uv's enable-cache (which talks to the runner cache server).
         uses: https://github.com/astral-sh/setup-uv@v7
-      - name: Install just and cargo-llvm-cov
-        uses: https://github.com/taiki-e/install-action@v2
-        with:
-          tool: just,cargo-llvm-cov
       - name: Setup virtual environment
         run: |
           uv venv
@@ -147,20 +130,103 @@ jobs:
           src: "./rgrow-python/rgrow"
       - name: Install maturin and test dependencies
         run: |
-          uv pip install maturin pytest-cov
+          uv pip install maturin
           uv pip install --group testing
-      - name: Run tests and coverage
-        run: just cov-python
+      - name: Build extension and run tests
+        run: |
+          source .venv/bin/activate
+          uv pip install ./rgrow-cli
+          maturin develop --uv --profile dev
+          pytest rgrow-python/tests -v
       - name: Run ty
         continue-on-error: true
         run: uvx ty check rgrow-python/rgrow/
-      - name: Upload coverage to Codecov
-        continue-on-error: true
-        uses: https://github.com/codecov/codecov-action@v5
+
+  coverage:
+    name: Combined coverage
+    # Build the combined Rust + Python coverage report only on main (and
+    # manual dispatches). The report and a shields.io endpoint badge JSON
+    # are uploaded as the `coverage-site` artifact; the docs workflow
+    # downloads this artifact and stages it under /coverage/ on Codeberg
+    # Pages.
+    if: (forge.event_name == 'push' && forge.ref == 'refs/heads/main') || forge.event_name == 'workflow_dispatch'
+    runs-on: docker
+    container:
+      image: docker.io/catthehacker/ubuntu:act-22.04
+      volumes:
+        - rgrow-cargo:/cache/cargo
+        - rgrow-cargo-target:/cache/cargo-target
+        - rgrow-uv:/cache/uv
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target
+      UV_CACHE_DIR: /cache/uv
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone tiny-xlib fork
+        run: git clone --depth 1 https://github.com/cgevans/tiny-xlib.git ./tiny-xlib
+      - uses: https://github.com/dtolnay/rust-toolchain@master
         with:
-          files: coverage.xml,coverage.lcov
-          name: python-linux
-          token: ${{ secrets.CODECOV_TOKEN }}
+          toolchain: stable
+          components: llvm-tools
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: https://github.com/astral-sh/setup-uv@v7
+      - name: Install just and cargo-llvm-cov
+        uses: https://github.com/taiki-e/install-action@v2
+        with:
+          tool: just,cargo-llvm-cov
+      - name: Set up virtual environment
+        run: |
+          uv venv
+          uv pip install -U pip setuptools wheel maturin
+          uv pip install --group testing
+      - name: Run combined coverage (Rust + Python)
+        # `just cov-full` runs `coverage` (Rust tests, then Python tests
+        # against the maturin-built extension, sharing a single profraw
+        # output dir) followed by `cov-html` (HTML report at
+        # target/llvm-cov/html/).
+        run: just cov-full
+      - name: Assemble coverage-site artifact
+        # Parse line-coverage percentage from the LCOV report produced by
+        # `just cov-full` (sums LH/LF across all files — the standard
+        # line-coverage definition). Avoids depending on cargo-llvm-cov's
+        # JSON output, which is codecov-format and lacks a totals field.
+        # `show-env` is sourced to recover CARGO_LLVM_COV_TARGET_DIR so we
+        # can locate the HTML output written by `just cov-full`.
+        run: |
+          set -euo pipefail
+          source <(cargo llvm-cov show-env --export-prefix --no-cfg-coverage)
+          html_dir="${CARGO_LLVM_COV_TARGET_DIR}/llvm-cov/html"
+          if [ ! -d "$html_dir" ]; then
+            echo "Expected HTML coverage report at $html_dir but it doesn't exist" >&2
+            exit 1
+          fi
+          pct=$(awk -F: '
+            /^LH:/ { lh += $2 }
+            /^LF:/ { lf += $2 }
+            END    { if (lf > 0) printf "%.0f", 100 * lh / lf; else print 0 }
+          ' coverage.lcov)
+          if   [ "$pct" -ge 90 ]; then color=brightgreen
+          elif [ "$pct" -ge 80 ]; then color=green
+          elif [ "$pct" -ge 70 ]; then color=yellowgreen
+          elif [ "$pct" -ge 60 ]; then color=yellow
+          elif [ "$pct" -ge 50 ]; then color=orange
+          else                         color=red
+          fi
+          mkdir -p coverage-site
+          cp -a "$html_dir"/. coverage-site/
+          cp coverage.lcov coverage-site/coverage.lcov
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' \
+            "$pct" "$color" > coverage-site/badge.json
+          echo "Coverage: ${pct}% (color: ${color})"
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
+        with:
+          name: coverage-site
+          path: coverage-site
+          retention-days: 30
 
   linux:
     name: Python Linux builds

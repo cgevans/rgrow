@@ -1,4 +1,4 @@
-[![codecov](https://codecov.io/github/cgevans/rgrow/graph/badge.svg?token=GZLWKMQ2GZ)](https://codecov.io/github/cgevans/rgrow)
+[![coverage](https://img.shields.io/endpoint?url=https://cge.codeberg.page/rgrow/coverage/badge.json)](https://cge.codeberg.page/rgrow/coverage/)
 [![PyPI](https://img.shields.io/pypi/v/rgrow)](https://pypi.org/project/rgrow/)
 [![Crates.io](https://img.shields.io/crates/v/rgrow)](https://crates.io/crates/rgrow)
 [![docs.rs](https://docs.rs/rgrow/badge.svg)](https://docs.rs/rgrow)

@@ -1,7 +1,10 @@
 name: Docs
 
 # Builds the zensical/mkdocs site and deploys it directly to git-pages, which
-# Codeberg Pages serves at <user>.codeberg.page/<repo>.
+# Codeberg Pages serves at <user>.codeberg.page/<repo>. Also stages the
+# coverage-site artifact produced by the CI workflow under /coverage/, so
+# https://<user>.codeberg.page/<repo>/coverage/ serves the latest combined
+# Rust + Python coverage report plus a shields.io endpoint badge.
 #
 # Runner expectation:
 #   - `docker` Linux runner.
@@ -23,6 +26,12 @@ on:
       - 'rgrow-rust/src/**'
       - 'rgrow-wasm/**'
       - '.forgejo/workflows/docs.yml'
+  # Re-run after CI completes successfully on main so the freshly-built
+  # coverage-site artifact is published alongside the docs.
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -34,6 +43,9 @@ concurrency:
 
 jobs:
   docs:
+    # When triggered by workflow_run, only deploy if the CI run actually
+    # succeeded. Other triggers (push, workflow_dispatch) always run.
+    if: forge.event_name != 'workflow_run' || forge.event.workflow_run.conclusion == 'success'
     runs-on: docker
     container:
       image: docker.io/catthehacker/ubuntu:act-22.04
@@ -99,6 +111,21 @@ jobs:
         run: |
           mkdir -p site/app
           cp -a rgrow-wasm/web/. site/app/
+      - name: Download coverage report artifact
+        # Pulls the `coverage-site` artifact produced by the CI workflow's
+        # `coverage` job. When this workflow is triggered by `workflow_run`
+        # (CI completion), `run-id` points at that CI run; for `push` /
+        # `workflow_dispatch` we fall back to the latest run on the
+        # branch. Marked best-effort so the docs site still deploys on the
+        # first run before any CI coverage artifact exists.
+        uses: https://code.forgejo.org/forgejo/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: coverage-site
+          path: site/coverage
+          run-id: ${{ forge.event.workflow_run.id }}
+          repository: ${{ forge.repository }}
+          token: ${{ forge.token }}
       - name: Deploy to Codeberg Pages
         uses: https://codeberg.org/git-pages/action@v2
         with:
