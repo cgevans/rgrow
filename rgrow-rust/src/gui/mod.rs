@@ -76,6 +76,8 @@ pub fn run_gui_subprocess(
         if let IpcMessage::Init(init) = init_msg {
             let shm_path = init.shm_path.clone();
             let shm_size = init.shm_size;
+            let grid_shm_path = init.grid_shm_path.clone();
+            let grid_shm_size = init.grid_shm_size;
 
             // Send Ready signal immediately - before spawning reader thread
             {
@@ -117,6 +119,13 @@ pub fn run_gui_subprocess(
                     }
                 };
 
+                // Grid shm is optional; inspection-only data lives here.
+                let grid_reader = if grid_shm_size > 0 {
+                    ShmReader::open(&grid_shm_path, grid_shm_size).ok()
+                } else {
+                    None
+                };
+
                 loop {
                     let t0 = Instant::now();
                     let mut len_bytes = [0u8; 8];
@@ -152,6 +161,19 @@ pub fn run_gui_subprocess(
                                         );
                                     }
 
+                                    let grid = if notif.grid_included {
+                                        grid_reader.as_ref().map(|r| {
+                                            r.read(notif.grid_data_len)
+                                                .chunks_exact(4)
+                                                .map(|c| {
+                                                    u32::from_le_bytes([c[0], c[1], c[2], c[3]])
+                                                })
+                                                .collect::<Vec<u32>>()
+                                        })
+                                    } else {
+                                        None
+                                    };
+
                                     iced_gui::GuiMessage::Update {
                                         frame_data,
                                         frame_width: notif.frame_width,
@@ -161,7 +183,17 @@ pub fn run_gui_subprocess(
                                         n_tiles: notif.n_tiles,
                                         mismatches: notif.mismatches,
                                         energy: notif.energy,
+                                        grid,
+                                        grid_rows: notif.grid_rows,
+                                        grid_cols: notif.grid_cols,
+                                        subcell_px: notif.subcell_px,
+                                        tile_shape_diamond: notif.tile_shape_diamond,
+                                        scale: notif.scale as u32,
+                                        overlay_linear: notif.overlay_linear,
                                     }
+                                }
+                                IpcMessage::ModelSnapshot(s) => {
+                                    iced_gui::GuiMessage::Snapshot(Box::new(s.clone()))
                                 }
                                 IpcMessage::Close => iced_gui::GuiMessage::Close,
                                 IpcMessage::Init(_) => continue,

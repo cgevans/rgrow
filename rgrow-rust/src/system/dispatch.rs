@@ -9,6 +9,7 @@ use std::fmt::Debug;
 use rayon::prelude::*;
 
 use crate::base::{GrowError, NumEvents, NumTiles, RgrowError, Tile};
+use crate::colors::Color;
 use crate::ffs::{FFSRunConfig, FFSRunResult};
 use crate::maybe_par_iter_mut;
 use crate::models::atam::ATAM;
@@ -30,6 +31,7 @@ use pyo3::IntoPyObjectExt;
 
 use super::analysis;
 use super::core::System;
+use super::edit::{BlockerData, EditableFeatures, GlueInteractionData, InteractionSchema};
 use super::types::*;
 
 #[enum_dispatch]
@@ -479,7 +481,7 @@ where
     }
 }
 
-#[enum_dispatch(DynSystem, TileBondInfo)]
+#[enum_dispatch(DynSystem, TileBondInfo, EditableSystem)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", derive(FromPyObject))]
 pub enum SystemEnum {
@@ -559,4 +561,110 @@ pub trait TileBondInfo {
 pub trait SystemInfo {
     fn tile_concs(&self) -> Vec<f64>;
     fn tile_stoics(&self) -> Vec<f64>;
+}
+
+/// Model-introspection and editing surface used by both the desktop
+/// subprocess GUI and the wasm browser front-end. Concrete impls live in
+/// [`super::edit`]; the default methods make every model usable (returning
+/// "not supported" / empty data) so only KTAM, SDC2DSquare and KBlock need
+/// real bodies. Because this is a supertrait of [`System`](super::System)
+/// it is available on every concrete model in `evolve_in_window_impl`, and
+/// `enum_dispatch` makes it available on [`SystemEnum`] for the wasm layer.
+#[enum_dispatch]
+pub trait EditableSystem: TileBondInfo {
+    /// Which kinds of edits the loaded model supports.
+    fn editable_features(&self) -> EditableFeatures {
+        EditableFeatures::default()
+    }
+
+    /// Labels and arity for the per-pair interaction editor.
+    fn interaction_schema(&self) -> InteractionSchema {
+        InteractionSchema::default()
+    }
+
+    /// Per-tile total concentrations (M), indexed by tile id (id 0 = empty).
+    /// `None` for models with no per-tile concentration concept.
+    fn tile_concentrations(&self) -> Option<Vec<f64>> {
+        None
+    }
+
+    /// Per-tile "available" (free) concentrations (M), if the model has such
+    /// a notion (currently KBlock's unblocked-tile concentration).
+    fn free_tile_concentrations(&self) -> Option<Vec<f64>> {
+        None
+    }
+
+    /// Non-zero glue–glue interactions.
+    fn glue_interactions(&self) -> Vec<GlueInteractionData> {
+        Vec::new()
+    }
+
+    /// Per-glue blocker inventory (KBlock only; empty otherwise).
+    fn blocker_list(&self) -> Vec<BlockerData> {
+        Vec::new()
+    }
+
+    /// NSEW triangle colors to draw a reference sprite for tile `base_id` in
+    /// the tileset panel. Defaults to the model's `tile_style`; models that
+    /// encode extra state in the tile id (KBlock) override the lookup.
+    fn panel_tri_colors(&self, base_id: usize) -> [Color; 4] {
+        self.tile_style(base_id as Tile).tri_colors
+    }
+
+    /// Left-shift between a panel/base tile id and the raw value stored in
+    /// the canvas (`raw = base << shift`). `0` for models that store base
+    /// ids directly; KBlock stores `base << 4 | blocker_mask`, so it returns
+    /// `4`. Used to encode painted tiles and decode grid values back to
+    /// names without the GUI knowing the per-model encoding.
+    fn canvas_id_shift(&self) -> u32 {
+        0
+    }
+
+    /// Set tile `id`'s total concentration (M). Returns the state update the
+    /// caller must apply via `update_state`.
+    fn set_tile_concentration(
+        &mut self,
+        _id: usize,
+        _value: f64,
+    ) -> Result<NeededUpdate, GrowError> {
+        Err(GrowError::NotSupported(
+            "setTileConcentration: not supported for this model".to_string(),
+        ))
+    }
+
+    /// Set tile `id`'s glue on `side` (0=N, 1=E, 2=S, 3=W); `None` clears it.
+    fn set_tile_edge_glue(
+        &mut self,
+        _id: usize,
+        _side: usize,
+        _glue_id: Option<usize>,
+    ) -> Result<NeededUpdate, GrowError> {
+        Err(GrowError::NotSupported(
+            "setTileEdgeGlue: not supported for this model".to_string(),
+        ))
+    }
+
+    /// Set the interaction value(s) for glue pair `(a, b)` (symmetric).
+    fn set_glue_interaction(
+        &mut self,
+        _a: usize,
+        _b: usize,
+        _dg: f64,
+        _ds: Option<f64>,
+    ) -> Result<NeededUpdate, GrowError> {
+        Err(GrowError::NotSupported(
+            "setGlueInteraction: not supported for this model".to_string(),
+        ))
+    }
+
+    /// Set the total blocker concentration (M) for glue `glue_id` (KBlock).
+    fn set_blocker_concentration(
+        &mut self,
+        _glue_id: usize,
+        _value: f64,
+    ) -> Result<NeededUpdate, GrowError> {
+        Err(GrowError::NotSupported(
+            "setBlockerConcentration: not supported for this model".to_string(),
+        ))
+    }
 }

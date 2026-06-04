@@ -25,7 +25,7 @@ use rgrow::models::sdc_common::{GsOrSeq, RefOrPair};
 use rgrow::painter::render_frame_dyn;
 use rgrow::state::{StateEnum, StateStatus};
 use rgrow::system::{
-    DynSystem, EvolveBounds, EvolveOutcome, ParameterInfo, SystemEnum, TileBondInfo,
+    DynSystem, EditableSystem, EvolveBounds, EvolveOutcome, ParameterInfo, SystemEnum, TileBondInfo,
 };
 use rgrow::tileset::{CanvasType, TileSet, TrackingConfig};
 
@@ -90,58 +90,11 @@ pub struct TileInfo {
     pub edge_glue_ids: [Option<u32>; 4],
 }
 
-/// Per-glue blocker info for the KBlock blocker panel. `concentration`
-/// is the user-set total blocker concentration (M); `free_concentration`
-/// is the equilibrium free-blocker concentration computed from the
-/// tile/glue usages and the blocker–glue ΔG.
-#[derive(Serialize)]
-pub struct BlockerInfo {
-    pub glue_id: u32,
-    pub glue_name: String,
-    pub concentration: f64,
-    pub free_concentration: f64,
-}
-
 /// Per-glue info for the per-side glue dropdown in the tileset table.
 #[derive(Serialize)]
 pub struct GlueInfo {
     pub id: u32,
     pub name: String,
-}
-
-/// One non-zero entry in the model's pair interaction matrix. `dg` is the
-/// model's primary number — KTAM: dimensionless strength; SDC2D / KBlock:
-/// ΔG in kcal/mol. `ds` is only populated for SDC2D (ΔS in kcal/(mol·K)).
-/// `matching` flags KTAM's special case where `(g, g)` reads from
-/// `glue_strengths[g]` instead of `glue_links[(g, g)]`.
-#[derive(Serialize)]
-pub struct GlueInteraction {
-    pub a: u32,
-    pub a_name: String,
-    pub b: u32,
-    pub b_name: String,
-    pub matching: bool,
-    pub dg: f64,
-    pub ds: Option<f64>,
-}
-
-/// Describes the per-pair editing schema for the loaded model — what the
-/// numbers mean, how to label them, and whether the second column exists.
-#[derive(Serialize, Default)]
-pub struct InteractionSchema {
-    pub label_dg: String,
-    pub has_ds: bool,
-    pub label_ds: Option<String>,
-}
-
-/// Capability flags for the editing UI. JS reads this once after a sim
-/// loads and decides which cells become editable. Avoids matching on
-/// `modelName()` strings in the JS layer.
-#[derive(Serialize, Default)]
-pub struct EditableFeatures {
-    pub tile_concentration: bool,
-    pub tile_edge_glue: bool,
-    pub glue_interaction: bool,
 }
 
 #[wasm_bindgen]
@@ -581,26 +534,11 @@ impl Sim {
         // Concentrations are only available on models that implement
         // `SystemInfo`. `bond_names` is `todo!()` on ATAM, so we only call
         // it when we know it's safe (KTAM, SDC2DSquare).
-        let (concs, free_concs, stoics, has_bond_names) = match &self.sys {
-            SystemEnum::KTAM(k) => {
-                use rgrow::system::SystemInfo;
-                (Some(k.tile_concs()), None, None, true)
-            }
-            SystemEnum::SDC2DSquare(_) => (None, None, None, true),
-            SystemEnum::KBlock(k) => {
-                let totals: Vec<f64> = k.tile_concentration.iter().map(|c| f64::from(*c)).collect();
-                // `unblocked_tile_concentration` adjusts the raw conc by
-                // the equilibrium blocker occupancy on each side, so the
-                // result is the "available" (fully-unblocked) tile
-                // concentration shown in the UI.
-                let frees: Vec<f64> = (0..totals.len())
-                    .map(|i| f64::from(k.unblocked_tile_concentration(i)))
-                    .collect();
-                (Some(totals), Some(frees), None, false)
-            }
-            _ => (None, None, None, false),
-        };
-        let bond_names: &[String] = if has_bond_names {
+        let concs = self.sys.tile_concentrations();
+        let free_concs = self.sys.free_tile_concentrations();
+        // `bond_names` is `todo!()` on ATAM, so only call it when the model
+        // exposes per-side glue editing (KTAM, SDC2DSquare).
+        let bond_names: &[String] = if self.sys.editable_features().tile_edge_glue {
             self.sys.bond_names()
         } else {
             &[]
@@ -619,7 +557,7 @@ impl Sim {
                 color: colors.get(id).copied().unwrap_or([0, 0, 0, 0]),
                 concentration: concs.as_ref().and_then(|v| v.get(id).copied()),
                 free_concentration: free_concs.as_ref().and_then(|v| v.get(id).copied()),
-                stoic: stoics.as_ref().and_then(|v: &Vec<f64>| v.get(id).copied()),
+                stoic: None,
                 edge_glues,
                 edge_glue_ids,
             });
@@ -635,28 +573,7 @@ impl Sim {
     /// so it stays consistent with the rates the simulator is using.
     #[wasm_bindgen(js_name = blockerList)]
     pub fn blocker_list(&self) -> Result<JsValue, JsError> {
-        let mut out: Vec<BlockerInfo> = Vec::new();
-        if let SystemEnum::KBlock(k) = &self.sys {
-            let frees = k.free_blocker_concentrations();
-            let n = k
-                .glue_names
-                .len()
-                .min(k.blocker_concentrations.len())
-                .min(frees.len());
-            for gi in 1..n {
-                let name = &k.glue_names[gi];
-                if name.is_empty() {
-                    continue;
-                }
-                out.push(BlockerInfo {
-                    glue_id: gi as u32,
-                    glue_name: name.clone(),
-                    concentration: f64::from(k.blocker_concentrations[gi]),
-                    free_concentration: f64::from(frees[gi]),
-                });
-            }
-        }
-        serde_wasm_bindgen::to_value(&out).map_err(js_err)
+        serde_wasm_bindgen::to_value(&self.sys.blocker_list()).map_err(js_err)
     }
 
     /// Set the total blocker concentration for glue `glue_id` (KBlock
@@ -664,30 +581,11 @@ impl Sim {
     /// blocker concentrations stay consistent.
     #[wasm_bindgen(js_name = setBlockerConcentration)]
     pub fn set_blocker_concentration(&mut self, glue_id: u32, value: f64) -> Result<(), JsError> {
-        if !value.is_finite() || value < 0.0 {
-            return Err(JsError::new(
-                "setBlockerConcentration: value must be a non-negative finite number",
-            ));
-        }
-        let gi = glue_id as usize;
-        match &mut self.sys {
-            SystemEnum::KBlock(k) => {
-                if gi == 0 || gi >= k.blocker_concentrations.len() {
-                    return Err(JsError::new(
-                        "setBlockerConcentration: glue id out of range",
-                    ));
-                }
-                k.blocker_concentrations[gi] = rgrow::units::Molar::from(value);
-                k.update();
-            }
-            _ => {
-                return Err(JsError::new(
-                    "setBlockerConcentration: not supported for this model",
-                ));
-            }
-        }
-        self.sys
-            .update_state(&mut self.state, &rgrow::system::NeededUpdate::NonZero);
+        let needed = self
+            .sys
+            .set_blocker_concentration(glue_id as usize, value)
+            .map_err(js_err)?;
+        self.sys.update_state(&mut self.state, &needed);
         Ok(())
     }
 
@@ -718,25 +616,7 @@ impl Sim {
     /// this to lay out the glue-interactions panel.
     #[wasm_bindgen(js_name = interactionSchema)]
     pub fn interaction_schema(&self) -> Result<JsValue, JsError> {
-        let s = match &self.sys {
-            SystemEnum::KTAM(_) => InteractionSchema {
-                label_dg: "Strength".to_string(),
-                has_ds: false,
-                label_ds: None,
-            },
-            SystemEnum::SDC2DSquare(_) => InteractionSchema {
-                label_dg: "ΔG (kcal/mol)".to_string(),
-                has_ds: true,
-                label_ds: Some("ΔS (kcal/(mol·K))".to_string()),
-            },
-            SystemEnum::KBlock(_) => InteractionSchema {
-                label_dg: "ΔG (kcal/mol)".to_string(),
-                has_ds: false,
-                label_ds: None,
-            },
-            _ => InteractionSchema::default(),
-        };
-        serde_wasm_bindgen::to_value(&s).map_err(js_err)
+        serde_wasm_bindgen::to_value(&self.sys.interaction_schema()).map_err(js_err)
     }
 
     /// Non-zero glue-glue interactions. For KTAM, includes self-pairs
@@ -744,162 +624,23 @@ impl Sim {
     /// `matching: true`). Pairs with `a < b` come from the link matrix.
     #[wasm_bindgen(js_name = glueInteractions)]
     pub fn glue_interactions(&self) -> Result<JsValue, JsError> {
-        let mut out: Vec<GlueInteraction> = Vec::new();
-        let names: &[String] = match &self.sys {
-            SystemEnum::ATAM(_) => &[],
-            _ => self.sys.bond_names(),
-        };
-        let name_at = |id: usize| -> String { names.get(id).cloned().unwrap_or_default() };
-        match &self.sys {
-            SystemEnum::KTAM(k) => {
-                let n = k.glue_strengths.len();
-                for g in 1..n {
-                    let v = k.glue_strengths[g];
-                    if v != 0.0 {
-                        out.push(GlueInteraction {
-                            a: g as u32,
-                            a_name: name_at(g),
-                            b: g as u32,
-                            b_name: name_at(g),
-                            matching: true,
-                            dg: v,
-                            ds: None,
-                        });
-                    }
-                }
-                let m = k.glue_links.nrows().min(k.glue_links.ncols());
-                for a in 1..m {
-                    for b in (a + 1)..m {
-                        let v = k.glue_links[(a, b)];
-                        if v != 0.0 {
-                            out.push(GlueInteraction {
-                                a: a as u32,
-                                a_name: name_at(a),
-                                b: b as u32,
-                                b_name: name_at(b),
-                                matching: false,
-                                dg: v,
-                                ds: None,
-                            });
-                        }
-                    }
-                }
-            }
-            SystemEnum::SDC2DSquare(s) => {
-                let m = s
-                    .delta_g_matrix
-                    .nrows()
-                    .min(s.delta_g_matrix.ncols())
-                    .min(s.entropy_matrix.nrows())
-                    .min(s.entropy_matrix.ncols());
-                for a in 1..m {
-                    for b in a..m {
-                        let dg: f64 = s.delta_g_matrix[(a, b)].into();
-                        let ds: f64 = s.entropy_matrix[(a, b)].into();
-                        if dg != 0.0 || ds != 0.0 {
-                            out.push(GlueInteraction {
-                                a: a as u32,
-                                a_name: name_at(a),
-                                b: b as u32,
-                                b_name: name_at(b),
-                                matching: a == b,
-                                dg,
-                                ds: Some(ds),
-                            });
-                        }
-                    }
-                }
-            }
-            SystemEnum::KBlock(k) => {
-                let links = k.glue_links();
-                let m = links.nrows().min(links.ncols());
-                for a in 1..m {
-                    for b in a..m {
-                        let dg: f64 = links[(a, b)].into();
-                        if dg != 0.0 {
-                            out.push(GlueInteraction {
-                                a: a as u32,
-                                a_name: name_at(a),
-                                b: b as u32,
-                                b_name: name_at(b),
-                                matching: a == b,
-                                dg,
-                                ds: None,
-                            });
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-        serde_wasm_bindgen::to_value(&out).map_err(js_err)
+        serde_wasm_bindgen::to_value(&self.sys.glue_interactions()).map_err(js_err)
     }
 
     /// Editing capabilities of the loaded model.
     #[wasm_bindgen(js_name = editableFeatures)]
     pub fn editable_features(&self) -> Result<JsValue, JsError> {
-        let f = match &self.sys {
-            SystemEnum::KTAM(_) => EditableFeatures {
-                tile_concentration: true,
-                tile_edge_glue: true,
-                glue_interaction: true,
-            },
-            SystemEnum::SDC2DSquare(_) => EditableFeatures {
-                tile_concentration: true,
-                tile_edge_glue: true,
-                glue_interaction: true,
-            },
-            SystemEnum::KBlock(_) => EditableFeatures {
-                tile_concentration: true,
-                tile_edge_glue: false,
-                glue_interaction: true,
-            },
-            _ => EditableFeatures::default(),
-        };
-        serde_wasm_bindgen::to_value(&f).map_err(js_err)
+        serde_wasm_bindgen::to_value(&self.sys.editable_features()).map_err(js_err)
     }
 
     /// Set tile `id`'s concentration. KTAM and SDC2DSquare only.
     #[wasm_bindgen(js_name = setTileConcentration)]
     pub fn set_tile_concentration(&mut self, id: u32, value: f64) -> Result<(), JsError> {
-        if !value.is_finite() || value < 0.0 {
-            return Err(JsError::new(
-                "setTileConcentration: value must be a non-negative finite number",
-            ));
-        }
-        let idx = id as usize;
-        match &mut self.sys {
-            SystemEnum::KTAM(k) => {
-                if idx == 0 || idx >= k.tile_concs.len() {
-                    return Err(JsError::new("setTileConcentration: tile id out of range"));
-                }
-                k.tile_concs[idx] = value;
-                k.update_system();
-            }
-            SystemEnum::SDC2DSquare(s) => {
-                if idx == 0 || idx >= s.strand_concentration.len() {
-                    return Err(JsError::new("setTileConcentration: strand id out of range"));
-                }
-                s.strand_concentration[idx] = rgrow::units::Molar::from(value);
-                s.update_system();
-            }
-            SystemEnum::KBlock(k) => {
-                if idx == 0 || idx >= k.tile_concentration.len() {
-                    return Err(JsError::new("setTileConcentration: tile id out of range"));
-                }
-                k.tile_concentration[idx] = rgrow::units::Molar::from(value);
-                // Recompute energies / free-blocker concentrations so
-                // attachment rates stay consistent with the new total.
-                k.update();
-            }
-            _ => {
-                return Err(JsError::new(
-                    "setTileConcentration: not supported for this model",
-                ));
-            }
-        }
-        self.sys
-            .update_state(&mut self.state, &rgrow::system::NeededUpdate::NonZero);
+        let needed = self
+            .sys
+            .set_tile_concentration(id as usize, value)
+            .map_err(js_err)?;
+        self.sys.update_state(&mut self.state, &needed);
         Ok(())
     }
 
@@ -912,44 +653,11 @@ impl Sim {
         side: u32,
         glue_id: Option<u32>,
     ) -> Result<(), JsError> {
-        if side >= 4 {
-            return Err(JsError::new("setTileEdgeGlue: side must be 0..=3"));
-        }
-        let g = glue_id.unwrap_or(0) as usize;
-        let idx = id as usize;
-        match &mut self.sys {
-            SystemEnum::KTAM(k) => {
-                if idx == 0 || idx >= k.tile_edges.nrows() {
-                    return Err(JsError::new("setTileEdgeGlue: tile id out of range"));
-                }
-                if g >= k.glue_strengths.len() {
-                    return Err(JsError::new("setTileEdgeGlue: glue id out of range"));
-                }
-                k.tile_edges[(idx, side as usize)] = g;
-                k.update_system();
-            }
-            SystemEnum::SDC2DSquare(s) => {
-                // strand_glues columns are NORTH/EAST/SOUTH/WEST (0..=3)
-                // — same as the JS-side `side` convention. The bottom
-                // (scaffold) glue lives in column 4 and isn't editable
-                // from the per-side cells.
-                if idx == 0 || idx >= s.strand_glues.nrows() {
-                    return Err(JsError::new("setTileEdgeGlue: strand id out of range"));
-                }
-                if g >= s.glue_names.len() {
-                    return Err(JsError::new("setTileEdgeGlue: glue id out of range"));
-                }
-                s.strand_glues[(idx, side as usize)] = g;
-                s.update_system();
-            }
-            _ => {
-                return Err(JsError::new(
-                    "setTileEdgeGlue: not supported for this model",
-                ));
-            }
-        }
-        self.sys
-            .update_state(&mut self.state, &rgrow::system::NeededUpdate::NonZero);
+        let needed = self
+            .sys
+            .set_tile_edge_glue(id as usize, side as usize, glue_id.map(|g| g as usize))
+            .map_err(js_err)?;
+        self.sys.update_state(&mut self.state, &needed);
         Ok(())
     }
 
@@ -964,67 +672,11 @@ impl Sim {
         dg: f64,
         ds: Option<f64>,
     ) -> Result<(), JsError> {
-        if !dg.is_finite() {
-            return Err(JsError::new("setGlueInteraction: dg must be finite"));
-        }
-        if let Some(d) = ds {
-            if !d.is_finite() {
-                return Err(JsError::new("setGlueInteraction: ds must be finite"));
-            }
-        }
-        let ai = a as usize;
-        let bi = b as usize;
-        if ai == 0 || bi == 0 {
-            return Err(JsError::new(
-                "setGlueInteraction: glue id 0 is the null glue",
-            ));
-        }
-        match &mut self.sys {
-            SystemEnum::KTAM(k) => {
-                let n = k.glue_strengths.len();
-                if ai >= n || bi >= n {
-                    return Err(JsError::new("setGlueInteraction: glue id out of range"));
-                }
-                if ai == bi {
-                    k.glue_strengths[ai] = dg;
-                } else {
-                    k.glue_links[(ai, bi)] = dg;
-                    k.glue_links[(bi, ai)] = dg;
-                }
-                k.update_system();
-            }
-            SystemEnum::SDC2DSquare(s) => {
-                let nrows = s.delta_g_matrix.nrows();
-                let ncols = s.delta_g_matrix.ncols();
-                if ai >= nrows || bi >= ncols || ai >= s.entropy_matrix.nrows() {
-                    return Err(JsError::new("setGlueInteraction: glue id out of range"));
-                }
-                let dg_val = rgrow::units::KcalPerMol::from(dg);
-                s.delta_g_matrix[(ai, bi)] = dg_val;
-                s.delta_g_matrix[(bi, ai)] = dg_val;
-                if let Some(d) = ds {
-                    let ds_val = rgrow::units::KcalPerMolKelvin::from(d);
-                    s.entropy_matrix[(ai, bi)] = ds_val;
-                    s.entropy_matrix[(bi, ai)] = ds_val;
-                }
-                s.update_system();
-            }
-            SystemEnum::KBlock(k) => {
-                let links = k.glue_links();
-                if ai >= links.nrows() || bi >= links.ncols() {
-                    return Err(JsError::new("setGlueInteraction: glue id out of range"));
-                }
-                k.set_glue_link(ai, bi, rgrow::units::KcalPerMol::from(dg));
-                k.update();
-            }
-            _ => {
-                return Err(JsError::new(
-                    "setGlueInteraction: not supported for this model",
-                ));
-            }
-        }
-        self.sys
-            .update_state(&mut self.state, &rgrow::system::NeededUpdate::NonZero);
+        let needed = self
+            .sys
+            .set_glue_interaction(a as usize, b as usize, dg, ds)
+            .map_err(js_err)?;
+        self.sys.update_state(&mut self.state, &needed);
         Ok(())
     }
 
@@ -1102,7 +754,7 @@ impl Sim {
         offset_i: Option<i32>,
         offset_j: Option<i32>,
     ) -> Result<u32, JsError> {
-        let grid = parse_xgrow_seed(text).map_err(js_err)?;
+        let grid = rgrow::parser_xgrow::parse_xgrow_seed(text).map_err(js_err)?;
         let flake_size = grid.len();
         if flake_size == 0 {
             return Err(JsError::new("xgrow seed: empty flake"));
@@ -1129,70 +781,6 @@ impl Sim {
             .update_state(&mut self.state, &rgrow::system::NeededUpdate::All);
         Ok(flake_size as u32)
     }
-}
-
-/// Parse the tile-grid out of an Xgrow saved-flake (`.seed`) file.
-///
-/// Format (per xgrow.c, `read_flake_file`):
-///
-/// ```text
-/// flake{N}={ ...
-/// [ ... stats ... ],...
-/// [ ... per-glue values ... ],...
-/// [ t11 t12 ... t1n ; ... ; tn1 ... tnn ] };
-/// ```
-///
-/// We skip the first two `],...`-terminated bracketed sections, then
-/// read the third bracketed section as a square grid. Rows are
-/// separated by `;`.
-fn parse_xgrow_seed(text: &str) -> Result<Vec<Vec<Tile>>, String> {
-    // Strip xgrow's `...` line-continuation markers — they're noise.
-    let cleaned = text.replace("...", " ");
-    // Skip everything up to the third `[`.
-    let mut rest = cleaned.as_str();
-    for n in 0..3 {
-        let start = rest
-            .find('[')
-            .ok_or_else(|| format!("xgrow seed: missing `[` (#{})", n + 1))?;
-        rest = &rest[start + 1..];
-        if n < 2 {
-            // Skip to the closing `]` of this section.
-            let end = rest
-                .find(']')
-                .ok_or_else(|| format!("xgrow seed: missing `]` (#{})", n + 1))?;
-            rest = &rest[end + 1..];
-        }
-    }
-    // `rest` is now the grid contents up to the closing `]`.
-    let end = rest
-        .find(']')
-        .ok_or_else(|| "xgrow seed: missing closing `]` for grid".to_string())?;
-    let grid_text = &rest[..end];
-
-    let mut grid: Vec<Vec<Tile>> = Vec::new();
-    for raw_row in grid_text.split(';') {
-        let row: Vec<Tile> = raw_row
-            .split_whitespace()
-            .map(|tok| {
-                tok.parse::<u64>()
-                    .map(|v| v as Tile)
-                    .map_err(|e| format!("xgrow seed: bad tile id `{tok}`: {e}"))
-            })
-            .collect::<Result<_, _>>()?;
-        if !row.is_empty() {
-            grid.push(row);
-        }
-    }
-    if grid.is_empty() {
-        return Err("xgrow seed: no rows parsed".into());
-    }
-    let w = grid[0].len();
-    if !grid.iter().all(|r| r.len() == w) {
-        return Err(format!(
-            "xgrow seed: rows are not all the same length (expected {w})"
-        ));
-    }
-    Ok(grid)
 }
 
 #[derive(Deserialize)]

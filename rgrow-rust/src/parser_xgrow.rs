@@ -392,6 +392,72 @@ pub fn parse_xgrow_string(tilestring: &str) -> anyhow::Result<tileset::TileSet> 
         .map(|x| x.1)
 }
 
+/// Parse the tile-grid out of an Xgrow saved-flake (`.seed` / importfile)
+/// file into a square row-major grid of tile ids.
+///
+/// Format (per xgrow.c, `read_flake_file`):
+///
+/// ```text
+/// flake{N}={ ...
+/// [ ... stats ... ],...
+/// [ ... per-glue values ... ],...
+/// [ t11 t12 ... t1n ; ... ; tn1 ... tnn ] };
+/// ```
+///
+/// We skip the first two `]`-terminated bracketed sections, then read the
+/// third bracketed section as a square grid. Rows are separated by `;`.
+pub fn parse_xgrow_seed(text: &str) -> Result<Vec<Vec<crate::base::Tile>>, String> {
+    use crate::base::Tile;
+
+    // Strip xgrow's `...` line-continuation markers — they're noise.
+    let cleaned = text.replace("...", " ");
+    // Skip everything up to the third `[`.
+    let mut rest = cleaned.as_str();
+    for n in 0..3 {
+        let start = rest
+            .find('[')
+            .ok_or_else(|| format!("xgrow seed: missing `[` (#{})", n + 1))?;
+        rest = &rest[start + 1..];
+        if n < 2 {
+            // Skip to the closing `]` of this section.
+            let end = rest
+                .find(']')
+                .ok_or_else(|| format!("xgrow seed: missing `]` (#{})", n + 1))?;
+            rest = &rest[end + 1..];
+        }
+    }
+    // `rest` is now the grid contents up to the closing `]`.
+    let end = rest
+        .find(']')
+        .ok_or_else(|| "xgrow seed: missing closing `]` for grid".to_string())?;
+    let grid_text = &rest[..end];
+
+    let mut grid: Vec<Vec<Tile>> = Vec::new();
+    for raw_row in grid_text.split(';') {
+        let row: Vec<Tile> = raw_row
+            .split_whitespace()
+            .map(|tok| {
+                tok.parse::<u64>()
+                    .map(|v| v as Tile)
+                    .map_err(|e| format!("xgrow seed: bad tile id `{tok}`: {e}"))
+            })
+            .collect::<Result<_, _>>()?;
+        if !row.is_empty() {
+            grid.push(row);
+        }
+    }
+    if grid.is_empty() {
+        return Err("xgrow seed: no rows parsed".into());
+    }
+    let w = grid[0].len();
+    if !grid.iter().all(|r| r.len() == w) {
+        return Err(format!(
+            "xgrow seed: rows are not all the same length (expected {w})"
+        ));
+    }
+    Ok(grid)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -409,5 +475,25 @@ mod tests {
             !ts.start_paused,
             "BinaryCounter.tiles should not set start_paused"
         );
+    }
+
+    #[test]
+    fn xgrow_seed_skips_two_sections_and_reads_grid() {
+        // Two leading bracketed sections (stats, per-glue values) are
+        // skipped; the third is the square tile grid, rows split on `;`.
+        let text = "flake0={ [ 1 2 3 ],... [ 4 5 6 ],... [ 1 2 ; 3 4 ] };";
+        let grid = parse_xgrow_seed(text).unwrap();
+        assert_eq!(grid, vec![vec![1, 2], vec![3, 4]]);
+    }
+
+    #[test]
+    fn xgrow_seed_rejects_ragged_grid() {
+        let text = "x [a] [b] [ 1 2 ; 3 ]";
+        assert!(parse_xgrow_seed(text).is_err());
+    }
+
+    #[test]
+    fn xgrow_seed_rejects_missing_sections() {
+        assert!(parse_xgrow_seed("[ 1 2 ]").is_err());
     }
 }

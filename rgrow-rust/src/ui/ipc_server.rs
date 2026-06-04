@@ -1,4 +1,4 @@
-use crate::ui::ipc::{ControlMessage, InitMessage, IpcMessage, UpdateNotification};
+use crate::ui::ipc::{ControlMessage, InitMessage, IpcMessage, ModelSnapshot, UpdateNotification};
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
@@ -18,6 +18,8 @@ pub struct IpcClient {
     stream: PipeClient,
     shm: Option<MmapMut>,
     shm_path: String,
+    grid_shm: Option<MmapMut>,
+    grid_shm_path: String,
 }
 
 impl IpcClient {
@@ -29,6 +31,8 @@ impl IpcClient {
                 stream,
                 shm: None,
                 shm_path: String::new(),
+                grid_shm: None,
+                grid_shm_path: String::new(),
             })
         }
         #[cfg(windows)]
@@ -47,6 +51,8 @@ impl IpcClient {
                 stream,
                 shm: None,
                 shm_path: String::new(),
+                grid_shm: None,
+                grid_shm_path: String::new(),
             })
         }
     }
@@ -133,7 +139,7 @@ impl IpcClient {
         }
     }
 
-    pub fn setup_shm(&mut self, shm_path: &str, size: usize) -> Result<(), std::io::Error> {
+    fn map_shm(shm_path: &str, size: usize) -> Result<MmapMut, std::io::Error> {
         #[cfg(unix)]
         let file = OpenOptions::new()
             .read(true)
@@ -155,15 +161,40 @@ impl IpcClient {
         };
 
         file.set_len(size as u64)?;
-        let mmap = unsafe { MmapMut::map_mut(&file)? };
-        self.shm = Some(mmap);
+        unsafe { MmapMut::map_mut(&file) }
+    }
+
+    pub fn setup_shm(&mut self, shm_path: &str, size: usize) -> Result<(), std::io::Error> {
+        self.shm = Some(Self::map_shm(shm_path, size)?);
         self.shm_path = shm_path.to_string();
+        Ok(())
+    }
+
+    pub fn setup_grid_shm(&mut self, shm_path: &str, size: usize) -> Result<(), std::io::Error> {
+        self.grid_shm = Some(Self::map_shm(shm_path, size)?);
+        self.grid_shm_path = shm_path.to_string();
         Ok(())
     }
 
     pub fn send_init(&mut self, init: &InitMessage) -> Result<(), Box<dyn std::error::Error>> {
         self.setup_shm(&init.shm_path, init.shm_size)?;
+        if init.grid_shm_size > 0 {
+            self.setup_grid_shm(&init.grid_shm_path, init.grid_shm_size)?;
+        }
         let msg = IpcMessage::Init(init.clone());
+        let serialized = bincode::serialize(&msg)?;
+        let len = serialized.len() as u64;
+        self.stream.write_all(&len.to_le_bytes())?;
+        self.stream.write_all(&serialized)?;
+        self.stream.flush()?;
+        Ok(())
+    }
+
+    pub fn send_snapshot(
+        &mut self,
+        snapshot: &ModelSnapshot,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let msg = IpcMessage::ModelSnapshot(snapshot.clone());
         let serialized = bincode::serialize(&msg)?;
         let len = serialized.len() as u64;
         self.stream.write_all(&len.to_le_bytes())?;
@@ -175,12 +206,21 @@ impl IpcClient {
     pub fn send_frame(
         &mut self,
         frame_data: &[u8],
+        grid_data: Option<&[u8]>,
         notification: UpdateNotification,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(ref mut shm) = self.shm {
             shm[..frame_data.len()].copy_from_slice(frame_data);
         } else {
             return Err("Shared memory not initialized".into());
+        }
+
+        if let Some(grid) = grid_data {
+            if let Some(ref mut grid_shm) = self.grid_shm {
+                if grid.len() <= grid_shm.len() {
+                    grid_shm[..grid.len()].copy_from_slice(grid);
+                }
+            }
         }
 
         let msg = IpcMessage::Update(notification);
@@ -243,6 +283,9 @@ impl Drop for IpcClient {
     fn drop(&mut self) {
         if !self.shm_path.is_empty() {
             let _ = std::fs::remove_file(&self.shm_path);
+        }
+        if !self.grid_shm_path.is_empty() {
+            let _ = std::fs::remove_file(&self.grid_shm_path);
         }
     }
 }

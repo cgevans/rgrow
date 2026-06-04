@@ -25,14 +25,14 @@ thread_local! {
         const { RefCell::new(Vec::new()) };
 }
 
-use super::dispatch::TileBondInfo;
+use super::dispatch::{EditableSystem, TileBondInfo};
 #[cfg(not(target_arch = "wasm32"))]
 use super::gui::evolve_in_window_impl;
 use super::types::*;
 
 use crate::base::RgrowError;
 
-pub trait System: Debug + Sync + Send + TileBondInfo + Clone {
+pub trait System: Debug + Sync + Send + TileBondInfo + EditableSystem + Clone {
     fn new_state<St: StateWithCreate + State>(&self, params: St::Params) -> Result<St, GrowError> {
         let mut new_state = St::empty(params)?;
         self.configure_empty_state(&mut new_state)?;

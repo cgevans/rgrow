@@ -146,6 +146,8 @@ fn test_ipc_init_ready_handshake() {
         block: Some(8),
         shm_path: "/tmp/test-shm".to_string(),
         shm_size: 4096,
+        grid_shm_path: String::new(),
+        grid_shm_size: 0,
         start_paused: false,
         model_name: "kTAM".to_string(),
         has_temperature: false,
@@ -237,6 +239,8 @@ fn test_ipc_update_message() {
         block: Some(8),
         shm_path: shm_path.clone(),
         shm_size,
+        grid_shm_path: String::new(),
+        grid_shm_size: 0,
         start_paused: false,
         model_name: "kTAM".to_string(),
         has_temperature: false,
@@ -261,10 +265,19 @@ fn test_ipc_update_message() {
         energy: -10.0,
         scale: 8,
         data_len: shm_size,
+        grid_included: false,
+        grid_rows: 0,
+        grid_cols: 0,
+        grid_data_len: 0,
+        subcell_px: 8,
+        tile_shape_diamond: false,
+        frame_subcells_w: 100,
+        frame_subcells_h: 100,
+        overlay_linear: true,
     };
 
     client
-        .send_frame(&frame_data, notification)
+        .send_frame(&frame_data, None, notification)
         .expect("Failed to send frame");
 
     server_thread.join().unwrap();
@@ -331,6 +344,8 @@ fn test_ipc_control_message() {
         block: Some(8),
         shm_path: "/tmp/test-shm".to_string(),
         shm_size: 4096,
+        grid_shm_path: String::new(),
+        grid_shm_size: 0,
         start_paused: false,
         model_name: "kTAM".to_string(),
         has_temperature: false,
