@@ -1708,7 +1708,9 @@ impl KTAM {
         if r.0 {
             r
         } else {
-            self.choose_dimer_attachment_at_point(state, p, acc)
+            // Monomer attachment did not consume the accumulator; thread the
+            // remaining rate (r.1), not the original acc, into dimer selection.
+            self.choose_dimer_attachment_at_point(state, p, r.1)
         }
     }
 
@@ -2034,7 +2036,7 @@ impl KTAM {
                 self.kf
                     * Rate64::exp(
                         -ts - self.bond_energy_of_tile_type_at_point(canvas, PointSafe2(p2), t2) // FIXME
-                        + 2. * self.get_energy_ns(t, t2) + 2.*self.alpha,
+                        + 2. * self.get_energy_ns(t, t2) + self.alpha,
                     )
             }
         }
@@ -2058,7 +2060,7 @@ impl KTAM {
                 self.kf
                     * Rate64::exp(
                         -ts - self.bond_energy_of_tile_type_at_point(canvas, PointSafe2(p2), t2) // FIXME
-                        + 2. * self.get_energy_we(t, t2) + 2.*self.alpha,
+                        + 2. * self.get_energy_we(t, t2) + self.alpha,
                     )
             }
         }
@@ -2346,8 +2348,14 @@ impl KTAM {
             old_energy -= self.get_energy_ns(old_tile, ts);
             old_energy -= self.get_energy_we(tw, old_tile);
 
-            if !self.is_fake_duple(old_tile) && self.tile_concs[old_tile as usize] > 0. {
-                old_energy -= self.tile_concs[old_tile as usize].ln() - self.alpha;
+            // Use the depletion-adjusted (free) concentration so the energy
+            // change matches detailed balance: in Equilibrium mode the
+            // attachment rate uses the free monomer concentration, so the
+            // chemical-potential term here must too. (effective_monomer_conc ==
+            // tile_concs outside Equilibrium, so None/Detach are unaffected.)
+            let conc = self.effective_monomer_conc(old_tile as usize);
+            if !self.is_fake_duple(old_tile) && conc > 0. {
+                old_energy -= conc.ln() - self.alpha;
             }
         };
 
@@ -2359,8 +2367,9 @@ impl KTAM {
             new_energy -= self.get_energy_ns(new_tile, ts);
             new_energy -= self.get_energy_we(tw, new_tile);
 
-            if !self.is_fake_duple(new_tile) && self.tile_concs[new_tile as usize] > 0. {
-                new_energy -= self.tile_concs[new_tile as usize].ln() - self.alpha;
+            let conc = self.effective_monomer_conc(new_tile as usize);
+            if !self.is_fake_duple(new_tile) && conc > 0. {
+                new_energy -= conc.ln() - self.alpha;
             }
         };
 
@@ -3260,7 +3269,7 @@ mod tests {
 
         // Naive formula: [AB] = [A]*[B] * exp(E - alpha)
         //   E = g_se * glue_strength = 1.0 * 1.0 = 1.0
-        //   [AB]_naive = 1e-3 * 1e-3 * exp(1.0) = 1e-6 * e
+        //   [AB]_naive = 1e-7 * 1e-7 * exp(1.0)
         let naive_eq = 1e-7 * 1e-7 * (1.0f64).exp();
         let eq_conc: f64 = dimer.equilibrium_conc.into();
 
@@ -3498,6 +3507,57 @@ mod tests {
         assert!(
             (dimer_rate + monomer_rate + ns_dimer_rate - full_rate_no_eq).abs() < 1e-8,
             "Attachment rate should be: with_eq={dimer_rate:.3e} + {monomer_rate:.3e} + {ns_dimer_rate:.3e} = {comb_rate:.8e}, no_eq={full_rate_no_eq:.8e}"
+        );
+    }
+
+    #[test]
+    fn test_equilibrium_energy_uses_free_conc() {
+        // In Equilibrium mode the energy change must use the depleted (free)
+        // monomer concentration, matching the attachment rate, so the recorded
+        // energy change equals the detailed-balance free energy. Build a system
+        // with significant dimer depletion and a nonzero alpha, then check the
+        // energy change of attaching a monomer uses free, not total, concentration.
+        let alpha = 2.0;
+        let mut system = make_equiconc_test_system(
+            8.0, // g_se (strong -> meaningful depletion)
+            alpha,
+            &[0.0, 1e-3, 1e-3], // high conc -> depletion
+            &[0.0, 1.0],
+            array![
+                [0, 0, 0, 0],
+                [0, 1, 0, 0], // tile 1 (A): E = glue 1
+                [0, 0, 0, 1], // tile 2 (B): W = glue 1, binds A.E
+            ],
+            vec!["empty".into(), "A".into(), "B".into()],
+        );
+        system.chunk_handling = ChunkHandling::Equilibrium;
+        system.update_system();
+
+        let free_a = system.free_tile_concs[1];
+        let total_a = system.tile_concs[1];
+        assert!(
+            free_a < total_a * 0.99,
+            "expected depletion: free={free_a:.3e} total={total_a:.3e}"
+        );
+
+        // Place B, then attach A to its west (A.E binds B.W).
+        let mut state: QuadTreeState<CanvasSquare, NullStateTracker> =
+            system.new_state((16, 16)).unwrap();
+        let bp = state.center();
+        system.set_safe_point(&mut state, bp, 2);
+        let ap = PointSafe2(state.move_sa_w(bp).0);
+        let ec = system.energy_change_from_point_change(&state, ap, 1);
+
+        let bond = system.get_energy_we(1, 2); // A.E - B.W bond energy
+        let expected_free = -bond - (free_a.ln() - alpha);
+        let expected_total = -bond - (total_a.ln() - alpha);
+        assert!(
+            (ec - expected_free).abs() < 1e-9,
+            "energy change {ec} should use free conc ({expected_free}), not total ({expected_total})"
+        );
+        assert!(
+            (ec - expected_total).abs() > 0.01,
+            "free- and total-based energy should differ (depletion); got ec={ec}"
         );
     }
 

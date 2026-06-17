@@ -131,8 +131,11 @@ def test_basic_rates_oldktam(gse, concs_nM, alpha, kf, stoic, bond_strength):
     kf=st.floats(1e3, 1e9),
 )
 def test_ktam_we_dimer_detach_rates(gse, alpha, kf, ep):
+    # alpha is left as the hypothesis-generated value so this exercises the
+    # chunk (dimer) detachment's alpha dependence: the chunk leaves as one intact
+    # dimer particle, so its rate carries +alpha (one localization entropy), like
+    # a monomer detachment, NOT +2*alpha.
     kf = 10**6
-    alpha = 0
     gse = 8.1
     gmc = 2 * gse - ep
 
@@ -184,6 +187,6 @@ def test_ktam_we_dimer_detach_rates(gse, alpha, kf, ep):
     sys, state = ts.create_system_and_state()
     sys.evolve(state, size_max=4, require_strong_bound=False)
     assert state.rate_at_point((2, 3)) == pytest.approx(
-        kf * math.exp(-2 * gse + 2 * alpha) + kf * math.exp(-3 * gse + alpha)
+        kf * math.exp(-2 * gse + alpha) + kf * math.exp(-3 * gse + alpha)
     )
     assert state.rate_at_point((2, 4)) == Rn
