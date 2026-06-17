@@ -531,13 +531,13 @@ def test_ktam_dimer_detach_on():
 _CHUNK_GSE = 5.0
 
 
-def _chunk_block_tileset(chunk_handling, chunk_size, *, gmc, alpha=-7.1):
+def _chunk_block_tileset(chunk_handling, chunk_size, *, gmc, alpha=-7.1, d_strength=2):
     return TileSet(
         [
-            Tile([0, "d", "s", "w"], name="A"),  # N=null, E=d(2), S=s(1), W=w(1)
-            Tile(["s", "w", 0, "d"], name="B"),  # N=s(1), E=w(1), S=null, W=d(2)
+            Tile([0, "d", "s", "w"], name="A"),  # N=null, E=d, S=s(1), W=w(1)
+            Tile(["s", "w", 0, "d"], name="B"),  # N=s(1), E=w(1), S=null, W=d
         ],
-        [Bond("d", 2), Bond("s", 1), Bond("w", 1)],
+        [Bond("d", d_strength), Bond("s", 1), Bond("w", 1)],
         canvas_type="tube",
         size=(8, 512),
         alpha=alpha,
@@ -549,8 +549,8 @@ def _chunk_block_tileset(chunk_handling, chunk_size, *, gmc, alpha=-7.1):
     )
 
 
-def _run_chunk_mode(chunk_handling, chunk_size, gmc, events=100_000):
-    ts = _chunk_block_tileset(chunk_handling, chunk_size, gmc=gmc)
+def _run_chunk_mode(chunk_handling, chunk_size, gmc, events=100_000, d_strength=2):
+    ts = _chunk_block_tileset(chunk_handling, chunk_size, gmc=gmc, d_strength=d_strength)
     sys, state = cast(tuple[KTAM, State], ts.create_system_and_state())
     state.canvas_view[::2, 5:250] = 1
     state.canvas_view[1::2, 5:250] = 2
@@ -634,6 +634,45 @@ def test_ktam_equilibrium_coexistence_energy():
         e_bal = _equilibrium_2bond_attach_free_energy(2 * GSE - math.log(2), alpha=alpha)
         assert abs(e_2gse - math.log(phi)) < 0.03, (alpha, e_2gse, math.log(phi))
         assert abs(e_bal) < 0.03, (alpha, e_bal)
+
+
+def test_ktam_equilibrium_strong_bond_external_coexistence():
+    """A strong internal dimer bond moves Equilibrium coexistence to the external value.
+
+    The block's internal bond is normally a double bond (E_int = 2*gse), giving a
+    depletion-shifted coexistence at gmc = 2*gse - ln(2) (so at gmc = 2*gse the
+    double-bond system is undersaturated and melts).  With a much stronger internal
+    bond (here strength 8, E_int = 8*gse) almost all monomer is sequestered in the
+    (A,B) dimer.  The internal bond is then a "spectator" -- present in both the
+    solution dimer and the solid, it cancels out of the solution<->solid free energy
+    -- so coexistence is governed purely by the external bonds and returns to
+    gmc = 2*gse, with no depletion correction (the correction grows to exactly offset
+    the internal bond; the parameters are checked directly in the Rust test
+    test_equilibrium_strong_bond_coexistence_at_external).
+
+    Here we bracket coexistence at 2*gse for the strong-bond system (grow below, melt
+    above, random-walk at 2*gse), and confirm the double-bond system melts at the
+    same gmc = 2*gse where the strong-bond system random-walks.
+    """
+    GSE = _CHUNK_GSE
+    D = 8  # internal bond strength; the external bonds (s, w) sum to strength 2
+
+    grow = _run_chunk_mode("equilibrium", "dimer", gmc=2 * GSE - 1.0, d_strength=D)
+    coex = _run_chunk_mode("equilibrium", "dimer", gmc=2 * GSE, d_strength=D)
+    melt = _run_chunk_mode("equilibrium", "dimer", gmc=2 * GSE + 1.0, d_strength=D)
+    double = _run_chunk_mode("equilibrium", "dimer", gmc=2 * GSE, d_strength=2)
+
+    # Strong bond, below coexistence: supersaturated -> grows.
+    assert grow["end"] > grow["start"] * 1.6, grow
+    # Strong bond, at coexistence (~2*gse): random-walks.
+    assert coex["outcome"] == EvolveOutcome.ReachedEventsMax, coex
+    assert coex["start"] * 0.5 < coex["end"] < coex["start"] * 1.6, coex
+    # Strong bond, above coexistence: undersaturated -> melts.
+    assert melt["end"] < melt["start"] * 0.5, melt
+    # Double bond at the same gmc = 2*gse melts: its coexistence is the
+    # depletion-shifted 2*gse - ln(2), below 2*gse.  Strengthening the internal
+    # bond is what moves coexistence up to 2*gse.
+    assert double["end"] < double["start"] * 0.5, double
 
 
 def test_ktam_equilibrium_attachment_conservation():

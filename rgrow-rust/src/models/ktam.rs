@@ -3562,6 +3562,81 @@ mod tests {
     }
 
     #[test]
+    fn test_equilibrium_strong_bond_coexistence_at_external() {
+        // Two-tile block A-B with an internal "d" bond of variable strength, plus
+        // two weak strength-1 external bonds per tile (s, w).  As the internal
+        // bond strengthens, almost all monomer is sequestered in the strong (A,B)
+        // dimer, and Equilibrium's single-tile coexistence Gmc -> the EXTERNAL-bond
+        // energy per tile (2*gse), independent of the internal bond.  The internal
+        // bond is a "spectator": present in both the solution dimer and the solid,
+        // it cancels out of the solution<->solid free-energy difference.
+        //
+        // Coexistence is where the free monomer is pinned at the energy-per-tile
+        // eps = (d+2)/2*gse, i.e. effective Gmc = -ln(free)+alpha = eps.  With the
+        // one strong "d" dimer (E_int = d*gse) and two weak strength-1 dimers, the
+        // exact mass balance at that free conc gives
+        //   gmc_bal = eps - ln(1 + e^{E_int-eps} + 2 e^{gse-eps}),
+        // which -> 2*gse as d -> infinity.  We check (a) the depletion solve puts
+        // the free conc exactly there for every alpha, and (b) gmc_bal converges to
+        // 2*gse.
+        let gse = 4.0;
+        let mut prev_residual = f64::INFINITY;
+        let mut last_gmc_bal = 0.0;
+        for &d in &[2.0_f64, 4.0, 8.0, 16.0] {
+            let e_int = d * gse;
+            let eps = (d + 2.0) / 2.0 * gse; // energy per tile (half bulk coordination)
+            let gmc_bal = eps - (1.0 + (e_int - eps).exp() + 2.0 * (gse - eps).exp()).ln();
+
+            // Coexistence Gmc moves monotonically toward the external value 2*gse,
+            // and stays between 2*gse and the full energy-per-tile eps.
+            let residual = (gmc_bal - 2.0 * gse).abs();
+            assert!(
+                residual < prev_residual,
+                "d={d}: |gmc_bal - 2*gse|={residual:.3e} should shrink (prev {prev_residual:.3e})"
+            );
+            assert!(
+                gmc_bal < 2.0 * gse + 1e-9 && gmc_bal < eps + 1e-9,
+                "d={d}: gmc_bal={gmc_bal} should be <= 2*gse={} and < eps={eps}",
+                2.0 * gse
+            );
+            prev_residual = residual;
+            last_gmc_bal = gmc_bal;
+
+            // The equiconc depletion solve reproduces the analytic coexistence for
+            // every alpha (the depletion bookkeeping is alpha-independent).
+            for &alpha in &[-7.1_f64, 0.0, 2.0] {
+                let c = (-gmc_bal + alpha).exp();
+                let system = make_equiconc_test_system(
+                    gse,
+                    alpha,
+                    &[0.0, c, c],
+                    &[0.0, d, 1.0, 1.0], // glue 1 = d (strong), 2 = s, 3 = w
+                    array![
+                        [0, 0, 0, 0], // tile 0 (empty)
+                        [0, 1, 2, 3], // A: N=0, E=d, S=s, W=w
+                        [2, 3, 0, 1], // B: N=s, E=w, S=0, W=d
+                    ],
+                    vec!["empty".into(), "A".into(), "B".into()],
+                );
+                let free = system.free_tile_concs[1];
+                let gmc_eff = -free.ln() + alpha;
+                assert!(
+                    (gmc_eff - eps).abs() < 1e-3,
+                    "d={d} alpha={alpha}: effective Gmc {gmc_eff:.6} should equal \
+                     energy-per-tile {eps:.6} (free={free:.3e})"
+                );
+            }
+        }
+        // Strong-bond limit: coexistence is at the external-bond energy (2*gse),
+        // the internal bond having dropped out entirely.
+        assert!(
+            (last_gmc_bal - 2.0 * gse).abs() < 1e-6,
+            "strongest bond: gmc_bal {last_gmc_bal} should be ~2*gse {}",
+            2.0 * gse
+        );
+    }
+
+    #[test]
     fn test_effective_monomer_conc_equilibrium_mode() {
         let mut system = make_equiconc_test_system(
             15.0,
