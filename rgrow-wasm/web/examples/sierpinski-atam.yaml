@@ -27,9 +27,9 @@ tiles:
 # the boundary tiles attach via their strength-2 B bonds and each computation
 # tile attaches via its two strength-1 input bonds.
 xgrowargs:
-    size: 128
+    size: 64
     seed:
-    - [120,120,1]
+    - [56,56,1]
     update_rate: 1
     threshold: 2
     canvas_type: Square

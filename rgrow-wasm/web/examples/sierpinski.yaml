@@ -34,9 +34,9 @@ tiles:
 # * doubletiles - a list of two-item lists, specifying the names of double tile pairs.
 # * vdoubletiles - the same for vertical double tiles.
 xgrowargs:
-    size: 128
+    size: 64
     seed:
-    - [120,120,1]
+    - [56,56,1]
       #    smax: 500
     update_rate: 1
     Gse: 8.1
